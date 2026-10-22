@@ -27,7 +27,7 @@
   "auth/src/project-id.mjs": "f416fccf086b650b1b6c9fa36bca0074a517400e6af7897eaca0d63ab739496a",
   "auth/src/provider-account-sync.mjs": "2a0f93c06130431386dbfccf763318997d6c92bc8f517bc1f8d2aef4a1f79b77",
   "auth/src/provider-catalog.mjs": "35b6a754ad2c8435c190633d0cced4d77eee4d9facd418ae1b095c7824ba135f",
-  "auth/src/provider-rotation-recipes.mjs": "b05d9b3cd96005bc58e07ad23ba364bfdf3d2ef794fbc0c7891debca0c23e965",
+  "auth/src/provider-rotation-recipes.mjs": "1debde7d3860b436a11197b3cefba0495bc588f60ed55dc5bf6ba29488cbb818",
   "auth/src/research-gate.mjs": "5f35dc29351e4357df84eb7a9b1957a8c395e13025cc31b463fa8d75f3584926",
   "auth/src/research-queue.mjs": "1548131598fbc6c6d33059462c6fd1bcca42d722e25f517edf7fe8143f1ad502",
   "auth/src/rotation-capability.mjs": "5ed62e4e88d30d36a8d440c51d278998f3d2f5f49c8fac9503f8c394cf39731f",
