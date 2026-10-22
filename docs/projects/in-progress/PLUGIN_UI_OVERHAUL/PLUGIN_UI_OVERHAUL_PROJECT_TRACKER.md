@@ -16,9 +16,9 @@
 - [x] Private vs. Store Lifecycle: Support private local usage versus one-click hash-pinned store publishing.
 
 ### 34-Plugin Recipes & Proposals (1–34)
-- [ ] Plugin 01/34: `auth` recipe & card overhaul
-- [ ] Plugin 02/34: `cli-agents` recipe & card overhaul
-- [ ] Plugin 03/34: `code-quality` recipe & card overhaul
+- [x] Plugin 01/34: `auth` recipe & card overhaul (live passkey/OAuth status, 6 domain controls, console copy)
+- [x] Plugin 02/34: `cli-agents` recipe & card overhaul (discovered agent matrix, node target telemetry, 6 verbs)
+- [x] Plugin 03/34: `code-quality` recipe & card overhaul (purged fake oscilloscope, deterministic gate matrix, fail-closed telemetry)
 - [ ] Plugin 04/34: `composable-cli` recipe & card overhaul
 - [ ] Plugin 05/34: `creative-search` recipe & card overhaul
 - [ ] Plugin 06/34: `decision` recipe & card overhaul
@@ -68,3 +68,6 @@
 | 2026-10-22T15:10:00Z | Antigravity | Added Agent Plugin Recipe modal and copy prompt workflow | Implemented hero banner and recipe modal supporting private local vs. store deployment paths |
 | 2026-10-22T15:12:00Z | Antigravity | Purged winamp-classic skins across scaffold plugin manifests | Removed legacy skin keys in auth, mesh, security, code-quality, and openwiki |
 | 2026-10-22T15:14:00Z | Antigravity | Verified complete test suite and production build | 50 test files passed (220 tests), tsc and vite build succeeded with exit code 0 |
+| 2026-10-22T15:58:00Z | Antigravity | Overhauled Plugin 01 (auth) card face | Live telemetry for passkeys and OAuth, 6 administrative actions, live terminal copy |
+| 2026-10-22T16:00:00Z | Antigravity | Overhauled Plugin 02 (cli-agents) card face | Multi-agent discovery matrix, target node telemetry, 6 management actions |
+| 2026-10-22T16:01:00Z | Antigravity | Overhauled Plugin 03 (code-quality) card face | Purged illegal fake waveform canvas, added real deterministic gate matrix and fail-closed telemetry |
