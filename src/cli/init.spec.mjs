@@ -61,6 +61,115 @@ describe('plugin dependency wiring failure isolation', () => {
 });
 
 
+describe('bootstrap token store resolution', () => {
+  // Regression: `init --project` issued the bootstrap PAT into the project's
+  // OWN key store, but the server answering http://localhost:3000 derives its
+  // store from AGENT_DIR — the GLOBAL brain under launchd. So the token written
+  // into brain.json was accepted by nobody: init printed "pre-authorized" and
+  // every request answered 401, which is what made `startup check` report
+  // `brain failed` (instructions-http-401) for project after project.
+  const projectBrain = '/repo/.agent/skills/total-recall';
+  const globalBrain = '/home/user/.agent/skills/total-recall';
+
+  /** A real on-disk brain directory, because an established store is required. */
+  function establishedBrain(prefix) {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), prefix));
+    const brain = path.join(root, 'skills', 'total-recall');
+    fs.mkdirSync(path.join(brain, 'config'), { recursive: true });
+    fs.writeFileSync(path.join(brain, 'config', 'keys.jsonl'), '');
+    return { root, brain };
+  }
+
+  it('mints a loopback project token into the store the local server reads', async () => {
+    const { resolveServingBrainDir } = await import('./init.mjs');
+    const serving = establishedBrain('tr-serving-');
+    try {
+      for (const url of ['http://localhost:3000', 'http://127.0.0.1:3000', 'http://[::1]:3000']) {
+        expect(resolveServingBrainDir({
+          brainDir: projectBrain, isProject: true, brainUrl: url, globalBrainDir: serving.brain,
+        })).toBe(serving.brain);
+      }
+    } finally {
+      fs.rmSync(serving.root, { recursive: true, force: true });
+    }
+  });
+
+  it('keeps the target brain store for a global run and for a remote brain', async () => {
+    const { resolveServingBrainDir } = await import('./init.mjs');
+    const serving = establishedBrain('tr-serving-');
+    try {
+      // A global init targets the store the server reads, so it must not divert.
+      expect(resolveServingBrainDir({
+        brainDir: serving.brain, isProject: false, brainUrl: 'http://localhost:3000', globalBrainDir: serving.brain,
+      })).toBe(serving.brain);
+
+      // A remote brain is served by a machine whose store we cannot write.
+      for (const url of ['https://brain.example.com', 'http://100.64.0.1:3000', 'not-a-url']) {
+        expect(resolveServingBrainDir({
+          brainDir: projectBrain, isProject: true, brainUrl: url, globalBrainDir: serving.brain,
+        })).toBe(projectBrain);
+      }
+    } finally {
+      fs.rmSync(serving.root, { recursive: true, force: true });
+    }
+  });
+
+  it('adopts only an established serving store and never collapses onto the project', async () => {
+    // Two constraints pull against each other, and both are pinned here.
+    // (a) `getGlobalAgentDir()` honours AGENT_DIR, so deriving the serving
+    //     store from it collapsed the "global" brain onto the project under
+    //     AGENT_DIR — the exact condition that produced the useless token —
+    //     and the bug survived the first fix.
+    // (b) An explicit root owns its whole layout, so init must never create
+    //     $HOME/.agent behind a caller that named a different root.
+    const { resolveServingBrainDir } = await import('./init.mjs');
+    const fixture = fs.mkdtempSync(path.join(os.tmpdir(), 'tr-serving-store-'));
+    const established = path.join(fixture, 'established', 'skills', 'total-recall');
+    fs.mkdirSync(path.join(established, 'config'), { recursive: true });
+    fs.writeFileSync(path.join(established, 'config', 'keys.jsonl'), '');
+    const selected = path.join(fixture, 'selected', 'skills', 'total-recall');
+
+    const previous = process.env.AGENT_DIR;
+    process.env.AGENT_DIR = path.join(fixture, 'selected');
+    try {
+      // (a) an AGENT_DIR pinned at the project must not make the serving store
+      // the project store when a real established global store is passed.
+      expect(resolveServingBrainDir({
+        brainDir: selected, isProject: true, brainUrl: 'http://localhost:3000', globalBrainDir: established,
+      })).toBe(established);
+
+      // (b) nothing is adopted — and therefore nothing is created — when no
+      // established store was named, even though $HOME is a temp dir here.
+      const missing = path.join(fixture, 'missing', 'skills', 'total-recall');
+      expect(resolveServingBrainDir({
+        brainDir: selected, isProject: true, brainUrl: 'http://localhost:3000', globalBrainDir: missing,
+      })).toBe(selected);
+      expect(fs.existsSync(path.join(fixture, 'missing'))).toBe(false);
+    } finally {
+      if (previous === undefined) delete process.env.AGENT_DIR;
+      else process.env.AGENT_DIR = previous;
+      fs.rmSync(fixture, { recursive: true, force: true });
+    }
+  });
+
+  it('issues the bootstrap key through a store bound to the resolved serving brain', async () => {
+    const { resolveServingBrainDir } = await import('./init.mjs');
+    const source = fs.readFileSync(fileURLToPath(new URL('./init.mjs', import.meta.url)), 'utf8');
+
+    // The bootstrap must go through keyStoreFor(<serving brain>), not the
+    // default `issueKey` import, which is pinned to AGENT_DIR and therefore
+    // cannot express a project brain's serving store.
+    expect(source).toContain('keyStoreFor(servingBrainDir)');
+    expect(source).toContain('resolveServingBrainDir({ brainDir, isProject, brainUrl: brainCfg.url, globalBrainDir: servingGlobalBrainDir })');
+
+    // `servingGlobalBrainDir` must be home-relative, NOT derived from
+    // getGlobalAgentDir(), which honours AGENT_DIR and collapses onto the
+    // project whenever AGENT_DIR is pinned there.
+    expect(source).toContain("path.join(os.homedir(), '.agent', 'skills', 'total-recall')");
+  });
+});
+
+
 describe('compatibility initialization explicit root isolation', () => {
   for (const layer of ['global', 'project']) {
     it(`initializes the explicit ${layer} root without writing HOME/.agent`, () => {
