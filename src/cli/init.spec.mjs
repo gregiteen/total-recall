@@ -203,3 +203,49 @@ describe('compatibility initialization explicit root isolation', () => {
     });
   }
 });
+
+
+describe('project brain-state gitignore', () => {
+  // Regression: `init --project` wrote brain.json (a live plaintext PAT) into
+  // the repository without excluding it, so twelve repositories tracked it and
+  // published a credential on every commit. Twelve tracked it; the tokens were
+  // inert only because they were also minted into the wrong store (the v3.40.6
+  // bug), which is luck, not safety.
+  it('excludes brain-local runtime state and keeps existing rules', async () => {
+    const { ensureProjectGitignore } = await import('./init.mjs');
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'tr-gitignore-'));
+    try {
+      fs.writeFileSync(path.join(root, '.gitignore'), 'node_modules/\n*.log\n');
+      const added = ensureProjectGitignore(root);
+
+      const content = fs.readFileSync(path.join(root, '.gitignore'), 'utf8');
+      // Pre-existing rules survive untouched.
+      expect(content).toContain('node_modules/');
+      expect(content).toContain('*.log');
+      // The credential-bearing paths are excluded.
+      expect(content).toContain('.agent/skills/total-recall/config/brain.json');
+      expect(content).toContain('.agent/skills/total-recall/config/keys.jsonl');
+      expect(content).toContain('.agent/skills/total-recall/config/secrets.enc');
+      expect(added).toContain('.agent/skills/total-recall/config/brain.json');
+
+      // Idempotent: a second run adds nothing and does not duplicate.
+      expect(ensureProjectGitignore(root)).toEqual([]);
+      expect(fs.readFileSync(path.join(root, '.gitignore'), 'utf8')).toBe(content);
+    } finally { fs.rmSync(root, { recursive: true, force: true }); }
+  });
+
+  it('dry run reports the exclusions without writing', async () => {
+    const { ensureProjectGitignore } = await import('./init.mjs');
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'tr-gitignore-dry-'));
+    try {
+      const planned = ensureProjectGitignore(root, { dryRun: true });
+      expect(planned.length).toBeGreaterThan(0);
+      expect(fs.existsSync(path.join(root, '.gitignore'))).toBe(false);
+    } finally { fs.rmSync(root, { recursive: true, force: true }); }
+  });
+
+  it('is wired into project init', () => {
+    const source = fs.readFileSync(fileURLToPath(new URL('./init.mjs', import.meta.url)), 'utf8');
+    expect(source).toContain('ensureProjectGitignore(cwd, { dryRun: opts.dryRun })');
+  });
+});
