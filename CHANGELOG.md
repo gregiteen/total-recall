@@ -1,3 +1,15 @@
+## 3.40.7 — 2026-10-23
+
+- Keep per-brain state out of git. Twelve repositories tracked
+  `config/brain.json`, which holds a live plaintext PAT, so a correct mint
+  would have published a working credential on the next commit; the tokens
+  that did reach history were inert only because they had also been minted
+  into the wrong store (the 3.40.6 bug). `init --project` now writes the
+  brain-state exclusions into the project's `.gitignore` via
+  `ensureProjectGitignore()`: `brain.json` and its backups, `keys.jsonl`,
+  `secrets.enc` and its backups, `leader.json` and `*.pid`. Idempotent,
+  preserves existing rules, honours `--dry-run`.
+
 ## 3.40.6 — 2026-10-23
 
 - Mint the project bootstrap PAT into the key store the server actually reads.
