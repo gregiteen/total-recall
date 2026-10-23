@@ -198,6 +198,42 @@ function printHelp() {
 `);
 }
 
+// ─── Per-brain state exclusions ─────────────────────────────────────────────
+
+/**
+ * Brain-local runtime state that must never be committed.
+ *
+ * `config/brain.json` holds a live plaintext PAT, so a repository that tracks
+ * it publishes a working credential on every commit. `secrets.enc` is the
+ * encrypted store, the `*.pid`/`leader.json` files name local processes, and
+ * `keys.jsonl` is the auth ledger. None of it is source: `init` and `brain
+ * ensure` rebuild it, and a teammate or CI clone has no business receiving it.
+ *
+ * Only the PROJECT layer needs this. The global brain lives in `~/.agent`,
+ * which is not a repository. Returns the exclusions it added.
+ */
+export function ensureProjectGitignore(projectRoot, { dryRun = false } = {}) {
+  const header = '# Total Recall brain state (machine-local: holds a live PAT)';
+  const entries = [
+    '.agent/skills/total-recall/config/brain.json',
+    '.agent/skills/total-recall/config/brain.json.bak-*',
+    '.agent/skills/total-recall/config/keys.jsonl',
+    '.agent/skills/total-recall/config/secrets.enc',
+    '.agent/skills/total-recall/config/secrets.enc.bak-*',
+    '.agent/skills/total-recall/config/leader.json',
+    '.agent/skills/total-recall/*.pid',
+  ];
+  const file = path.join(projectRoot, '.gitignore');
+  let current = '';
+  try { current = fs.readFileSync(file, 'utf8'); } catch { /* absent: create it */ }
+  const missing = entries.filter(entry => !current.split(/\r?\n/).includes(entry));
+  if (!missing.length) return [];
+  if (dryRun) return missing;
+  const block = `${current && !current.endsWith('\n') ? '\n' : ''}${current ? '\n' : ''}${header}\n${missing.join('\n')}\n`;
+  fs.writeFileSync(file, current + block, 'utf8');
+  return missing;
+}
+
 // ─── Bootstrap token store resolution ───────────────────────────────────────
 
 /**
@@ -966,6 +1002,15 @@ export default async function init(args) {
       }
       fs.writeFileSync(registryPath, JSON.stringify(registry, null, 2));
       logOk(`Registered project "${projectName}" in global brain registry`);
+
+      // Keep brain state out of git. `brain.json` carries a live PAT, so a
+      // repo that tracks it publishes a working credential on every commit.
+      try {
+        const added = ensureProjectGitignore(cwd, { dryRun: opts.dryRun });
+        if (added.length) logOk(`Excluded ${added.length} brain-state path(s) in .gitignore`);
+      } catch (ignoreErr) {
+        logWarn(`Could not update .gitignore: ${ignoreErr.message}`);
+      }
 
       // Auto-sync all .md files from the repo into the vault
       try {
