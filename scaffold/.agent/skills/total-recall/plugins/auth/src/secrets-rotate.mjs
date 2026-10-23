@@ -23,6 +23,7 @@ import { getProvider, providerForKeyName } from './provider-catalog.mjs';
 import { atomicWrite, safeStringify } from './vault.mjs';
 import { getRotationPlan, generateSecretValue } from './rotation-capability.mjs';
 import { getRecipe, valueLooksValid } from './provider-rotation-recipes.mjs';
+import { rotateViaProviderApi } from './provider-api-rotation.mjs';
 import {
   launchRotationContext,
   openConsole,
@@ -440,7 +441,45 @@ export async function rotateAuto(brainDir, key, opts = {}) {
     return { ok: true, key, class: plan.class, method: 'self_generated', exports: result.exports };
   }
 
-  if (plan.class === 'provider_browser' || plan.class === 'provider_api') {
+  // A provider that can mint and revoke its own keys must not be driven through a browser. This
+  // branch used to send provider_api down the browser path with everything else, which is why a
+  // management credential had no consumer anywhere in the code and a rotation that needed no human
+  // instead waited on a console login.
+  const provider = row.provider ? getProvider(row.provider) : providerForKeyName(key);
+  const api = provider?.rotation?.api;
+  if (plan.class === 'provider_api' && api?.create) {
+    const attempt = await rotateViaProviderApi({
+      brainDir,
+      key,
+      managementKeyName: provider.rotation.management_key,
+      recipe: api,
+      baseUrl: api.base_url,
+      // getSecret returns an object even for a key it does not hold, so 'truthy' is not the test.
+      // Reading a missing management key as present sent the request out with a bogus credential
+      // and surfaced the provider's 401, which reads as "wrong key" when the real answer is
+      // "no management key is stored at all".
+      readSecret: async (brain, name) => {
+        try {
+          const found = await getSecret(brain, name);
+          if (!found || found.found === false) return null;
+          const value = found.value ?? found;
+          return typeof value === 'string' && value ? value : null;
+        } catch { return null; }
+      },
+      storeSecret: (brain, name, value, o) => rotateSecretAndExport(brain, name, value, {
+        actor: o.actor, exportEnv: opts.exportEnv !== false,
+      }),
+      secretMeta: async (brain, name) => (await listSecretsMeta(brain)).find((r) => r.key === name) || null,
+      // Remember which key the provider minted, so the next rotation can revoke this one instead of
+      // reporting that the previous credential cannot be addressed.
+      recordKeyId: async (brain, name, id) => {
+        try { await updateSecretMeta(brain, name, { provider_key_id: id }); } catch { /* metadata is best-effort */ }
+      },
+    });
+    return { ...attempt, class: plan.class, method: 'provider_api' };
+  }
+
+  if (plan.class === 'provider_browser') {
     return { ...(await rotateViaBrowser(brainDir, key, opts)), class: plan.class, method: 'browser' };
   }
 

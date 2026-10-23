@@ -15,6 +15,15 @@
  *     class?: 'provider_api' | 'provider_browser' | 'self_generated' | 'manual',
  *     high_risk?: boolean,
  *     manual_keys?: string[],
+ *     // A provider that lets the account mint and revoke its own keys over its API. The management
+ *     // credential is a separate stored secret; without it the provider cannot rotate itself, which
+ *     // is what made 'provider_api' a class with no implementation.
+ *     management_key?: string,
+ *     api?: {
+ *       base_url: string,
+ *       create: { method?: string, path: string, body?: (label: string) => object, value_path: string, id_path?: string },
+ *       revoke?: { method?: string, path: (id: string, hash: string) => string },
+ *     },
  *   },
  *   default_monthly_cap_usd?: number | null,
  *   tiers?: { id: string, label: string, monthly_usd?: number | null }[],
@@ -92,6 +101,28 @@ export const PROVIDER_CATALOG = [
       header: 'Authorization: Bearer <key>',
       env_keys: ['OPENROUTER_API_KEY'],
       notes: 'OpenAI-compatible base URL https://openrouter.ai/api/v1',
+    },
+    // OpenRouter issues and revokes keys over its own API, but only to a credential that carries
+    // management rights. The inference key the store already holds cannot do it — the API answers
+    // is_management_key:false and 401 on GET /api/v1/keys — so the management credential lives
+    // under its own name and this declaration says where to find it.
+    rotation: {
+      class: 'provider_api',
+      management_key: 'OPENROUTER_MANAGEMENT_KEY',
+      api: {
+        base_url: 'https://openrouter.ai/api/v1',
+        create: {
+          method: 'POST',
+          path: '/keys',
+          body: (label) => ({ name: label }),
+          value_path: 'key',
+          id_path: 'data.hash',
+        },
+        revoke: {
+          method: 'DELETE',
+          path: (id) => `/keys/${id}`,
+        },
+      },
     },
     default_monthly_cap_usd: 30,
     tiers: [{ id: 'payg', label: 'Pay as you go', monthly_usd: null }],

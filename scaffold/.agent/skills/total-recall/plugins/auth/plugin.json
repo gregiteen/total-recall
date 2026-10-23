@@ -123,6 +123,11 @@
         "effect": "read"
       },
       {
+        "name": "agent",
+        "description": "Sign in an agent CLI that authenticates on its own terminal",
+        "effect": "destructive"
+      },
+      {
         "name": "secret",
         "description": "Manage and inspect auth secrets in the Total Recall store",
         "effect": "write"

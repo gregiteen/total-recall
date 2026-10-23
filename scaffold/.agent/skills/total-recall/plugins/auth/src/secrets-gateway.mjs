@@ -10,6 +10,7 @@ import fs from 'fs';
 import path from 'path';
 import crypto from 'crypto';
 import os from 'os';
+import { spawnSync } from 'node:child_process';
 import { encryptSecrets, decryptSecrets, encryptSecretsSync, decryptSecretsSync } from './crypto.mjs';
 import { DEFAULT_KEYCHAIN_SERVICE, readKeychainPassword } from './secrets-keychain.mjs';
 import { writeFileSecure, appendFileSecure } from './secure-file.mjs';
@@ -58,6 +59,7 @@ export function secretsPassword({
   env = process.env,
   readKeychain = readTrKeychainPassword,
   readEnvFile = readTrEnvFilePassword,
+  readLaunchAgent = readTrLaunchAgentPassword,
 } = {}) {
   const fromEnv = env.TR_SECRETS_PASSWORD || env.TR_MASTER_PASSWORD;
   if (fromEnv) return fromEnv;
@@ -70,7 +72,25 @@ export function secretsPassword({
     }
     if (fromKeychain) return fromKeychain;
   }
-  return readEnvFile(env) || null;
+  return readEnvFile(env) || readLaunchAgent(env) || null;
+}
+
+/** Existing owner-only launchd carrier, also usable by noninteractive agents.
+ * No password is copied into another store, environment, argv or output.
+ */
+export function readTrLaunchAgentPassword(env=process.env,{platform=process.platform,exec=spawnSync}={}) {
+  if(platform!=='darwin' || env.TR_SECRETS_NO_HOST_CARRIER==='1')return null;
+  const home=env.HOME || (env===process.env?os.homedir():null);
+  const file=env.TR_SECRETS_LAUNCH_AGENT || (home?path.join(home,'Library/LaunchAgents/com.totalrecall.brain.plist'):null);
+  if(!file)return null;
+  try {
+    const stat=fs.lstatSync(file),directory=fs.lstatSync(path.dirname(file));
+    const uid=process.getuid?.();
+    if(!stat.isFile() || !directory.isDirectory() || (stat.mode & 0o077)!==0 || (directory.mode & 0o022)!==0 || (uid!==undefined && (stat.uid!==uid || directory.uid!==uid)))return null;
+    const result=exec('/usr/bin/plutil',['-extract','EnvironmentVariables.TR_SECRETS_PASSWORD','raw','-o','-',file],{encoding:'utf8',timeout:5000,maxBuffer:65536});
+    if(result.status!==0)return null;
+    return (result.stdout || '').replace(/\r?\n$/,'') || null;
+  }catch{return null;}
 }
 
 /**
