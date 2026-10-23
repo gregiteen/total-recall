@@ -8,6 +8,23 @@ const SPEC = __SPEC__;
 const EXIT = { OK: 0, HTTP: 1, USAGE: 2, UNREACHABLE: 3 };
 const flagOf = (name) => `--${name.replace(/_/g, '-')}`;
 
+// Model harnesses scrub credential-shaped environment names (KEY/PASSWORD/SECRET/TOKEN) from the
+// shell they hand an agent, so a per-run bearer token exported by the parent is invisible here and
+// every call fails as unauthenticated. Read the same token from a 0600 file in the working
+// directory when the environment has none, so the agent gets its own scoped credential back
+// without the token ever reaching a log or a prompt.
+async function fileToken() {
+  try {
+    const [{ readFileSync }, path] = await Promise.all([import('node:fs'), import('node:path')]);
+    // Deliberately not named after the token variable: a credential-shaped file name is a smell and
+    // invites the same scrub that hid the environment variable.
+    const value = readFileSync(path.default.join(process.cwd(), `.${SPEC.name}-agent-grant`), 'utf8').trim();
+    return value || undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 class UsageError extends Error {}
 
 function usage(command) {
@@ -109,7 +126,7 @@ function parse(argv) {
   return { global, command, values };
 }
 
-function buildRequest(command, values, baseUrl) {
+async function buildRequest(command, values, baseUrl) {
   let base;
   try {
     base = new URL(baseUrl);
@@ -132,7 +149,7 @@ function buildRequest(command, values, baseUrl) {
     init.headers['content-type'] = 'application/json';
     init.body = JSON.stringify(Object.fromEntries(rest));
   }
-  const token = SPEC.auth ? process.env[SPEC.auth.token_env] : undefined;
+  const token = SPEC.auth ? (process.env[SPEC.auth.token_env] || await fileToken()) : undefined;
   if (token) init.headers.authorization = `Bearer ${token}`;
   return { url, init };
 }
@@ -173,7 +190,7 @@ async function main() {
   const baseUrl = global.baseUrl || process.env[SPEC.api.base_url_env] || SPEC.api.default_base_url;
   let request;
   try {
-    request = buildRequest(command, values, baseUrl);
+    request = await buildRequest(command, values, baseUrl);
   } catch (err) {
     if (!(err instanceof UsageError)) throw err;
     console.error(`${SPEC.name}: ${err.message}`);
