@@ -1,12 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { PluginInfo } from '../../../api/plugins'
 import { apiFetch, API_BASE } from '../../../api/_base'
-import { normalizeCard, type Card, type CardRegion } from './contract'
+import { normalizeCard, type Card } from './contract'
 import { CardRunner } from './runner'
-import { ActivityWidget, CommandsWidget, DataWidget, SettingsWidget, StatusWidget } from './widgets'
+import { ActivityWidget, CommandsWidget, SettingsWidget } from './widgets'
 import { brandStyle } from './theme'
 import { WorkspaceHost } from '../workspace/WorkspaceHost'
-import { PluginPanel, pluginElements } from '../PluginPanel'
+import { PluginPanel } from '../PluginPanel'
 import './card.css'
 import { CardScenes } from './CardScenes'
 
@@ -43,17 +43,6 @@ function Header({ card, onOpenDrawer }: { card: Card; onOpenDrawer: () => void }
       {hasWorkspace ? 'Open workspace' : 'Settings & usage'}
     </button>
   </header>
-}
-
-function Region({ region, plugin }: { region: CardRegion; plugin: PluginInfo }) {
-  switch (region.widget) {
-    case 'status': return <StatusWidget />
-    case 'live': return <PluginPanel plugin={plugin} elementId={pluginElements(plugin).find(element => element.kind === 'card')?.id} readOnly />
-    case 'actions': case 'form': case 'keypad': return <CommandsWidget region={region.command ? { ...region, commands: [region.command] } : region} />
-    case 'table': case 'detail': case 'list': case 'gauge': case 'log': return <DataWidget region={region} />
-    case 'settings': case 'credentials': return <SettingsWidget plugin={plugin} />
-    case 'activity': return <ActivityWidget />
-  }
 }
 
 function Drawer({ plugin, card, onClose }: { plugin: PluginInfo; card: Card; onClose: () => void }) {
@@ -95,20 +84,23 @@ function Drawer({ plugin, card, onClose }: { plugin: PluginInfo; card: Card; onC
   </aside>
 }
 
-/** One engine for every plugin; the manifest supplies layout, brand and commands. */
+/**
+ * The host gives a plugin its frame, its brand tokens and its command
+ * plumbing. The layout is the plugin's own face: CardEngine never arranges
+ * a plugin's interface and there is no shared template to fall back to.
+ */
 export function CardEngine({ plugin }: { plugin: PluginInfo }) {
   const card = useMemo(() => normalizeCard(plugin), [plugin])
-  const owned = pluginElements(plugin).some(element => element.kind === 'card' || element.kind === 'panel')
   const [drawer, setDrawer] = useState(false)
   return <CardRunner card={card}>
-    <section className={`card card-${card.template}${owned ? ' card-owned' : ''}`} style={brandStyle(card.branding)} data-density={card.branding.density} aria-label={`${card.title} card`}>
+    <section className={`card card-bespoke${card.face ? ' card-owned' : ''}`} style={brandStyle(card.branding)} data-density={card.branding.density} aria-label={`${card.title} card`}>
       <Header card={card} onOpenDrawer={() => setDrawer(true)} />
       {card.description && <p className="card-muted card-description">{card.description}</p>}
-      <CardScenes plugin={plugin}><div className="card-regions">
-        {card.regions.filter(region => !['actions', 'form', 'keypad'].includes(region.widget)).map((region, i) => <section key={i} className={`card-region card-region-${region.widget}`} style={{ gridColumn: `span ${Math.min(12, Math.max(1, region.span || 12))}` }}>
-          {region.title && <h3>{region.title}</h3>}<Region region={region} plugin={plugin} />
-        </section>)}
-      </div></CardScenes>
+      <CardScenes plugin={plugin}>
+        {card.face
+          ? <PluginPanel plugin={plugin} elementId={card.face.id} readOnly />
+          : <p className="card-error" role="alert">{plugin.name} has not supplied its card face.</p>}
+      </CardScenes>
       {card.branding.provider && <footer className="card-footer">{card.branding.provider.url ? <a href={card.branding.provider.url} target="_blank" rel="noreferrer noopener">{card.branding.provider.name}</a> : card.branding.provider.name} is a trademark of its owner. This plugin connects to the service with your own account.</footer>}
       {drawer && <Drawer plugin={plugin} card={card} onClose={() => setDrawer(false)} />}
     </section>

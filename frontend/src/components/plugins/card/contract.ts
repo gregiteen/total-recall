@@ -2,14 +2,9 @@ import type { PluginInfo } from '../../../api/plugins'
 
 export type ArgType = 'string' | 'number' | 'boolean' | 'choice'
 export type Effect = 'read' | 'write' | 'destructive' | 'send'
-export type Template = 'console' | 'ledger' | 'monitor' | 'inbox' | 'dashboard' | 'workbench' | 'vault'
-export type WidgetKind = 'status' | 'actions' | 'table' | 'detail' | 'log' | 'form' | 'keypad' | 'gauge' | 'list' | 'settings' | 'credentials' | 'activity' | 'live'
-export type CellFormat = 'text' | 'number' | 'money' | 'date' | 'datetime' | 'bytes' | 'percent' | 'status'
 
 export interface CardArg { name: string; flag?: string; positional?: boolean; label: string; type: ArgType; options?: Array<string | number>; required?: boolean; secret?: boolean }
 export interface CardCommand { name: string; description?: string; args: CardArg[]; effect: Effect; output: 'json' | 'text'; timeoutMs?: number }
-export interface CardColumn { key: string; label: string; format?: CellFormat }
-export interface CardRegion { widget: WidgetKind; title?: string; source?: { command: string; args?: string[] }; columns?: CardColumn[]; command?: string; commands?: string[]; span?: number }
 export interface CardBranding {
   name: string; color: string; accent: string; font: string; density: 'compact' | 'comfortable' | 'spacious'
   radius: 'none' | 'sm' | 'md' | 'lg' | 'pill'; header: 'plain' | 'ledger-rule' | 'band' | 'tab-strip' | 'badge-left'
@@ -20,14 +15,15 @@ export interface CardWorkspace {
   tabs?: string[];
   permissions?: string[];
 }
+/** The plugin's own card face. Layout belongs to the plugin, never to a shared template. */
+export interface CardFace { id: string; tag: string; module: string; description?: string }
 export interface Card {
-  id: string; title: string; description: string; template: Template; regions: CardRegion[]
+  id: string; title: string; description: string; face?: CardFace
   commands: Map<string, CardCommand>; branding: CardBranding; status?: { command: string; refreshSeconds: number }
   distribution?: { tier: string; license: string }
   workspace?: CardWorkspace
 }
 
-const TEMPLATES: Template[] = ['console', 'ledger', 'monitor', 'inbox', 'dashboard', 'workbench', 'vault']
 const FONTS = ['system', 'inter', 'ibm-plex', 'space-grotesk', 'jetbrains-mono', 'dm-sans', 'outfit', 'fraunces', 'newsreader', 'chivo-mono']
 const HEX = /^#[0-9a-fA-F]{6}$/
 /** Manifest JSON is untyped input; every field is checked before it is used. */
@@ -71,17 +67,12 @@ export function normalizeCard(plugin: PluginInfo): Card {
   }
   const status = obj(manifest.status)
   const statusCommand = typeof status.command === 'string' && commands.has(status.command) ? status.command : undefined
-  const layout = obj(manifest.card_layout)
-  const known = (r: Loose) => r && typeof r === 'object'
-  const regions: CardRegion[] = Array.isArray(layout.regions) ? layout.regions.filter(known).slice(0, 12) : []
-  const template: Template = TEMPLATES.includes(layout.template) ? layout.template : 'console'
-  if (regions.length === 0) {
-    // No declared layout: show real state, every command with its arguments, then configuration.
-    const elements = plugin.ui?.elements || manifest.ui?.elements || []
-    if (elements.some((element: Loose) => element.kind === 'card' || element.kind === 'panel')) regions.push({ widget: 'live' })
-    if (statusCommand) regions.push({ widget: 'status', title: 'Status' })
-    regions.push({ widget: 'actions', title: 'Commands' }, { widget: 'activity', title: 'Recent activity' })
-  }
+  // The face is the plugin's own component; there is no shared layout to fall back to.
+  const elements: Loose[] = Array.isArray(manifest.ui?.elements) ? manifest.ui.elements : (Array.isArray(plugin.ui?.elements) ? plugin.ui.elements : [])
+  const declared = elements.find((element: Loose) => element && typeof element === 'object' && (element.kind === 'card' || element.kind === 'panel'))
+  const face: CardFace | undefined = declared && typeof declared.id === 'string' && typeof declared.tag === 'string' && typeof declared.module === 'string'
+    ? { id: declared.id, tag: declared.tag, module: declared.module, description: typeof declared.description === 'string' ? declared.description : undefined }
+    : undefined
   const ws = obj(manifest.workspace)
   const workspace: CardWorkspace | undefined = ws && (ws.component || Array.isArray(ws.tabs)) ? {
     component: typeof ws.component === 'string' ? ws.component : undefined,
@@ -89,7 +80,7 @@ export function normalizeCard(plugin: PluginInfo): Card {
     permissions: Array.isArray(ws.permissions) ? ws.permissions.filter((p: unknown) => typeof p === 'string') : undefined,
   } : undefined
   return {
-    id: plugin.id, title: branding.name, description: plugin.description, template, regions, commands, branding,
+    id: plugin.id, title: branding.name, description: plugin.description, face, commands, branding,
     status: statusCommand ? { command: statusCommand, refreshSeconds: Number.isInteger(status.refresh_seconds) ? Math.min(86400, Math.max(5, status.refresh_seconds)) : 30 } : undefined,
     distribution: obj(manifest.distribution).tier ? { tier: manifest.distribution.tier, license: manifest.distribution.license } : undefined,
     workspace,

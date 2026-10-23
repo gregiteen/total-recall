@@ -2,6 +2,8 @@ import { describe, it, expect } from 'vitest';
 import { validateCardContract } from './card.mjs';
 import { validatePluginManifest } from '../plugin-loader.mjs';
 
+const face = { id: 'card', kind: 'card', tag: 'demo-card', module: 'ui/card.js', description: 'Demo face' };
+
 const base = () => ({
   id: 'demo', name: 'Demo', version: '1.0.0', description: 'A demonstration plugin.',
   cli: { command: 'demo', handler: './cli.mjs', subcommands: [
@@ -13,11 +15,7 @@ const base = () => ({
   ] },
   status: { command: 'status', refresh_seconds: 30 },
   distribution: { tier: 'official', license: 'open' },
-  card_layout: { template: 'ledger', regions: [
-    { widget: 'status' },
-    { widget: 'table', source: { command: 'status', path: 'items' }, columns: [{ key: 'id', label: 'Id' }, { key: 'amount', label: 'Amount', format: 'money' }] },
-    { widget: 'actions', commands: ['refund'] }
-  ] },
+  ui: { elements: [face] },
   branding: { color: '#635bff', accent: '#0a2540', font: 'ibm-plex', density: 'compact', radius: 'sm', header: 'ledger-rule' }
 });
 
@@ -26,9 +24,23 @@ describe('card contract', () => {
     expect(validateCardContract(base()).errors).toEqual([]);
     expect(validatePluginManifest(base()).valid).toBe(true);
   });
-  it('is optional', () => {
-    const m = { id: 'demo', name: 'Demo', version: '1.0.0', description: 'd' };
-    expect(validateCardContract(m).errors).toEqual([]);
+  it('requires a bespoke card face and rejects every shared template', () => {
+    // Every plugin has a card. A plugin without one is incomplete.
+    const missing = { id: 'demo', name: 'Demo', version: '1.0.0', description: 'd' };
+    expect(validateCardContract(missing).errors.join('\n')).toMatch(/must declare the plugin's card face/);
+
+    // A declared-but-empty ui is not a way to opt out.
+    const emptyUi = { ...missing, ui: { elements: [] } };
+    expect(validateCardContract(emptyUi).errors.join('\n')).toMatch(/must declare the plugin's card face/);
+
+    const templated = base();
+    templated.card_layout = { template: 'ledger', regions: [{ widget: 'status' }] };
+    const text = validateCardContract(templated).errors.join('\n');
+    expect(text).toMatch(/'card_layout' is not supported/);
+    expect(text).toMatch(/never a shared template/);
+
+    // The template vocabulary is gone: no template, widget or region concept remains.
+    expect(validateCardContract(base()).errors).toEqual([]);
   });
   it('rejects bad arguments, effects and unknown commands', () => {
     const m = base();
@@ -55,25 +67,20 @@ describe('card contract', () => {
     expect(validateCardContract(m).errors.join('\n')).toMatch(/must be a string/);
     expect(validateCardContract(m).errors.join('\n')).toMatch(/only one secret/);
   });
-  it('requires layout regions to bind to declared commands', () => {
-    const m = base();
-    m.card_layout.regions[1].source.command = 'nope';
-    m.card_layout.regions.push({ widget: 'table', source: { command: 'status' } });
-    const text = validateCardContract(m).errors.join('\n');
-    expect(text).toMatch(/source.command must name a declared/);
-    expect(text).toMatch(/columns is required for a table/);
-  });
-  it('rejects unknown templates, widgets and brand tokens', () => {
-    const m = base();
-    m.card_layout.template = 'winamp';
-    m.card_layout.regions[0].widget = 'confetti';
-    m.branding.color = 'red';
-    m.branding.font = 'comic-sans';
-    const text = validateCardContract(m).errors.join('\n');
-    expect(text).toMatch(/template' must be one of/);
-    expect(text).toMatch(/widget must be one of/);
-    expect(text).toMatch(/color must be a #rrggbb/);
-    expect(text).toMatch(/font must be one of/);
+  it('requires exactly one declared card face', () => {
+    const none = base();
+    none.ui.elements = [{ id: 'settings', kind: 'settings', tag: 'x-settings', module: 'ui/settings.js' }];
+    expect(validateCardContract(none).errors.join('\n')).toMatch(/must declare an element of kind 'card'/);
+
+    const two = base();
+    two.ui.elements = [face, { id: 'second', kind: 'card', tag: 'demo-second', module: 'ui/second.js' }];
+    expect(validateCardContract(two).errors.join('\n')).toMatch(/exactly one card face/);
+
+    const withPanel = base();
+    withPanel.ui.elements = [face, { id: 'panel', kind: 'panel', tag: 'demo-panel', module: 'ui/panel.js' }];
+    expect(validateCardContract(withPanel).errors).toEqual([]);
+
+    expect(validateCardContract(base()).errors).toEqual([]);
   });
   it('warns about fixed metrics', () => {
     const m = base();

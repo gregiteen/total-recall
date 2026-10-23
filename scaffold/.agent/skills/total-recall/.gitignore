@@ -16,3 +16,10 @@ memory-vault/.events/
 browser-profile/
 .snapshots/
 daemon.pid
+
+# macOS AppleDouble resource forks ("._name" beside "name"). They appear
+# whenever a brain is read from a non-HFS volume (NFS/SMB/exFAT) or restored
+# through an archiver, and 160 of them landed in this brain on 2026-10-15.
+# They are filesystem metadata, not memory: never version them.
+._*
+.DS_Store

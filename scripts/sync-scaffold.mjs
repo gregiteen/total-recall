@@ -83,7 +83,7 @@ try {
     'start',
     'meta-harness',
     'decision',
-    'plugins',
+    'plugin',
     'project-management'
   ];
 
