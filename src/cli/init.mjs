@@ -198,6 +198,59 @@ function printHelp() {
 `);
 }
 
+// ─── Bootstrap token store resolution ───────────────────────────────────────
+
+/**
+ * The brain directory whose key store the server answering `brainUrl` reads.
+ *
+ * A server process derives its store from `AGENT_DIR` alone (`core/config.mjs`
+ * → `brainDir`), and the launchd service starts it with the GLOBAL agent dir.
+ * So a token written into a project brain's `brain.json` is only usable when
+ * it was minted into that global store. Minting into the project's own store
+ * produced a token no running server would accept, while init still reported
+ * success — the failure surfaced later as `startup check` reporting
+ * `brain failed` (`instructions-http-401`) for every project.
+ *
+ * Loopback URLs therefore resolve to the store the local server reads. A
+ * remote brain's store is not reachable from here, so the target brain keeps
+ * its own store.
+ *
+ * Two constraints pull against each other and both must hold:
+ *   1. `AGENT_DIR` (and the `_TR_TEST_AGENT_DIR` fixture override) honours an
+ *      explicitly selected root, so the serving store must not be derived by
+ *      blindly re-reading it — when it is pinned at the project the two stores
+ *      collapse and the bug returns untouched.
+ *   2. An explicit root owns its whole layout: init must never create
+ *      `$HOME/.agent` behind a caller that named a different root (a test, or
+ *      an isolated install). So `globalBrainDir` is used only when it is
+ *      genuinely distinct AND already exists; otherwise the target store is
+ *      kept rather than a new one being created.
+ */
+export function resolveServingBrainDir({ brainDir, isProject, brainUrl, globalBrainDir = null }) {
+  if (!isProject) return brainDir;
+  let loopback = false;
+  try {
+    const host = new URL(brainUrl).hostname;
+    loopback = ['localhost', '127.0.0.1', '[::1]', '::1'].includes(host);
+  } catch { /* unparseable URL: treat as remote and keep the target store */ }
+  if (!loopback) return brainDir;
+  // `globalBrainDir` is the caller's explicit answer and is preferred. Only
+  // when it names nothing usable do we consider the home-relative global
+  // brain — and never when an explicit root owns the layout, because that
+  // root's server is the one being served and $HOME belongs to someone else.
+  const explicitRoot = Boolean(process.env.AGENT_DIR || process.env._TR_TEST_AGENT_DIR);
+  const candidates = [globalBrainDir];
+  if (!explicitRoot) candidates.push(path.join(os.homedir(), '.agent', 'skills', 'total-recall'));
+  for (const candidate of candidates) {
+    if (!candidate || candidate === brainDir) continue;
+    // Only adopt a store that is already established; adopting a missing one
+    // would make init responsible for creating it, which constraint 2 forbids.
+    if (fs.existsSync(path.join(candidate, 'config', 'keys.jsonl'))
+      || fs.existsSync(path.join(candidate, 'config', '.ssss'))) return candidate;
+  }
+  return brainDir;
+}
+
 // ─── Main ───────────────────────────────────────────────────────────────────
 
 export default async function init(args) {
@@ -207,6 +260,10 @@ export default async function init(args) {
   const cwd = process.cwd();
   const globalAgentDir = getGlobalAgentDir();
   const globalBrainDir = path.join(globalAgentDir, 'skills', 'total-recall');
+  // The HOME-relative global brain, which is what a background server reads.
+  // `globalAgentDir` above honours AGENT_DIR and can therefore point at the
+  // project being initialised; the serving store must not be derived from it.
+  const servingGlobalBrainDir = path.join(os.homedir(), '.agent', 'skills', 'total-recall');
 
   // Determine target based on --project flag
   const isProject = opts.project;
@@ -705,12 +762,26 @@ export default async function init(args) {
 
     if (needsBootstrap) {
       try {
-        const { issueKey } = await import('../server/keys.mjs');
-        const keyData = issueKey('Default Local Developer Key', { scopes: ['*'] });
+        const { keyStoreFor } = await import('../server/keys.mjs');
         brainCfg.url = brainCfg.url || 'http://localhost:3000';
+        // Mint the bootstrap token into the store the SERVER reads, which is
+        // the store under `AGENT_DIR` — not necessarily the brain this init run
+        // targets. A project brain's token is validated by whatever server
+        // process answers `brainCfg.url`, and that process resolves its store
+        // from `AGENT_DIR` (launchd starts it with the global one). Issuing
+        // into the project's own store wrote a token no running server could
+        // match: init reported "pre-authorized" and every request answered 401,
+        // so `startup check` said `brain failed` on project after project.
+        // When the target IS the store the server reads this is a no-op branch.
+        const servingBrainDir = resolveServingBrainDir({ brainDir, isProject, brainUrl: brainCfg.url, globalBrainDir: servingGlobalBrainDir });
+        const { issueKey } = keyStoreFor(servingBrainDir);
+        const keyData = issueKey('Default Local Developer Key', { scopes: ['*'] });
         brainCfg.token = brainCfg.token || keyData.token;
         writeFileSecure(brainJsonPath, JSON.stringify(brainCfg, null, 2), { mode: 0o600 });
         logOk(`Bootstrap configuration successfully generated and pre-authorized at ${brainCfg.url}`);
+        if (isProject && servingBrainDir !== brainDir) {
+          logOk(`Bootstrap token issued to the serving brain store at ${servingBrainDir}`);
+        }
         if (brainCfg.project_id) {
           logOk(`Assigned project UUID ${brainCfg.project_id} to project brain`);
         }

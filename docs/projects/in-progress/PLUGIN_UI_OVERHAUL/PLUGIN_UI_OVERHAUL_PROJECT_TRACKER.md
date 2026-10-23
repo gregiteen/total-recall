@@ -54,6 +54,7 @@
 - [x] Bug Fixes: Resolved Chromium `CustomElementRegistry` duplicate constructor collisions across 5 plugins (`creative-search`, `decision`, `openwiki`, `translator`, `user-automations`), and added missing card declarations in `hermes` and `sticker-generator`
 - [x] Publication: Published all 34 plugins to the public npm registry under `gregiteen` and `@gregiteen/signed-gi-client`, and published `total-recall-brain@3.40.4`
 - [x] Mesh Propagation: Deployed `total-recall-brain@3.40.4` to all 179 project brains across the workspace, and updated global CLIs on Mac Mini, Cloud Droplet, and MacBook
+- [x] Post-completion defect: repaired the project-brain bootstrap token that made `startup check` report `brain failed` everywhere (2026-10-23)
 
 ---
 
@@ -110,3 +111,4 @@
 | 2026-10-22T17:22:00Z | Antigravity | Resolved CustomElementRegistry constructor collisions | Subclassed duplicate custom element tag constructors across 5 plugins, eliminating Chromium registration errors |
 | 2026-10-22T17:28:00Z | Antigravity | Published all 34 plugins and total-recall-brain@3.40.4 to npm registry | Public packages live on npm under gregiteen and @gregiteen/signed-gi-client |
 | 2026-10-22T17:33:00Z | Antigravity | Cluster-wide propagation and independent version verification | Deployed total-recall-brain@3.40.4 across all 179 project brains, updated global CLIs on Mac Mini, Cloud Droplet, and MacBook |
+| 2026-10-23T05:29:00Z | Claude (DeepSeek Harness) | Repaired the project-brain bootstrap token that made every project report `brain failed` | `init --project` minted its `brain.json` PAT into the project key store while the server validates against the store under `AGENT_DIR` (global, under launchd), so the token was accepted by nobody: init said "pre-authorized" and `startup check` then reported `instructions-http-401`. Added `keyStoreFor(brainDir)` (`src/server/keys.mjs`) and `resolveServingBrainDir()` (`src/cli/init.mjs`); 6 new regression tests, of which the 3 init tests were verified to fail against the pre-fix source. Fleet-verified: 13 of 14 tokened project brains were unusable and now return 200 from `/api/instructions`; the remote brain was left untouched. `startup check` moved `brain failed` → `brain ready`. |
