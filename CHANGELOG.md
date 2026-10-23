@@ -1,3 +1,24 @@
+## 3.40.6 — 2026-10-23
+
+- Mint the project bootstrap PAT into the key store the server actually reads.
+  A server resolves its store from `AGENT_DIR` alone, and the launchd service
+  starts it with the global agent dir, but `init --project` issued through the
+  default `issueKey`, pinned to whatever `AGENT_DIR` named at that moment. The
+  two diverged, so the token written into `brain.json` was accepted by nobody:
+  `init` printed "pre-authorized", and `startup check` then reported
+  `brain failed` (`instructions-http-401`) with overall readiness false. On the
+  machine this was measured on, 13 of the 14 project brains that carried a
+  token carried an unusable one. `src/server/keys.mjs` gains
+  `keyStoreFor(brainDir)` so a caller can bind a store to the brain a server
+  serves, and `init.mjs` resolves the serving brain through
+  `resolveServingBrainDir()`: a loopback URL uses the store the local server
+  reads, a remote brain keeps its own store. The store is adopted only when it
+  is distinct from the target and already established, because adopting a
+  missing one would make `init` create `$HOME/.agent` behind an explicitly
+  selected root — which the compatibility-init isolation invariant forbids.
+- Note on scope: 3.40.5 was published carrying the pre-fix code, so this
+  release is the first artifact that actually contains the repair.
+
 ## 3.39.6 — 2026-10-16
 
 - Write the project instruction surface at the repository root, not inside
