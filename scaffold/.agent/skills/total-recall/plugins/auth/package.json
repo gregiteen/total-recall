@@ -5,7 +5,7 @@
   "type": "module",
   "main": "cli.mjs",
   "scripts": {
-    "test": "node --test test/auth.test.mjs && vitest run --exclude '**/auth.test.mjs'"
+    "test": "node --test test/*.test.mjs"
   },
   "keywords": [
     "total-recall-plugin",

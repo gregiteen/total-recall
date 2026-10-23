@@ -1,5 +1,7 @@
 # Auth plugin
 
+Noninteractive agents use the existing host password carriers in this order: process environment, macOS Keychain, the private TR environment file, then the private `com.totalrecall.brain` LaunchAgent. The LaunchAgent must be an owned regular file at mode 0600 in an owned directory without group/other write permission. `TR_SECRETS_LAUNCH_AGENT` selects an explicit carrier; `TR_SECRETS_NO_HOST_CARRIER=1` disables it. Auth captures the password internally and never copies it into argv, logs or another machine. Missing carriers and decryption failures remain errors.
+
 Auth owns encrypted provider credentials, dashboard and collaboration passwords, purpose-bound session signing, passkey storage, and scoped API-key lifecycle. Core adapters require its manifest exports and have no credential implementation fallback.
 
 ## Operations

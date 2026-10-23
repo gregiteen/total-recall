@@ -7,20 +7,17 @@ import { resolveSecretsPath, loadSecrets, saveSecrets, ensureMeta, appendAudit, 
 
 const REQUEST_TIMEOUT_MS = 10_000;
 
-function serverPort(override) {
-  // The leader's port is whatever it advertised on the mesh. Assuming the local
-  // default made sync fail with "fetch failed" against a leader that was up and
-  // reachable on a different port (the cloud brain serves on 3900, not 3000).
-  const candidate = Number(override ?? process.env.TR_SERVER_PORT ?? process.env.PORT ?? 3000);
-  return Number.isInteger(candidate) && candidate > 0 && candidate <= 65535 ? candidate : 3000;
+function serverPort() {
+  const value = Number(process.env.TR_SERVER_PORT || process.env.PORT || 3000);
+  return Number.isInteger(value) && value > 0 && value <= 65535 ? value : 3000;
 }
 
-function meshUrl(ip, route, port) {
+function meshUrl(ip, route) {
   const octets = String(ip || '').split('.').map(Number);
   if (octets.length !== 4 || octets.some((part) => !Number.isInteger(part) || part < 0 || part > 255) || octets[0] !== 100 || octets[1] < 64 || octets[1] > 127) {
     throw new Error('Leader IP is outside the Tailscale CGNAT range');
   }
-  return `http://${ip}:${serverPort(port)}${route}`;
+  return `http://${ip}:${serverPort()}${route}`;
 }
 
 export function getSecretsChecksum() {
@@ -42,8 +39,8 @@ export function secretsSyncMode(env = process.env) {
  * anything. The node's store is never replaced wholesale and the node keeps
  * its own master password.
  */
-export async function syncGrantedSecrets(leaderIp, { dir = brainDir, fetchImpl = fetch, port } = {}) {
-  const base = meshUrl(leaderIp, '/api/secrets/mesh', port);
+export async function syncGrantedSecrets(leaderIp, { dir = brainDir, fetchImpl = fetch } = {}) {
+  const base = meshUrl(leaderIp, '/api/secrets/mesh');
   const listResponse = await fetchImpl(base, { signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS) });
   if (!listResponse.ok) throw new Error(`Leader returned ${listResponse.status}`);
   const { keys } = await listResponse.json();
@@ -79,6 +76,6 @@ export async function syncLoop() {
   if (await isLeader()) return;
   const leaderInfo = await getLeaderInfo();
   if (!leaderInfo?.ip) return;
-  try { await syncGrantedSecrets(leaderInfo.ip, { port: leaderInfo.brain_port }); }
-  catch (err) { logger.error('secrets-sync', 'Failed to sync granted secrets', { error: err.message, leader: leaderInfo.ip, port: leaderInfo.brain_port ?? 'default' }); }
+  try { await syncGrantedSecrets(leaderInfo.ip); }
+  catch (err) { logger.error('secrets-sync', 'Failed to sync granted secrets', { error: err.message }); }
 }

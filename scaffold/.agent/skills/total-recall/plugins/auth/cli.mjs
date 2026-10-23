@@ -342,6 +342,31 @@ export async function run(argv = []) {
       else throw new Error('Use auth key list|issue <name> --scopes <csv> [--role role] [--expires date]|revoke <id>|usage [id]|roles|role-set <name> --scopes <csv>');
       console.log(JSON.stringify(result)); break;
     }
+    case 'agent': {
+      // Sign in an agent CLI that authenticates on its own terminal. The pty lives in
+      // scripts/agent-login-pty.py because Node has none and this plugin carries no pty library;
+      // this routes the plugin's own surface to it.
+      const { loginAgent, AGENT_LOGIN_PROFILES } = await import('./src/agent-login.mjs');
+      const [action = 'list', name] = rest;
+      const flag = (n) => { const at = rest.indexOf(n); return at < 0 ? undefined : rest[at + 1]; };
+      if (action === 'list') {
+        console.log(JSON.stringify(Object.keys(AGENT_LOGIN_PROFILES).map((id) => ({ id, ...AGENT_LOGIN_PROFILES[id] }))));
+        break;
+      }
+      if (action !== 'login') throw new Error('Use auth agent list | auth agent login <agent> [--code <code>] [--code-file <path>] [--url-file <path>]');
+      const result = await loginAgent({
+        agent: name,
+        code: flag('--code'),
+        codeFile: flag('--code-file'),
+        urlFile: flag('--url-file'),
+        onEvent: (event) => { if (!isJson && event.event === 'url') console.log('\nOpen this URL and approve it:\n' + event.url + '\n'); },
+      });
+      if (isJson) console.log(JSON.stringify(result));
+      else if (result.ok) console.log(result.alreadySignedIn ? `${name} is already signed in.` : `${name} signed in.`);
+      else console.log(`${name} is not signed in. ${result.error || result.reason || ''} ${result.hint || ''}`.trim());
+      if (!result.ok) process.exitCode = 2;
+      break;
+    }
     case 'google':
       await handleGoogle(rest, isJson);
       break;
@@ -370,6 +395,7 @@ export async function run(argv = []) {
       console.log('  key list|issue|revoke|usage|roles|role-set   Scoped tokens and role policies');
       console.log('  secret   Inspect and manage Total Recall secrets store keys');
       console.log('  password set --stdin [--force-reset]   Set encrypted dashboard credential');
+      console.log('  agent list|login <agent>   Sign in an agent CLI that authenticates on its own terminal');
       break;
     default:
       console.error(`Unknown subcommand: ${command}. Run 'total-recall auth --help' for guidance.`);
