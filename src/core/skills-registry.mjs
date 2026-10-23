@@ -93,7 +93,7 @@ export function skillPackageFiles(skillDir) {
   const files = [];
   const visit = (dir, relative = '') => {
     for (const entry of fs.readdirSync(dir, { withFileTypes: true }).sort((a, b) => a.name.localeCompare(b.name))) {
-      if (entry.name === '.git' || entry.name === 'node_modules' || entry.name === '.DS_Store') continue;
+      if (skillPackageExcluded(entry.name)) continue;
       const next = relative ? `${relative}/${entry.name}` : entry.name;
       if (entry.isDirectory()) visit(path.join(dir, entry.name), next);
       else if (entry.isFile() || entry.isSymbolicLink()) files.push(next);
@@ -264,14 +264,38 @@ export function listInstalls(brainDir, { skillId = null, repo = null } = {}) {
 }
 
 /**
- * Recursive copy of skill directory (skip node_modules, .git).
+ * State that is never part of a skill package.
+ *
+ * A skill's package is its content: SKILL.md, references, prompts, scripts,
+ * subagents, evals and assets. Everything listed here is either the agent's
+ * private state, disposable derived data, or a nested install belonging to
+ * something else — and `config/secrets.enc` is the credential store itself,
+ * which must never be copied into another repository or published. Excluding
+ * them also stops the package hash changing every time memory is written.
+ */
+const SKILL_PACKAGE_EXCLUDED_DIRS = new Set([
+  'node_modules', '.git', 'memory-vault', 'memory-derived', 'derived',
+  'sessions', 'logs', 'browser-profile', 'plugins', 'plugin-state',
+  'memory-inbox', 'dist', 'coverage', '.cache', 'tmp',
+]);
+const SKILL_PACKAGE_EXCLUDED_FILES = [
+  /^\.DS_Store$/, /^secrets\.enc(\.|$)/, /^\.env(\.|$)/, /^id_[a-z]+$/, /\.pem$/,
+];
+
+/** True when a directory entry is private, derived or a nested install. */
+export function skillPackageExcluded(name) {
+  return SKILL_PACKAGE_EXCLUDED_DIRS.has(name) || SKILL_PACKAGE_EXCLUDED_FILES.some((re) => re.test(name));
+}
+
+/**
+ * Recursive copy of skill directory, content only.
  */
 export function copySkillDir(src, dest) {
   if (!fs.existsSync(src)) throw new Error(`Source missing: ${src}`);
   fs.mkdirSync(dest, { recursive: true });
   const entries = fs.readdirSync(src, { withFileTypes: true });
   for (const ent of entries) {
-    if (ent.name === 'node_modules' || ent.name === '.git' || ent.name === '.DS_Store') continue;
+    if (skillPackageExcluded(ent.name)) continue;
     const from = path.join(src, ent.name);
     const to = path.join(dest, ent.name);
     if (ent.isDirectory()) {

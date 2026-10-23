@@ -15,11 +15,14 @@ vi.mock('../PluginSettings', () => ({ PluginSettings: () => <div>settings-form</
 vi.mock('../PluginPanel', async (original) => ({ ...await original<typeof import('../PluginPanel')>(), PluginPanel: ({ plugin }: { plugin: PluginInfo }) => <div>{plugin.id} owner interface</div> }))
 
 const plugin = {
-  id: 'demo', name: 'Demo', description: 'Demo plugin', cli: { command: 'demo', subcommands: [{ name: 'status' }, { name: 'send', description: 'Send one' }, { name: 'lookup' }] },
+  id: 'demo', name: 'Demo', description: 'Demo plugin',
+  ui: { elements: [{ id: 'owner', kind: 'card', tag: 'owner-card', module: './ui/card.js' }] },
+  cli: { command: 'demo', subcommands: [{ name: 'status' }, { name: 'send', description: 'Send one' }, { name: 'lookup' }] },
   manifest: {
     status: { command: 'status', refresh_seconds: 30 },
     branding: { name: 'Demo Brand', color: '#1D4ED8', accent: '#FACC15', font: 'inter', header: 'band', provider: { name: 'Acme', url: 'https://acme.example' } },
     distribution: { tier: 'official', license: 'open' },
+    ui: { elements: [{ id: 'owner', kind: 'card', tag: 'owner-card', module: './ui/card.js', description: 'Demo face' }] },
     cli: { subcommands: [
       { name: 'status', effect: 'read' },
       { name: 'send', effect: 'send', args: [{ name: 'to', positional: true, label: 'To', type: 'string', required: true }, { name: 'token', positional: true, label: 'Token', type: 'string', secret: true }] },
@@ -30,17 +33,18 @@ beforeEach(() => vi.clearAllMocks())
 afterEach(cleanup)
 
 describe('card contract', () => {
-  it('derives a layout, effects and a status poll from the manifest', () => {
+  it('takes the face from the plugin manifest and never derives a layout', () => {
     const card = normalizeCard(plugin)
-    expect(card.regions.map(r => r.widget)).toEqual(['status', 'actions', 'activity'])
+    expect(card.face).toEqual({ id: 'owner', tag: 'owner-card', module: './ui/card.js', description: 'Demo face' })
+    expect('template' in card).toBe(false)
+    expect('regions' in card).toBe(false)
     expect(card.commands.get('send')!.effect).toBe('send')
     expect(card.status).toEqual({ command: 'status', refreshSeconds: 30 })
   })
-  it('requires explicit read effects even for list/config groups and falls back from unknown branding', () => {
-    const bare = normalizeCard({ id: 'x', name: 'X', description: '', cli: { command: 'x', subcommands: [{ name: 'list' }, { name: 'config' }, { name: 'purge' }] }, manifest: { branding: { color: 'red', font: "'Syne', sans-serif" } } } as unknown as PluginInfo)
+  it('leaves the face undefined when the plugin declares none', () => {
+    const bare = normalizeCard({ id: 'x', name: 'X', description: '', cli: { command: 'x', subcommands: [{ name: 'list' }] }, manifest: { branding: { color: 'red', font: "'Syne', sans-serif" } } } as unknown as PluginInfo)
+    expect(bare.face).toBeUndefined()
     expect(bare.commands.get('list')!.effect).toBe('write')
-    expect(bare.commands.get('config')!.effect).toBe('write')
-    expect(bare.commands.get('purge')!.effect).toBe('write')
     expect(bare.branding.color).toBe('#475569'); expect(bare.branding.font).toBe('system')
   })
   it('never puts secret arguments on the command line and builds the agent CLI line', () => {
@@ -59,59 +63,34 @@ describe('theme', () => {
 })
 
 describe('card engine', () => {
-  it('mounts the owner interface for a live region rather than substituting command forms', () => {
-    render(<CardEngine plugin={{ ...plugin, manifest: { ...plugin.manifest, card_layout: { template: 'workbench', regions: [{ widget: 'live' }] } } }} />)
-    expect(screen.getByText('demo owner interface')).toBeTruthy()
-    expect(screen.getByText('total-recall demo send <to> --json')).toBeTruthy()
-  })
-  it('uses the owner card as the overview when the owner has not declared a host layout', () => {
-    const owned = { ...plugin, ui: { elements: [{ id: 'owner', kind: 'card', tag: 'owner-card', module: './ui/card.js' }] } }
-    expect(normalizeCard(owned).regions[0].widget).toBe('live')
-    render(<CardEngine plugin={owned} />)
-    expect(screen.getByText('demo owner interface')).toBeTruthy()
-    expect(screen.getByLabelText('send command scene')).toBeTruthy()
-  })
-  it('shows real status, the CLI line for every command, and credits the provider', async () => {
+  it('mounts the owner face and never substitutes a host arrangement', async () => {
     render(<CardEngine plugin={plugin} />)
-    await waitFor(() => expect(screen.getAllByText('ok').length).toBeGreaterThan(0))
-    expect(runPluginCommand).toHaveBeenCalledWith('demo', 'status', ['--json'])
-    expect(screen.getByText('total-recall demo send <to> --json')).toBeTruthy()
+    await waitFor(() => expect(screen.getByText('demo owner interface')).toBeTruthy())
+    expect(document.querySelector('.card-regions')).toBeNull()
+    expect(document.querySelector('.card-bespoke')).toBeTruthy()
+  })
+  it('says so plainly when a plugin has not supplied a face', async () => {
+    const faceless = { ...plugin, ui: { elements: [] }, manifest: { ...plugin.manifest, ui: { elements: [] } } } as unknown as PluginInfo
+    render(<CardEngine plugin={faceless} />)
+    await waitFor(() => expect(screen.getByRole('alert').textContent).toMatch(/has not supplied its card face/))
+  })
+  it('renders the owner face and credits the provider without polling on its behalf', async () => {
+    render(<CardEngine plugin={plugin} />)
+    await waitFor(() => expect(screen.getByText('demo owner interface')).toBeTruthy())
+    // Reading real state belongs to the plugin's own face, not to the host engine.
+    expect(runPluginCommand).not.toHaveBeenCalled()
     expect(screen.getByRole('link', { name: 'Acme' })).toBeTruthy()
   })
-  it('offers every command scene and does not send merely by opening its form', async () => {
-    render(<CardEngine plugin={plugin} />)
-    await waitFor(() => expect(runPluginCommand).toHaveBeenCalled())
-    expect(screen.getAllByText('Try')).toHaveLength(3)
-    fireEvent.click(screen.getAllByText('Try')[2])
-    fireEvent.change(screen.getByLabelText(/Query/), { target: { value: 'hello' } })
-    fireEvent.click(screen.getByText('Look up'))
-    await waitFor(() => expect(runPluginCommand).toHaveBeenCalledWith('demo', 'lookup', ['--query', 'hello', '--json']))
-    expect(runPluginCommand).not.toHaveBeenCalledWith('demo', 'send', expect.anything())
-  })
-  it('toggles actual host activation and offers common commands in the context menu', async () => {
+  it('toggles actual host activation and never derives screens from the command list', async () => {
     vi.mocked(apiFetch).mockResolvedValueOnce({ ok: true, json: async () => ({ success: true, activation: { enabled: false, state: 'inactive' } }) } as Response)
     render(<CardEngine plugin={plugin} />)
     await waitFor(() => expect(screen.getByText('Active')).toBeTruthy())
     fireEvent.click(screen.getByRole('switch'))
     await waitFor(() => expect(screen.getByText('Inactive')).toBeTruthy())
     expect(apiFetch).toHaveBeenCalledWith('/api/plugins/demo/activation', expect.objectContaining({ method: 'PUT', body: '{"enabled":false}' }))
-    fireEvent.contextMenu(screen.getByLabelText('Demo Brand scenes'))
-    expect(screen.getByRole('menu', { name: 'Demo Brand common commands' })).toBeTruthy()
-    expect(screen.getAllByRole('menuitem').map(item => item.textContent)).toEqual(['status', 'send', 'lookup'])
-    fireEvent.keyDown(screen.getByRole('menu'), { key: 'Escape' })
-    expect(screen.queryByRole('menu')).toBeNull()
-  })
-  it('requires confirmation for sends and transports a declared credential only through stdin', async () => {
-    render(<CardEngine plugin={plugin} />)
-    fireEvent.click(screen.getAllByText('Try')[1])
-    fireEvent.change(screen.getByLabelText(/^To\s/), { target: { value: 'recipient@example.test' } })
-    fireEvent.change(screen.getByLabelText('Token'), { target: { value: 'private-fixture' } })
-    expect(screen.getByText('Run command').closest('button')?.disabled).toBe(true)
-    fireEvent.click(screen.getByLabelText('Confirm send'))
-    fireEvent.click(screen.getByText('Run command'))
-    await waitFor(() => expect(runPluginCommand).toHaveBeenCalledWith('demo', 'send', ['recipient@example.test', '--json'], { stdin: 'private-fixture' }))
-    expect((screen.getByLabelText('Token') as HTMLInputElement).value).toBe('')
-    expect(screen.queryByText('private-fixture')).toBeNull()
+    // The host hosts one mount point; it does not turn subcommands into screens.
+    expect(screen.queryByLabelText(/command scene/)).toBeNull()
+    expect(document.querySelectorAll('.card-scene')).toHaveLength(1)
   })
   it('shows owner command activity without recording arguments or credentials', async () => {
     render(<CardEngine plugin={plugin} />)
@@ -142,19 +121,11 @@ describe('card engine', () => {
     fireEvent.keyDown(close, { key: 'Escape' })
     await waitFor(() => expect(document.activeElement).toBe(opener))
   })
-  it('does not invent a zero usage meter when the source has no measurements', async () => {
-    render(<CardEngine plugin={{ ...plugin, manifest: { ...plugin.manifest, card_layout: { template: 'monitor', regions: [{ widget: 'gauge', source: { command: 'status' } }] } } }} />)
-    await waitFor(() => expect(screen.getByText('No valid usage measurement is available.')).toBeTruthy())
-    expect(screen.queryByRole('meter')).toBeNull()
-  })
   it('shows Open workspace and mounts workspace tab for plugins with workspace', async () => {
     const phonePlugin = {
       ...plugin,
       id: 'phone',
-      manifest: {
-        ...plugin.manifest,
-        workspace: { component: 'PhoneDialer', tabs: ['dialer', 'calls'], permissions: ['microphone'] }
-      }
+      manifest: { ...plugin.manifest, workspace: { component: 'PhoneDialer', tabs: ['dialer', 'calls'], permissions: ['microphone'] } },
     } as unknown as PluginInfo
     render(<CardEngine plugin={phonePlugin} />)
     await waitFor(() => expect(screen.getByText('Open workspace')).toBeTruthy())

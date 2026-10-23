@@ -9,11 +9,8 @@
 .card-badge{display:inline-block;margin:4px 6px 0 0;padding:1px 8px;border-radius:var(--card-radius);background:var(--card-accent);color:var(--card-on-accent);font-size:.7rem;font-weight:600}
 .card-badge-quiet{background:transparent;color:var(--card-muted);border:1px solid var(--card-line)}
 .card-description{margin:0}.card-muted{color:var(--card-muted);font-size:.85rem;margin:2px 0}
-.card-regions{display:grid;grid-template-columns:repeat(12,1fr);gap:var(--card-gap)}.card-region{grid-column:span 12;min-width:0}
-.card-console .card-region-status{grid-column:span 12}.card-dashboard .card-region,.card-monitor .card-region{grid-column:span 6}
-.card-workbench .card-regions,.card-inbox .card-regions{grid-template-columns:minmax(0,1fr) minmax(0,2fr)}.card-workbench .card-region,.card-inbox .card-region{grid-column:auto}
-.card-ledger .card-region-table{grid-column:span 12}.card-vault .card-region{grid-column:span 12;border-left:3px solid var(--card-accent);padding-left:var(--card-gap)}
-@media (max-width:720px){.card-regions{grid-template-columns:1fr}.card-regions>.card-region{grid-column:auto!important}}
+/* The face supplies its own layout; the host only gives it a surface. */
+.card-bespoke .card-face{display:block;min-width:0}
 .card-row{display:flex;align-items:center;gap:8px;flex-wrap:wrap}.card-kv{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:8px;margin:8px 0 0}.card-kv dt{font-size:.7rem;color:var(--card-muted);text-transform:uppercase}.card-kv dd{margin:0;font-weight:600;overflow-wrap:anywhere}
 .card-pill{padding:1px 8px;border-radius:999px;font-size:.75rem;font-weight:600;border:1px solid currentColor}.card-pill-ok{color:#047857}.card-pill-warn{color:#b45309}.card-pill-error{color:#b91c1c}.card-pill-neutral{color:var(--card-muted)}
 .card-button{background:var(--card-color);color:var(--card-on-color);border:0;border-radius:var(--card-radius);padding:6px 12px;font:inherit;cursor:pointer}.card-button:disabled{opacity:.5;cursor:not-allowed}.card-button-quiet{background:transparent;color:var(--card-text);border:1px solid var(--card-line)}

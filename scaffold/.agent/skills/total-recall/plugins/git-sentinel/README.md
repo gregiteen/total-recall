@@ -1,8 +1,11 @@
 # Git Hygiene
 
-September 30 review: The audit reproduced two reporting bugs: trimming porcelain output corrupts its first leading status column; missing upstream/error can become zero unpushed commits. PIC-018 requires column-preserving parsing and explicit unknown/no-upstream/error states. These fields remain unreliable until repaired. See the [correction tracker](../../docs/projects/in-progress/PLUGIN_IMPLEMENTATION_CORRECTIONS/PLUGIN_IMPLEMENTATION_CORRECTIONS_PROJECT_TRACKER.md).
+Reports the state of the git repository you run it in: current branch, staged / unstaged / untracked / conflicted files, commits not yet pushed to upstream, and stashes.
 
-Reports the state of the git repository you run it in: current branch, staged / unstaged / untracked files, commits not yet pushed to upstream, and stashes.
+**Reporting accuracy, verified 2026-10-23.** Two defects reported in the September 30 review are fixed and covered by testing:
+
+- **Porcelain columns are preserved.** `git status --porcelain` output is never trimmed, so a file whose name begins with a space parses correctly. Verified against a file literally named `" leading-space.txt"`, which reports as `A   leading-space.txt`.
+- **An unknown upstream is never reported as zero unpushed commits.** `upstreamStatus` distinguishes `tracking`, `none`, `gone`, `detached`, `unborn`, `unknown` and `error`; where no comparison exists, `unpushedCommits` is `null` rather than `0`. Verified in a repository with no remote configured.
 
 **Use cases:** software-development
 

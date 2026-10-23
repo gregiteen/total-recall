@@ -340,20 +340,11 @@ export default run;
     manifest.tasks = [{ intent: taskIntent, schedule: taskSchedule, command: taskCommand, placement: 'selected-node' }];
   }
 
-  if (withUi) {
-    manifest.ui = {
-      design_tokens: 'ui/DESIGN.md',
-      elements: [{ id: 'panel', kind: 'panel', tag: `${id}-panel`, module: 'ui/panel.js', description: `${pluginName} panel`, events: [], tokens: ['color-text', 'color-surface', 'color-border', 'spacing-md', 'radius-md'], optional_tokens: [] }],
-    };
-    const panelClass = `${id.split('-').map((part) => part[0].toUpperCase() + part.slice(1)).join('')}Panel`;
-    fs.mkdirSync(path.join(pluginDir, 'ui'), { recursive: true });
-    fs.writeFileSync(path.join(pluginDir, 'ui', 'DESIGN.md'), '---\ncolors:\n  text: "#20242a"\n  surface: "#ffffff"\n  border: "#dce2e8"\nspacing:\n  md: 12px\nrounded:\n  md: 8px\n---\n\n# Design tokens\n\nReplace these defaults with the host design tokens.\n');
-    if (apiKeys.length) {
-      manifest.ui.elements[0].events = ['save-token'];
-      manifest.ui.elements[0].props = { view: { type: 'object', description: `Printed by \`total-recall ${id} token status --json\`: { present, secretKey }` } };
-    }
-    fs.writeFileSync(path.join(pluginDir, 'ui', 'panel.js'), apiKeys.length ? tokenPanelSource(id, panelClass, pluginName, apiKeys) : `class ${panelClass} extends HTMLElement {\n  connectedCallback() {\n    const root = this.shadowRoot || this.attachShadow({ mode: 'open' });\n    root.replaceChildren();\n    const style = document.createElement('style');\n    style.textContent = ':host { display:block; color:var(--color-text); background:var(--color-surface); border:1px solid var(--color-border); border-radius:var(--radius-md); padding:var(--spacing-md); }';\n    const text = document.createElement('p');\n    text.textContent = ${JSON.stringify(`${pluginName} panel scaffold. Add the actual capability before sharing.`)};\n    root.append(style, text);\n  }\n}\ncustomElements.define('${id}-panel', ${panelClass});\n`);
-  }
+  // No UI is generated. Every plugin must have a card face, but a face is
+  // bespoke owner code authored by hand once the plugin's function is known:
+  // a generated stub is what produced a ecosystem of identical cards. The
+  // scaffold therefore reports the face as outstanding rather than faking one.
+  const cardOutstanding = true;
 
   if (isCapability) {
     manifest.deploy = {

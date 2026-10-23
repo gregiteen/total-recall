@@ -3,10 +3,26 @@ import type { ReactNode } from 'react'
 import type { PluginInfo } from '../../../api/plugins'
 import { API_BASE, apiFetch } from '../../../api/_base'
 import { useRunner } from './runner-context'
-import { CommandsWidget } from './widgets'
 import { ExecutionPicker } from './ExecutionPicker'
 
-/** Generic navigation and activation; the overview stays the owner's bespoke interface. */
+/**
+ * The host gives a plugin a place to put its screens and a way to move between
+ * them. Which screens exist, what they are called and what is on them is the
+ * plugin's design: the face declares them and reports the active one. The host
+ * never derives a screen from the command list.
+ */
+export interface PluginScreen { id: string; label: string }
+
+/** Screens a face declares through `window.screens`, else the face stands alone. */
+export function declaredScreens(element: HTMLElement | null): PluginScreen[] {
+  const raw = (element as unknown as { screens?: unknown })?.screens
+  if (!Array.isArray(raw)) return []
+  return raw
+    .filter((screen): screen is PluginScreen => Boolean(screen) && typeof screen === 'object'
+      && typeof (screen as PluginScreen).id === 'string' && typeof (screen as PluginScreen).label === 'string')
+    .slice(0, 12)
+}
+
 export function CardScenes({ plugin, children }: { plugin: PluginInfo; children: ReactNode }) {
   const { card, busy } = useRunner()
   const [enabled, setEnabled] = useState(plugin.activation?.enabled !== false)
@@ -28,16 +44,18 @@ export function CardScenes({ plugin, children }: { plugin: PluginInfo; children:
   }, [plugin.id])
   const running = [...busy, ...Object.values(ownerBusy)]
   const track = useRef<HTMLDivElement>(null)
+  // The face's own screens collapse into a single mount point: the plugin keeps
+  // every screen inside its own component and reports which one is active.
   const names = [...card.commands.keys()]
   const face = plugin.manifest?.card_face as { quick_actions?: Array<{ subcommand: string; label?: string }> } | undefined
   const declared = plugin.card_face?.quick_actions || face?.quick_actions || []
   const validActions = declared.filter(action => names.includes(action.subcommand))
-  const common = validActions.length ? validActions.slice(0, 6) : names.filter(name => !['on', 'off'].includes(name)).slice(0, 6).map(subcommand => ({ subcommand, label: subcommand }))
+  const common = validActions.slice(0, 8)
   const behavior = () => window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ? 'auto' as const : 'smooth' as const
+  /** Ask the face to show a screen it declared; it may ignore a name it does not own. */
   const openCommand = (name: string) => {
     setMenu(false)
-    const scene = track.current?.children[names.indexOf(name) + 1] as HTMLElement | undefined
-    if (scene && track.current) track.current.scrollTo({ left: scene.offsetLeft, behavior: behavior() })
+    window.dispatchEvent(new CustomEvent('plugin-show-screen', { detail: { pluginId: plugin.id, screen: name } }))
   }
   const move = (delta: number) => track.current?.scrollBy({ left: delta * track.current.clientWidth, behavior: behavior() })
   const toggle = async () => {
@@ -58,17 +76,15 @@ export function CardScenes({ plugin, children }: { plugin: PluginInfo; children:
       <button type="button" className="card-button" role="switch" aria-checked={enabled} aria-label={`${card.title} on or off`} onClick={() => void toggle()} disabled={changing || running.length > 0}>{changing ? 'Updating…' : enabled ? 'Turn off' : 'Turn on'}</button>
       <button type="button" className="card-link" aria-label="Previous scene" onClick={() => move(-1)}>←</button>
       <button type="button" className="card-link" aria-label="Next scene" onClick={() => move(1)}>→</button>
-      <button type="button" className="card-link" aria-haspopup="menu" aria-expanded={menu} onClick={() => setMenu(!menu)}>Quick commands</button>
+      {common.length > 0 && <button type="button" className="card-link" aria-haspopup="menu" aria-expanded={menu} onClick={() => setMenu(!menu)}>Screens</button>}
     </div>
-    {menu && <div role="menu" aria-label={`${card.title} common commands`} className="card-context-menu">
+    {menu && <div role="menu" aria-label={`${card.title} declared screens`} className="card-context-menu">
       {common.map(action => <button role="menuitem" type="button" className="card-link" key={action.subcommand} onClick={() => openCommand(action.subcommand)}>{action.label || action.subcommand}</button>)}
-      {!common.length && <span>No commands declared.</span>}
     </div>}
     {error && <p role="alert" className="card-error">{error}</p>}
     <ExecutionPicker />
-    <div className="card-scene-track" ref={track} tabIndex={0} aria-label={`${card.title} scenes`}>
-      <section className="card-scene" aria-label="Overview">{children}</section>
-      {names.map(name => <section className="card-scene" key={name} aria-label={`${name} command scene`}><CommandsWidget region={{ widget: 'actions', commands: [name] }} /></section>)}
+    <div className="card-scene-track" ref={track} tabIndex={0} aria-label={`${card.title} interface`}>
+      <section className="card-scene" aria-label="Interface">{children}</section>
     </div>
   </div>
 }

@@ -828,7 +828,8 @@ export default function PluginsPage({ activeBrainId }: PluginsPageProps) {
                 )}
               </Empty>
             ) : (
-              <div className="card-grid" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(min(100%, 360px), 1fr))", gap: "22px" }}>
+              {/* Plugin faces are wide surfaces with screens to flip through, never narrow columns. */}
+              <div className="card-grid" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 720px), 1fr))", gap: "22px" }}>
                 {shownInstalled.map((p) => {
                   return (
                     <div
@@ -836,7 +837,7 @@ export default function PluginsPage({ activeBrainId }: PluginsPageProps) {
                       onContextMenu={(e) => handleContextMenu(p, e)}
                       onTouchStart={(e) => handleTouchStart(p, e)}
                       onTouchEnd={cancelLongPress}
-                      style={{ display: "flex", flexDirection: "column", gap: "8px" }}
+                      style={{ display: "flex", flexDirection: "column", gap: "8px", minWidth: 0 }}
                     >
                       <CardEngine plugin={p} />
                       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "0 4px", fontSize: "11px", color: "var(--text-tertiary)", flexWrap: "wrap", gap: "6px" }}>

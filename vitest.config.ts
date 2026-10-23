@@ -88,9 +88,6 @@ export default defineConfig({
     env: {
       TR_SECRETS_NO_KEYCHAIN: '1',
       TR_ENV_FILE: '/nonexistent/total-recall-test/tr.env',
-      // Plugins ship as standalone repositories; specs use fixed fixtures
-      // instead of whatever is installed in the developer's own brain.
-      _TR_TEST_BUNDLED_PLUGINS_DIR: fileURLToPath(new URL('./fixtures/bundled-plugins', import.meta.url)),
     },
     setupFiles: ['./scripts/test-memory-root.mjs', './frontend/src/setupTests.ts'],
     coverage: {

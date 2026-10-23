@@ -13,15 +13,14 @@ describe('plugin inventory and CLI library lifecycle', () => {
   let root, previous;
   beforeEach(() => {
     root = fs.mkdtempSync(path.join(os.tmpdir(), 'tr-catalog-'));
-    previous = { agent: process.env._TR_TEST_AGENT_DIR, bundled: process.env._TR_TEST_BUNDLED_PLUGINS_DIR };
+    previous = { agent: process.env._TR_TEST_AGENT_DIR };
     process.env._TR_TEST_AGENT_DIR = path.join(root, 'global-agent');
-    process.env._TR_TEST_BUNDLED_PLUGINS_DIR = path.join(root, 'bundled');
     fs.mkdirSync(path.join(root, '.agent'), { recursive: true });
     const config = path.join(root, '.agent/skills/total-recall/config'); fs.mkdirSync(config, { recursive: true });
     fs.writeFileSync(path.join(config, 'clients.json'), JSON.stringify(['codex', 'claude-code', 'antigravity']));
   });
   afterEach(() => {
-    for (const [key, value] of [['_TR_TEST_AGENT_DIR', previous.agent], ['_TR_TEST_BUNDLED_PLUGINS_DIR', previous.bundled]]) {
+    for (const [key, value] of [['_TR_TEST_AGENT_DIR', previous.agent]]) {
       if (value === undefined) delete process.env[key]; else process.env[key] = value;
     }
     fs.rmSync(root, { recursive: true, force: true });

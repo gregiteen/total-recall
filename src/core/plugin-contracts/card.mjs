@@ -1,9 +1,9 @@
 /**
- * Functional card contract. The host renders one card per plugin from these
- * declarations: what the plugin can do (commands with typed arguments and an
- * effect), what it needs (settings, credentials), and how to read its real
- * state (a status command). Everything here is optional; a plugin without it
- * still gets a card listing its commands and secrets.
+ * Functional card contract. A plugin's card face is its own bespoke Web
+ * Component, declared as a `ui.elements[]` entry of kind `card`. There is no
+ * template: no shared layout, no widget vocabulary, no allowlist of shapes.
+ * Core validates that the face exists and that the commands behind it are
+ * declared; it never dictates how the face is arranged.
  */
 const plain = (v) => v && typeof v === 'object' && !Array.isArray(v);
 const COMMAND = /^[a-z][a-z0-9-]{0,63}$/;
@@ -15,14 +15,10 @@ export const OUTPUT_KINDS = ['json', 'text'];
 export const TIERS = ['core', 'official', 'personal', 'community'];
 export const LICENSE_CLASSES = ['open', 'closed'];
 const STATUS_STATES = ['ok', 'warn', 'error', 'unknown'];
-export const CARD_TEMPLATES = ['console', 'ledger', 'monitor', 'inbox', 'dashboard', 'workbench', 'vault'];
-export const CARD_WIDGETS = ['status', 'actions', 'table', 'detail', 'log', 'form', 'keypad', 'gauge', 'list', 'settings', 'credentials', 'activity', 'live'];
-export const WIDGETS_NEEDING_SOURCE = ['table', 'detail', 'list', 'gauge', 'log'];
 export const CARD_FONTS = ['system', 'inter', 'ibm-plex', 'space-grotesk', 'jetbrains-mono', 'dm-sans', 'outfit', 'fraunces', 'newsreader', 'chivo-mono'];
 export const CARD_DENSITIES = ['compact', 'comfortable', 'spacious'];
 export const CARD_RADII = ['none', 'sm', 'md', 'lg', 'pill'];
 export const CARD_HEADERS = ['plain', 'ledger-rule', 'band', 'tab-strip', 'badge-left'];
-export const CELL_FORMATS = ['text', 'number', 'money', 'date', 'datetime', 'bytes', 'percent', 'status'];
 export const WORKSPACE_PERMISSIONS = ['microphone', 'camera', 'notifications'];
 const HEX = /^#[0-9a-fA-F]{6}$/;
 
@@ -87,7 +83,7 @@ export function validateCardContract(manifest) {
       if (!LICENSE_CLASSES.includes(manifest.distribution.license)) errors.push(`'distribution.license' must be one of: ${LICENSE_CLASSES.join(', ')}`);
     }
   }
-  validateLayout(manifest, names, errors);
+  validateCardFace(manifest, errors);
   validateBranding(manifest.branding, errors, warnings);
   validateWorkspace(manifest.workspace, errors);
   if (Array.isArray(manifest.secrets)) {
@@ -101,36 +97,28 @@ export function validateCardContract(manifest) {
   return { errors, warnings, states: STATUS_STATES };
 }
 
-function validateLayout(manifest, commandNames, errors) {
-  const layout = manifest.card_layout;
-  if (layout === undefined) return;
-  if (!plain(layout)) { errors.push("'card_layout' must be an object"); return; }
-  if (!CARD_TEMPLATES.includes(layout.template)) errors.push(`'card_layout.template' must be one of: ${CARD_TEMPLATES.join(', ')}`);
-  if (!Array.isArray(layout.regions) || layout.regions.length === 0 || layout.regions.length > 12) {
-    errors.push("'card_layout.regions' must be an array of 1 to 12 regions");
+/**
+ * Every plugin has a card face: bespoke owner code, declared once in
+ * ui.elements[]. A plugin without one is incomplete, and a plugin that declares
+ * a shared template is invalid.
+ *
+ * The *scaffold* emitted by `plugin create` deliberately contains no card: a
+ * face is authored by hand once the plugin's function is understood. The
+ * scaffold is therefore not yet a valid plugin, and says so.
+ */
+function validateCardFace(manifest, errors) {
+  if (manifest.card_layout !== undefined) {
+    errors.push("'card_layout' is not supported: a card face is bespoke owner code in ui.elements[], never a shared template");
+  }
+  const elements = manifest.ui?.elements;
+  if (!Array.isArray(elements) || elements.length === 0) {
+    errors.push("'ui.elements' must declare the plugin's card face; every plugin has one, authored by hand");
     return;
   }
-  layout.regions.forEach((region, i) => {
-    const where = `card_layout.regions[${i}]`;
-    if (!plain(region)) { errors.push(`${where} must be an object`); return; }
-    if (!CARD_WIDGETS.includes(region.widget)) { errors.push(`${where}.widget must be one of: ${CARD_WIDGETS.join(', ')}`); return; }
-    if (WIDGETS_NEEDING_SOURCE.includes(region.widget)) {
-      const cmd = region.source?.command;
-      if (typeof cmd !== 'string' || !commandNames.has(cmd)) errors.push(`${where}.source.command must name a declared cli subcommand`);
-    }
-    if (region.widget === 'form' && !commandNames.has(region.command)) errors.push(`${where}.command must name a declared cli subcommand`);
-    if (region.commands !== undefined) {
-      if (!Array.isArray(region.commands) || region.commands.some((c) => !commandNames.has(c))) errors.push(`${where}.commands must list declared cli subcommands`);
-    }
-    if (region.columns !== undefined) {
-      if (!Array.isArray(region.columns) || region.columns.length === 0) errors.push(`${where}.columns must be a non-empty array`);
-      else region.columns.forEach((c, j) => {
-        if (!plain(c) || typeof c.key !== 'string' || typeof c.label !== 'string') errors.push(`${where}.columns[${j}] needs key and label`);
-        else if (c.format !== undefined && !CELL_FORMATS.includes(c.format)) errors.push(`${where}.columns[${j}].format must be one of: ${CELL_FORMATS.join(', ')}`);
-      });
-    }
-    if (region.widget === 'table' && !Array.isArray(region.columns)) errors.push(`${where}.columns is required for a table`);
-  });
+  // Panels (token entry, settings drawers) are secondary screens of the plugin, not card faces.
+  const faces = elements.filter((element) => plain(element) && element.kind === 'card');
+  if (faces.length === 0) errors.push("'ui.elements' must declare an element of kind 'card'");
+  if (faces.length > 1) errors.push("'ui.elements' must declare exactly one card face");
 }
 
 function validateBranding(branding, errors, warnings) {

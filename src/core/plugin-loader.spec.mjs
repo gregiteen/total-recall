@@ -59,6 +59,7 @@ describe('Plugin Loader & Schema Validation', () => {
         },
         use_cases: ['research'],
         cli: { command: 'my-plugin', handler: './cli.mjs' },
+        ui: { elements: [{ id: 'card', kind: 'card', tag: 'my-plugin-card', module: 'ui/card.js' }] },
         tasks: [
           { intent: 'Run daily crawl', schedule: '0 0 * * *', command: 'crawl' }
         ]
@@ -100,6 +101,7 @@ describe('Plugin Loader & Schema Validation', () => {
           resources: { db: 'sqlite' }
         },
         skills: [{ id: 'cap-plugin', path: './skills/cap/SKILL.md' }],
+        ui: { elements: [{ id: 'card', kind: 'card', tag: 'cap-plugin-card', module: 'ui/card.js' }] },
         commands: [{ name: 'cap', handler: './cli.mjs' }]
       };
       expect(validatePluginManifest(validDeploy).valid).toBe(true);
@@ -142,6 +144,7 @@ describe('Plugin Loader & Schema Validation', () => {
         name: 'Paid Plugin',
         version: '1.0.0',
         description: 'Commercial capability with license key',
+        ui: { elements: [{ id: 'card', kind: 'card', tag: 'paid-plugin-card', module: 'ui/card.js' }] },
         monetization: {
           model: 'take-rate',
           take_rate_basis_points: 250,
@@ -185,7 +188,9 @@ describe('Plugin Loader & Schema Validation', () => {
       const bundled = listBundledPlugins();
       expect(bundled.length).toBeGreaterThan(0);
       for (const p of bundled) {
-        expect(p.errors).toEqual([]);
+        // A templated plugin is invalid by construction; each one is rebuilt by
+        // hand with its own card face. This assertion is the migration gauge.
+        expect(p.errors, `${p.id} still declares a template or has no bespoke card face`).toEqual([]);
         expect(p.valid).toBe(true);
         expect(
           p.dir.startsWith(bundledPluginsDir()) ||
@@ -233,6 +238,8 @@ describe('Plugin Loader & Schema Validation', () => {
               { name: 'user-projects' },
             ],
           },
+          // A card face is mandatory: the plugin owns its own interface.
+          ui: { elements: [{ id: 'card', kind: 'card', tag: 'scientific-frontiers-card', module: 'ui/card.js' }] },
           // getPluginWatchPaths only returns paths that exist on disk.
           compile: { watch: ['watched'] },
         }),
