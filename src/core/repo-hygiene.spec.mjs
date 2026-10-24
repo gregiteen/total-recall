@@ -15,7 +15,7 @@ function tracked() {
 }
 
 describe('open-source repo hygiene', () => {
-  it('commits no per-user memories, IDE projections or handoffs', () => {
+  it('commits no per-user memories or IDE projections', () => {
     const files = tracked();
     if (!files) return;
     // Skills ARE repo content and belong in git: git does not descend into an
@@ -23,17 +23,28 @@ describe('open-source repo hygiene', () => {
     // (~317 files) existing in no repository anywhere -- one disk failure from
     // being lost (commit 9e83665). What must stay out of an open-source package
     // is per-USER STATE, which is what actually leaks a person's machine:
-    // memories, handoffs, and IDE projections. `.agent/skills/` is allowed;
+    // memories and IDE projections. `.agent/skills/` is allowed;
     // everything else under those directories is not.
     const isSkillContent = (f) => /^\.agent\/skills\/[^/]+\//.test(f.replace(/^\.agents\//, '.agent/'));
     const forbidden = files.filter((f) => {
       const perUserDir = /^(\.agent|\.agents|\.claude|\.codex|\.cursor|\.windsurf)\//.test(f);
       if (perUserDir && !isSkillContent(f)) return true;
-      if (/^HANDOFF\.md$/.test(f)) return true;
       if (/(^|\/)memory-(vault|inbox|derived)\/.*\.md$/.test(f) && !f.startsWith('scaffold/')) return true;
       return false;
     });
     expect(forbidden).toEqual([]);
+  });
+
+  it('keeps the owner-requested project handoff free of private state and outside the npm payload', () => {
+    const files = tracked();
+    if (!files?.includes('HANDOFF.md')) return;
+    const text = readFileSync(path.join(ROOT, 'HANDOFF.md'), 'utf8');
+    expect(text).not.toMatch(/\/Users\/[^/\s]+\/|(?:Bearer\s+tr_|tr_)[A-Za-z0-9_-]{30,}|-----BEGIN.*PRIVATE KEY/);
+    const manifest = JSON.parse(readFileSync(path.join(ROOT, 'package.json'), 'utf8'));
+    // The root handoff is project documentation, not an installation instruction.
+    expect(manifest.files).not.toContain('HANDOFF.md');
+    expect(manifest.files).not.toContain('*');
+    expect(manifest.files).not.toContain('**');
   });
 
   it('ships only the generic bootstrap in scaffold/ (fixed allowlist, no personal markers)', () => {

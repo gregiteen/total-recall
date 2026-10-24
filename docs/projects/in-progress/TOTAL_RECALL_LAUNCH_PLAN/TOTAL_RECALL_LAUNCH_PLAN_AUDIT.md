@@ -1,5 +1,79 @@
 # TOTAL_RECALL_LAUNCH_PLAN — Audit
 
+## DEV-API-02 formal audit baseline
+
+**Audit Status**: Complete
+**Audited commit**: 6f48d39 (baseline before this implementation)
+**Audit host**: Gregorys-Mac-mini.local; Codex; 2026-10-24.
+
+### Scope and method
+
+Continue the existing launch plan and root handoff, focusing on API-1–API-6. Read the five-file plan, invoke implementation/tests, CLI router, auth-owner access-key/server-auth modules, brain selection, composed registries, recall, remember and compilation call graph. Baseline runtime check and fresh focused invoke execution ran on the Mini. Historical consolidation observations below keep their original provenance; they are not fresh release certification.
+
+### Inventory and runtime surface
+
+Full server mounts `src/server/routes/invoke.mjs`; memory-only app does not. `src/server/auth.mjs` and `keys.mjs` are adapters to the auth plugin, which owns named PATs, roles, issuer identity and validated SSSS state. `bin/total-recall.mjs` dispatches built-ins, installed plugin namespaces and project/global composed modules. `src/core/config.mjs` and CLI layer selectors govern brains. `startup check --json` currently reports shared_ready:true on the Mini; this does not prove fleet state or that the serving process has loaded this patch.
+
+### Data and state
+
+Canonical memory remains validated SSSS Markdown; local indexes are projections. Existing auth-owned PAT state remains authoritative, with no second grant/key store. The new execution ledger uses validated SSSS event operations with caller/operation/target/outcome metadata. Request text, argv, tokens and output must never enter that ledger. Disposable acceptance keys and fixture brains are removed after tests; private local brain/OpenWiki state remains outside the public artifact.
+
+### Integrations
+
+Node's direct-argv child API supplies process groups, pipes and termination signals. Restricted retrieval uses trusted local search/data parsing only; ordinary recall no longer needs a logger/config/auth import merely to access filesystem helpers. Full mode deliberately retains auth-owner credential resolution and trusted plugin/composed code. Paid decision providers remain full-mode functionality with incomplete quota/cancellation acceptance. Gro's seller services and image are outside this repository's change.
+
+### Security and privacy
+
+The original route's raw-scope checks lost role ceilings and execution identity. A generic child inherited server administration and credentials, arbitrary target flags and nested owner work. Prototype names could resolve through inherited object members. Named scopes alone did not constrain filesystem/provider work. The implementation must require explicit mode grants, fresh key/issuer/role checks, registry membership and truthful resource outcomes. Unsupported restricted execution must fail closed; an environment marker is attribution, not a sandbox.
+
+### Standing-rule conflicts
+
+The root handoff was explicitly requested and force-added by the owner in `6f48d39`, but the historical repo-hygiene test unconditionally bans it. The fresh full suite reproduced this single failure. Preserve the requested project handoff and instead check it for private state and npm exclusion. Keep private session exports ignored. No change to the no-private-state packaging requirement is authorized.
+
+### Quality baseline
+
+The incoming handoff records 13 historical route tests; those were not rerun before these edits. This turn verified runtime readiness before implementation, then ran fresh source tests below. First focused implementation run:42 tests passed; expanded regression:84 tests passed. Independent agent:5 real HTTP tests passed using actual auth-owned disposable keys. First full suite:2296 passed,1 failed across370 files; the failure is the contradictory handoff ban above. Final-source full suite, default SSSS audit persistence, server-free memory and configured gates are recorded in the tracker/evidence after completion. Earlier suite totals remain historical.
+
+### Debt and dead code
+
+Current generic CLI/plugin/composed handlers have no enforceable restricted-owner contract. `remember` invokes compilation, including plugin generators. Do not label these safe by filtering argv. Restricted mutation/owner adapters and provider spending ceilings remain required work. Full mode intentionally permits host administration; narrower consumers must not receive full grants as an operational workaround.
+
+### Deploy and operations
+
+This batch changes source/tests/documentation and commits/pushes the complete working tree. It does not publish npm, activate a serving release, change cloud binds or rotate production keys. Migration is explicit and documented in the developer guide. Child termination cannot undo committed memory or already accepted provider work; outcome-audit failure requires checking owner state before retrying a mutation.
+
+### Content and product fit
+
+TR's optional developer API supports intentional full access alongside confined access. Ordinary memory remains server-free. The guide must distinguish source acceptance, actual served source and publication, and must describe unsupported restricted adapters as unavailable. The six launch streams and full install/upgrade journey remain in progress.
+
+### Findings register
+
+| ID | Finding | Disposition and evidence |
+| --- | --- | --- |
+| A-001 | Raw scopes bypass role/lifecycle ceilings through dispatch | Fresh shared-auth authority and issuer-chain checks; route and real HTTP tests |
+| A-002 | Restricted requests inherit server CLI/credential/brain authority | Dedicated local server-brain retrieval; all unsupported restricted owners denied |
+| A-003 | Prototype operation names and syntax-only composed membership | Own-property operation checks and actual executable registry membership |
+| A-004 | Unbounded caller timeout, missing concurrency contract and false successful exits | Child/server limits, group cancellation and truthful failed envelopes; resource tests |
+| A-005 | No validated per-execution outcome ledger | SSSS authorization/outcome events, secret-free payload tests and audit-unavailable denial |
+| A-006 | Restricted mutations/owner adapters and provider quotas not complete | Open API-1–API-6 acceptance; no completed-launch or hardened-API claim |
+| A-007 | Root handoff publication conflicts with hygiene assertion | Preserve owner deliverable; assert private-state exclusion and npm exclusion |
+
+### Impact on the requested change
+
+Reuse auth instead of introducing credentials or policy stores. Implement an explicit opt-in migration, safe local retrieval, unsupported-owner denial, bounded children and matching capability discovery. Preserve legitimate full developer work. Keep canonical write/compilation behavior unchanged while restricted writes remain denied. Run all relevant and full Mini tests, independent acceptance and configured gates before Git publication.
+
+### Decisions
+
+DEV-API-01 retention stands. DEV-API-02 is a staged security boundary, not complete API acceptance: full mode is literal and intentional throughout its issuer chain; restricted retrieval is server-brain-only; unsupported confinement is denied. No competing project, Gro dependency or cloud prerequisite is introduced.
+
+## DEV-API-02 — Execution boundary audit, October 24
+
+Codex verified the sanctioned host is Gregorys-Mac-mini.local and `startup check --json` reports shared_ready:true. Shared auth already stores arbitrary validated scopes, role ceilings, expiry, issuer identity and revocation in SSSS; no additional key store is needed. Invoke currently bypasses role ceilings by inspecting raw scopes, accepts prototype operation names, treats failed CLI exits as successful envelopes and inherits all server environment variables. CLI `remember` also compiles executable plugin generators, so its restricted write path cannot be approved merely by filtering argv. Composed discovery and execution must use the actual project/global registry and CLI precedence.
+
+Implementation boundary: explicit literal `invoke:full` opts a key into trusted host developer authority (including host credentials and nested execution); `*` alone does not migrate a key. `invoke:restricted` plus `brain:server` permits only the dedicated local recall adapter and discovery. Arbitrary CLI/plugin/composed execution, memory writes and paid decisions fail closed for restricted keys until their owners provide enforceable confinement. Restricted provider spending is zero. This closes unsafe dispatch without claiming all API-1–API-6 acceptance is complete.
+
+Research: [Node child processes](https://nodejs.org/api/child_process.html) documents direct argv, detached POSIX process groups and signal handling. [Node permissions](https://nodejs.org/api/permissions.html) describes resource controls, which do not make arbitrary plugin JavaScript a safe restricted execution adapter. Prefer trusted owner code and explicit denial over treating flags or environment context as a sandbox.
+
 ## SCOPE-RECONCILE-01 — Complete source audit, October 24
 
 Owner clarification: Gro CRM owns its seller-facing scoped command API, public agent guide/skills and integrated DSH runtime. The pasted handoff mixed these requirements with Total Recall work. Gro source already implements its gateway/catalog/guide and public skill/client routes in `crm_runtime/server.py`; Gro's own plan owns empty-platform discovery, scoped external-agent acceptance, native UI restoration and optional seller-memory provisioning. A downloadable MCP client is not an MCP server. No DSH bundle into Total Recall is specified by this launch plan.

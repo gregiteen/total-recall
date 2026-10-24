@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import matter from './frontmatter.mjs';
-import { atomicWrite, isSafeVaultName } from './vault.mjs';
+import { atomicWrite, isSafeVaultName } from './vault-files.mjs';
 
 const caches = new Map();
 const words = text => [...new Set(String(text).toLowerCase().match(/[\p{L}\p{N}_-]+/gu) || [])];

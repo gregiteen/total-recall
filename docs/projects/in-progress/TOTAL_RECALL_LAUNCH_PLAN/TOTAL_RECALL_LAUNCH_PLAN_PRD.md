@@ -99,6 +99,8 @@ A launched release means all six of these hold simultaneously:
 
 These requirements extend the existing LR workstreams; they do not introduce a new product project, DSH bundle or Gro dependency. Implementation is still pending.
 
+DEV-API-02 stages implementation with explicit auth-owned scopes: `invoke:full` grants trusted host developer execution; `invoke:restricted` and `brain:server` grant only local server-brain retrieval. Legacy wildcard keys require deliberate migration. Unsupported restricted writes, CLI/plugin/composed execution and paid provider calls must be denied and omitted from capabilities. Full API-1–API-6 acceptance remains open until restricted mutation/owner adapters and the independent-agent journey pass.
+
 ## 4. Requirement reconciliation
 
 The conflicts the audit found, each with one decision. Losing requirements are superseded by name so no future agent implements them again.

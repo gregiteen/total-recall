@@ -49,7 +49,7 @@ Run this matrix against the server candidate when the developer API is delivered
 | Resource and failure handling | Server timeout/concurrency/output/cost limits hold; exit failures, truncation and termination are accurate; audits contain no credentials |
 | Independent client and discovery | A second agent uses its own granted key, sees only executable capabilities and completes a real permitted round trip with denial controls |
 
-Implementation and this matrix are pending; the historical 13 route-unit tests do not certify these properties.
+DEV-API-02 staged source evidence is recorded in [the verification artifact](evidence/DEV-API-02-source-verification.md): explicit full CLI, restricted retrieval, discovery, lifecycle/denial/resource cases, independent auth-owned-key HTTP and server-free memory pass. Unsupported restricted mutation/owners are denied. Provider quotas and the complete matrix remain pending; no deployed or complete-journey claim is made.
 
 ### General runtime failure checks
 
@@ -87,7 +87,7 @@ Not a substitute for the journey, but each is a stage that now has evidence:
 | 7 — capsule meets its gate | **recorded telemetry passes** at the configured 16,000 project budget; remeasure the final candidate | tracker Measurement substrate; TR-003 overflow evidence superseded |
 | 12–14 — upgrade, preservation, restart | not run | — |
 
-**The journey remains unproven as a whole.** Stage 6, final-candidate stage 7, the server-free baseline and stages 12–14 remain open; L6 cannot be claimed. Earlier rows are historical evidence, not a current rerun.
+**The journey remains unproven as a whole.** A separate disposable server-free CLI baseline now passes in DEV-API-02; it does not complete a fresh published-install journey. Stage 6, final-candidate stage 7 and stages 12–14 remain open; L6 cannot be claimed. Earlier rows are historical evidence, not a current rerun.
 
 ## Why this replaces per-component acceptance
 

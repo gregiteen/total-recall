@@ -16,25 +16,29 @@ The single active project is [TOTAL_RECALL_LAUNCH_PLAN](docs/projects/in-progres
 - Existing generic TR skills, agent integrations and developer tooling remain valid. API documentation must describe verified TR behavior rather than reuse Gro seller assumptions.
 - The latest docs replace undecided invoke disposition with retention and hardening. Implementation/security acceptance is still pending; do not describe the existing route as already hardened.
 
-## Current implementation and gaps
+## Current source stage — DEV-API-02
 
-Commit `69addd2` added `src/server/routes/invoke.mjs`, its route tests and the mount in `src/server/index.mjs`. The separate memory-only app does not mount invoke. Auth supplies key identity/role/expiry/scopes, and the route checks operation-family scopes.
+The next source stage is implemented and verified; this is not complete API-1–API-6 or launch acceptance. See [source evidence](docs/projects/in-progress/TOTAL_RECALL_LAUNCH_PLAN/evidence/DEV-API-02-source-verification.md) and the [developer guide](docs/reference/cli-reference.md#optional-developer-invoke-api).
 
-The important gap: `cli.run` spawns the CLI with the server environment/package-root cwd rather than a restricted caller execution context. A broad `sandbox:run` scope does not authorize individual commands/arguments/targets. `composable.run` validates name syntax but does not establish registry membership. Memory targets are not bound to key-specific brain grants; writes can request global scope. Direct argv/no-shell execution is useful but does not constrain CLI authority. Existing output/default timeout controls do not establish the complete server-controlled resource contract.
+- Invoke now requires a named auth-owned PAT with an explicit literal mode. A legacy wildcard or dashboard session does not opt in. Full mode requires `invoke:full` throughout its issuer chain; restricted mode uses `invoke:restricted,ssss:read,brain:server` for authorized server-brain local retrieval.
+- Fresh roles, scopes, issuer ceilings, revocation and expiry are rechecked at execution boundaries and every250ms while work runs. Prototype operation names and unregistered/shadowed composed names are refused.
+- Restricted retrieval uses trusted local search in a dedicated credential-free child. Restricted mutation, arbitrary CLI/plugin/composed execution and decisions fail closed and are omitted from discovery until their owners can enforce confinement.
+- Full mode deliberately grants trusted host developer authority, including auth-owner credentials and nested host execution; do not present it as a sandbox. Child environment is allowlisted; direct children have server time/concurrency/output limits, truthful failed envelopes and process-group cancellation/cleanup. No bearer token is sent to a child.
+- Authorization/outcomes persist via validated SSSS events without argv, tokens, memory text or output. Pre-execution audit failure denies work. Effects already committed cannot be rolled back by cancellation or audit failure.
+- Final Mini full suite:2303 tests/371 files pass, exit0. Final focused56 tests/6 files pass. Eight configured full-tier quality gates pass with0 findings; the remote-tier test is covered by the separately executed Mini full suite. Independent agent's5 actual HTTP cases and actual server-free CLI memory acceptance pass. Fixture keys/listeners/vaults are cleaned.
+
+The full suite found an obsolete blanket ban on the owner-requested root handoff. The hygiene rule now preserves that project document while testing private-state and npm exclusion. The formal audit's missing required sections/commit formatting were repaired and its checker passes. All historical findings remain in the audit/log.
 
 ## Next implementation batch
 
-Follow PRD API-1–API-6 and the development plan's DEV-API-01 batch:
-
-1. Map auth key/role contracts, command catalogs, argument handling, brain/project selection and nested execution. Define explicit full/restricted modes, current-key migration, command/target/credential grants, delegation ceilings, revocation and treatment of already-running work. Reuse the auth owner; no parallel credential/key store.
-2. Authorize registered command, arguments and target, then carry the same authority into CLI/plugin/composed execution. Preserve intentionally granted full developer capabilities. Restricted execution fails closed when the owning handler cannot enforce grants. Prevent scope-changing flags, aliases or child operations from expanding authority.
-3. Control child environment/credential capabilities and execution resource ceilings: timeouts, concurrency, output and provider spending. Report nonzero exit, truncation and termination accurately. Audit identity/authorized target/operation/outcome without token or secret payloads. Capability discovery must match execution authorization.
-4. Prove explicit full access and permitted restricted workflows, denied escalation/foreign brains, plugin/composed enforcement, expiry/revocation/delegation and resource limits. Use an independent agent with its own granted key for a real round trip. Separately prove server-free local CLI memory.
-5. Write the developer guide from actual verified behavior; complete required TR gates, packaging and upgrade acceptance before release claims. Do not assume cloud hosting is required.
+1. Continue API-1–API-6 with enforceable restricted memory mutation and owner-specific CLI/plugin/composed adapters, exact schemas and authorized project/brain grants. `remember` currently compiles plugin generators; do not enable it for restricted keys by filtering argv alone. No second auth/key store.
+2. Complete provider quotas/cancellation and the remaining resource contract. Full host administration can intentionally perform external work; current child ceilings do not prove a per-provider spending bound or malicious-code isolation.
+3. Extend actual acceptance to permitted restricted writes/owner workflows and the intended full administrative/plugin/composed workflows. Keep unsupported confinement denied; do not grant full mode to bypass a restriction.
+4. Continue instruction synchronization, fleet propagation, private-state-safe distribution, standalone bricks, recoverable upgrades and the complete launch journey. Keep separate server-free acceptance. No npm/serving/fleet release was performed in this source stage.
 
 This is work within the existing six LR streams, not a new product project. Continue the other open launch work: instruction synchronization and harness readback, fleet propagation, private-state-safe distribution, standalone capability bricks, state-preserving/recoverable upgrades and the [complete launch journey](docs/projects/in-progress/TOTAL_RECALL_LAUNCH_PLAN/LAUNCH_ACCEPTANCE_JOURNEY.md).
 
-## Verification and source state
+## Earlier verification and source history (preserved)
 
 - Current API-plan commit before this handoff: `bf2b957`; corresponding Gro documentation commit `9c13aed`. Both were pushed, clean and had zero unpushed commits.
 - Relevant source history: `0062229` panel/card contract and modernized specs; `8de9f11` capsule telemetry/action prediction; `69addd2` invoke implementation. D1 is resolved: one bespoke face, unlimited plugin-owned panels. The historical 4,000-token D2 overflow blocker is superseded by measured project configuration at 16,000; instruction sync and universal curation policy are separate questions.
@@ -43,4 +47,4 @@ This is work within the existing six LR streams, not a new product project. Cont
 - Gro's separate last full gate passed 523 runtime tests then failed an obsolete native-policy tool-list assertion. It is tracked in Gro, not a TR failure or dependency.
 - No runtime code, package version, npm release, image or serving process was changed during reconciliation/docs updates. Local TR brain/OpenWiki state stays excluded from the public Git artifact. Keep publication, installation and deployment evidence distinct.
 
-This handoff replaces the older local October 21 root handoff. Project action logs carry the verification history; do not treat the older handoff's open-task list as the current plan.
+This handoff includes the verified DEV-API-02 source stage and replaces the older local October21 root handoff. Project action logs carry the verification history; do not treat the older handoff's open-task list as the current plan.

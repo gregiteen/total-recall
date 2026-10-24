@@ -12,6 +12,8 @@ October 24 reconciliation: the PRD scope correction and audit SCOPE-RECONCILE-01
 
 ### Next implementation batch — DEV-API-01
 
+DEV-API-02 first closes current authority leaks: explicit modes and migration, fresh role/lifecycle/issuer checks, catalog validation, fixed restricted recall adapter, bounded children, truthful outcomes and matching discovery. Restricted write and arbitrary owner execution remain denied until their confinement is implemented; keep the complete acceptance item open.
+
 1. Map existing auth role/key contracts, CLI/plugin/composed command catalogs, argument parsing, brain selection and child execution. Finalize the PRD API-1–API-6 contract, including current-key migration, explicit full/restricted modes, credential/target grants and running-work revocation behavior. Reuse the auth owner; do not invent a parallel key store.
 2. Enforce registered-command and target/argument authorization, then propagate the caller's execution context through CLI/plugin/composed operations. Preserve intentional full developer capabilities. Restricted execution fails closed where an owner cannot enforce its grants; disallow privilege expansion through nested commands, flags or delegation.
 3. Bound timeout/concurrency/output/provider spending and normalize actual failures/termination. Audit caller, authorized target/operation and outcome without secrets. Validate capability discovery against executable permissions.

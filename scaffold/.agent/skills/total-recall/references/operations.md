@@ -12,6 +12,12 @@ For research queues, discover `research --help`, select project/global scope exp
 
 Publication/deployment use the owning push/deploy procedures when authorized. Shared production services require staged health-checked zero-downtime switching and rollback. Do not use a generated restart command as permission to interrupt a serving process.
 
+## Optional developer API
+
+The full server's `/v1/invoke` requires a named auth-owned PAT with a literal `invoke:full` or `invoke:restricted` mode; legacy wildcards and dashboard sessions do not opt in. Full mode requires full grants throughout the issuer chain and intentionally grants trusted host administration, including auth-owned credentials and nested owner execution. Do not describe it as a sandbox or give it to a restricted consumer to bypass a denial.
+
+Restricted `ssss.read` additionally requires `ssss:read` and `brain:server`, uses local server-brain retrieval and spends no provider credits. Restricted memory mutation, arbitrary CLI/plugin/composed execution and paid decisions remain unavailable until their owners enforce confinement. Capabilities omit denied operations. Fresh role/issuer/expiry/revocation checks, controlled child environment, concurrency/time/output bounds and validated SSSS execution audit apply; effects already committed cannot be rolled back by cancellation. Provider quotas and the complete API/launch journey remain separate acceptance work. Read the shipped `docs/reference/cli-reference.md` developer API contract before migration or execution.
+
 ## Uniform dependency updates
 
 Use `total-recall update --all-brains` to plan both SSSS and Total Recall updates across registered brains, installed plugin owners and nested consumers. Add `--apply` to pin the resolved published releases, refresh npm/pnpm locks and verify actual package resolution; `--json` returns per-consumer results and failures. Extra roots use repeatable `--repo` or `TR_SYNC_REPOS`. Every consumer owns a local installation: a shared node_modules link is detached without mutating its former target and restored on failure. Missing versions, unsupported managers, newer previews and verification mismatches fail explicitly. This updates local dependencies; it does not deploy services or merge brains.

@@ -56,6 +56,7 @@ const DIRECT_WRITE_APPROVED = [
   'src/core/ssss-kernel-bridge.mjs',
   'src/core/validated-write.mjs',
   'src/core/vault.mjs',
+  'src/core/vault-files.mjs',
   'src/core/surface.mjs',
   'src/core/blackboard.mjs',
   'src/core/steering.mjs',
