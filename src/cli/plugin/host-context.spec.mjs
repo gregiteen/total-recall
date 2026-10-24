@@ -16,7 +16,8 @@ it('supplies host context through the real installed-plugin CLI dispatch', () =>
     fs.writeFileSync(path.join(plugin, 'plugin.json'), JSON.stringify({
       id: 'host-probe', name: 'Host Probe', version: '1.0.0',
       description: 'Synthetic host context verification',
-      cli: { command: 'host-probe', handler: './cli.mjs' }
+      cli: { command: 'host-probe', handler: './cli.mjs' },
+      ui: { elements: [{ id: 'card', kind: 'card', tag: 'tr-fixture-card', module: 'ui/card.js' }] },
     }));
     fs.writeFileSync(path.join(plugin, 'cli.mjs'), `export function run(argv) {
       console.log(JSON.stringify({ packageRoot: process.env.TR_PACKAGE_ROOT,

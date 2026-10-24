@@ -17,7 +17,7 @@ describe('plugin host activation lifecycle', () => {
     process.env._TR_TEST_AGENT_DIR = path.join(root, 'global');
     const source = path.join(root, 'source'); fs.mkdirSync(source);
     fs.writeFileSync(path.join(source, 'cli.mjs'), 'export async function run(){ console.log("executed"); }');
-    fs.writeFileSync(path.join(source, 'plugin.json'), JSON.stringify({ id: 'activation-demo', name: 'Activation Demo', version: '1.0.0', description: 'Activation fixture',
+    fs.writeFileSync(path.join(source, 'plugin.json'), JSON.stringify({ id: 'activation-demo', name: 'Activation Demo', version: '1.0.0', description: 'Activation fixture', ui: { elements: [{ id: 'card', kind: 'card', tag: 'tr-fixture-card', module: 'ui/card.js' }] }, 
       cli: { command: 'activation-demo', handler: 'cli.mjs', subcommands: [{ name: 'tick', effect: 'read', output: 'text', args: [] }] },
       runtime: { modules: { example: 'cli.mjs' } }, tasks: [{ intent: 'Tick', schedule: '* * * * *', command: 'tick' }] }));
     const config = path.join(root, '.agent/skills/total-recall/config'); fs.mkdirSync(config, { recursive: true });

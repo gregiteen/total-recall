@@ -5,6 +5,7 @@ import os from 'node:os';
 import { applyDeploymentPlan, resolveAppVaultDir } from './apply.mjs';
 import { createDeploymentPlan } from './plan.mjs';
 import { upgradeCapability, AppUpgradeError, getInstalledCapabilityRecord } from './upgrade.mjs';
+import { withFixtureFace } from '../testing/plugin-fixture.mjs';
 
 describe('Capability Deployment Upgrader (app-deploy/upgrade.mjs)', () => {
   let tmpTarget;
@@ -19,7 +20,7 @@ describe('Capability Deployment Upgrader (app-deploy/upgrade.mjs)', () => {
     // Version 1 of capability
     fs.writeFileSync(
       path.join(v1Dir, 'plugin.json'),
-      JSON.stringify({
+      JSON.stringify(withFixtureFace({
         id: 'crm-bridge',
         name: 'CRM Bridge',
         version: '1.0.0',
@@ -27,7 +28,7 @@ describe('Capability Deployment Upgrader (app-deploy/upgrade.mjs)', () => {
         deploy: {
           targets: ['ssss-app']
         }
-      })
+      }))
     );
     fs.writeFileSync(path.join(v1Dir, 'bridge.mjs'), 'export const version = "1.0.0";\n');
     fs.writeFileSync(path.join(v1Dir, 'legacy-helper.mjs'), 'export const obsolete = true;\n');
@@ -35,7 +36,7 @@ describe('Capability Deployment Upgrader (app-deploy/upgrade.mjs)', () => {
     // Version 2 of capability (updates bridge.mjs, removes legacy-helper.mjs, adds new-feature.mjs)
     fs.writeFileSync(
       path.join(v2Dir, 'plugin.json'),
-      JSON.stringify({
+      JSON.stringify(withFixtureFace({
         id: 'crm-bridge',
         name: 'CRM Bridge',
         version: '2.0.0',
@@ -43,7 +44,7 @@ describe('Capability Deployment Upgrader (app-deploy/upgrade.mjs)', () => {
         deploy: {
           targets: ['ssss-app']
         }
-      })
+      }))
     );
     fs.writeFileSync(path.join(v2Dir, 'bridge.mjs'), 'export const version = "2.0.0";\n');
     fs.writeFileSync(path.join(v2Dir, 'new-feature.mjs'), 'export const feature = "v2-hotness";\n');

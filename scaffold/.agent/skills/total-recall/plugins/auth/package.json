@@ -16,12 +16,12 @@
   ],
   "license": "MIT",
   "dependencies": {
-    "yaml": "^2.9.0",
-    "bcrypt": "^6.0.0",
-    "jsonwebtoken": "^9.0.3",
-    "express-rate-limit": "^8.5.1",
     "@simplewebauthn/server": "^13.3.2",
-    "express": "^5.2.1"
+    "bcrypt": "^6.0.0",
+    "express": "^5.2.1",
+    "express-rate-limit": "^8.5.1",
+    "jsonwebtoken": "^9.0.3",
+    "yaml": "^2.9.0"
   },
   "files": [
     "cli.mjs",

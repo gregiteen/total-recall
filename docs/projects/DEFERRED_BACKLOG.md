@@ -2,6 +2,8 @@
 
 > **Global Safety Net**: This document contains deferred tasks, future enhancements, and unfinished items extracted from completed project trackers or active scoping sessions. Nothing is ever deleted; it is stored here until it can be scheduled.
 
+> **Scope correction — 2026-10-24.** Everything below is **product roadmap, not launch work**. None of it is a launch gate, and none of it blocks the [TOTAL_RECALL_LAUNCH_PLAN](in-progress/TOTAL_RECALL_LAUNCH_PLAN/TOTAL_RECALL_LAUNCH_PLAN_PROJECT_TRACKER.md). This file is not a second project and does not carry acceptance criteria. Per the standing directive *"If a task is deemed unnecessary, delete it entirely instead of moving it to the deferred backlog,"* items belong here only while they remain plausibly wanted; a task removed from launch scope for being unnecessary is deleted, not parked here.
+
 ## Future Enhancements (Post v1.0)
 
 ### Infrastructure & Deployments

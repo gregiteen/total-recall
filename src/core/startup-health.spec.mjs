@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, afterAll } from 'vitest';
 vi.mock('./required-plugins.mjs', () => ({ inspectRequiredPlugins: vi.fn(() => ({ status: 'ready', errors: [] })) }));
 import { inspectRequiredPlugins } from './required-plugins.mjs';
 import fs from 'node:fs';
@@ -86,6 +86,51 @@ describe('startup health truth and boundaries', () => {
     expect(healthVerdict({...health,vfs:{exists:false,skill_exists:true}}).status).toBe('degraded');
     expect(await verifyListener(123,new URL('http://localhost:3000'),{run:async()=>({code:0,output:'p456',reason:null})})).toBe(false);
     expect(await verifyListener(123,new URL('http://localhost:3000'),{run:async()=>({code:0,output:'p123\n',reason:null})})).toBe(true);
+  });
+  describe('process identity resolves relative launch-agent paths', () => {
+    // A launch agent starts `node src/server/index.mjs` with WorkingDirectory
+    // set. The recorded command carries no absolute path, and resolving it
+    // against the caller's cwd made readiness depend on where the operator
+    // stood: the same healthy server read as `server-process-unverified` from
+    // any directory other than the install root.
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'startup-identity-'));
+    const pidFile = path.join(root, 'server.pid');
+    const script = path.join(root, 'src', 'server', 'index.mjs');
+    fs.mkdirSync(path.dirname(script), { recursive: true });
+    fs.writeFileSync(script, '// entry');
+    fs.writeFileSync(pidFile, '4321');
+    const base = { alive: () => true };
+    afterAll(() => fs.rmSync(root, { recursive: true, force: true }));
+
+    it('recognizes its own entry when the command path is relative', () => {
+      const id = processIdentity(pidFile, script, { ...base, command: () => 'node src/server/index.mjs', cwd: () => root });
+      expect(id).toMatchObject({ status: 'running', pid: 4321 });
+    });
+    it('refuses a second installation reached by the same relative form', () => {
+      // A real second install has the same entry layout, so the relative path
+      // resolves — to the wrong root. That is a foreign install, not an
+      // unresolvable path, and must not be excused by the entry-tail fallback.
+      const other = fs.mkdtempSync(path.join(os.tmpdir(), 'startup-other-'));
+      try {
+        const otherScript = path.join(other, 'src', 'server', 'index.mjs');
+        fs.mkdirSync(path.dirname(otherScript), { recursive: true });
+        fs.writeFileSync(otherScript, '// other install');
+        const id = processIdentity(pidFile, script, { ...base, command: () => 'node src/server/index.mjs', cwd: () => other });
+        expect(id.status).toBe('conflict');
+        expect(id.reason).toBe('foreign-pid');
+      } finally { fs.rmSync(other, { recursive: true, force: true }); }
+    });
+    it('matches an absolute entry path without consulting cwd', () => {
+      const id = processIdentity(pidFile, script, { ...base, command: () => `node ${script}`, cwd: () => '/nonexistent' });
+      expect(id.status).toBe('running');
+    });
+    it('accepts a corroborating entry-tail match when no root resolves', () => {
+      const id = processIdentity(pidFile, script, { ...base, command: () => 'node /opt/other/install/src/server/index.mjs', cwd: () => null });
+      expect(id.status).toBe('running');
+    });
+    it('never reports running when the process is gone', () => {
+      expect(processIdentity(pidFile, script, { alive: () => false, command: () => 'node src/server/index.mjs' })).toEqual({ status: 'stopped' });
+    });
   });
   it('builtin-colliding declared command is rejected without dispatch', async () => {
     const cwd=fs.mkdtempSync(path.join(os.tmpdir(),'startup-app-'));

@@ -8,6 +8,7 @@ import {
   generateSsssEnvelopes,
   computeDeterministicHash
 } from './plan.mjs';
+import { withFixtureFace } from '../testing/plugin-fixture.mjs';
 
 describe('Capability Deployment Planner (app-deploy/plan.mjs)', () => {
   let tmpRoot;
@@ -38,6 +39,7 @@ describe('Capability Deployment Planner (app-deploy/plan.mjs)', () => {
       },
       skills: [{ id: 'chat-feature', path: './skills/chat/SKILL.md' }],
       cli: { command: 'chat', handler: './cli.mjs' },
+      ui: { elements: [{ id: 'card', kind: 'card', tag: 'tr-fixture-card', module: 'ui/card.js' }] },
       ssss_schemas: {
         categories: [{ name: 'chat-sessions', description: 'Chat threads' }]
       }

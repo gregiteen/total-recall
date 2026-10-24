@@ -146,19 +146,20 @@ export async function buildEnvProjection(brainDir, target = {}) {
     if (value == null || value === '') continue;
     const meta = byKey.get(key) || { key, repos: [], scope: 'global' };
     if (!secretMatchesTarget(meta, target)) continue;
-    selected.push({ key, value: String(value), meta });
+    const outKey = (target.rename && target.rename[key]) || key;
+    selected.push({ key, outKey, value: String(value), meta });
   }
 
   selected.sort((a, b) => a.key.localeCompare(b.key));
 
-  const lines = selected.map(({ key, value }) => {
+  const lines = selected.map(({ outKey, value }) => {
     // Quote if needed
     const needsQuote = /[\s#"'$\\]/.test(value);
     const v = needsQuote ? JSON.stringify(value) : value;
-    return `${key}=${v}`;
+    return `${outKey}=${v}`;
   });
 
-  const exampleLines = selected.map(({ key }) => `${key}=`);
+  const exampleLines = selected.map(({ outKey }) => `${outKey}=`);
 
   const body = `${envHeader()}${lines.join('\n')}${lines.length ? '\n' : ''}${END_MARK}\n`;
   const exampleBody = `# Example env — names only. Values live in Total Recall secrets store.
@@ -200,6 +201,7 @@ export async function exportEnvToProject(brainDir, projectPath, opts = {}) {
     projectSlug: projectSlugFromPath(abs),
     includeGlobal: opts.includeGlobal !== false,
     keys: opts.keys,
+    rename: opts.rename,
   };
 
   const projection = await buildEnvProjection(brainDir, target);

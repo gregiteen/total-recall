@@ -98,7 +98,7 @@ Instructions here.
     expect(fs.existsSync(path.join(pluginDir, 'cli.mjs'))).toBe(true);
   });
 
-  it('creates a scheduled plugin with a valid token-driven UI panel', async () => {
+  it('creates a scheduled plugin without generating a card face', async () => {
     const cwdSpy = vi.spyOn(process, 'cwd').mockReturnValue(tmpProject);
     try {
       await createPlugin(['daily-review', '--name', 'Daily Review', '--with-task', '--task-command', 'refresh', '--task-schedule', '0 6 * * *', '--task-intent', 'Refresh the review', '--with-ui']);
@@ -106,11 +106,15 @@ Instructions here.
     const dir = path.join(tmpProject, '.agent', 'skills', 'total-recall', 'plugins', 'daily-review');
     const manifest = JSON.parse(fs.readFileSync(path.join(dir, 'plugin.json'), 'utf8'));
     expect(manifest.tasks).toEqual([{ intent: 'Refresh the review', schedule: '0 6 * * *', command: 'refresh', placement: 'selected-node' }]);
-    expect(generateUiElements(manifest, { pluginDir: dir, target: 'web-components' }).files.some((file) => file.path === 'elements/panel.js')).toBe(true);
-    expect(fs.readFileSync(path.join(dir, 'README.md'), 'utf8')).toContain('selected node');
+    // A card face is bespoke owner code, authored by hand. No generator may
+    // emit one, so --with-ui produces no UI module of any kind.
+    expect(fs.existsSync(path.join(dir, 'ui', 'panel.js'))).toBe(false);
+    expect(fs.existsSync(path.join(dir, 'ui', 'card.js'))).toBe(false);
+    expect(manifest.scaffold).toBe(true);
+    expect(fs.readFileSync(path.join(dir, 'README.md'), 'utf8')).toMatch(/no card face is generated.*by hand/s);
   });
 
-  it('--api-key scaffolds a paste-your-key UI, a token CLI and a declared secret', async () => {
+  it('--api-key scaffolds a token CLI and a declared secret, but no generated face', async () => {
     const cwdSpy = vi.spyOn(process, 'cwd').mockReturnValue(tmpProject);
     try {
       await createPlugin(['acme-sync', '--name', 'Acme Sync', '--api-key', 'ACME_API_KEY']);
@@ -118,10 +122,10 @@ Instructions here.
     const dir = path.join(tmpProject, '.agent', 'skills', 'total-recall', 'plugins', 'acme-sync');
     const manifest = JSON.parse(fs.readFileSync(path.join(dir, 'plugin.json'), 'utf8'));
     expect(manifest.secrets).toEqual([expect.objectContaining({ key: 'ACME_API_KEY', required: true })]);
-    expect(manifest.ui.elements[0].events).toContain('save-token');
-    const panel = fs.readFileSync(path.join(dir, 'ui', 'panel.js'), 'utf8');
-    expect(panel).toContain("type = 'password'");
-    expect(panel).toContain('save-token');
+    // No credential-entry UI is generated: that pattern produced the shared
+    // scaffold face this contract removed.
+    expect(manifest.ui).toBeUndefined();
+    expect(fs.existsSync(path.join(dir, 'ui'))).toBe(false);
     const cli = fs.readFileSync(path.join(dir, 'cli.mjs'), 'utf8');
     expect(cli).toContain('authRun(["set", TOKEN_KEY, "--stdin"]');
     expect(cli).toContain("'auth', 'secret'");
@@ -135,7 +139,8 @@ Instructions here.
     expect(rejected.status).toBe(1);
     expect(rejected.stderr).toContain('verification must be implemented');
     expect(rejected.stdout).not.toContain('saved');
-    expect(generateUiElements(manifest, { pluginDir: dir, target: 'web-components' }).files.some((file) => file.path === 'elements/panel.js')).toBe(true);
+    // The scaffold declares no face, so UI generation has nothing to emit.
+    expect(() => generateUiElements(manifest, { pluginDir: dir, target: 'web-components' })).toThrow(/declares no ui/);
   });
 
   it('rejects incomplete task options before creating a directory', async () => {

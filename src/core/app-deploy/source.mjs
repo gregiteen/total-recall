@@ -243,16 +243,23 @@ export async function resolveCapabilitySource(source, options = {}) {
       sourceType = 'local';
       candidateDir = path.resolve(source);
     } else {
-      // Check if it's an installed or bundled plugin by ID
-      const installed = getPlugin(source, options.projectRoot || process.cwd());
-      if (installed && fs.existsSync(installed.dir)) {
-        sourceType = installed.scope === 'bundled' ? 'bundled' : 'local';
-        candidateDir = installed.dir;
+      // Check if it's an installed or bundled plugin by ID.
+      //
+      // Precedence matters here. `getPlugin` searches the caller's project and
+      // the global agent dir, so on a machine where the same id is also
+      // installed it returns that copy — and the request was recorded as
+      // 'local' instead of 'bundled'. Bundled is the intended source for a bare
+      // id, so it is resolved first and only then falls back to what is
+      // installed.
+      const bundledDir = path.join(bundledPluginsDir(), source);
+      if (fs.existsSync(bundledDir)) {
+        sourceType = 'bundled';
+        candidateDir = bundledDir;
       } else {
-        const bundledDir = path.join(bundledPluginsDir(), source);
-        if (fs.existsSync(bundledDir)) {
-          sourceType = 'bundled';
-          candidateDir = bundledDir;
+        const installed = getPlugin(source, options.projectRoot || process.cwd());
+        if (installed && fs.existsSync(installed.dir)) {
+          sourceType = installed.scope === 'bundled' ? 'bundled' : 'local';
+          candidateDir = installed.dir;
         }
       }
     }

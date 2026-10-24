@@ -28,6 +28,10 @@ describe('Plugin Evolving Context Injections', () => {
             { name: 'user-projects' },
           ],
         },
+        // Every plugin declares exactly one bespoke card face, and an invalid
+        // plugin is skipped by assemblePluginContexts. Without this the fixture
+        // is not a plugin and the assembly returns nothing.
+        ui: { elements: [{ id: 'card', kind: 'card', tag: 'tr-fixture-card', module: 'ui/card.js' }] },
       }),
     );
   });
@@ -120,7 +124,7 @@ describe('Plugin Evolving Context Injections', () => {
         const dir = path.join(pluginsRoot, id);
         fs.mkdirSync(dir);
         fs.writeFileSync(path.join(dir, 'plugin.json'), JSON.stringify({
-          id, name: id, version: '1.0.0', description: 'Generator confinement test', ...extra,
+          id, name: id, version: '1.0.0', description: 'Generator confinement test', ui: { elements: [{ id: 'card', kind: 'card', tag: 'tr-fixture-card', module: 'ui/card.js' }] }, ...extra,
         }));
         if (id !== 'missing-context') fs.symlinkSync(outside, path.join(dir, 'replacement.mjs'));
       }

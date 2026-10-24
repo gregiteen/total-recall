@@ -4,14 +4,14 @@ description: Read for repository architecture and ownership; load only relevant 
 repo_scoped: true
 repository_id: "total-recall-brain"
 generated_from: total-recall
-generated_at: 2026-10-07T04:47:05.714Z
+generated_at: 2026-10-24T06:23:40.598Z
 ---
 
 # total-recall-brain — Codebase Architecture
 
-Personal AI system — database-free, SSSS-powered intelligence engine deployable to any POSIX host.
+The Vibe Coding Brain & Autonomous Software Factory: memory, rules, secrets, and 33 visual plugins automatically managed across all your devices.
 
-- **Languages**: JavaScript (714 files), Markdown (349 files), TypeScript (132 files), Python (29 files), CSS (13 files)
+- **Languages**: JavaScript (722 files), Markdown (257 files), TypeScript (130 files), CSS (12 files)
 - **Frameworks**: React, Express
 - **Module system**: module
 - **Tests**: Vitest

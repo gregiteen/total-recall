@@ -18,7 +18,8 @@ describe('plugin command generation', () => {
     fs.writeFileSync(path.join(plugin, 'plugin.json'), JSON.stringify({
       id: 'sample-plugin', name: 'Sample Plugin', version: '1.0.0',
       description: 'A sample plugin command.',
-      commands: [{ name: 'sample-run', handler: './handler.mjs', description: 'Run the sample.', background: true }]
+      commands: [{ name: 'sample-run', handler: './handler.mjs', description: 'Run the sample.', background: true }],
+      ui: { elements: [{ id: 'card', kind: 'card', tag: 'tr-fixture-card', module: 'ui/card.js' }] },
     }));
     fs.writeFileSync(path.join(plugin, 'handler.mjs'),
       'export function run(argv) { return { data: { args: argv.slice(3) } }; }\n');

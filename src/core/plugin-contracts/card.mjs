@@ -83,7 +83,7 @@ export function validateCardContract(manifest) {
       if (!LICENSE_CLASSES.includes(manifest.distribution.license)) errors.push(`'distribution.license' must be one of: ${LICENSE_CLASSES.join(', ')}`);
     }
   }
-  validateCardFace(manifest, errors);
+  validateCardFace(manifest, errors, warnings);
   validateBranding(manifest.branding, errors, warnings);
   validateWorkspace(manifest.workspace, errors);
   if (Array.isArray(manifest.secrets)) {
@@ -103,15 +103,24 @@ export function validateCardContract(manifest) {
  * a shared template is invalid.
  *
  * The *scaffold* emitted by `plugin create` deliberately contains no card: a
- * face is authored by hand once the plugin's function is understood. The
- * scaffold is therefore not yet a valid plugin, and says so.
+ * face is authored by hand once the plugin's function is understood. A scaffold
+ * declares `scaffold: true`, so it installs while the author works and reports
+ * its missing face as a warning rather than an error. Any other plugin without
+ * a face is an error, because nothing else explains why it is missing.
  */
-function validateCardFace(manifest, errors) {
+function validateCardFace(manifest, errors, warnings) {
   if (manifest.card_layout !== undefined) {
     errors.push("'card_layout' is not supported: a card face is bespoke owner code in ui.elements[], never a shared template");
   }
   const elements = manifest.ui?.elements;
   if (!Array.isArray(elements) || elements.length === 0) {
+    // A scaffold is a freshly created plugin whose face has not been authored
+    // yet. It must be installable so the author can iterate, but it is not a
+    // shippable plugin, so the missing face is reported and stays visible.
+    if (manifest.scaffold === true) {
+      warnings.push("'ui.elements' declares no card face yet: author ui/card.js and ui/DESIGN.md by hand for this plugin's own function, then declare the face in ui.elements[]");
+      return;
+    }
     errors.push("'ui.elements' must declare the plugin's card face; every plugin has one, authored by hand");
     return;
   }

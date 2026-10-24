@@ -22,7 +22,8 @@ describe('App Capability Deployment CLI (cli/app/index.mjs)', () => {
       version: '1.0.0',
       description: 'Prints a report',
       use_cases: ['software-development'],
-      cli: { command: 'report-fixture', handler: './cli.mjs', subcommands: [{ name: 'report', description: 'Print it' }] }
+      cli: { command: 'report-fixture', handler: './cli.mjs', subcommands: [{ name: 'report', description: 'Print it' }] },
+      ui: { elements: [{ id: 'card', kind: 'card', tag: 'tr-fixture-card', module: 'ui/card.js' }] },
     }));
     fs.writeFileSync(path.join(dir, 'cli.mjs'), 'export async function run() { console.log("report"); }\n');
     fs.writeFileSync(path.join(dir, 'README.md'), '# Report Fixture\n');
@@ -87,7 +88,8 @@ describe('App Capability Deployment CLI (cli/app/index.mjs)', () => {
       name: 'Only Flask',
       version: '1.0.0',
       description: 'Flask only',
-      deploy: { targets: ['flask'] }
+      deploy: { targets: ['flask'] },
+      ui: { elements: [{ id: 'card', kind: 'card', tag: 'tr-fixture-card', module: 'ui/card.js' }] },
     }));
     await expect(
       run(['app', 'plan', pluginDir, '--adapter', 'react'])

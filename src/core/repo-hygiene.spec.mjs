@@ -43,10 +43,13 @@ describe('open-source repo hygiene', () => {
     const skills = new Set(
       scaffold.map((f) => f.match(/^scaffold\/\.agent\/skills\/([^/]+)\//)?.[1]).filter(Boolean),
     );
+    // The authoring skill directory is `plugin` (singular), matching the live
+    // `.agents/skills/plugin` tree. The former `plugins` directory was removed
+    // in aee2ad0; this allowlist was not updated with it.
     expect([...skills].sort()).toEqual([
       'decision',
       'meta-harness',
-      'plugins',
+      'plugin',
       'project-management',
       'start',
       'total-recall',

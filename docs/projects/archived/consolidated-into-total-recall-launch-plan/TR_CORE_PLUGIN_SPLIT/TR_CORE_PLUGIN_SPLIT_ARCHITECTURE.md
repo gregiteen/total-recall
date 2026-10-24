@@ -172,26 +172,42 @@ Official and core plugins carry neutral, descriptive display names (no invented 
 
 **Design system.** One token set (`DESIGN.md` per plugin falls back to host tokens), neutral graphite surfaces with one accent per plugin, 8 px spacing scale, a type scale, state colors that meet contrast (ok, warn, error, unknown), focus rings, reduced-motion respected, no animation other than state transitions of 150 ms.
 
-## Layout contract and per-plugin design (supersedes the single-renderer note above) — 2026-10-11
-The engine is shared; the design is not. A plugin declares `card_layout` in `plugin.json`:
+## Card face contract — bespoke, not templated (supersedes the layout contract below) — 2026-10-24
+
+> **Superseded 2026-10-24 by `TOTAL_RECALL_LAUNCH_PLAN`.** The layout-contract model that
+> previously occupied this section — a shared engine rendering a declared `card_layout`
+> template plus a region/widget list — is **deleted from the codebase and is invalid**.
+> It is preserved here only as history. Do not implement it.
+>
+> Evidence of removal at `aee2ad0`: `grep -rn "CARD_TEMPLATES\|CARD_WIDGETS\|WidgetKind\|CardRegion" src/`
+> returns 0 matches; `validateLayout` no longer exists; `src/core/plugin-contracts/card.mjs:109`
+> raises an explicit error for any manifest declaring `card_layout`; 0 of 34 plugins declare one.
+>
+> The seven templates (`console`, `ledger`, `monitor`, `inbox`, `dashboard`, `workbench`,
+> `vault`) and the twelve widgets (`status`, `actions`, `table`, `detail`, `log`, `form`,
+> `keypad`, `gauge`, `list`, `settings`, `credentials`, `activity`) no longer exist as a
+> vocabulary. The per-plugin template assignments in the former design brief are void.
+
+**A card face is bespoke owner code.** Each plugin declares exactly one face in `ui.elements[]`:
+
 ```json
-"card_layout": {
-  "template": "ledger",
-  "regions": [
-    { "widget": "status",  "variant": "strip" },
-    { "widget": "table",   "source": { "command": "view", "path": "payments" }, "columns": [{ "key": "id", "label": "Payment" }, { "key": "amount", "label": "Amount", "format": "money" }] },
-    { "widget": "actions", "variant": "palette", "commands": ["checkout", "refund"] },
-    { "widget": "credentials" }
+"ui": {
+  "design_tokens": "ui/DESIGN.md",
+  "elements": [
+    { "id": "card", "kind": "card", "tag": "tr-stripe-card", "module": "ui/card.js", "description": "…" }
   ]
-},
-"branding": { "color": "#635bff", "accent": "#0a2540", "font": "ibm-plex", "density": "compact", "radius": "sm", "header": "ledger-rule" }
+}
 ```
-**Templates** (page composition): `console` (primary form beside output), `ledger` (table first with a side action rail), `monitor` (gauge/status tiles above a live log), `inbox` (list and detail), `dashboard` (status tiles, then actions), `workbench` (tabs for several tools), `vault` (record list with per-row actions). A template fixes the arrangement and responsive behavior; the plugin chooses it by function.
-**Widgets** (all bind to real command output or host data, never constants): `status`, `actions`, `table`, `detail`, `log`, `form` (a command's arguments as the primary control), `keypad` (dial/numeric entry), `gauge`, `list`, `settings`, `credentials`, `activity`. A widget whose source command is missing or fails shows that state honestly.
-**Brand tokens** come from `branding` and the plugin's `DESIGN.md`: color, accent, font from a fixed vetted set, density, radius, header treatment, state colors derived with contrast checks. Hard-coded colors in plugin code are rejected by the conformance test.
-**Custom Live view.** A plugin that needs a bespoke surface (for example a DNS zone editor) mounts its sandboxed panel in a `live` region; it still gets the standard Actions, Settings and Credentials regions from the engine.
-**Design brief per plugin** (initial assignment; each gets a written `DESIGN.md` with rationale):
-auth `vault` (credential list, passkeys, rotation age); stripe `ledger`; domains `workbench` (zone table, mailbox list, DNS editor live view); phone `console` + `keypad` (dial, lines, sessions); text `inbox` (threads and composer); signing `ledger` of agreements with status stages; maps `console` (query form, result list, route detail); crm `dashboard`; security `monitor` (findings by severity); system-monitor `monitor` (gauges); mesh `workbench` (nodes, peers, access); deploy `monitor` (release stages, health, rollback); code-quality `ledger` of gate results; decision `inbox` of pending decisions; design `console` (token inspector); image-generator `console` with asset grid; creative-search `console` with ranked results; openwiki `workbench`; okf `console`; skill-manager `ledger`; operator-alerts `inbox`; user-automations `ledger` of scheduled tasks; git-sentinel `ledger` of repos; dsh `monitor`; composable-cli `workbench`; translator `ledger` of locale coverage; tickets `ledger` of passes; tr-transcribe `console`; sticker-generator `console` with asset grid; phone-companion `monitor` of devices.
+
+- The face is a custom element the plugin owns, authored **by hand** from that plugin's own function. No template, no widget set, no region model.
+- Exactly one element of `kind: card` is required. A manifest with none, or with more than one, is invalid.
+- **A panel is not a card face.** Secondary screens (token entry, settings drawers) may coexist with the face; they do not satisfy the requirement for one.
+- `card_layout` is an error, not a warning. A manifest declaring a layout does not validate.
+- No script, loop, template literal or codegen step may write or bulk-edit a plugin's `plugin.json`, `ui/card.js` or `ui/DESIGN.md`.
+- A **brick** is a capability, not a plugin: it carries no card face, no `ui` block and no Total Recall runtime dependency in its vendored payload.
+- **Brand tokens** still come from `branding` and the plugin's `DESIGN.md`. Hard-coded colors in plugin code remain rejected.
+
+Authoring guidance lives in `.agents/skills/plugin/references/card-design.md`: design from the function, then verify by looking.
 
 ## Brand, logos, drawer and tracking — 2026-10-11
 **Names.** `branding.provider = { "name": "Stripe", "url": "https://stripe.com" }` marks a wrapper; its display name is the provider name. A plugin without `provider` is first-party and uses a descriptive name or, when monetized, its own brand. The two can coexist: `telnyx-voice` (open, bring your own key) and a separately branded managed service built on it.

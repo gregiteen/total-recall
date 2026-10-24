@@ -1,4 +1,11 @@
-import type { CellFormat, Loose } from './contract'
+import type { Loose } from './contract'
+
+/**
+ * How a scalar is rendered. This is presentation owned by the card face that
+ * asks for it — not a template primitive. The layout vocabulary (`CardRegion`,
+ * `CardColumn`, `CellFormat`) that once shared these names is deleted.
+ */
+export type CellFormat = 'text' | 'number' | 'money' | 'percent' | 'bytes' | 'date' | 'datetime'
 
 export type Tone = 'ok' | 'warn' | 'error' | 'neutral'
 const GOOD = /^(ok|healthy|active|connected|ready|running|verified|delivered|sent|passed|pass|up|online|true|complete|completed)$/i

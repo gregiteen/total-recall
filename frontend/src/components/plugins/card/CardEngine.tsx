@@ -78,7 +78,7 @@ function Drawer({ plugin, card, onClose }: { plugin: PluginInfo; card: Card; onC
     <div className="card-drawer-body">
       {tab === 'workspace' && <WorkspaceHost plugin={plugin} card={card} />}
       {tab === 'settings' && <SettingsWidget plugin={plugin} />}
-      {tab === 'commands' && <CommandsWidget region={{ widget: 'actions' }} />}
+      {tab === 'commands' && <CommandsWidget />}
       {tab === 'usage' && <ActivityWidget />}
     </div>
   </aside>

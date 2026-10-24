@@ -6,19 +6,19 @@ description: >-
   file before executing.
 repo_scoped: true
 repository_id: "total-recall-brain"
-generated_at: 2026-10-07T04:47:05.714Z
+generated_at: 2026-10-24T06:43:56.000Z
 generated_from: total-recall
 ---
 
 # total-recall-brain — Codebase Architecture
 
-> Personal AI system — database-free, SSSS-powered intelligence engine deployable to any POSIX host.
+> The Vibe Coding Brain & Autonomous Software Factory: memory, rules, secrets, and 33 visual plugins automatically managed across all your devices.
 
 > **Auto-generated** by `npx total-recall skill generate-expert`. Regenerate anytime to stay current.
 
 ## Stack
 
-- **Languages**: JavaScript (714 files), Markdown (349 files), TypeScript (132 files), Python (29 files), CSS (13 files)
+- **Languages**: JavaScript (722 files), Markdown (257 files), TypeScript (130 files), CSS (12 files)
 - **Frameworks**: React, Express
 - **Tests**: Vitest
 - **Module system**: module
@@ -27,7 +27,7 @@ generated_from: total-recall
 ## Directory Structure
 
 ```
-bin/  (4 items)
+bin/  (5 items)
 collab/
   backend/  (3 items)
   frontend/
@@ -41,11 +41,10 @@ docs/
   how-to/  (1 items)
   infra/  (3 items)
   projects/
-    archived/  (8 items)
-    completed/  (49 items)
-    in-progress/  (13 items)
-    planned/  (1 items)
-  reference/  (6 items)
+    archived/  (10 items)
+    completed/  (48 items)
+    in-progress/  (1 items)
+  reference/  (7 items)
   security/  (2 items)
   setup/  (1 items)
 extension/
@@ -54,10 +53,6 @@ extension/
   options/  (3 items)
   sidepanel/  (3 items)
 fixtures/
-  bundled-plugins/
-    creative-search/  (2 items)
-    git-sentinel/  (2 items)
-    system-monitor/  (2 items)
   invalid/  (5 items)
   okf-bundles/
     cross-linked/  (2 items)
@@ -71,48 +66,37 @@ frontend/
   public/
     brand/  (5 items)
   src/
-    api/  (30 items)
+    api/  (28 items)
     assets/  (3 items)
     components/  (33 items)
-    pages/  (59 items)
+    pages/  (54 items)
     utils/  (1 items)
 infra/
   headscale/  (3 items)
-knowledge-catalog/
-  agents/
-    enrichment/  (3 items)
-    mdcode/  (8 items)
-  okf/
-    bundles/  (3 items)
-    samples/  (3 items)
-    src/  (1 items)
-    tests/  (8 items)
-  samples/
-    discovery/  (6 items)
-    enrichment/  (3 items)
-  toolbox/
-    enrichment/  (5 items)
-    mdcode/  (8 items)
+knowledge-catalog/  (0 items)
 models/
   catalog/
     total-recall/  (1 items)
+openwiki/  (8 items)
 scaffold/
   openwiki/  (6 items)
-scratch/
-  dummy-repo/  (1 items)
-scripts/  (16 items)
+scratch/  (2 items)
+scripts/  (23 items)
 src/
   cli/
     app/  (2 items)
     ingest/  (4 items)
-    plugin/  (15 items)
+    plugin/  (19 items)
   core/
     app-deploy/  (23 items)
+    plugin-contracts/  (6 items)
+    testing/  (1 items)
   server/
-    routes/  (96 items)
+    routes/  (90 items)
 templates/
   claude-hooks/  (1 items)
   default-config/  (4 items)
+  memory/  (1 items)
   obsidian-queries/  (4 items)
   openwiki/  (6 items)
 ```
@@ -120,11 +104,13 @@ templates/
 ## Entry Points
 
 - **total-recall**: `bin/total-recall.mjs` (bin)
+- **vibebrain**: `bin/total-recall.mjs` (bin)
 - **antigravity**: `bin/antigravity.mjs` (bin)
+- **total-recall-memory**: `bin/total-recall-memory.mjs` (bin)
 
 ## CLI Commands
 
-65 commands in `src/cli/`:
+67 commands in `src/cli/`:
 
 | Command | File | Description |
 |---------|------|-------------|
@@ -157,31 +143,25 @@ templates/
 | help | help.mjs | total-recall help |
 | import-rules | import-rules.mjs | src/cli/import-rules.mjs |
 | ingest-okf | ingest-okf.mjs |  |
-| ingest-openwiki | ingest-openwiki.mjs | Discover and ingest OpenWiki hubs declared by installed plug |
 | ingest | ingest.mjs | total-recall ingest |
 | init | init.mjs | total-recall init |
 | integration-dispatcher | integration-dispatcher.mjs | Dynamic SSSS-driven Integration Dispatcher. |
 | key | key.mjs |  |
 | lint | lint.mjs | total-recall lint |
 | map | map.mjs |  |
-| mesh | mesh.mjs | total-recall mesh — control-server (headscale) mesh administ |
+| memory-entry | memory-entry.mjs |  |
+| memory-init | memory-init.mjs |  |
+| memory-plugin | memory-plugin.mjs |  |
+| mesh | mesh.mjs |  |
 | migrate | migrate.mjs |  |
-| project-id | project-id.mjs | total-recall project-id [--json] | --all |
-| proposals | proposals.mjs |  |
-| ... | +25 more | |
+| ... | +27 more | |
 
 ## API Routes
 
-47 route modules in `src/server/routes/`:
+46 route modules in `src/server/routes/`:
 
-### auth (6 endpoints)
+### auth (0 endpoints)
 
-- `POST /auth/login`
-- `POST /auth/logout`
-- `POST /auth/change-password`
-- `GET /auth/me`
-- `GET /auth/status`
-- `POST /auth/setup`
 
 ### brains (3 endpoints)
 
@@ -248,9 +228,12 @@ templates/
 
 - `GET /api/brain/export`
 
-### extension (2 endpoints)
+### extension (5 endpoints)
 
 - `GET /api/extension/download`
+- `GET x-forwarded-proto`
+- `GET x-forwarded-host`
+- `GET host`
 - `GET /api/extension/status`
 
 ### field (3 endpoints)
@@ -276,15 +259,8 @@ templates/
 - `GET /api/ssss/references`
 - `GET /api/ssss/references/:name`
 
-### headscale (7 endpoints)
+### headscale (0 endpoints)
 
-- `GET /api/headscale/node`
-- `DELETE /api/headscale/node/:id`
-- `GET /api/headscale/preauthkey`
-- `POST /api/headscale/preauthkey`
-- `GET /api/headscale/user`
-- `GET /api/headscale/policy`
-- `PUT /api/headscale/policy`
 
 ### help (3 endpoints)
 
@@ -307,13 +283,10 @@ templates/
 - `GET /api/integrations/active`
 - `POST /api/integrations/connect`
 
-### keys (3 endpoints)
+### keys (0 endpoints)
 
-- `GET /api/keys`
-- `POST /api/keys`
-- `DELETE /api/keys/:id`
 
-### memory (9 endpoints)
+### memory (10 endpoints)
 
 - `GET /api/memory`
 - `GET /api/memory/stats`
@@ -324,25 +297,11 @@ templates/
 - `DELETE /api/memory/:slug`
 - `POST /api/memory/search/semantic`
 
-### mesh-presence (4 endpoints)
+### mesh-presence (0 endpoints)
 
-- `GET /api/mesh/presence`
-- `GET /api/mesh/presence/local`
-- `POST /api/mesh/presence/resolve`
-- `POST /api/mesh/dispatch`
 
-### mesh (20 endpoints)
+### mesh (0 endpoints)
 
-- `GET /api/mesh/leader`
-- `GET /api/mesh/nodes`
-- `POST /api/mesh/access`
-- `GET /api/mesh/access/proposals`
-- `POST /api/mesh/access/import`
-- `GET /api/mesh/enrollment`
-- `POST /api/mesh/enroll`
-- `POST /api/mesh/preauthkey`
-- `POST /api/mesh/register-node`
-- `POST /api/mesh/watch`
 
 ### models (5 endpoints)
 
@@ -369,25 +328,21 @@ templates/
 - `GET /api/notifications/history`
 - `POST /api/notifications/test`
 
-### plugins-mesh (4 endpoints)
+### plugins-mesh (0 endpoints)
 
-- `GET /api/mesh/plugins/installed`
-- `GET /api/mesh/plugins`
-- `GET /api/mesh/plugins/:id/bundle`
-- `GET /api/public/plugins/:id/bundle`
 
-### plugins (17 endpoints)
+### plugins (23 endpoints)
 
+- `GET /api/plugins/execution-targets`
+- `PUT /api/plugins/:id/activation`
+- `POST /api/plugins/:id/credentials`
+- `GET /api/plugins/:id/configuration`
+- `PUT /api/plugins/:id/configuration`
 - `GET /api/plugins/:id/ui/:element`
+- `GET /api/plugins/:id/logo`
 - `GET /api/plugins`
 - `GET /api/plugins/available`
 - `GET /api/plugins/peers`
-- `POST /api/plugins/install`
-- `POST /api/plugins/:id/share`
-- `POST /api/plugins/:id/branding`
-- `POST /api/plugins/:id/lock`
-- `POST /api/plugins/:id/deploy-store`
-- `DELETE /api/plugins/:id`
 
 ### proposals (6 endpoints)
 
@@ -421,19 +376,6 @@ templates/
 - `GET /api/scripts/:name`
 - `PUT /api/scripts/:name`
 - `POST /api/scripts/:name/run`
-
-### secrets (26 endpoints)
-
-- `GET /api/secrets/checksum`
-- `GET /api/secrets/sync`
-- `GET /api/secrets/list`
-- `GET /api/secrets/sync/status`
-- `POST /api/secrets/sync/trigger`
-- `POST /api/secrets/sync/trigger-pull`
-- `GET /api/secrets/providers`
-- `GET /api/secrets/tracking-health`
-- `GET /api/secrets/shared-values`
-- `POST /api/secrets/account-sync`
 
 ### sessions (5 endpoints)
 
@@ -509,15 +451,8 @@ templates/
 - `GET /api/vault/hash`
 - `GET /api/vault/status`
 
-### webauthn (7 endpoints)
+### webauthn (0 endpoints)
 
-- `GET /api/webauthn/status`
-- `POST /api/webauthn/register/options`
-- `POST /api/webauthn/register/verify`
-- `POST /api/webauthn/assert/options`
-- `POST /api/webauthn/assert/verify`
-- `POST /api/webauthn/step-up/password`
-- `DELETE /api/webauthn/credentials/:id`
 
 ### webhooks (7 endpoints)
 
@@ -548,11 +483,9 @@ templates/
 - NotificationsPage
 - OkfPage
 - OnboardingPage
-- OpenWikiPage
 - PluginsPage
 - RulesPage
 - SandboxPage
-- SecretsPage
 - SettingsPage
 - SkillsPage
 - TasksPage
@@ -579,66 +512,80 @@ templates/
 - VoiceInput
 - brand/AnimatedBrandMark
 - brand/BrandMark
+- plugins/PluginPanel
+- plugins/PluginSettings
 
 ## Core Modules
 
-139 modules in `src/core/`:
+154 modules in `src/core/`:
 
 - **agent-manager** — exports: loadAgentState, saveAgentState, isProcessRunning, listAgents, buildRemoteSpawnCommand, spawnAgent, killAgent, getAgentLogs
 - **api-routes** — exports: silenceInfoLogs, actionFor, loadApiRoutes
 - **append-log** — exports: compactAppendLogs
+- **auth-guard**
+- **auto-compile** — exports: autoCompileSurfaces
+- **automatic-brain-updates** — exports: automaticUpdateStatus, startAutomaticBrainUpdates, runAutomaticBrainUpdates
 - **autopull-install** — exports: packageRoot, buildLaunchAgentPlist, buildCronLine, mergeCrontab, detectLaunchAgentPort, installAutoPull
 - **blackboard** — exports: loadBlackboard, saveBlackboard, updateBlackboardState, clearBlackboard
 - **bound-hosts** — exports: registerBoundHost, unregisterBoundHost, getBoundHosts, resetBoundHosts, isLoopbackHost, isReachableFromOtherDevices
 - **brain-registry** — exports: globalBrainDirFor, readBrainToggles, isBrainEnabled, setBrainEnabled, listLocalBrains, findLocalBrain
 - **brain-state** — exports: isBrainState, rsyncExcludes, findBrainState
-- **browser-session** — exports: getChromium, resolveProfileDir, ensureProfileDir, launchRotationContext, openConsole, isAuthenticated, looksLikeLoginUrl, waitForLogin
+- **brain-updates** — exports: installedBrainPackage, discoverBrainConsumers, brainInstallOwner, updateAllBrains
 - **cache-prune** — exports: sessionIngestedGuard, agentHomeFor, isProtected, pruneCaches, formatBytes, maybePruneCaches
 - **clarity-rewriter** — exports: runClarityReview, runStalenessCheck, runFactSeeker, runCutoffAudit, writeCorrection
 - **claude-hooks** — exports: installClaudeCodeHooks
-- **command-surface** — exports: describeCommandFile, run, listSurfaceCommands, buildCommandsSection, surfaceInputsHash
+- **cli-commands**
+- **cli-maintenance** — exports: cliInputFingerprint, maintainCliSurfaces, startCliSurfaceMaintenance
+- **cli-quick-reference**
+- **cli-semantic-index** — exports: hashVerb, harvestAllCliVerbs, loadCliSemanticIndex, buildCliSemanticIndex, queryCliSemanticIndex
+- **command-surface** — exports: commandScopeDirectories, describeCommandFile, run, listSurfaceCommands, buildCommandsSection, surfaceInputsHash
 - **conclusion-writer** — exports: validateDraftNode, runConclusionWriter
-- **config** — exports: getEnvVar, detectProjectBrain, getActiveBrains, resolveBrainLayer
+- **config** — exports: surfaceDir, instructionsFilePath, detectProjectBrain, getActiveBrains, resolveBrainLayer
 - **conflict-detector** — exports: detectSemanticConflicts, scanVaultForConflicts, detectPatchConflict, computeFileHash, autoResolveConflict, applyAutoResolution, detectAndResolve, writeConflicts
 - **context-cache** — exports: loadSectionCache, saveSectionCache, computeSectionHash, getCachedSection, manageContextBudget
 - **context-compiler** — exports: compileContext, renderCapsule, capsuleResponse, previewContext
 - **context-policy** — exports: curatedRules, ruleAppliesToRepo, selectRules, assembleContext
 - **crons** — exports: runCrons
-- **crypto** — exports: clearDerivedKeyCache, deriveKey, deriveKeySync, encryptSecrets, encryptSecretsSync, decryptSecrets, decryptSecretsSync, generateSignatureKeyPair
 - **daemon-control** — exports: readPid, getDaemonStatus, startDaemon, stopDaemon, ensureDaemonRunning
 - **daemon-loop** — exports: writeInterrupt, acquirePidLock, reassertPidLock, releasePidLock
-- **device-io** — exports: buildIoProfileFromSignals, uiHintsFromIo, detectDeviceIo, mergeIoProfiles
+- **default-plugins**
+- **device-io**
 - **dream** — exports: pruneResolvedProposals, autoPruneStorage, scanModifiedVault, loadCandidatesFromInbox, loadCandidatesFromSessions, collectRemCandidates, evaluateCandidates, runDreamCycle
 - **drift-detector** — exports: detectIndexDrift, checkEventLogIntegrity
-- **embeddings** — exports: getEmbedding, cosineSimilarity, loadEmbeddingsIndex, saveEmbeddingToIndex, removeEmbeddingFromIndex, nodeToEmbedText, chunkNodeBody, buildEmbeddingsIndex
+- **embeddings** — exports: getEmbedding, getEmbeddingWithProvenance, cosineSimilarity, loadEmbeddingsIndex, saveEmbeddingToIndex, removeEmbeddingFromIndex, nodeToEmbedText, chunkNodeBody
 - **emergency-alerts** — exports: writeEmergencyAlert, clearEmergencyAlerts, readEmergencyAlerts, runStartupHealthCheck
-- **env-import** — exports: inferProvider, maskSecret, parseEnvText, isCandidateKey, defaultEnvFilePaths, scanEnvSources, publicScanResult, importEnvSecrets
 - **evolution** — exports: runSsssEvalWorkflow, proposeSchemaUpgrades, applySchemaUpgrade
 - **evolving-context** — exports: compileEvolvingContext
 - **fact-seeker** — exports: getLocalizedDateTime, formatBeautifulDate, loadAgenda, addToAgenda, cancelBogusAgendaTopics, reclassifyCancelledAgendaTopics, markTopicResearched, getNextAgendaTopic
 - **fast-recall** — exports: buildLocalSearchIndex, fastSearch
 - **friction** — exports: detectFriction
+- **frontmatter**
 - **github-sync** — exports: initGitHubSync, runGitHubSync, getGitHubSyncStatus
-- **headscale-client** — exports: headscaleUrlFromEnv, assertSecureControlUrl, normalizeControlUrl, findHeadscaleKeyMeta, resolveHeadscaleConfig, describeHeadscaleAvailability, headscaleFetch, headscaleFetchWithLegacyFallback
+- **global-brain-updates** — exports: updateGlobalBrainPackages
+- **headscale-client**
+- **host-type-catalog**
 - **import-rules** — exports: detectRuleFiles, importRuleFiles, detectAndImport
 - **inference-engine** — exports: runInferenceTask, runSynthesisTask
-- **lan-discovery** — exports: parseArpTable, discoverLanHosts, probeLanBrains, discoverLanSnapshot, lanHostnameFromIp, registerLanMeshNodes
-- **leader-election** — exports: leaderPin, getLeaderInfo, isLeader, tryAcquireLease, renewLease, releaseLease
-- **logger**
+- **lan-discovery**
+- **leader-election**
+- **logger** — exports: enforceLogSize, pruneOldLogs
+- **memory-brain** — exports: writeBrainIdentity, registerProjectBrain
 - **memory-layers** — exports: normalizeMemoryLayer, inferMemoryLayer, memoryLayerRoutingWeight, buildMemoryLayerIndex
+- **memory-schema**
 - **memory-title** — exports: stripSelfCapturedTitlePrefix, isSelfCapturedEchoTitle, defaultTitleFromBody, normalizeMemoryTitle
-- **mesh-access-sync** — exports: remoteNodeDocsCommand, parseRemoteNodeDocs, planAccessFromPeerDocs, syncAccessFromPeers
-- **mesh-access** — exports: parseSshConfig, readSshConfig, sshConfigMatchScore, findSshConfigEntryForNode, accessFromSshConfigEntry, classifyTailscaleVariant, meshSshFromVariant, resolveNodeAccess
-- **mesh-activity** — exports: getLocalIdleSeconds, detectActiveSurface, getLocalPresence, resolveActiveDevice
-- **mesh-auth** — exports: normalizeRemoteAddress, isMeshOrLoopbackAddress, getMeshSyncToken, getMeshSyncAuthorization, requireMeshSyncAuth
-- **mesh-discover** — exports: candidateUsers, localPrivateKeys, classifyProbeFailure, probeLogin, discoverNodeAccess
-- **mesh-enroll** — exports: resetAutoEnrollThrottle, supportsTailscaleSsh, readTailscaleStatus, readTailscalePrefs, resolveLoginServer, getEnrollmentStatus, autoEnrollEnabled, buildUpArgs
-- **mesh-late-bind** — exports: startMeshBindWatch
-- **mesh** — exports: normalizeHostname, meshNodeDocSlug, meshNodeKey, clearMeshStatusCache, isMeshAvailable, getMeshSelf, getMeshIp, getMeshHostname
-- **meta-harness** — exports: normalizeToolSelection, buildHarnessArgs, shellQuote, resolveHarnessEnv, detectHarnesses, dispatchTask, runCouncil
+- **mesh-access-sync**
+- **mesh-access**
+- **mesh-activity**
+- **mesh-auth**
+- **mesh-brain-updates** — exports: updateMeshBrainPackages
+- **mesh-discover**
+- **mesh-enroll**
+- **mesh-late-bind**
+- **mesh**
+- **meta-harness** — exports: normalizeToolSelection, buildHarnessArgs, shellQuote, resolveHarnessEnv, detectHarnesses, detectHarnessesWithAuth, dispatchTask, runCouncil
 - **migrate** — exports: runMigration, testMigration
 - **network-bind** — exports: resolveServerHost
-- **network-interfaces** — exports: classifyInterfaceKind, isLanIpv4, isOverlayIpv4, listLocalInterfaces, summarizeInterfacesForEntity, listLocalLanCidrs
+- **network-interfaces**
 - **notifications** — exports: sendSystemNotification, listNotificationRules, createNotificationRule, deleteNotificationRule, recordNotificationDelivery, listNotificationHistory, sendTestNotification
 - **obsidian-sync** — exports: syncObsidianToVault, watchObsidianDirectory
 - **okf-adapter** — exports: okfConceptToSsssNode, ssssNodeToOkfConcept, importBundle, exportBundle, lintOkfCompliance, generateLiveIndex, generateLiveLog
@@ -646,65 +593,68 @@ templates/
 - **operation-validator** — exports: processOperation, processOperationAsync, acquireLease, releaseLease
 - **optimizer** — exports: proposalKey, loadOpenProposalKeys, dedupeProposals, createProposal, generateMemoryCleanupProposals, generateSkillImprovementProposals, generateWorkflowRepairProposals, generateModelRoutingProposals
 - **package-auto-update** — exports: isPackageAutoUpdateEnabled, packageUpdateStatePath, loadUpdateState, saveUpdateState, resolveRegistryFiles, readRegistryEntries, rootsFromEnv, listUpdateRoots
+- **package-version** — exports: comparePackageVersions, packageVersionStatus
 - **pairing** — exports: buildPairingInfo
 - **parallel-context** — exports: streamParallelContext, checkFlashHealth
 - **pid-lock** — exports: entryPathHint, readProcessCommand, shouldHonorPidLock
+- **plugin-activation** — exports: setPluginActive
 - **plugin-bundle** — exports: listPluginFiles, hashPluginDir, packPlugin, decodeBundle, writeEntriesAtomic, copyPluginAtomic
+- **plugin-catalog** — exports: buildPluginCatalog, refreshPluginCatalog
 - **plugin-context** — exports: assemblePluginContexts, startPluginDirectedWatcher
-- **plugin-loader** — exports: projectPluginsDir, globalPluginsDir, bundledPluginsDir, vaultForPluginsDir, resolveProjectRoot, isCronExpression, isSafeRelativePath, validatePluginManifest
-- **plugin-peers** — exports: meshPeerUrl, listPeerPlugins, parsePeerSource, fetchPeerBundle
+- **plugin-cron** — exports: parseCron, cronMatches
+- **plugin-dependencies** — exports: preparePluginDependencies
+- **plugin-distribution** — exports: installPlugin, setPluginShared, setPluginBranding, setPluginLocked, deployPluginToStore, listSharedPlugins, packSharedPlugin, packPublicPlugin
+- **plugin-document-store** — exports: resolvePluginAssetPath, executePluginDocument, pluginDocumentOperation
+- **plugin-loader** — exports: projectPluginsDir, globalPluginsDir, bundledPluginsDir, vaultForPluginsDir, resolveProjectRoot, isCronExpression, isSafeRelativePath, resolvePluginFile
+- **plugin-peers**
 - **plugin-public** — exports: parsePublicPluginSource, publicPluginShareUrl, fetchPublicBundle
 - **plugin-runner-child**
-- **plugin-runner** — exports: runPluginCommand
-- **plugin-store** — exports: recordPath, readPluginRecord, buildPluginDocumentBody, ensurePluginRecord, syncAllPluginRecords, patchPluginRecord, describePlugin, listInstalledPlugins
-- **plugin-tasks** — exports: parseCron, cronMatches, taskRunsOnNode, minuteSlot, latestDueSlot, runDuePluginTasks, startPluginTaskScheduler, stopPluginTaskScheduler
+- **plugin-runner** — exports: validatePluginSecretInput, runPluginCommand
+- **plugin-runtime** — exports: loadPluginModule, loadPluginRouters, unavailablePluginOperation
+- **plugin-setup** — exports: setupInstalledPlugins
+- **plugin-state-store** — exports: executePluginState, listPluginStates
+- **plugin-state** — exports: pluginActivation, readActivationRecord
+- **plugin-store** — exports: recordPath, recordPluginsDir, vaultFor, readPluginRecord, emit, buildPluginDocumentBody, ensurePluginRecord, syncAllPluginRecords
+- **plugin-tasks** — exports: taskRunsOnNode, minuteSlot, latestDueSlot, runDuePluginTasks, startPluginTaskScheduler, stopPluginTaskScheduler
+- **plugin-vendor** — exports: readBricks, listBricks, satisfiesRange, vendorPlugin
 - **post-mortem** — exports: readSessionTranscript, deriveSessionProject, runPostMortem, runComplianceAudit
-- **project-brain** — exports: resolveProjectBrainPaths, ensureOpenWiki, ensureCoreSkillPackage, writeBrainIdentity, ensureFullProjectBrain, registerProjectBrain, ensureAndRegisterProjectBrain, inspectProjectBrain
+- **project-brain** — exports: resolveProjectBrainPaths, ensureOpenWiki, ensureCoreSkillPackage, ensureFullProjectBrain, ensureAndRegisterProjectBrain, inspectProjectBrain
 - **project-id** — exports: readProjectId, ensureProjectId, repairProjectIds
+- **project-status** — exports: outstandingProjectStatus, formatOutstandingProjectStatus
 - **proposal-applier** — exports: findDissimilarPair, appendProposalAudit, listProposals, getProposal, setProposalStatus, revertProposal, hasHandler, applyProposal
 - **protect-instructions** — exports: protectIDEInstructions
-- **provider-account-sync** — exports: resolveProbeName, syncSecretAccount, syncAllSecretAccounts, getTrackingHealth
-- **provider-catalog** — exports: getProvider, providerForKeyName, listProviders
-- **provider-rotation-recipes** — exports: getRecipe, listVerifiedRecipes, valueLooksValid
 - **quick-capture** — exports: isValidSource, captureMessage, listCaptureInbox
-- **registration-watch** — exports: resolveLogSource, latestAuthId, getWatchStatus, clearWatchResult, stopWatch, startWatch
+- **registration-watch**
 - **remote-vault-sync** — exports: importRemoteBundle, runSync
-- **repo-sync** — exports: syncAllRepos, syncSingleRepo
+- **repo-sync** — exports: isGeneratedSurface, syncAllRepos, syncSingleRepo
+- **required-plugins** — exports: inspectRequiredPlugins, ensureRequiredPlugins
 - **research-gate** — exports: resolveAutonomousConfig, loadAutonomousConfig, requestResearch, defaultCoverageCheck, proposeAutonomousResearch
 - **research-queue** — exports: compileResearchProjectSummary, syncResearchProjectNode, loadQueue, saveQueue, listQueue, normalizeTopic, addToQueue, updateQueueItem
 - **research-surface** — exports: extractSynthesis, isUsableSynthesis, extractFindings, selectResearchBriefs, formatResearchBriefs, findRelevantResearch, formatChatResearch
 - **research** — exports: handleProactiveResearch, writeOrUpdateConsolidatedDraft, saveSynthesizedReportToDraft, promoteDraftToVault, handleQuickResearch
-- **rotation-capability** — exports: selfGeneratedSpec, generateSecretValue, getRotationPlan, planAll, summarizePlans
 - **runtime** — exports: findBinaryInPath, loadRuntimeConfig, checkRuntimeHealth, loadDynamicSecrets, callLocalRuntime, callLocalRuntimeRaw, cleanAndParseJSON
 - **sandbox** — exports: validateCommand, runInSandbox, executeWithEscalation
+- **scaffold-plugins** — exports: isReleaseFile, releaseFiles, syncScaffoldPlugins
 - **scheduler** — exports: loadPendingTasks, updateTaskStatus, persistTaskToDisk, generateIdleTask, createScheduler
 - **schema**
 - **search** — exports: semanticSearch
-- **secret-integration-research** — exports: gatherCodeUsageContext, parseAiJson, inferSecretIntegrationWithAi, buildIntegrationResearchBrief, maybeEnqueueIntegrationResearch, cancelBogusApiIntegrationQueueItems
-- **secrets-env-diff** — exports: isPlaceholderValue, classify, resolveEnvFiles, repoOfEnvFile, diffEnvAgainstStore, defaultBrainDir
-- **secrets-env-export** — exports: mergeEnvManagedBlock, projectSlugFromPath, loadProjectRegistry, secretMatchesTarget, buildEnvProjection, exportEnvToProject, exportEnvToRegistry, buildDeploySecretsPayload
-- **secrets-keychain** — exports: keychainAvailable, readKeychainPassword, writeKeychainPassword, describeKeychainCarrier
-- **secrets-rekey** — exports: readMasterPasswordFromCarrierText, updateMasterPasswordCarrierText, readMasterPasswordFromCarrier, generateSecretsMasterPassword, rekeySecretsTransaction
-- **secrets-remote-deploy** — exports: resolveRemoteTargetsPath, loadRemoteTargets, saveRemoteTargets, addRemoteTarget, removeRemoteTarget, deployEnvToRemote, deployKeyToRemotes
-- **secrets-rotate** — exports: buildBrowserRotatePrompt, enqueueRotationDueTasks, rotateSecretAndExport, runSecretsRotationCheck, runSecretsExportAll, getBrowserRotateAssist, rotateViaBrowser, rotateAuto
-- **secrets-store** — exports: resolveSecretsPath, resolveAuditPath, resolveUsagePath, secretsPassword, readTrEnvFilePassword, isPlainJsonStore, loadSecretsSync, saveSecretsSync
-- **secrets-sync** — exports: getSecretsChecksum, pullSecretsFromLeader, fetchLeaderChecksum, syncLoop
 - **secure-file** — exports: chmodSecure, writeFileSecure, appendFileSecure
 - **server-restart** — exports: detectSupervisor, requestSelfRestart, packageVersionOnDisk
 - **session-watcher** — exports: createSessionEntry, parseClaudeCode, parseCodex, parseGeminiCli, parseAntigravity, parseCursor, parseVSCode, contentFingerprint
-- **skill-config** — exports: resolveSkillDir, loadConfigSchema, validateSkillConfig, configPath, recordPath, projectVaultFor, readSkillConfigState, readSkillConfig
+- **skill-config** — exports: useCoreDir, coreDirOf, resolveSkillDir, loadConfigSchema, validateSkillConfig, configPath, recordPath, projectVaultFor
 - **skill-optimizer** — exports: splitSkill, planSkillOptimization, optimizeSkill, skillMetadata, auditSkillOwnership, skillDirectories, optimizeSkills
 - **skills-registry** — exports: resolveRegistryDir, resolveRegistryPath, emptyRegistry, loadRegistry, saveRegistry, skillPackageFiles, hashSkillContent, hashSkillLayer
 - **snapshot** — exports: getSnapshotsDir, createSnapshot, listSnapshots, rollbackVault
 - **source-adapters** — exports: loadResearchConfig, isDailyCapReached, getSearchUsageStats, braveSearch, serperSearch, tavilySearch, exaSearch, webSearch
+- **source-brain-updates** — exports: updateSourceBrainPackages, updateSourceBrainPackage
 - **source-watcher** — exports: startSourceWatcher
 - **ssss-host-extension** — exports: listHostOnlyTypes, listTypesProvidedByPackage, listCoreTypes, listMissingCoreSchemas, buildTotalRecallHostExtension, getTotalRecallHostExtension
 - **ssss-kernel-bridge** — exports: getKernelMode, inventorySummary, mapTrPrincipal, createTotalRecallRegistrySet, getTotalRecallEngine, isLowRiskEnvelope, isCoreRouteEnvelope, isProtocolPath
 - **ssss-operation-service** — exports: writeVfsDocument, patchVfsDocument, deleteVfsDocument, appendVfsEvent, listVfsEvents
-- **startup-health** — exports: runBounded, verifyListener, processIdentity, healthVerdict, appVerdict, fetchStartup, startupHealth
+- **startup-health** — exports: runBounded, verifyListener, readProcessCwd, processIdentity, healthVerdict, appVerdict, fetchStartup, startupHealth
 - **steering** — exports: checkLayer1, checkLayer2, detectConflicts, quarantineConflict, resolveConflict
-- **surface** — exports: isSurfaceCodeStale, commandDirsFor, extractWikilinks, replaceFirstManagedInjectionBlock, heuristicCompact, buildResearchSection, readRuleBudgets, legacyRuleContributions
-- **tailscale-cli** — exports: resolveTailscaleBinary, hasTailscaleDaemon
+- **surface** — exports: isSurfaceCodeStale, commandDirsFor, extractWikilinks, replaceFirstManagedInjectionBlock, heuristicCompact, readRuleBudgets, readContextBudget, legacyRuleContributions
+- **tailscale-cli**
 - **task-envelope** — exports: normalizePriority, buildTaskEnvelope, normalizeTask, persistEnvelope, addTask, listTasks, getTask, cancelTask
 - **task-executors** — exports: resolveExecutor, dispatchTask, listExecutorIds
 - **throttled-fetch** — exports: loadFirewallPolicy, blockDomain, unblockDomain, getAuditLog, throttledFetch, safeFetch, getGateStats, resetGateStats
@@ -714,24 +664,24 @@ templates/
 - **usage-tracker** — exports: calculateCurrentCost, syncUsageLedger, loadBudgetConfig, checkBudgetSafety
 - **validated-write** — exports: prepareNodeForContract, writeNodeValidated, writeNodeValidatedAsync, validateNode, resolveVaultDir, updateNodeInPlace
 - **vault-backfill** — exports: walkVaultNodes, normalizeLegacyShapes, diffNode, analyzeVault, backfillVault
-- **vault-cache** — exports: getNodes, invalidate, start
+- **vault-cache** — exports: isGeneratedVaultPath, getNodes, invalidate, start
 - **vault-watcher** — exports: snapshotSignatures, isSettledEvent, startVaultWatcher
 - **vault** — exports: isSafeVaultName, atomicWrite, safeStringify, walkMd, loadNodes, loadMergedNodes, writeNode, deleteNode
 - **vector-field** — exports: compileField, sampleField, loadField, recomputeVelocities, fieldStats
 - **vector-store**
 - **vfs-documents** — exports: defaultVaultRoot, listVfsDocuments, listVfsDocumentsUnder, findVfsDocument, findVfsDocumentByType, findVfsDocumentByPath
 - **watchdog** — exports: attachLogMonitor, detachLogMonitor, attachLogTail, detachLogTail
-- **webauthn-store** — exports: resolveWebAuthnPath, listPasskeys, hasPasskeys, resolveRpFromRequest, beginRegistration, finishRegistration, beginAuthentication, finishAuthentication
+- **webauthn-store**
 - **webhook-handlers** — exports: handleWebhook
 
 ## Agent Skills
 
 - **cli-agents**: Discover and coordinate authenticated terminal coding agents when
 - **code-mode**: Inspect or change Code Mode sandbox, VFS and instruction-led execution.
-- **code-quality**: Run Total Recall's configured package, registry and remote test gates.
+- **code-quality**
 - **meta-harness**: Inspect harnesses, agent processes and mesh execution when authorized.
 - **okf**: Check OKF compatibility when designing SSSS schemas.
-- **plugins**: Standards, authoring guide, and CLI workflows for Total Recall plugins.
+- **plugin**: Author, review or fix a Total Recall plugin (tr-plugin-*). A recipe of exact specifications an agent executes, so the plugin declares the surfaces its function needs, serves agents through its CLI, scaffolds its capability into other applications, and renders a bespoke card face.
 - **project-management**: Manage five-file project docs, trackers, GitHub issues and reviews.
 - **push**: Prepare and publish a Total Recall npm/GitHub release when authorized.
 - **repo-expert**: Read for repository architecture and ownership; load only relevant reference sections.
@@ -741,12 +691,12 @@ templates/
 - **ssss**: Validate or change SSSS schemas, operations, registries and
 - **start**: "Start a session: verify shared runtime, summarize the repo, follow
 - **test**: Run Total Recall unit, CLI, API and frontend tests.
-- **total-recall**: Portable memory and instruction CLI. Read this compact entrypoint; load operation references only for the current task.
+- **total-recall**: Operate Total Recall memory, instructions, plugin discovery and runtime; route auth/secrets, OpenWiki, CRM and mesh work to their owning plugins.
 - **total-recall-project-management**: Apply verified Total Recall planning and readiness differences.
 
 ## Config Files
 
-- **package.json scripts**: dev, start, test, routes:manifest, clean, check:dist, prepublishOnly, check:ssss-registry
+- **package.json scripts**: dev, start, test, routes:manifest, sync:scaffold-plugins, clean, check:dist, prepublishOnly, check:ssss-registry, check:package, start:memory
 - vitest.config.ts
 - .env.example
 - AGENTS.md
