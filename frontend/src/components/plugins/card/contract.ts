@@ -68,8 +68,11 @@ export function normalizeCard(plugin: PluginInfo): Card {
   const status = obj(manifest.status)
   const statusCommand = typeof status.command === 'string' && commands.has(status.command) ? status.command : undefined
   // The face is the plugin's own component; there is no shared layout to fall back to.
+  // Only `kind: 'card'` is the face. A plugin may declare any number of
+  // `kind: 'panel'` screens, and one declared before the card is still a
+  // secondary screen, never the face.
   const elements: Loose[] = Array.isArray(manifest.ui?.elements) ? manifest.ui.elements : (Array.isArray(plugin.ui?.elements) ? plugin.ui.elements : [])
-  const declared = elements.find((element: Loose) => element && typeof element === 'object' && (element.kind === 'card' || element.kind === 'panel'))
+  const declared = elements.find((element: Loose) => element && typeof element === 'object' && element.kind === 'card')
   const face: CardFace | undefined = declared && typeof declared.id === 'string' && typeof declared.tag === 'string' && typeof declared.module === 'string'
     ? { id: declared.id, tag: declared.tag, module: declared.module, description: typeof declared.description === 'string' ? declared.description : undefined }
     : undefined

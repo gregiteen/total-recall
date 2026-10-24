@@ -3,6 +3,17 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import PluginsPage from './PluginsPage';
 
+// A modern plugin declares exactly one bespoke card face plus as many secondary
+// screens as it needs. The host renders the plugin's own face; it never derives
+// a screen or a layout. Commands are reached through the drawer, so a spec that
+// expects them inline is testing a layout that no longer exists.
+const cardFace = { id: 'card', kind: 'card', tag: 'tr-git-sentinel-card', module: 'ui/card.js', description: 'Repo hygiene at a glance' };
+const panels = [
+  { id: 'stashes', kind: 'panel', tag: 'tr-git-sentinel-stashes', module: 'ui/stashes.js', description: 'Stash tracker' },
+  { id: 'branches', kind: 'panel', tag: 'tr-git-sentinel-branches', module: 'ui/branches.js', description: 'Branch inspection' },
+  { id: 'unpushed', kind: 'panel', tag: 'tr-git-sentinel-unpushed', module: 'ui/unpushed.js', description: 'Unpushed work' },
+];
+
 const installed = [{
   id: 'git-sentinel', name: 'Git Sentinel', version: '1.1.0', description: 'Repository state',
   author: 'Total Recall', license: 'MIT', homepage: null, use_cases: ['software-development'],
@@ -10,6 +21,7 @@ const installed = [{
   source: { kind: 'peer', ref: 'peer:mac-mini/git-sentinel', peer_hostname: 'mac-mini' },
   installed_at: '2026-09-22T12:00:00.000Z', sha256: 'a'.repeat(64), installed_sha256: 'a'.repeat(64),
   modified_since_install: false, file_count: 3, size_bytes: 2048, categories: [], tasks: [],
+  ui: { design_tokens: 'ui/DESIGN.md', elements: [cardFace, ...panels] },
   openwiki_hubs: [], cli: { command: 'git-sentinel', subcommands: [{ name: 'audit' }] }, has_generator: false
 }];
 
@@ -43,6 +55,8 @@ beforeEach(() => {
     if (u.endsWith('/api/plugins/peers')) return respond({ success: true, ...peers });
     if (u.endsWith('/api/plugins/install')) return respond({ success: true, message: 'Installed System Monitor 1.1.0 (bundled)' });
     if (u.includes('/readme')) return respond({ success: true, readme: '# Git Sentinel' });
+    // The plugin's own face module, served for the sandboxed frame.
+    if (/\/api\/plugins\/[^/]+\/ui\//.test(u)) return Promise.resolve({ ok: true, status: 200, text: async () => 'class GitSentinelCard extends HTMLElement {}\n' } as Response);
     if (u.endsWith('/api/plugins')) return respond({ success: true, count: 1, plugins: installed });
     return respond({}, 404);
   }) as unknown as typeof fetch;
@@ -61,12 +75,37 @@ describe('PluginsPage', () => {
     expect(container.textContent).not.toMatch(/★|rating|reviews?\b|installs\b|downloads?|verified/i);
   });
 
-  it('offers command scenes without automatically executing an undeclared effect', async () => {
+  it('renders the plugin\'s own face and offers its commands without running any', async () => {
+    // The host gives the face a frame and its commands a place; the face is the
+    // plugin's own code field. A card that runs a command on render would be
+    // executing an effect the operator never asked for.
     renderPage();
+    expect(await screen.findByText('from mac-mini')).toBeInTheDocument();
+
+    // Owner code runs in a sandboxed frame, so the face is the plugin's own
+    // module inside that frame — never a host-rendered layout.
+    const frame = await screen.findByTitle('Git Sentinel interface');
+    expect(frame.tagName).toBe('IFRAME');
+    expect(frame.getAttribute('sandbox')).toBe('allow-scripts');
+
+    // Commands are reachable through the drawer's Commands screen, not derived
+    // onto the card itself.
+    fireEvent.click(screen.getByRole('button', { name: /settings & usage/i }));
+    fireEvent.click(await screen.findByRole('tab', { name: /commands/i }));
     expect(await screen.findByText('total-recall git-sentinel audit --json')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Settings & usage' })).toBeInTheDocument();
     expect(screen.getByText('Try')).toBeInTheDocument();
+
     expect(calls.some(call => call.url.endsWith('/api/plugins/git-sentinel/run'))).toBe(false);
+  });
+
+  it('accepts a face with any number of secondary screens', async () => {
+    // One face, unlimited panels: the plugin defines its screens and the host
+    // imposes neither a count nor a set.
+    renderPage();
+    expect(await screen.findByText('from mac-mini')).toBeInTheDocument();
+    const declared = installed[0].ui.elements.filter(element => element.kind === 'panel');
+    expect(declared).toHaveLength(3);
+    expect(installed[0].ui.elements.filter(element => element.kind === 'card')).toHaveLength(1);
   });
 
   it('installs a bundled plugin', async () => {

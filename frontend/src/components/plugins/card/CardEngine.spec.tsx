@@ -41,6 +41,32 @@ describe('card contract', () => {
     expect(card.commands.get('send')!.effect).toBe('send')
     expect(card.status).toEqual({ command: 'status', refreshSeconds: 30 })
   })
+  it('resolves the face to kind card even when panels are declared first', () => {
+    // A plugin has one face and as many `kind: panel` screens as it needs. A
+    // panel declared before the card is a secondary screen, never the face —
+    // matching on `card || panel` would mount the wrong module.
+    const withPanels = {
+      ...plugin,
+      manifest: {
+        ...plugin.manifest,
+        ui: {
+          elements: [
+            { id: 'stashes', kind: 'panel', tag: 'tr-stashes', module: './ui/stashes.js' },
+            { id: 'owner', kind: 'card', tag: 'owner-card', module: './ui/card.js', description: 'Demo face' },
+            { id: 'branches', kind: 'panel', tag: 'tr-branches', module: './ui/branches.js' },
+          ],
+        },
+      },
+    } as unknown as PluginInfo
+    expect(normalizeCard(withPanels).face).toEqual({ id: 'owner', tag: 'owner-card', module: './ui/card.js', description: 'Demo face' })
+
+    // Panels alone never produce a face.
+    const panelsOnly = {
+      ...plugin,
+      manifest: { ...plugin.manifest, ui: { elements: [{ id: 'p', kind: 'panel', tag: 'tr-p', module: './ui/p.js' }] } },
+    } as unknown as PluginInfo
+    expect(normalizeCard(panelsOnly).face).toBeUndefined()
+  })
   it('leaves the face undefined when the plugin declares none', () => {
     const bare = normalizeCard({ id: 'x', name: 'X', description: '', cli: { command: 'x', subcommands: [{ name: 'list' }] }, manifest: { branding: { color: 'red', font: "'Syne', sans-serif" } } } as unknown as PluginInfo)
     expect(bare.face).toBeUndefined()

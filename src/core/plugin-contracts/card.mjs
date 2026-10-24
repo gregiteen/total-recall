@@ -4,6 +4,11 @@
  * template: no shared layout, no widget vocabulary, no allowlist of shapes.
  * Core validates that the face exists and that the commands behind it are
  * declared; it never dictates how the face is arranged.
+ *
+ * A plugin carries exactly one face and AS MANY secondary screens as it needs,
+ * each declared `kind: 'panel'`. Screens are the plugin's own design: it names
+ * them, orders them and decides what is on them. The host imposes no count and
+ * no screen set, and never derives a screen from the command list.
  */
 const plain = (v) => v && typeof v === 'object' && !Array.isArray(v);
 const COMMAND = /^[a-z][a-z0-9-]{0,63}$/;
@@ -124,10 +129,12 @@ function validateCardFace(manifest, errors, warnings) {
     errors.push("'ui.elements' must declare the plugin's card face; every plugin has one, authored by hand");
     return;
   }
-  // Panels (token entry, settings drawers) are secondary screens of the plugin, not card faces.
+  // One face, and as many secondary screens as the plugin needs. Cardinality is
+  // checked for `card` alone, so panels may be declared in any number and on
+  // either side of the face.
   const faces = elements.filter((element) => plain(element) && element.kind === 'card');
   if (faces.length === 0) errors.push("'ui.elements' must declare an element of kind 'card'");
-  if (faces.length > 1) errors.push("'ui.elements' must declare exactly one card face");
+  if (faces.length > 1) errors.push("'ui.elements' must declare exactly one card face; further screens use kind 'panel'");
 }
 
 function validateBranding(branding, errors, warnings) {
