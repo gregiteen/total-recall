@@ -36,6 +36,23 @@ One journey, one account of record, one host per stage recorded. This is the dec
 
 ## Failure-mode checks
 
+### DEV-API-01 optional developer API acceptance
+
+Run this matrix against the server candidate when the developer API is delivered; it does not replace the server-free CLI baseline or require a cloud host. Record commands, key grant metadata (never token values), target identity, outcomes and source/package identity.
+
+| Case | Required evidence |
+| --- | --- |
+| Explicit full developer key | Intentionally permitted administrative/CLI/plugin/composed operations work within its recorded target/credential grants; Gro seller restrictions are not applied |
+| Restricted key | Allowed command/arguments succeed on its authorized project/brain; foreign targets and scope-changing flags are denied |
+| Nested execution | CLI/plugin/composed children retain the caller's authority; unregistered command aliases and privilege escalation fail |
+| Lifecycle/delegation | Expired/revoked keys cannot start new/child work; delegated grants cannot exceed the issuer; running-work behavior matches the documented policy |
+| Resource and failure handling | Server timeout/concurrency/output/cost limits hold; exit failures, truncation and termination are accurate; audits contain no credentials |
+| Independent client and discovery | A second agent uses its own granted key, sees only executable capabilities and completes a real permitted round trip with denial controls |
+
+Implementation and this matrix are pending; the historical 13 route-unit tests do not certify these properties.
+
+### General runtime failure checks
+
 Run separately; each must fail honestly rather than report success.
 
 | Check | Expected |

@@ -14,7 +14,7 @@ SCOPE-RECONCILE-01 in the audit is the provenance for this correction. Total Rec
 
 Gro CRM owns its seller-scoped CRM gateway, public agent bootstrap/skills and integrated DSH runtime. Gro's optional Total Recall companion and R28 memory integration belong to Gro's plan; they do not require bundling DSH into TR or adding hosted seller services to TR's launch. Existing generic TR agent integrations remain supported on their own terms.
 
-The `/v1/invoke` code introduced at `69addd2` is an implementation discrepancy requiring explicit disposition, not a new core requirement. LR-6 must record that disposition and reconcile public claims. Preserve source and history during this documentation pass; do not silently remove, expand, publish or port the route. A public TR-specific skill URL is not an accepted substitute for Gro's already planned public CRM skills.
+**DEV-API-01 owner decision:** retain `/v1/invoke` as an optional developer API. It is not Gro's seller gateway and does not make HTTP/cloud hosting a requirement for local memory. The former keep/extract/remove item is resolved in favor of retention and authorization hardening. A public TR-specific skill URL is not a substitute for Gro's public CRM skills; TR's own developer API needs its own accurate integration documentation.
 
 Total Recall is finished enough to launch, but it is governed by **13 competing projects** whose instructions contradict each other. The last consolidation drifted: 12 new projects appeared after it, and the README still names a single active project that is not single.
 
@@ -87,6 +87,17 @@ A launched release means all six of these hold simultaneously:
 - **R26** — One **complete journey** passes end to end: clean install → working brain → plugin use → memory written and recalled → upgrade → recall still intact → runtime still healthy. Recorded as one artifact.
 - **R27** — Every gate names the command that produced it and the host it ran on. Local results are never presented as sanctioned gates.
 - **R28** — Sanctioned suites and gates run on the **Mac mini**, never the MacBook, Chromebook, or cloud droplet.
+
+### 3.8 DEV-API-01 — Optional developer API requirements
+
+- **API-1 — Audience and modes:** support explicit full developer access and restricted agent keys. Full developer grants can intentionally authorize CLI administration, plugins, project files and composed workflows; do not impose Gro seller restrictions. A broad scope name alone must not silently imply full access. Existing keys need an explicit, documented migration/grant treatment.
+- **API-2 — Authority through dispatch:** authenticate key identity, role, expiry and grants, then authorize the exact command, arguments and target. Carry that authority through CLI, plugin and composed execution. Restricted calls fail closed when a handler cannot enforce the requested restrictions. Validate names against the actual registered command catalog; syntax checks are insufficient. Child operations cannot gain more authority than their parent grant.
+- **API-3 — Brain/project and credentials:** define allowed projects/brains and enforce selectors, paths and scope-changing flags. Full access is explicit about its target reach. Resolve only authorized credential capabilities, with a controlled execution environment; no accidental inheritance of the server's administrative identity. Administrative credential operations are available only when intentionally granted; raw values never enter routine audit records.
+- **API-4 — Delegation and lifecycle:** keys can be named, bounded, revoked and expired. Issuing/delegating a key cannot expand the issuer's command, target, credential or expiry grants. Revoked/expired keys cannot start new work or child operations; cancellation/handling of already-running work is defined and tested.
+- **API-5 — Execution and evidence:** keep direct argv/no-shell execution; enforce server-controlled timeout ceilings, concurrency, output and provider-spending limits. Failures, truncation and termination are reported accurately. Audit caller, authorized operation/target and outcome without token/secret payloads.
+- **API-6 — Availability and acceptance:** document local, private-mesh and hosted use separately, using the existing configured binding rather than promising public reachability. No server is required for remember/recall/context. Prove full access, restricted access, forbidden escalation, isolation, lifecycle/resource limits and an independent-agent round trip before claiming the hardened API is delivered.
+
+These requirements extend the existing LR workstreams; they do not introduce a new product project, DSH bundle or Gro dependency. Implementation is still pending.
 
 ## 4. Requirement reconciliation
 

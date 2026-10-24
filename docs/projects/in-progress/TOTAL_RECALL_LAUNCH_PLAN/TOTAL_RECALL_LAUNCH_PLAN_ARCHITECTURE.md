@@ -10,7 +10,15 @@
 
 ### Product boundary reconciliation, October 24
 
-Local CLI → validated SSSS vault/index/instruction operations is the baseline; no HTTP server or cloud account is required. The optional memory server exposes memory/context/instructions/rules, and the full server hosts additional generic interfaces. Full-server commit `69addd2` currently mounts a scoped `/v1/invoke` dispatcher across CLI, memory, composable and decision operations; the memory-only app does not. Track its disposition under LR-6 rather than assuming it is part of core acceptance.
+Local CLI → validated SSSS vault/index/instruction operations is the baseline; no HTTP server or cloud account is required. The optional memory server exposes memory/context/instructions/rules, and the full server hosts additional generic interfaces. Full-server commit `69addd2` currently mounts `/v1/invoke` across CLI, memory, composable and decision operations; the memory-only app does not. DEV-API-01 retains this as an optional developer interface and requires authorization hardening before delivery claims.
+
+### DEV-API-01 target dispatch contract
+
+Request → shared-auth principal/grants → registered command resolution → argument and project/brain authorization → execution under the same authority → bounded result and token-free audit. Full developer mode intentionally permits the recorded developer/admin capabilities and targets. Restricted mode exposes only permitted commands and targets; unsupported confinement fails rather than falling back to server authority. Both modes use the same operation catalog and owner implementations; do not duplicate CLI/domain logic inside HTTP handlers.
+
+The execution context must identify the caller, explicit full/restricted mode, command/target/credential grants and lifecycle/resource ceilings. CLI and plugin owners must consume/enforce that context, including nested composed operations. Merely passing a bearer token into an otherwise unrestricted child process is insufficient. Map any native child environment and filesystem access to the grant; do not inherit unrelated server credentials. Verify composed names against the registry and bound argument schemas before execution. Preserve Gro's separate seller authorization policy.
+
+This is the target contract. Current `cli.run` still uses the server environment/package cwd after its operation-scope check; the audit records the gap. Implementation must define revocation of new/child work and treatment of running work, exact credential/target grants, timeout/concurrency/output/cost limits and accurate failures. Existing local/configured mesh binding is not a promise of internet access. The API remains optional and server-free CLI acceptance stays independent.
 
 Gro's separate production graph is seller credential → Gro CRM command gateway → Gro-owned services, plus its pinned native DSH seller image. Public CRM instructions/skills, external-client onboarding and optional seller memory are Gro-owned. Vendorable capability bricks remain a TR responsibility; their use in Gro does not make Gro's endpoints, seller state, DSH image or credential policy part of TR core. See the PRD scope reconciliation and audit SCOPE-RECONCILE-01. Existing generic agent adapters, plugin work and optional private server/mesh use are preserved.
 

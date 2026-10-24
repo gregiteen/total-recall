@@ -8,7 +8,17 @@
 
 ## Priority order
 
-October 24 reconciliation: the PRD scope correction and audit SCOPE-RECONCILE-01 govern this plan. Gro owns public CRM skills/gateway, integrated DSH delivery and optional seller-memory integration. No DSH bundle into TR or cloud-hosting prerequisite is added here. The existing TR invoke route is accounted for under LR-6 as a disposition task, not silently made a launch requirement. Historical evidence below is not fresh runtime certification.
+October 24 reconciliation: the PRD scope correction and audit SCOPE-RECONCILE-01 govern this plan. Gro owns public CRM skills/gateway, integrated DSH delivery and optional seller-memory integration. No DSH bundle into TR or cloud-hosting prerequisite is added here. DEV-API-01 now resolves invoke disposition: retain the optional TR developer API and harden authority through dispatch. Historical evidence below is not fresh runtime certification.
+
+### Next implementation batch — DEV-API-01
+
+1. Map existing auth role/key contracts, CLI/plugin/composed command catalogs, argument parsing, brain selection and child execution. Finalize the PRD API-1–API-6 contract, including current-key migration, explicit full/restricted modes, credential/target grants and running-work revocation behavior. Reuse the auth owner; do not invent a parallel key store.
+2. Enforce registered-command and target/argument authorization, then propagate the caller's execution context through CLI/plugin/composed operations. Preserve intentional full developer capabilities. Restricted execution fails closed where an owner cannot enforce its grants; disallow privilege expansion through nested commands, flags or delegation.
+3. Bound timeout/concurrency/output/provider spending and normalize actual failures/termination. Audit caller, authorized target/operation and outcome without secrets. Validate capability discovery against executable permissions.
+4. On the mini, prove explicit full access, restricted read/write workflows, cross-brain denial, blocked administrative escalation, composed/plugin enforcement, expiry/revocation/delegation, execution limits and an independent-agent round trip. Keep a separate server-free memory acceptance. Do not weaken a denial test to accommodate an unenforced capability.
+5. Write the developer guide from verified behavior: local CLI vs optional local server/private mesh/hosted API, grants, examples and limits. Run required TR gates and include the tested API in packaging/upgrade/launch evidence. No delivery claim or production/package change is made by this documentation update.
+
+This is work within the existing six streams: LR-3 for brain/instruction behavior, LR-5 for generic owner execution contracts, LR-2/LR-4 for release/package integrity, LR-6 for independent-agent and local-only acceptance. Gro's seller API and DSH image remain outside this batch.
 
 Ordered by dependency, not by effort. LR-1 first because nothing is provable while the runtime cannot identify itself; LR-6 last because it verifies everything before it.
 
@@ -108,7 +118,8 @@ Mostly satisfied. This phase **finishes and stops teaching the wrong model**.
 - [ ] Write and run [`LAUNCH_ACCEPTANCE_JOURNEY.md`](LAUNCH_ACCEPTANCE_JOURNEY.md): clean install → working brain → plugin use → memory written and recalled → upgrade → recall intact → runtime healthy
 - [ ] Verify installation instructions against the published package **from a clean machine** (R24)
 - [ ] Reconcile public claims to demonstrated behavior only; label planned integrations as planned (R23) — inherits `TR_MARKETING_LAUNCH`
-- [ ] **SCOPE-RECONCILE-01 / invoke disposition:** review the existing `69addd2` full-server dispatcher against TR's generic optional-interface boundary; record keep/extract/remove decision and authorization/brain/CLI-dispatch evidence before any new release claim. It is not Gro's CRM gateway, a cloud prerequisite or a DSH-bundle requirement. This pass changes documentation only.
+- [x] **DEV-API-01 / disposition:** owner approved retaining `/v1/invoke` as an optional TR developer API, with explicit full access and restricted keys; it is not Gro's gateway, a cloud prerequisite or a DSH-bundle requirement.
+- [ ] Implement and verify PRD API-1–API-6 through the batch above; keep current operation-scope checks distinct from completed downstream authority enforcement.
 - [ ] Prove the ordinary local remember/recall/context path without a running HTTP server or cloud instance; add that result to the clean-install journey.
 - [ ] Close `TR_LAUNCH_HARNESS_DISCOVERY` findings LH-001 (landing ownership) and LH-004 (DSH probe) or drop them as non-launch
 - [ ] Verify the final working tree and upstream equality for the tested candidate. The audit's dirty-tree finding is historical; do not reuse it as a current status.
