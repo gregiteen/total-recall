@@ -8,6 +8,14 @@
 
 ## 1. Purpose
 
+### October 24 scope reconciliation
+
+SCOPE-RECONCILE-01 in the audit is the provenance for this correction. Total Recall remains an independently installable, MIT-licensed, local-first memory and instruction system with generic plugin/tooling interfaces. Local remember/recall/context use must not require a hosted cloud instance or public endpoint. Optional server and mesh interfaces do not change that baseline.
+
+Gro CRM owns its seller-scoped CRM gateway, public agent bootstrap/skills and integrated DSH runtime. Gro's optional Total Recall companion and R28 memory integration belong to Gro's plan; they do not require bundling DSH into TR or adding hosted seller services to TR's launch. Existing generic TR agent integrations remain supported on their own terms.
+
+The `/v1/invoke` code introduced at `69addd2` is an implementation discrepancy requiring explicit disposition, not a new core requirement. LR-6 must record that disposition and reconcile public claims. Preserve source and history during this documentation pass; do not silently remove, expand, publish or port the route. A public TR-specific skill URL is not an accepted substitute for Gro's already planned public CRM skills.
+
 Total Recall is finished enough to launch, but it is governed by **13 competing projects** whose instructions contradict each other. The last consolidation drifted: 12 new projects appeared after it, and the README still names a single active project that is not single.
 
 This project **consolidates all 13 in-progress projects into one owner with one priority order and one acceptance journey**, then archives the predecessors with their evidence intact.
@@ -94,7 +102,7 @@ The conflicts the audit found, each with one decision. Losing requirements are s
 | `status` daemon running vs `startup check` foreign PID | **`startup check` is authoritative.** A foreign PID is a conflict, never healthy | The `status` reading as a health claim |
 | npm `3.40.7` vs installed `3.40.4` | **Propagation is incomplete.** The published artifact is correct; the installed surface is behind | Any claim that 3.40.7 is released |
 | Plugin count 29/30/32/33/34 across documents | **34 is authoritative** (`plugin list --json`) | Every other count |
-| Capsule budget 4,000 vs real corpus | **Open — Greg's decision.** R11 is not satisfiable at 4,000 for the current corpus | Nothing yet; a decision is required |
+| Capsule budget 4,000 vs real corpus | **Historical blocker superseded.** Tracker telemetry passes at the configured 16,000 project budget; final candidate still requires per-action evidence | Old D2 launch block; no universal default or curation policy is newly decided |
 | Test/gate counts (2,353 / 2,405 / 309 / 184) | **Historical.** Each workstream re-measures on its own host | Prior counts as current evidence |
 | Four projects each owning one card face | **One card workstream.** Three are already complete and verified | The four-project structure |
 

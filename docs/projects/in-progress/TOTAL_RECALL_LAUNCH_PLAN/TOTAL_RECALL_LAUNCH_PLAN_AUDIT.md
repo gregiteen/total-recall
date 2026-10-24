@@ -1,5 +1,13 @@
 # TOTAL_RECALL_LAUNCH_PLAN — Audit
 
+## SCOPE-RECONCILE-01 — Complete source audit, October 24
+
+Owner clarification: Gro CRM owns its seller-facing scoped command API, public agent guide/skills and integrated DSH runtime. The pasted handoff mixed these requirements with Total Recall work. Gro source already implements its gateway/catalog/guide and public skill/client routes in `crm_runtime/server.py`; Gro's own plan owns empty-platform discovery, scoped external-agent acceptance, native UI restoration and optional seller-memory provisioning. A downloadable MCP client is not an MCP server. No DSH bundle into Total Recall is specified by this launch plan.
+
+Actual implementation discrepancy: commit `69addd2` adds `src/server/routes/invoke.mjs` and mounts `/v1/invoke` in the full TR server. The separate `src/server/memory-app.mjs` does not mount it. CLI recall searches local vault/index state; ordinary memory does not require HTTP hosting. The full server uses configured/mesh/loopback binding; the memory server defaults to loopback. Endpoint existence does not prove public exposure, independent-agent acceptance or product scope. Record disposition under LR-6; this documentation change neither removes the route nor promotes it into a core launch requirement.
+
+Plan drift is independently visible: `8de9f11` adds capsule telemetry and action prediction, and tracker measurements show the old overflow blocker is stale. `0062229` and tracker evidence resolve the panel decision and modernize the card tests. The pasted handoff reports 2,263 tests for `69addd2`; this is historical evidence, not a fresh full-suite certification. The development plan and Readiness summary lagged those changes. This reconciliation updates known statuses without asserting fleet propagation, current sync, upgrade preservation or completed launch acceptance.
+
 > **Project Prefix**: `TOTAL_RECALL_LAUNCH_PLAN`
 > **Kanban State**: In Progress
 > **Audit Status**: Complete

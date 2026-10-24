@@ -13,6 +13,7 @@ One journey, one account of record, one host per stage recorded. This is the dec
 3. Sanctioned suites run on the **Mac mini** (R28). Local results are labeled local.
 4. A failure stops the journey. Fix at the source, then restart from the first affected stage.
 5. No stage may be satisfied by a different stage's evidence. A healthy container does not prove browser boot; a model response does not prove persistent memory.
+6. Before starting any HTTP server, prove local `remember`, `recall --local` and `context` on an isolated initialized brain with no cloud instance or running server. Record output, persistence and exit status. Server/mesh readiness below is a separate configured-runtime acceptance, not a prerequisite for ordinary CLI memory. Gro CRM endpoints, public seller skills and its DSH image are outside this journey.
 
 ## Stages
 
@@ -66,10 +67,10 @@ Not a substitute for the journey, but each is a stage that now has evidence:
 | 8 — plugin installs and runs | **pass for creation** — `plugin create` → install → list active (previously impossible) | LR-4 evidence |
 | 10–11 — memory written and recalled | not re-run in this pass | 1,617 global brain nodes present |
 | 6 — instructions in sync | **fail** `In sync: no` | `total-recall status` |
-| 7 — capsule meets its gate | **fail** — 12/13 over budget | TR-003 evidence |
+| 7 — capsule meets its gate | **recorded telemetry passes** at the configured 16,000 project budget; remeasure the final candidate | tracker Measurement substrate; TR-003 overflow evidence superseded |
 | 12–14 — upgrade, preservation, restart | not run | — |
 
-**The journey remains unproven as a whole.** Stages 6, 7, and 12–14 are open, and L6 cannot be claimed.
+**The journey remains unproven as a whole.** Stage 6, final-candidate stage 7, the server-free baseline and stages 12–14 remain open; L6 cannot be claimed. Earlier rows are historical evidence, not a current rerun.
 
 ## Why this replaces per-component acceptance
 

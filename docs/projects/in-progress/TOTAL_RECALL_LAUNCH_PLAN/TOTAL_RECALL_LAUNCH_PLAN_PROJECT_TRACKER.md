@@ -21,6 +21,17 @@
 
 ## Active acceptance checklist
 
+### October 24 scope reconciliation
+
+PRD scope reconciliation and audit SCOPE-RECONCILE-01 are authoritative. Gro owns its seller command gateway/public skills, integrated DSH delivery and optional seller-memory integration. TR owns local memory/instructions, generic tooling and plugin bricks. Neither cloud hosting nor DSH installation is required for ordinary TR memory. No runtime code was removed, ported or released by this reconciliation.
+
+- [x] Reconcile ownership across both five-file projects, preserving their unrelated work and history.
+- [ ] Account for the full-server `/v1/invoke` implementation at `69addd2`: explicitly decide its generic optional-interface disposition and verify its dispatch/brain/authorization boundary before publication claims. Code existence is not scope approval; it is not Gro's CRM gateway.
+- [ ] Record server-free local remember/recall/context acceptance in LR-6.
+- Public CRM skill URL/guide delivery and DSH runtime bundling are tracked by Gro, not new TR launch gates. Existing generic TR skills/adapters are retained.
+
+Recent source: `0062229` (panel/card contract and specs), `8de9f11` (capsule telemetry/action prediction), `69addd2` (invoke implementation). The handoff's 2,263-test result is historical; the final candidate needs its own gates. A narrow rerun of `invoke.spec.mjs` during this chat passed 13/13 on the Mac mini; it does not certify end-to-end authorization or the full suite.
+
 ### Measurement substrate (added 2026-10-24)
 
 The plan argued several things from anecdotes because nothing measured them. That gap is now closed for the capsule, which is the number that governs every session.
@@ -62,7 +73,7 @@ The plan argued several things from anecdotes because nothing measured them. Tha
 
 ### LR-3 — Memory and instruction contract
 
-- [ ] **D2**: decide curation to ≤4,000 or justify a higher default. **Blocked on Greg.** Evidence: 12/13 over at ~9,807–9,870 vs 4,000; `context --action read` exits 2.
+- [x] **D2 old overflow blocker superseded:** telemetry above records 0% overflow at the configured 16,000 project budget. This does not decide a universal default; sync and curation remain separate tasks. Do not ask the owner to resolve the obsolete 4,000-token failure again.
 - [ ] Reconcile instruction surfaces from the scaffold as publish source (R12). Current: local 28,192 vs remote 24,897, `never` synced, no targets.
 - [ ] Resolve the three-way skill/entrypoint version skew.
 - [ ] Make the capsule name its required set and overage on overflow (R14).
@@ -139,7 +150,7 @@ Found because the plan's gates were actually run rather than trusted. **None was
 | --- | --- | --- |
 | L1 | `shared_ready: true` | **Passing** — `server: ready` 3.40.7, `daemon: running`, brain ready, ssss available, `shared_ready: true` (from a neutral cwd) |
 | L2 | Installed version equals published | **Passing on this host** — CLI `v3.40.7` = npm `3.40.7`; fleet and cloud unverified |
-| L3 | Instructions in sync; capsule meets its gate | **Failing** — `In sync: no`, 12/13 capsules over budget. **Blocked on D2** |
+| L3 | Instructions in sync; capsule meets its gate | **Partial** — configured capsule budget passes recorded telemetry; instruction sync/version acceptance remains open. Old overflow evidence is superseded. |
 | L4 | Fresh install reaches a working brain and plugin | **Partly proven** — `plugin create` now works end to end (was impossible); full clean-machine run not done |
 | L5 | Upgrade preserves state | Unknown — not yet run |
 | L6 | Complete journey passes | Unknown — not yet run |
@@ -149,7 +160,7 @@ Found because the plan's gates were actually run rather than trusted. **None was
 | ID | Decision | Owner | Blocks | Resolution |
 | --- | --- | --- | --- | --- |
 | D1 | May panels coexist with a card face? | Greg | LR-5 final acceptance | **RESOLVED 2026-10-24 — "as many panel screens as needed."** One face, unlimited panels. The host imposes no count and no screen set. Locked in by the contract spec, the authoring reference, and a regression test. |
-| D2 | Capsule budget: curate to ≤4,000 or raise the default with justification? | Greg | LR-3 | **Open.** Still the only decision blocking L3. |
+| D2 | Historical 4,000-token overflow blocker | Reconciled | LR-3 | **Superseded by measured project configuration:** telemetry passes at 16,000. Universal default/curation policy is not newly decided; instruction sync remains open independently. |
 
 ## Verified evidence at `aee2ad0`
 
@@ -178,6 +189,10 @@ Recorded so these are not re-litigated. **Local host; sanctioned Mac mini gates 
 - Version numbers are point-in-time at `aee2ad0`.
 - Predecessor checked boxes were not re-certified; they remain `claim` per the register.
 - No plugin UI was rendered in a browser for this audit.
+
+## Reconciled readiness — October 24
+
+In progress. Identity fixes and the local version gap have recorded evidence; panel approval and its modernized tests are complete. The old capsule-overflow blocker is superseded by telemetry. Those results do not establish instruction synchronization, fleet propagation, safe distributed artifacts, upgrade preservation or the complete launch journey. Work remains under the same six LR workstreams. Next: verify instruction publication/readback and local-only memory behavior, certify packaging/upgrades, then complete the journey; separately account for the unplanned invoke code. Gro's agent delivery tasks do not block this launch.
 
 ## Action Log
 
@@ -210,15 +225,5 @@ Append-only. Timestamp · actor · action · outcome · evidence.
 - `2026-10-24T05:51:00Z` — Claude (DSH): **Final suite: 2218 of 2219 tests pass**, 362 of 363 files. Down from **60 failures at HEAD**. The single remaining failure (`PluginsPage.spec.tsx`) encodes the pre-bespoke layout and awaits the **D1** decision.
 - `2026-10-24T05:52:00Z` — Claude (DSH): Committed and pushed. Evidence: `git log`, push result.
 
-## Readiness
-
-**Substantially closer; not ready for launch.** Consolidation is complete, L1 and L2 now pass on the sanctioned host, and 2218 of 2219 tests pass with all quality gates clean (they started at 60 failures and 3 gate findings).
-
-Remaining before launch:
-1. **L3 — blocked on D2** (capsule budget). Instruction surfaces are still out of sync.
-2. **L4** — a full clean-machine install has not been run end to end.
-3. **L5, L6** — upgrade preservation and the complete journey are unproven.
-4. **One failing test** (`PluginsPage.spec.tsx`) awaiting the **D1** decision.
-5. **LR-2 fleet propagation** — only this host is verified; the cloud and 56 registered brains are not.
-
-The next action is **L3**: resolve **D2** so the capsule gate can be met, then run the acceptance journey (LR-6).
+- `2026-10-24T21:24Z` — Codex: SCOPE-RECONCILE-01 audit compared both five-file plans, source routes, server binding/local CLI, Git history and the pasted handoff. Found Gro requirements had been presented as TR launch work and `69addd2` invoke lacked a plan disposition. Updated audit first, then requirements/architecture/plan/tracker; corrected known stale D1/D2/local version and scaffolder statuses. Preserved unrelated work and historical action entries. Earlier read attempts used the wrong repository for a TR path and returned missing-file errors; corrected explicit cwd. No feature code, package version or deployment changed. Documentation/link validation and Git publication results follow.
+- `2026-10-24T21:30Z` — Codex: both projects pass five-file scope/final Action Log checks and corrected Gro plan link resolves; TR `git diff --check` passes. Saved scoped correction through TR, refreshed local OpenWiki (8 imports, 0 errors) and confirmed retrieval; Gro did the same (6 imports, 0 errors). Local OpenWiki/brain state remains excluded from TR's public Git artifact. Sequential TR fast quality gates passed with 0 findings in3.4s. Gro's separate full gate passed523 CRM runtime tests then failed its pre-existing native-restoration policy expectation; recorded in Gro, not used as a TR failure or launch dependency. No TR runtime source, package version or deployment changed; invoke disposition remains open. Final Git verification follows.

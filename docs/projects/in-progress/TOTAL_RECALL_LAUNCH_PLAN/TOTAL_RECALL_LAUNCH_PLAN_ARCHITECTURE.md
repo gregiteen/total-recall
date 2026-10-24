@@ -8,6 +8,12 @@
 
 ## 1. Ownership model
 
+### Product boundary reconciliation, October 24
+
+Local CLI → validated SSSS vault/index/instruction operations is the baseline; no HTTP server or cloud account is required. The optional memory server exposes memory/context/instructions/rules, and the full server hosts additional generic interfaces. Full-server commit `69addd2` currently mounts a scoped `/v1/invoke` dispatcher across CLI, memory, composable and decision operations; the memory-only app does not. Track its disposition under LR-6 rather than assuming it is part of core acceptance.
+
+Gro's separate production graph is seller credential → Gro CRM command gateway → Gro-owned services, plus its pinned native DSH seller image. Public CRM instructions/skills, external-client onboarding and optional seller memory are Gro-owned. Vendorable capability bricks remain a TR responsibility; their use in Gro does not make Gro's endpoints, seller state, DSH image or credential policy part of TR core. See the PRD scope reconciliation and audit SCOPE-RECONCILE-01. Existing generic agent adapters, plugin work and optional private server/mesh use are preserved.
+
 The previous consolidation failed for a structural reason: it named a single owner in prose but left nothing that would **prevent** a new project from appearing. The fix is an explicit custody rule plus a register that is checked, not a better-worded README.
 
 ```
@@ -46,7 +52,7 @@ Absorbs the daemon-lock and health-reporting findings. `startup check` is author
 Absorbs `UNIFORM_BRAIN_UPDATES` and the version-skew finding. Publishing, tagging, installing and per-consumer verification are separate reported events (R8). An upgrade preserves memory and configuration, and interruption is recoverable (R9).
 
 ### LR-3 — Memory and instruction contract
-Absorbs the TR-003 capsule-overflow item and the surface sync drift. Two sub-items: the **budget decision** (blocked on Greg) and the **scaffold-as-publish-source** reconciliation. The capsule must report overflow honestly (R14).
+Absorbs the TR-003 capsule-overflow item and the surface sync drift. Recorded telemetry supersedes the historical overflow blocker at this project's configured 16,000 budget; it does not settle a universal default. Scaffold-as-publish-source synchronization, curation and candidate readback remain open. The capsule must report overflow honestly (R14).
 
 ### LR-4 — Packaging safety
 Absorbs `PLUGIN_CREATOR_SKILL`'s unpublished fix. Acceptance covers **every** path independently (R21), because the leak entered through a path other than the one previously certified. The `tokenPanelSource()` reconciliation (audit §2.5) belongs here, since it is a credential-entry pattern in generated code.
@@ -60,7 +66,7 @@ Absorbs `PLUGIN_CARDS_BESPOKE`, `PLUGIN_BRICK_STANDALONE`, the remaining `PLUGIN
 | **Brick** | None | None | None in the vendored payload | `pluginBundleFiles(dir, {audience:'brick'})` |
 | **Panel** | Not a face | Secondary screen | Total Recall host | `validateCardFace` (panels do not satisfy the face requirement) |
 
-The "panel is not a card face" contract edit recorded at 2026-10-23T23:47Z is the **hinge** that lets a plugin carry secondary screens without satisfying the face requirement. It is adopted here and flagged for Greg's confirmation (open decision D1).
+The "panel is not a card face" contract edit recorded at 2026-10-23T23:47Z lets a plugin carry secondary screens without satisfying the face requirement. D1 is resolved: the owner approved as many plugin-owned panels as needed alongside exactly one bespoke face; the tracker and `0062229` record contract/test evidence.
 
 ### LR-6 — Launch acceptance
 Absorbs `TR_MARKETING_LAUNCH` and `TR_LAUNCH_HARNESS_DISCOVERY`, narrowed. Discovery stops being a live track: harness experiments (Pi, Hermes, OpenCode, Goose, OpenHands, Aider) produce **no launch dependency**. Public claims follow demonstrated behavior only (R23).
@@ -120,13 +126,13 @@ Statuses: `evidenced` · `claim` · `superseded` · `retired` · `external-owner
 - **No parallel edit surface.** Documents are corrected in place; no shadow copies are maintained.
 - **No second evidence system.** The existing `source-items.json` machinery is extended, not replaced.
 
-## 7. Open decisions
+## 7. Decision reconciliation
 
-Two, both Greg's. Neither blocks LR-1, LR-2, LR-4, or LR-5.
+The original two decisions are no longer open launch blockers. Their dispositions are recorded here so agents do not request the same decisions again.
 
 | ID | Decision | Blocks | Default if undecided |
 | --- | --- | --- | --- |
-| **D1** | May panels coexist with a card face? (The contract already allows it; needs confirmation.) | LR-5 final acceptance only | Current code behavior: yes |
-| **D2** | Capsule budget: curate the 83 directives to ≤4,000, or justify and raise the default? | LR-3 completion | Raise the documented default and record why |
+| **D1** | Resolved by owner: one face, unlimited plugin-owned panels | None | Contract/tests recorded at `0062229` and in tracker |
+| **D2** | Historical overflow superseded by telemetry at the configured project budget | No current overflow blocker; LR-3 sync remains open | No new universal default or curation policy is inferred |
 
 Brand/trademark naming from TR-010 FC-F is **not** a launch decision and moves out of scope with the product roadmap.

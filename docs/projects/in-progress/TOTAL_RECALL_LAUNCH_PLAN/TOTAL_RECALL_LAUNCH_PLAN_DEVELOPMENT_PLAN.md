@@ -8,15 +8,17 @@
 
 ## Priority order
 
+October 24 reconciliation: the PRD scope correction and audit SCOPE-RECONCILE-01 govern this plan. Gro owns public CRM skills/gateway, integrated DSH delivery and optional seller-memory integration. No DSH bundle into TR or cloud-hosting prerequisite is added here. The existing TR invoke route is accounted for under LR-6 as a disposition task, not silently made a launch requirement. Historical evidence below is not fresh runtime certification.
+
 Ordered by dependency, not by effort. LR-1 first because nothing is provable while the runtime cannot identify itself; LR-6 last because it verifies everything before it.
 
 | Phase | Workstream | Gate | Status |
 | --- | --- | --- | --- |
 | 0 | Consolidation | R1–R5 | **Complete** (this plan) |
-| 1 | LR-1 Runtime truth | L1 | Not started |
-| 2 | LR-2 Release propagation | L2, L5 | Not started |
-| 3 | LR-3 Memory and instruction contract | L3 | Partly blocked (D2) |
-| 4 | LR-4 Packaging safety | R20–R22 | Not started |
+| 1 | LR-1 Runtime truth | L1 | Identity fixes recorded; status ownership and harness readback remain |
+| 2 | LR-2 Release propagation | L2, L5 | Local version gap closed; fleet and upgrade acceptance open |
+| 3 | LR-3 Memory and instruction contract | L3 | Telemetry added; sync/version reconciliation open; old overflow blocker superseded |
+| 4 | LR-4 Packaging safety | R20–R22 | Source repairs recorded; per-path certification and shipped artifact open |
 | 5 | LR-5 Plugin, brick and card contract | — | Mostly complete |
 | 6 | LR-6 Launch acceptance | L6 | Not started |
 
@@ -34,12 +36,12 @@ Ordered by dependency, not by effort. LR-1 first because nothing is provable whi
 
 **Gate L1**: `startup check --json` reports `shared_ready: true` on the sanctioned host, and `status` agrees with it.
 
-- [ ] Resolve the foreign-PID daemon lock conflict. `startup check` reports `daemon: conflict / foreign-pid (local-pid)` while `status` reports the daemon running — the same lock, two answers (audit §2.2, C5)
-- [ ] Determine what the server process is, and make `server-process-unverified` resolve to a verified identity or an honest failure (audit §2.2)
+- [x] Resolve the recorded foreign-PID daemon lock conflict — tracker LR-1 and `evidence/LR-1-remediation.md`; original conflict retained in the audit.
+- [x] Resolve the recorded `server-process-unverified` cwd defect — tracker LR-1 and regression evidence; not a claim about every installed runtime.
 - [ ] Make `status` and `startup check` read the **same** authority for daemon state (R7)
 - [ ] Prove the surface actually written is the surface a harness reads, for both layers (R13) — inherits `SURFACE_COMPILATION_FIX`'s central defect and `TR_CORE_PLUGIN_SPLIT`'s `TR_CORE_PLUGIN_SPLIT_SURFACE_DIR_AUDIT.md`
-- [ ] Add a regression test that a silent no-op surface write fails loudly (R13)
-- [ ] Record the artifact: the `startup check --json` output, the host, and the commit
+- [x] Add the recorded startup/surface regression coverage — tracker LR-1, 5 added cases; actual harness readback remains open above.
+- [x] Record the original `startup check --json` artifact, host and source — LR-1 remediation evidence. Repeat on the actual release candidate before delivery.
 
 **Do not** treat a healthy container, a running daemon, or a 200 response as proof of one another. Each is a distinct claim.
 
@@ -47,7 +49,7 @@ Ordered by dependency, not by effort. LR-1 first because nothing is provable whi
 
 **Gate L2/L5**: the installed CLI equals the published version, independently verified, and an upgrade preserves state.
 
-- [ ] Close the propagation gap: npm publishes `3.40.7`, the installed CLI is `3.40.4` (audit §2.3, C4)
+- [x] Close the recorded local `3.40.4` → `3.40.7` gap — tracker LR-2. This does not certify other consumers or a later package.
 - [ ] Verify per surface, not in aggregate: published artifact, tag, installed CLI, and each registered consumer (R8) — inherits `UNIFORM_BRAIN_UPDATES`
 - [ ] Report a failed or stale consumer explicitly; never print success for a partial rollout (R10)
 - [ ] Prove an upgrade preserves memories, vault content, configuration and plugin state (R9)
@@ -59,7 +61,8 @@ Ordered by dependency, not by effort. LR-1 first because nothing is provable whi
 
 **Gate L3**: instruction surfaces report `In sync: yes`, and the capsule reaches `ready: true` within budget.
 
-- [ ] **D2 (blocked on Greg)**: decide whether to curate the 83 directives to ≤4,000 tokens or to justify and raise the documented default. Evidence: 12 of 13 capsules over at ~9,807–9,870 tokens, 59% overshoot; `context "x" --action read` exits 2
+- [x] Supersede the old **D2** overflow blocker: tracker telemetry records 0% overflow at the configured 16,000 budget. This is a measured project setting, not a newly approved universal default; curation and sync remain separate work.
+- [ ] Reconcile archived TR-003 and remaining stale readiness statements against telemetry; record current per-action samples for release acceptance.
 - [ ] Reconcile instruction surfaces **from the scaffold as the publish source**; never hand-edit the live copy (R12). Current state: local 28,192 bytes vs remote 24,897, `In sync: no`, `never` synced, no targets (audit §2.4, C6)
 - [ ] Resolve the three-way skill/entrypoint version skew recorded in TR-006
 - [ ] Make the capsule name its required set and overage when it overflows (R14)
@@ -73,8 +76,8 @@ Ordered by dependency, not by effort. LR-1 first because nothing is provable whi
 - [ ] Publish the unpublished fix so the **installed package** stops carrying the old private-state copy behavior (R22) — currently the leak is fixed in source but not shipped
 - [ ] Certify **every** path independently: export, import, scaffold, install, `skill deploy`, sharing (R21)
 - [ ] Reconcile the `--from-skill` path: `src/cli/plugin/create.mjs:163` reads `SKILL.md` and parses frontmatter through a path separate from the shared exclusion predicate (audit §2.5, C3)
-- [ ] Resolve `tokenPanelSource()` (`create.mjs:76`) against the tracker's claim that it was removed — it is a credential-entry pattern in generated code
-- [ ] Remove generated `panel.js` / `DESIGN.md` stub / `ui` block from the scaffolder, and make the scaffold emit a **valid** manifest or state honestly that the face comes later (R19)
+- [x] Reconcile the scaffolder's generated-UI claim — tracker records removal of the unreachable generator and explicit hand-authored face guidance; keep any credential-specific/per-path certification open under R21.
+- [x] Make a new scaffold report its unfinished face honestly — tracker records `scaffold: true` and working creation. This does not certify a finished plugin UI.
 - [ ] Relocate or remove the 46 MB `browser-profile` from the skill directory
 - [ ] Add a scan that asserts no private-state path matches a distributed artifact
 - [ ] Record the artifact: the per-path scan result and the installed-package hash
@@ -88,7 +91,7 @@ Mostly satisfied. This phase **finishes and stops teaching the wrong model**.
 - [x] 0 of 34 plugins declare `card_layout` — verified
 - [x] Three card faces complete and verified independently: `git-sentinel` (625 lines), `stripe` (790), `system-monitor` (655), each with `ui/DESIGN.md`
 - [ ] **Correct every shipped document that teaches the deleted model** (R17): `TR_CORE_PLUGIN_SPLIT_ARCHITECTURE.md:176–189` (the 7-template list and the `card_layout` example) is the primary offender; `PLUGIN_UI_OVERHAUL`'s Recipe Contract follows
-- [ ] Settle **D1** with Greg: panels may coexist with the card face (already the code's behavior)
+- [x] Settle **D1**: one bespoke face may coexist with as many plugin-owned panels as needed; tracker records owner approval and regression coverage (`0062229`).
 - [ ] Make `ui` optional for a **brick** while a **plugin** still requires exactly one bespoke face (the two requirement sets in ARCHITECTURE §2, LR-5) — this is the unresolved hinge from 2026-10-23T23:47Z
 - [ ] Add `capability { entry, exports }` to the manifest contract, and `pluginBundleFiles(dir, {audience})` with `plugin` and `brick` selection
 - [ ] Extract `capability/index.mjs` for the first brick (`stripe`): exported functions, explicit parameters, injected transport, no `example.com` placeholders, no example defaults
@@ -105,8 +108,10 @@ Mostly satisfied. This phase **finishes and stops teaching the wrong model**.
 - [ ] Write and run [`LAUNCH_ACCEPTANCE_JOURNEY.md`](LAUNCH_ACCEPTANCE_JOURNEY.md): clean install → working brain → plugin use → memory written and recalled → upgrade → recall intact → runtime healthy
 - [ ] Verify installation instructions against the published package **from a clean machine** (R24)
 - [ ] Reconcile public claims to demonstrated behavior only; label planned integrations as planned (R23) — inherits `TR_MARKETING_LAUNCH`
+- [ ] **SCOPE-RECONCILE-01 / invoke disposition:** review the existing `69addd2` full-server dispatcher against TR's generic optional-interface boundary; record keep/extract/remove decision and authorization/brain/CLI-dispatch evidence before any new release claim. It is not Gro's CRM gateway, a cloud prerequisite or a DSH-bundle requirement. This pass changes documentation only.
+- [ ] Prove the ordinary local remember/recall/context path without a running HTTP server or cloud instance; add that result to the clean-install journey.
 - [ ] Close `TR_LAUNCH_HARNESS_DISCOVERY` findings LH-001 (landing ownership) and LH-004 (DSH probe) or drop them as non-launch
-- [ ] Verify the working tree is clean and pushed — currently false: the CARDS tracker is modified and `MESH_CARD_BESPOKE/` was untracked
+- [ ] Verify the final working tree and upstream equality for the tested candidate. The audit's dirty-tree finding is historical; do not reuse it as a current status.
 - [ ] Run the sanctioned suites on the **Mac mini** and record the host (R28)
 - [ ] Record the artifact: the journey transcript with one host per stage
 
