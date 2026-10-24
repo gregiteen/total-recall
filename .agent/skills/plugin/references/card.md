@@ -31,6 +31,7 @@ Work in this order, and write the reasoning into `ui/DESIGN.md` **before** writi
 
 A plugin with several jobs carries them across **screens the operator flips through**. The plugin defines them.
 
+- A plugin has **exactly one card face and as many screens as it needs**. There is no limit and no required count; use the number the plugin's own tasks call for. Declare each additional screen as a `kind: 'panel'` element in `ui.elements[]`.
 - Order them by the plugin's own tasks, **most-used first**.
 - The first screen answers what the operator opened the card to do.
 - **Never one screen per subcommand.** That is the host's command list wearing a costume, and it is what makes unrelated plugins look alike.

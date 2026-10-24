@@ -76,11 +76,29 @@ describe('card contract', () => {
     two.ui.elements = [face, { id: 'second', kind: 'card', tag: 'demo-second', module: 'ui/second.js' }];
     expect(validateCardContract(two).errors.join('\n')).toMatch(/exactly one card face/);
 
+    expect(validateCardContract(base()).errors).toEqual([]);
+  });
+
+  it('allows a plugin as many secondary screens as it needs', () => {
+    // One face, unlimited panels. A plugin defines its own screens, and there is
+    // no host-imposed limit or screen set. The cardinality rule applies to
+    // `card` alone.
     const withPanel = base();
     withPanel.ui.elements = [face, { id: 'panel', kind: 'panel', tag: 'demo-panel', module: 'ui/panel.js' }];
     expect(validateCardContract(withPanel).errors).toEqual([]);
 
-    expect(validateCardContract(base()).errors).toEqual([]);
+    const many = base();
+    many.ui.elements = [
+      face,
+      ...Array.from({ length: 40 }, (_, i) => ({ id: `screen-${i}`, kind: 'panel', tag: `demo-screen-${i}`, module: `ui/screen-${i}.js` })),
+    ];
+    expect(validateCardContract(many).errors).toEqual([]);
+    expect(validatePluginManifest(many).valid).toBe(true);
+
+    // Panels may be declared before or after the face.
+    const faceLast = base();
+    faceLast.ui.elements = [{ id: 'panel', kind: 'panel', tag: 'demo-panel', module: 'ui/panel.js' }, face];
+    expect(validateCardContract(faceLast).errors).toEqual([]);
   });
   it('warns about fixed metrics', () => {
     const m = base();

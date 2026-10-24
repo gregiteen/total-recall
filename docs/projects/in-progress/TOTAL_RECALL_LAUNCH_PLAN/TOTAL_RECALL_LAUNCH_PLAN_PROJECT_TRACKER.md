@@ -76,7 +76,7 @@ Found because the plan's gates were actually run rather than trusted. **None was
 - [x] **The release gate misclassified bundled plugin source as leaked brain state.** `brain-state.json` lists `plugins` as per-brain state (correct for an *installed* plugin directory), and `isBrainState` matched that segment **anywhere** in a path. The scaffold legitimately ships bundled plugin source at `scaffold/.agent/skills/total-recall/plugins/<id>/` — and `.gitignore:157` states plainly those must stay in git — so the template itself was flagged and the release gate failed. Fixed by anchoring an exemption to the scaffold's own brain path; an installed or brain-local `plugins/` directory is still state. `check-scaffold-state.mjs` now reports all three checks green and `brain-state.spec.mjs` passes 11/11.
 - [x] **The scaffold's pinned plugin hashes were stale.** The same gate hash-pins every bundled plugin file in `scripts/scaffold-plugins.json`. Removing the private-app-name leak changed one file, correctly invalidating its pin. Re-pinned through the sanctioned `scripts/sync-scaffold-plugins.mjs`: **212 pinned files, 7 changes** — which also brought `mesh/ui/card.js` and several plugin manifests back into sync.
 - [x] **`plugin-context.spec.mjs` "assembles evolving context"** returned empty. The fixture plugin declared no card face, so it was invalid, and `assemblePluginContexts` skips invalid plugins (`plugin-context.mjs:21`). Face added to the fixture; 5/5 pass.
-- [ ] **`PluginsPage.spec.tsx` "offers command scenes…"** expects `total-recall git-sentinel audit --json` and a `Try` button to render inline on the card. Under the bespoke contract the host renders **the plugin's own face** (or an honest "has not supplied its card face" message) and `CommandsWidget` lives in the drawer's Commands tab. The spec's mock plugin declares no `ui`. This spec encodes the pre-bespoke layout and needs a decision: either the mock declares a face and the assertions target the drawer, or the host renders declared commands on the card again. **Related to D1** (may panels/secondary screens coexist with the face); not fixed here because it is a product decision, not a mechanical edit.
+- [x] **`PluginsPage.spec.tsx` modernized** (Greg: "ensure tests are modern"). The spec encoded the pre-bespoke layout, expecting commands inline on the card and a mock plugin with no `ui`. It now models a real plugin — one bespoke face plus three panels — and asserts the actual architecture: the face mounts in a sandboxed `allow-scripts` frame (owner code runs isolated, never host-rendered), commands are reached through the drawer's Commands screen, and no command runs on render. A second test asserts the face/panel cardinality. 6/6 pass.
 
 ### Pre-existing gate findings found during LR-1 (fixed in this pass)
 
@@ -104,7 +104,7 @@ Found because the plan's gates were actually run rather than trusted. **None was
 - [x] 0 of 34 plugins declare `card_layout`.
 - [x] Three card faces verified complete: `git-sentinel` 625, `stripe` 790, `system-monitor` 655 lines, each with `DESIGN.md`.
 - [ ] Correct every shipped document teaching the deleted model (R17) — `TR_CORE_PLUGIN_SPLIT_ARCHITECTURE.md:176–189` primary; `PLUGIN_UI_OVERHAUL` Recipe Contract follows.
-- [ ] Settle **D1** with Greg: panels may coexist with the card face.
+- [x] Settle **D1** with Greg: panels may coexist with the card face. — **Resolved: "as many panel screens as needed."** Added an explicit contract test (40 panels + 1 face valid, two faces rejected, panels before or after the face), stated the rule in `card.mjs` and the authoring reference, and fixed a real bug this exposed: `normalizeCard` matched `kind === 'card' || kind === 'panel'`, so **a panel declared before the card would have been mounted as the face**. Regression test verified to fail against the pre-fix matcher.
 - [ ] Make `ui` optional for a brick while a plugin still requires exactly one bespoke face.
 - [ ] Add `capability {entry, exports}` and `pluginBundleFiles(dir, {audience})`.
 - [ ] Extract `capability/index.mjs` for `stripe`; inject transport; drop placeholders and example defaults.
@@ -137,10 +137,10 @@ Found because the plan's gates were actually run rather than trusted. **None was
 
 ## Open decisions
 
-| ID | Decision | Owner | Blocks | Default |
+| ID | Decision | Owner | Blocks | Resolution |
 | --- | --- | --- | --- | --- |
-| D1 | May panels coexist with a card face? | Greg | LR-5 final acceptance | Current code: yes |
-| D2 | Capsule budget: curate to ≤4,000 or raise the default with justification? | Greg | LR-3 | Raise and record why |
+| D1 | May panels coexist with a card face? | Greg | LR-5 final acceptance | **RESOLVED 2026-10-24 — "as many panel screens as needed."** One face, unlimited panels. The host imposes no count and no screen set. Locked in by the contract spec, the authoring reference, and a regression test. |
+| D2 | Capsule budget: curate to ≤4,000 or raise the default with justification? | Greg | LR-3 | **Open.** Still the only decision blocking L3. |
 
 ## Verified evidence at `aee2ad0`
 
