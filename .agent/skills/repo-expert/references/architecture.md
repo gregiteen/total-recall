@@ -6,7 +6,7 @@ description: >-
   file before executing.
 repo_scoped: true
 repository_id: "total-recall-brain"
-generated_at: 2026-10-24T08:55:19.636Z
+generated_at: 2026-10-24T09:13:38.224Z
 generated_from: total-recall
 ---
 
@@ -18,7 +18,7 @@ generated_from: total-recall
 
 ## Stack
 
-- **Languages**: JavaScript (728 files), Markdown (258 files), TypeScript (130 files), CSS (12 files)
+- **Languages**: JavaScript (730 files), Markdown (258 files), TypeScript (130 files), CSS (12 files)
 - **Frameworks**: React, Express
 - **Tests**: Vitest
 - **Module system**: module
@@ -92,7 +92,7 @@ src/
     plugin-contracts/  (6 items)
     testing/  (1 items)
   server/
-    routes/  (90 items)
+    routes/  (92 items)
 templates/
   claude-hooks/  (1 items)
   default-config/  (4 items)
@@ -158,7 +158,7 @@ templates/
 
 ## API Routes
 
-46 route modules in `src/server/routes/`:
+47 route modules in `src/server/routes/`:
 
 ### auth (0 endpoints)
 
@@ -282,6 +282,11 @@ templates/
 
 - `GET /api/integrations/active`
 - `POST /api/integrations/connect`
+
+### invoke (2 endpoints)
+
+- `GET /v1/invoke/capabilities`
+- `POST /v1/invoke`
 
 ### keys (0 endpoints)
 

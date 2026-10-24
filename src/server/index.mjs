@@ -402,6 +402,18 @@ try {
 
 // ─── API Routes (/v1/chat/completions) ──────────────────────────────────────────
 
+// The single agent entry point. Mounted separately from apiRouter so a failure
+// in one surface cannot leave the other dark.
+try {
+  const { invokeRouter } = await import('./routes/invoke.mjs');
+  if (invokeRouter) {
+    app.use(invokeRouter);
+    logger.info('server', 'Agent invoke endpoint mounted at /v1/invoke');
+  }
+} catch (err) {
+  logger.error('server', `invoke router failed to load; /v1/invoke left unmounted: ${err.message}`);
+}
+
 try {
   const { apiRouter } = await import('./api.mjs');
   if (apiRouter) {
