@@ -97,7 +97,7 @@ INSTRUCTIONS.md
 AGENTS.md
 CLAUDE.md
 GEMINI.md
-HANDOFF.md
+# The owner-requested root project handoff is tracked; private session exports stay local.
 .clauderules
 .cursorrules
 CODEX.md
@@ -149,7 +149,7 @@ WINDSURF.md
 .vitest-tmp/
 
 # Open-source hygiene: the canonical repo carries NO user memories, IDE
-# projections or session handoffs. Those belong to each user's installation
+# projections or private session handoffs. Those belong to each user's installation
 # (a machine may have any of them locally; none are committed).
 # `.agent/*` rather than `.agent/`: git does not descend into an ignored
 # directory, so a plain `.agent/` would make every `!` re-include below dead.
@@ -176,5 +176,5 @@ WINDSURF.md
 .cursor/
 .windsurf/
 .hermes/
-HANDOFF.md
+# The owner-requested root project handoff is tracked; private session exports stay local.
 .deploy-state.json

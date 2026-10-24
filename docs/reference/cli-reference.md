@@ -657,3 +657,46 @@ Plan a uniform SSSS and Total Recall release across registered brains, installed
 - `--repo <path>` (repeatable) and `TR_SYNC_REPOS` include extra roots.
 
 Import aliases and dependency sections are preserved. Failed installs restore changed manifests, owner lockfiles and detached links; verification failures produce a nonzero exit. Existing newer previews require explicit resolution rather than a silent downgrade. This command changes local dependencies only.
+
+## Optional developer invoke API
+
+Ordinary `remember`, `recall` and `context` run locally without HTTP or cloud hosting. The full server additionally mounts `POST /v1/invoke` and `GET /v1/invoke/capabilities`; the memory-only server does not mount these routes. Use the server's actual configured loopback, private-mesh or hosted binding. Installing Total Recall does not publish an internet endpoint.
+
+### Explicit key migration
+
+Invoke uses the shared auth plugin's named PATs, roles, expiry, revocation and issuer records. Discover its current interface with `total-recall auth --help`; key management uses `auth key list`, `auth key issue <name> --scopes <csv> [--role <name>] [--expires <date>]`, `auth key revoke <id>` and `auth key role-set <name> --scopes <csv>`. Keep credentials in the auth owner's secure store and out of command arguments and logs.
+
+An existing `*` or `sandbox:run` key does **not** opt into invoke execution. Dashboard cookies do not opt in either. Issue a deliberately named replacement with one of the following literal mode grants, then revoke the old key when its consumers have migrated. Existing keys keep their behavior on other routes; this policy describes invoke only.
+
+| Mode | Required grants | Authority |
+| --- | --- | --- |
+| Restricted local retrieval | `invoke:restricted,ssss:read,brain:server` | Dedicated local search adapter against this server's brain only; no provider credentials or spending |
+| Full host developer | `invoke:full` plus the operation scope (or `*`) | Trusted host administration, including target files, auth-owned credentials, plugins, composed workflows and nested child operations |
+
+`invoke:full,*` is an intentional full-administrator grant. It is unsuitable when command, file or provider-spending confinement is required. Full mode permits host credential operations when requested, and is not an operating-system sandbox or a per-provider spending quota. Child processes receive an allowlisted environment: ordinary API keys, `NODE_OPTIONS` and preload settings are removed; full mode retains the host identity and auth owner's credential-store configuration. The child carries caller/mode/target metadata for attribution, not a bearer token.
+
+Role ceilings and the current issuer chain apply at every request. Full mode requires the literal `invoke:full` grant on every ancestor; a restricted or legacy wildcard issuer cannot manufacture a full-mode descendant. Delegation through auth must stay within the issuer's scopes and expiry. Invoke additionally denies work when an ancestor is unavailable, revoked, expired or no longer grants the requested scopes; cycles fail closed. A revoked/expired key cannot start another invoke. Running child processes are rechecked every 250 ms and their process groups are terminated when authority ends. Effects already committed, including external provider requests, are not rolled back.
+
+### Request and discovery
+
+Send a PAT in the Authorization Bearer header, and JSON such as:
+
+```json
+{"operation":"ssss.read","params":{"query":"project architecture","target":"server","limit":5}}
+```
+
+Restricted retrieval accepts only `query`, `category`, `limit`, `target` and `timeoutMs`. The target can be omitted or equal `server`; paths and global/project selectors are denied. It searches the server brain's local full-text index, verifies selected canonical Markdown and returns up to 20 snippets. A missing or corrupt full-text index fails explicitly; compile that authorized brain with the local CLI before retrying.
+
+Use `GET /v1/invoke/capabilities` or the `capabilities` operation to discover only executable operation families for this key. Restricted keys currently expose discovery and authorized `ssss.read`. **Restricted memory writes, generic CLI/plugin/composed execution and decisions have no confined owner adapter yet:** they are denied even when a broad family scope is present, and omitted from discovery. Do not migrate a restricted consumer to full mode just to bypass that denial.
+
+Full mode supports `cli.run` with a registered `verb` and separate string `args`, `ssss.read`, `ssss.write`, `composable.list`, `composable.run`, `decision.run` and `decision.predict`, subject to the operation's family scope. An optional absolute `target` selects a full-mode working directory; it does not confine a trusted host administrator to that directory. CLI names must exist in the built-in, active plugin or executable composed registry. Composed names must exist in the actual project/global command directories and must not be shadowed by a built-in or active plugin. Shell strings are never executed by the invoke dispatcher; full-mode owner code may intentionally execute nested commands.
+
+### Resource and outcome contract
+
+Parameters are limited to 16 KiB. The server allows four active requests total and one per key. CLI and restricted-read child processes have a 60-second ceiling, shortened by a positive finite `timeoutMs`, and a combined stdout/stderr cap of 256 KiB. Restricted local search has a 128 MiB JavaScript heap ceiling. Process-group enforcement currently requires POSIX; unsupported hosts fail explicitly. Client disconnect, ended authority, timeout and output overflow terminate the child group. A full administrator can intentionally run owner code with broader host effects; these controls do not establish malicious-code isolation or bound arbitrary external spending.
+
+Responses use `{ok,operation,result,error,scope,latency_ms}` for execution. Nonzero exit, signal, timeout and truncated output produce failed envelopes with the real child exit/signal/termination fields. Requested full-mode command output may itself contain sensitive data; routine audit records contain caller identity, operation, authorized target and outcome, never argv, memory text, tokens, stdout or stderr. Provider execution still requires its own quota/cancellation acceptance before the complete API resource contract can be called delivered.
+
+Source verification covers focused dispatch/resource regressions and an independent agent's actual loopback round trip using disposable auth-owned keys. This is staged hardening. Confined mutation/owner adapters, provider quotas and the complete packaging/upgrade/launch journey remain open; these checks do not certify a deployed endpoint.
+
+Invoke authorization and outcome records are appended through the validated SSSS event operation in the `invoke` workspace. If the pre-execution audit cannot persist, work does not start. If outcome persistence fails after an owner completed, the response reports audit failure; it does not claim success or roll back the owner's effects. Check the owner state before retrying a mutation.

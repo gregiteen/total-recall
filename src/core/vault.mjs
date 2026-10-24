@@ -2,37 +2,11 @@ import fs from 'fs';
 import path from 'path';
 import matter from './frontmatter.mjs';
 import { logger } from './logger.mjs';
+export { atomicWrite, isSafeVaultName } from './vault-files.mjs';
+import { atomicWrite, isSafeVaultName } from './vault-files.mjs';
 
-// Slug allowlist shared with validated-write.mjs — a slug is a filename, so it
-// must not be able to escape its category directory.
-//
-// Dots are permitted in the interior because repository names legitimately
-// contain them — any domain-style name (`example.com`) produces a slug with a
-// dot on ingest, and the stricter rule rejected thousands of real nodes over an
-// ordinary character. What enables traversal is a path separator or `..`, and
-// neither is reachable here — separators are outside the character class, a
-// leading dot or dash is excluded by the first-character rule, and `..` is
-// rejected outright below.
-const SAFE_NAME = /^[a-zA-Z0-9_][a-zA-Z0-9_.-]*$/;
-
-/**
- * True when `name` is safe to use as a path segment.
- */
-export function isSafeVaultName(name) {
-  const value = String(name);
-  if (!SAFE_NAME.test(value)) return false;
-  if (value.includes('..')) return false;
-  return true;
-}
-
-/**
- * Atomic file write using write-then-rename to prevent partial corruption.
- */
-export function atomicWrite(filePath, content) {
-  const tmpPath = `${filePath}.tmp.${process.pid}`;
-  fs.writeFileSync(tmpPath, content, 'utf8');
-  fs.renameSync(tmpPath, filePath);
-}
+// Re-export pure path/atomic-write helpers for existing callers. Local retrieval
+// imports vault-files directly so it never loads logger/configuration/auth.
 
 /**
  * Deep-strip undefined values from an object so js-yaml (via gray-matter)

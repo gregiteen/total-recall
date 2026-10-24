@@ -1,169 +1,168 @@
-/**
- * Single authenticated invoke endpoint.
- *
- * Any agent — DSH, Claude Code, Codex, a script — should need ONE route and ONE
- * scoped key, not a private client. Everything Total Recall can do is dispatched
- * from here by operation name, and every operation declares the scope it
- * requires so authorization stays enforced in code.
- *
- * The four operation families are the product surfaces:
- *   cli        — run a built-in or plugin CLI verb
- *   ssss       — a canonical memory mutation
- *   composable — run a composed command (the verbs built from other verbs)
- *   decision   — a typed Jev decision, answered from state + questions
- * plus `capabilities`, which lets an agent discover what its key may do rather
- * than guessing and being refused.
- *
- * Two rules this file holds to:
- *   1. Scope is checked per operation, before any work happens. An operation
- *      with no declared scope is refused rather than defaulting to allowed.
- *   2. The response shape is identical for every family, so a client writes one
- *      parser: { ok, operation, result, error, scope, cost_usd, latency_ms }.
- */
+/** Optional developer API. Explicit grants precede every owner execution. */
 import { Router } from 'express';
-import { requireAuth, requireScope } from '../auth.mjs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { requireAuth } from '../auth.mjs';
+import { loadKeys, keyHasScope } from '../keys.mjs';
+import { brainDir, globalAgentDir } from '../../core/config.mjs';
+import { logger } from '../../core/logger.mjs';
+import crypto from 'node:crypto';
+import { appendVfsEvent } from '../../core/ssss-operation-service.mjs';
+import { CLI_COMMANDS } from '../../core/cli-commands.mjs';
+import { buildPluginCatalog } from '../../core/plugin-catalog.mjs';
+import { listSurfaceCommands } from '../../core/command-surface.mjs';
+import { invokeAuthority, authorizeInvoke, operationAllowed } from '../invoke-policy.mjs';
+import { INVOKE_LIMITS, InvokeError, executeInvokeChild, requireSuccessfulRun, invokeEnvironment, absoluteTarget } from '../invoke-execution.mjs';
 
-export const invokeRouter = Router();
-
-/**
- * The operation registry. `scope` is required: an entry without one is a bug,
- * and the dispatcher refuses unknown operations rather than falling through.
- */
-export const OPERATIONS = {
-  // ---- discovery -----------------------------------------------------------
-  'capabilities': { scope: null, family: 'introspection' },
-
-  // ---- cli -----------------------------------------------------------------
+const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../..');
+export const OPERATIONS = Object.freeze(Object.fromEntries(Object.entries({
+  capabilities: { scope: null, family: 'introspection' },
   'cli.run': { scope: 'sandbox:run', family: 'cli' },
-
-  // ---- ssss ----------------------------------------------------------------
   'ssss.read': { scope: 'ssss:read', family: 'ssss' },
   'ssss.write': { scope: 'ssss:write', family: 'ssss' },
-
-  // ---- composable ----------------------------------------------------------
   'composable.list': { scope: 'config:read', family: 'composable' },
   'composable.run': { scope: 'sandbox:run', family: 'composable' },
-
-  // ---- decision ------------------------------------------------------------
   'decision.run': { scope: 'memory:read', family: 'decision' },
   'decision.predict': { scope: 'memory:read', family: 'decision' },
-};
-
-const ok = (res, operation, result, extra = {}) => res.json({
-  ok: true, operation, result, error: null, ...extra,
-});
+}).map(([name, def]) => [name, Object.freeze(def)])));
 
 const fail = (res, status, operation, code, message, extra = {}) => res.status(status).json({
   ok: false, operation, result: null, error: { code, message }, ...extra,
 });
 
-/**
- * Capabilities are filtered by the caller's own scopes, so an agent sees what it
- * can actually do. A capability an agent cannot use is omitted rather than
- * advertised and then refused.
- */
-invokeRouter.get('/v1/invoke/capabilities', requireAuth, (req, res) => {
-  const granted = new Set(req.auth?.scopes || []);
-  const wildcard = granted.has('*');
+/** Only scopes that can execute are advertised. */
+function capabilitiesFor(authority) {
   const families = {};
   for (const [name, def] of Object.entries(OPERATIONS)) {
-    if (!wildcard && def.scope && !granted.has(def.scope)) continue;
+    if (!operationAllowed(authority, name, def.scope)) continue;
     (families[def.family] ||= []).push({ operation: name, scope: def.scope });
   }
-  ok(res, 'capabilities', {
-    operations: families,
-    families: Object.keys(families),
-    note: 'Only operations your key may run are listed. Unknown operations are refused.',
+  return { operations: families, families: Object.keys(families), mode: authority.mode,
+    targets: authority.mode === 'full' ? 'host' : ['server'],
+    credentials: authority.mode === 'full' ? 'host-auth-owner' : [],
+    provider_spending: authority.mode === 'full' ? 'trusted-host-authority' : 0,
+    limits: INVOKE_LIMITS };
+}
+
+/** Injectable dependencies allow real HTTP tests with disposable auth-owned keys. */
+export function createInvokeRouter({ auth = requireAuth, store = { loadKeys, keyHasScope },
+  execute = executeInvokeChild, audit,
+  cwd = process.cwd(), serverBrain = brainDir, limits = INVOKE_LIMITS } = {}) {
+  const router = Router();
+  const recordAudit = audit || (event => appendVfsEvent(`invoke/${crypto.randomUUID()}`, event, {
+    vaultRoot: path.join(serverBrain, 'memory-vault'), workspaceId: 'invoke', actorRole: 'system', intent: 'Record developer invoke outcome',
+  }));
+  const active = new Map();
+  let total = 0;
+  router.get('/v1/invoke/capabilities', auth, (req, res) => {
+    try {
+      const authority = invokeAuthority(req, store);
+      res.json({ ok: true, operation: 'capabilities', result: capabilitiesFor(authority), error: null });
+    } catch (err) { fail(res, err.status || 503, 'capabilities', err.code || 'authority-unavailable', err.code ? err.message : 'Authority validation unavailable.'); }
   });
-});
-
-/** POST /v1/invoke — the single entry point. */
-invokeRouter.post('/v1/invoke', requireAuth, async (req, res) => {
-  const started = Date.now();
-  const { operation, params = {} } = req.body || {};
-
-  if (typeof operation !== 'string' || !operation) {
-    return fail(res, 400, operation || null, 'missing-operation', 'Body must include { operation, params }.');
-  }
-  const def = OPERATIONS[operation];
-  // Refuse rather than fall through: an unregistered name must never reach a
-  // generic handler that might do something unintended.
-  if (!def) {
-    return fail(res, 404, operation, 'unknown-operation',
-      `Unknown operation '${operation}'. GET /v1/invoke/capabilities lists the ones your key may run.`);
-  }
-
-  // Scope is enforced per operation, before any work. A missing scope on an
-  // entry is treated as denied, not as public.
-  if (def.scope) {
-    const granted = new Set(req.auth?.scopes || []);
-    if (!granted.has('*') && !granted.has(def.scope)) {
-      return fail(res, 403, operation, 'insufficient-scope',
-        `Operation '${operation}' requires scope '${def.scope}'.`, { scope: def.scope });
+  router.post('/v1/invoke', auth, async (req, res) => {
+    const started = Date.now();
+    const { operation, params = {} } = req.body || {};
+    if (typeof operation !== 'string' || !operation) return fail(res, 400, null, 'missing-operation', 'Body must include { operation, params }.');
+    if (!Object.hasOwn(OPERATIONS, operation)) return fail(res, 404, operation, 'unknown-operation', 'Unknown operation.');
+    const def = OPERATIONS[operation];
+    let authority, timer, controller, disconnected, counted = false, outcome = 'denied', target = null;
+    try {
+      if (!params || typeof params !== 'object' || Array.isArray(params)) throw new InvokeError(400, 'invalid-params', 'params must be an object.');
+      if (Buffer.byteLength(JSON.stringify(params)) > 16384) throw new InvokeError(413, 'input-limit', 'Invoke parameters exceed 16 KiB.');
+      authority = invokeAuthority(req, store);
+      authorizeInvoke(authority, operation, def.scope, params);
+      if (total >= limits.concurrency || (active.get(authority.id) || 0) >= limits.perKey) throw new InvokeError(429, 'concurrency-limit', 'Execution concurrency limit reached.');
+      total++; active.set(authority.id, (active.get(authority.id) || 0) + 1); counted = true;
+      target = authority.mode === 'restricted' ? 'server' : absoluteTarget(params.target, cwd);
+      try { await recordAudit({ caller: authority.id, mode: authority.mode, operation, target, outcome: 'authorized' }); }
+      catch { throw new InvokeError(503, 'audit-unavailable', 'Execution audit is unavailable; no work was started.'); }
+      controller = new AbortController();
+      disconnected = () => { if (!res.writableEnded) controller.abort(); };
+      req.once('aborted', disconnected); res.once('close', disconnected);
+      const revalidate = () => {
+        try {
+          const current = invokeAuthority(req, store);
+          if (current.mode !== authority.mode) throw new Error('mode changed');
+          authorizeInvoke(current, operation, def.scope, params);
+        } catch { controller.abort(); }
+      };
+      revalidate();
+      timer = setInterval(revalidate, 250); timer.unref?.();
+      const context = { authority, target, serverBrain, signal: controller.signal, limits,
+        run: options => {
+          revalidate();
+          return execute({ ...options, signal: controller.signal, limits });
+        } };
+      let result;
+      if (operation === 'capabilities') result = capabilitiesFor(authority);
+      else result = await HANDLERS[operation](params, context);
+      revalidate();
+      if (controller.signal.aborted) throw new InvokeError(403, 'authority-ended', 'Caller authority ended during execution.');
+      outcome = 'success';
+      await recordAudit({ caller: authority.id, mode: authority.mode, operation, target, outcome, latency_ms: Date.now() - started });
+      return res.json({ ok: true, operation, result, error: null, scope: def.scope, latency_ms: Date.now() - started });
+    } catch (err) {
+      outcome = err instanceof InvokeError ? err.code : 'operation-failed';
+      // Error strings from owner code can contain secrets. Only curated policy
+      // messages and explicitly requested full-mode command output are returned.
+      try { await recordAudit({ caller: authority?.id || req.auth?.id || 'unresolved', operation, target, outcome, latency_ms: Date.now() - started }); }
+      catch {
+        logger.error('invoke', 'Execution outcome audit unavailable', { operation, caller: authority?.id || 'unresolved' });
+        return fail(res, 503, operation, 'audit-unavailable', 'Execution audit could not be recorded.');
+      }
+      return fail(res, err.status || 400, operation, outcome, err instanceof InvokeError ? err.message : 'Operation failed.',
+        { scope: def.scope, latency_ms: Date.now() - started, ...(err.result ? { result: err.result } : {}) });
+    } finally {
+      clearInterval(timer);
+      if (disconnected) { req.removeListener('aborted', disconnected); res.removeListener('close', disconnected); }
+      if (counted) { total--; const n = active.get(authority.id) - 1; if (n) active.set(authority.id, n); else active.delete(authority.id); }
     }
-  }
+  });
+  return router;
+}
 
-  try {
-    const handler = HANDLERS[operation];
-    if (!handler) return fail(res, 501, operation, 'not-implemented', `Operation '${operation}' is declared but not implemented.`);
-    const result = await handler(params, req);
-    return ok(res, operation, result, { scope: def.scope, latency_ms: Date.now() - started });
-  } catch (err) {
-    return fail(res, 400, operation, 'operation-failed', err?.message || 'Operation failed.', { scope: def.scope, latency_ms: Date.now() - started });
-  }
-});
+export const invokeRouter = createInvokeRouter();
 
 /** The categories `total-recall remember` documents. Singular, and closed. */
 const MEMORY_CATEGORIES = new Set(['invariant', 'preference', 'correction', 'fact', 'concept', 'pattern', 'anti-pattern', 'decision', 'lore']);
 
-/** Run a CLI verb in-process through the plugin runner, never a shell string. */
-/**
- * Run a CLI verb with argv built as real elements.
- *
- * `verb` is the command path only (e.g. "plugin list"); `args` are passed as
- * SEPARATE argv elements and are never re-split. Splitting a whole command line
- * on whitespace destroys any argument containing a space — a search query like
- * "invoke endpoint" became two words, matched nothing, and returned an empty
- * list while reporting success.
- */
-async function runCliVerb({ verb, args = [], timeoutMs }) {
-  if (typeof verb !== 'string' || !verb.trim()) throw new Error('cli.run needs a verb, e.g. "status" or "plugin list".');
-  if (!Array.isArray(args) || args.some(a => typeof a !== 'string')) throw new Error('args must be an array of strings.');
+/** The same two executable composed-command directories used by the CLI. */
+function composedCommands(cwd) {
+  return listSurfaceCommands([
+    { scope: 'project', dir: path.join(cwd, '.agent/commands') },
+    { scope: 'global', dir: path.join(globalAgentDir, 'commands') },
+  ]);
+}
+
+async function runCliVerb({ verb, args = [], timeoutMs }, context) {
+  if (typeof verb !== 'string' || !verb.trim()) throw new InvokeError(400, 'invalid-verb', 'cli.run needs a registered verb.');
+  if (!Array.isArray(args) || args.some(a => typeof a !== 'string' || a.includes('\0'))) throw new InvokeError(400, 'invalid-args', 'args must be an array of strings.');
   const parts = verb.trim().split(/\s+/);
-  const [command, ...verbArgs] = parts;
-  const { spawn } = await import('node:child_process');
-  const { fileURLToPath } = await import('node:url');
-  const path = (await import('node:path')).default;
-  const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../..');
-  const entry = path.join(root, 'bin/total-recall.mjs');
-  return await new Promise((resolve, reject) => {
-    // argv array with shell:false — a verb is never interpolated into a shell.
-    const child = spawn(process.execPath, [entry, command, ...verbArgs, ...args], {
-      cwd: root, shell: false, stdio: ['ignore', 'pipe', 'pipe'],
-      env: { ...process.env, FORCE_COLOR: '0', NO_COLOR: '1' },
-    });
-    let out = '', err = '', bytes = 0;
-    const limit = 256 * 1024;
-    const cap = (buf, sink) => {
-      bytes += buf.length;
-      if (bytes > limit) { child.kill('SIGKILL'); return sink; }
-      return sink + buf.toString();
-    };
-    child.stdout.on('data', b => { out = cap(b, out); });
-    child.stderr.on('data', b => { err = cap(b, err); });
-    child.on('error', reject);
-    const timer = setTimeout(() => child.kill('SIGKILL'), Number(timeoutMs) > 0 ? Number(timeoutMs) : 60000);
-    child.on('close', code => {
-      clearTimeout(timer);
-      resolve({ exit_code: code, stdout: out, stderr: err, truncated: bytes > limit });
-    });
-  });
+  const [command] = parts;
+  const catalog = buildPluginCatalog(context.target);
+  const plugin = catalog.plugins.find(p => p.namespace === command && p.callable && p.activation.enabled);
+  if (!Object.hasOwn(CLI_COMMANDS, command) && !plugin && !composedCommands(context.target).some(c => c.name === command)) {
+    throw new InvokeError(404, 'unregistered-command', 'Command is not registered in the authorized target.');
+  }
+  const env = invokeEnvironment(true);
+  env.TR_INVOKE_CONTEXT = JSON.stringify({ caller: context.authority.id, mode: 'full', target: context.target });
+  return requireSuccessfulRun(await context.run({ entry: path.join(root, 'bin/total-recall.mjs'),
+    args: [...parts, ...args], cwd: context.target, env, timeoutMs }));
 }
 
 const HANDLERS = {
-  async 'cli.run'(params) { return await runCliVerb(params); },
+  async 'cli.run'(params, context) { return await runCliVerb(params, context); },
 
-  async 'ssss.read'({ query, category, limit = 5 }) {
+  async 'ssss.read'({ query, category, limit = 5, timeoutMs }, context) {
+    if (typeof query !== 'string' || !query.trim() || query.startsWith('-')) throw new InvokeError(400, 'invalid-query', 'query must be nonempty text, not a CLI option.');
+    if (category !== undefined && (typeof category !== 'string' || !/^[a-z][a-z-]{0,63}$/.test(category))) throw new InvokeError(400, 'invalid-category', 'Invalid category.');
+    if (context.authority.mode === 'restricted') {
+      const run = requireSuccessfulRun(await context.run({ entry: path.join(root, 'src/server/invoke-read-child.mjs'),
+        cwd: root, env: invokeEnvironment(false), timeoutMs, nodeArgs: ['--max-old-space-size=128'],
+        input: JSON.stringify({ brain: context.serverBrain, query, category, limit: Math.max(1, Math.min(20, Number(limit) || 5)) }) }));
+      try { return JSON.parse(run.stdout); } catch { throw new InvokeError(502, 'invalid-owner-output', 'Retrieval returned invalid output.'); }
+    }
     // Retrieval belongs to the owning CLI. It searches metadata and indexed body
     // text with ranking and session chunks; a substring scan here would return
     // different, worse results than `recall` for the same question.
@@ -172,7 +171,7 @@ const HANDLERS = {
     if (category) args.push('--category', String(category));
     // The query is ONE argv element, passed through `args` so it is never
     // re-split on whitespace.
-    const run = await runCliVerb({ verb: 'recall', args: [String(query || ''), ...args] });
+    const run = await runCliVerb({ verb: 'recall', args: [query, ...args], timeoutMs }, context);
     if (run.exit_code !== 0) throw new Error(run.stderr?.trim() || 'recall failed');
     // The CLI pretty-prints ONE JSON array across many lines, so it cannot be
     // read line-by-line: a line-based reader finds only `[` and fails to parse,
@@ -185,14 +184,15 @@ const HANDLERS = {
     if (start !== -1 && end > start) {
       try { parsed = JSON.parse(stdout.slice(start, end + 1)); } catch { /* unparseable */ }
     }
-    const nodes = Array.isArray(parsed) ? parsed.map(n => ({
+    if (!Array.isArray(parsed)) throw new InvokeError(502, 'invalid-owner-output', 'Recall did not return a valid result array.');
+    const nodes = parsed.map(n => ({
       slug: n.slug, category: n.category, title: n.title,
       status: n.status, score: n.score, snippet: String(n.body || n.content || '').slice(0, 240),
-    })) : [];
+    }));
     return { count: nodes.length, nodes };
   },
 
-  async 'ssss.write'({ category, title, content, tags, scope }) {
+  async 'ssss.write'({ category, title, content, tags, scope, timeoutMs }, context) {
     if (!content || typeof content !== 'string') throw new Error('ssss.write needs content.');
     // Canonical memory is written by its owning CLI, never reimplemented here.
     // `remember` runs the validated write path and recompiles the derived
@@ -210,35 +210,25 @@ const HANDLERS = {
     if (scope === 'global') args.push('--global');
     else args.push('--project');
     // Same rule as ssss.read: the memory text is one argv element, never split.
-    const run = await runCliVerb({ verb: `remember ${cat}`, args: [text, ...args] });
+    const run = await runCliVerb({ verb: `remember ${cat}`, args: [text, ...args], timeoutMs }, context);
     if (run.exit_code !== 0) throw new Error(run.stderr?.trim() || run.stdout?.trim() || 'remember failed');
     const created = /vault:\s*(\S+)/.exec(run.stdout || '')?.[1] || null;
     return { category: cat, path: created, exit_code: run.exit_code };
   },
 
-  async 'composable.list'() {
-    const { fileURLToPath } = await import('node:url');
-    const path = (await import('node:path')).default;
-    const fs = (await import('node:fs')).default;
-    const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../..');
-    const dir = path.join(root, '.agent/commands');
-    if (!fs.existsSync(dir)) return { count: 0, commands: [] };
-    const commands = fs.readdirSync(dir).filter(f => f.endsWith('.mjs')).map(f => {
-      const text = fs.readFileSync(path.join(dir, f), 'utf8');
-      return {
-        name: f.replace(/\.mjs$/, ''),
-        description: text.match(/@description\s+(.*)/)?.[1] || '',
-        risk: text.match(/@risk\s+(\S+)/)?.[1] || 'unknown',
-      };
-    });
+  async 'composable.list'(_params, context) {
+    const catalog = buildPluginCatalog(context.target);
+    const commands = composedCommands(context.target).filter(c => !Object.hasOwn(CLI_COMMANDS, c.name) &&
+      !catalog.plugins.some(p => p.callable && p.activation.enabled && p.namespace === c.name));
     return { count: commands.length, commands };
   },
 
-  async 'composable.run'({ name, args = [] }) {
-    if (typeof name !== 'string' || !/^[a-z][a-z0-9-]{0,63}$/.test(name)) throw new Error('composable.run needs a kebab-case command name.');
-    if (!Array.isArray(args)) throw new Error('args must be an array.');
-    // A composed command is a CLI verb; run it the same controlled way.
-    return await runCliVerb({ verb: name, args });
+  async 'composable.run'({ name, args = [], timeoutMs }, context) {
+    if (typeof name !== 'string' || !/^[a-z][a-z0-9-]{0,63}$/.test(name)) throw new InvokeError(400, 'invalid-name', 'composable.run needs a kebab-case command name.');
+    if (Object.hasOwn(CLI_COMMANDS, name) || !composedCommands(context.target).some(c => c.name === name)) throw new InvokeError(404, 'unregistered-command', 'Composed name is not executable in the authorized target.');
+    const catalog = buildPluginCatalog(context.target);
+    if (catalog.plugins.some(p => p.callable && p.activation.enabled && p.namespace === name)) throw new InvokeError(409, 'shadowed-command', 'A plugin shadows this composed name.');
+    return await runCliVerb({ verb: name, args, timeoutMs }, context);
   },
 
   async 'decision.run'({ model, state, questions, timeoutMs }) {
@@ -254,11 +244,11 @@ const HANDLERS = {
     const d = await client.requestDecision({
       apiKey, model: model || client.DEFAULT_MODEL,
       endpoint: client.DEFAULT_ENDPOINT,
-      timeoutMs: Number(timeoutMs) > 0 ? Number(timeoutMs) : client.DEFAULT_TIMEOUT_MS,
+      timeoutMs: Math.min(INVOKE_LIMITS.timeoutMs, Number(timeoutMs) > 0 ? Number(timeoutMs) : client.DEFAULT_TIMEOUT_MS),
       state: state || {}, questions,
     });
     // A provider failure is reported as a failure; it is never a silent default.
-    if (!d) return { answered: false, reason: 'provider-failed' };
+    if (!d) throw new InvokeError(502, 'provider-failed', 'Decision provider failed.');
     const answers = {};
     for (const key of Object.keys(questions)) {
       const type = questions[key]?.type || 'choice';
