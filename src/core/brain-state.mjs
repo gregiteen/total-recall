@@ -43,9 +43,32 @@ export const BRAIN_STATE = load();
  * @param {string} relPath e.g. "references/api-reference.md"
  * @returns {boolean}
  */
+/**
+ * Bundled plugin SOURCE inside the shipped scaffold is a template, not state.
+ *
+ * `plugins/` is state because an installed plugin directory is one brain's own
+ * collection. But the scaffold ships bundled plugin source at
+ * `scaffold/.agent/skills/total-recall/plugins/<id>/`, and `.gitignore` states
+ * plainly that it must stay in git. Matching the `plugins` segment anywhere in
+ * the path therefore flagged the template itself and failed the release gate.
+ * The exemption is anchored to the scaffold's own brain path, so an installed
+ * or brain-local `plugins/` directory is still state.
+ */
+function isScaffoldBundledPluginSource(parts) {
+  const at = parts.lastIndexOf('scaffold');
+  if (at === -1) return false;
+  const rest = parts.slice(at + 1);
+  return rest[0] === '.agent'
+    && rest[1] === 'skills'
+    && rest[2] === 'total-recall'
+    && rest[3] === 'plugins'
+    && rest.length > 4;
+}
+
 export function isBrainState(relPath) {
   if (!relPath) return false;
   const parts = String(relPath).split(/[\\/]+/).filter(Boolean);
+  if (isScaffoldBundledPluginSource(parts)) return false;
   if (parts.some((seg) => BRAIN_STATE.dirs.has(seg))) return true;
   const base = parts[parts.length - 1];
   if (!base) return false;

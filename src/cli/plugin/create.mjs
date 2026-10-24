@@ -4,7 +4,6 @@ import { spawnSync } from "node:child_process";
 import { validatePluginManifest } from "../../core/plugin-loader.mjs";
 import { installPlugin } from "../../core/plugin-store.mjs";
 import { parseCron } from "../../core/plugin-cron.mjs";
-import { generateUiElements } from "../../core/app-deploy/ui-elements.mjs";
 
 function toTitleCase(kebab) {
   return kebab
@@ -115,7 +114,11 @@ export async function createPlugin(args = []) {
   const isGlobal = args.includes("--global") || args.includes("-g");
   let withCli = args.includes("--with-cli");
   const withGenerator = args.includes("--with-generator");
-  let withUi = args.includes("--with-ui");
+  // A card face is bespoke owner code, authored by hand once the plugin's
+  // function is understood. The scaffold deliberately ships without one, so
+  // there is nothing to generate here; `--with-ui` is accepted only to explain
+  // that to anyone who asks for it.
+  const asksForUi = args.includes("--with-ui");
   const withTask = args.includes("--with-task");
   const createGithub = args.includes("--github");
   const publicRepo = args.includes("--public");
@@ -248,15 +251,18 @@ export async function createPlugin(args = []) {
     name: pluginName,
     version: "0.1.0",
     description: pluginDesc,
-    license: "MIT"
+    license: "MIT",
+    // Declares this plugin as a fresh scaffold so it can install before its
+    // bespoke card face exists. Remove the flag when the face is authored.
+    scaffold: true
   };
   if (useCases.length > 0) manifest.use_cases = useCases;
 
-  // House rule: a plugin for a service that needs an API key ships a UI to paste
-  // that key and a CLI to save it, so it works the moment the key is pasted.
+  // House rule: a plugin for a service that needs an API key ships a CLI to save
+  // it, so it works the moment the key is pasted. Its card face is authored by
+  // hand later, like every other face.
   if (apiKeys.length) {
     withCli = true;
-    withUi = true;
     manifest.secrets = apiKeys.map((key) => ({ key, description: `${pluginName} service API key (paste it in the plugin UI)`, required: true }));
   }
 
@@ -434,9 +440,10 @@ export default generateContext;
     fs.rmSync(pluginDir, { recursive: true, force: true });
     process.exit(1);
   }
-  if (withUi) {
-    try { generateUiElements(manifest, { pluginDir, target: 'web-components' }); }
-    catch (error) { fs.rmSync(pluginDir, { recursive: true, force: true }); throw error; }
+  // The scaffold installs without a card face, and says so. Its face is
+  // authored by hand next; the warning is the reminder, not a failure.
+  if (validation.warnings?.length) {
+    for (const warning of validation.warnings) console.log(`⚠️  ${warning}`);
   }
 
   fs.writeFileSync(
@@ -469,7 +476,7 @@ export default generateContext;
   if (category) lines.push(`- **SSSS Category**: \`${category}\``);
   if (withCli) lines.push(`- **CLI Command**: \`npx total-recall ${id}\``);
   if (withTask) lines.push(`- **Scheduled task**: \`${taskCommand}\` at \`${taskSchedule}\` (selected node; implement the command and choose a node before use)`);
-  if (withUi) lines.push('- **UI**: `ui/panel.js` custom element with DESIGN.md tokens');
+  if (asksForUi) lines.push('- **UI**: no card face is generated. Author `ui/card.js` and `ui/DESIGN.md` by hand for this plugin\'s own function, then declare the face in `ui.elements[]`');
   if (apiKeys.length) lines.push('- **API key**: paste it in the plugin UI (`save-token` event) or pipe it to `npx total-recall ' + id + ' token set --stdin`; stored as `' + apiKeys[0] + '` in the secrets store');
   lines.push("");
 

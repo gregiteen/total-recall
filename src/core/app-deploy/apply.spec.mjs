@@ -9,6 +9,7 @@ import {
   resolveAppVaultDir
 } from './apply.mjs';
 import { createDeploymentPlan } from './plan.mjs';
+import { withFixtureFace } from '../testing/plugin-fixture.mjs';
 
 describe('Capability Deployment Applier (app-deploy/apply.mjs)', () => {
   let tmpTarget;
@@ -21,7 +22,7 @@ describe('Capability Deployment Applier (app-deploy/apply.mjs)', () => {
     // Create a valid capability plugin
     fs.writeFileSync(
       path.join(tmpPluginDir, 'plugin.json'),
-      JSON.stringify({
+      JSON.stringify(withFixtureFace({
         id: 'test-cap',
         name: 'Test Capability',
         version: '1.0.0',
@@ -33,7 +34,7 @@ describe('Capability Deployment Applier (app-deploy/apply.mjs)', () => {
             database: 'sqlite://./data/app.db'
           }
         }
-      })
+      }))
     );
 
     fs.writeFileSync(

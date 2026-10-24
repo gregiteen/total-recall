@@ -15,11 +15,28 @@ function parseArgs(args) {
   return { isJson, useCase, query: words.join(' ').toLowerCase().trim() };
 }
 
+/**
+ * Match a plugin against a query.
+ *
+ * Words are matched on boundaries rather than by raw substring, because a bare
+ * `includes` makes a short query match inside unrelated words: searching "git"
+ * returned the signing plugin, whose description begins "Digital agreement…".
+ * A hit inside a word is only accepted at a word start so that real substrings
+ * still work ("sent" finds "git-sentinel") without matching "digital".
+ */
 function matches(p, query, useCase) {
   if (useCase && !(p.use_cases || []).includes(useCase)) return false;
   if (!query) return true;
-  return [p.id, p.name, p.description, ...(p.use_cases || [])]
-    .some((v) => String(v || '').toLowerCase().includes(query));
+  const haystacks = [p.id, p.name, p.description, ...(p.use_cases || [])]
+    .map((v) => String(v || '').toLowerCase());
+  const words = query.split(/\s+/).filter(Boolean);
+  return words.every((word) => {
+    const escaped = word.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    // Anchor at a word start so "sent" matches "git-sentinel" but "git" does
+    // not match "digital".
+    const bounded = new RegExp(`(^|[^a-z0-9])${escaped}`, 'i');
+    return haystacks.some((h) => bounded.test(h) || h.startsWith(word));
+  });
 }
 
 function printPlugin(p, installHint) {

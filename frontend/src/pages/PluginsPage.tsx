@@ -828,7 +828,7 @@ export default function PluginsPage({ activeBrainId }: PluginsPageProps) {
                 )}
               </Empty>
             ) : (
-              {/* Plugin faces are wide surfaces with screens to flip through, never narrow columns. */}
+              // Plugin faces are wide surfaces with screens to flip through, never narrow columns.
               <div className="card-grid" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 720px), 1fr))", gap: "22px" }}>
                 {shownInstalled.map((p) => {
                   return (

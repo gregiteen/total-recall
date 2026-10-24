@@ -3,8 +3,8 @@ import type { PluginInfo } from '../../../api/plugins'
 import { PluginSettings } from '../PluginSettings'
 import { defaultValue, missingRequired, visibleArgs, type ArgValues } from './args'
 import { cliLine } from './cli-line'
-import type { CardColumn, CardCommand, CardRegion } from './contract'
-import { formatCell, rowsOf, scalarsOf, toneOf } from './format'
+import type { CardCommand } from './contract'
+import { scalarsOf, toneOf } from './format'
 import { useRunner, type RunResult } from './runner-context'
 import { useSource } from './use-source'
 
@@ -58,10 +58,10 @@ function ReadForm({ command }: { command: CardCommand }) {
 }
 
 /** Every declared operation, with arguments, explicit mutation confirmation and secure stdin. */
-export function CommandsWidget({ region }: { region: CardRegion }) {
+export function CommandsWidget() {
   const { card } = useRunner()
   const cliName = card.id
-  const names = region.commands || [...card.commands.keys()]
+  const names = [...card.commands.keys()]
   const [open, setOpen] = useState('')
   const [copied, setCopied] = useState('')
   return <ul className="card-commands">
@@ -81,37 +81,6 @@ export function CommandsWidget({ region }: { region: CardRegion }) {
     })}
     {names.length === 0 && <li className="card-muted">No commands declared.</li>}
   </ul>
-}
-
-function Cell({ value, column }: { value: unknown; column: CardColumn }) {
-  return column.format === 'status' ? <Pill tone={toneOf(value)}>{formatCell(value)}</Pill> : <>{formatCell(value, column.format)}</>
-}
-
-/** table, list, detail, gauge and log all read one declared command and show it. */
-export function DataWidget({ region }: { region: CardRegion }) {
-  const { result, loading } = useSource(region.source?.command, region.source?.args)
-  if (!result) return <p className="card-muted">{loading ? 'Loading…' : ''}</p>
-  if (!result.ok) return <Failure result={result} />
-  const { widget } = region
-  if (widget === 'log') return <pre className="card-pre">{result.text || JSON.stringify(result.data, null, 2)}</pre>
-  if (widget === 'gauge') {
-    const d = result.data || {}
-    const observedValue = d.value ?? d.used ?? d.percent
-    const observedMax = d.max ?? d.total ?? (d.percent !== undefined ? 100 : undefined)
-    const value = Number(observedValue), max = Number(observedMax)
-    if (observedValue == null || observedMax == null || !Number.isFinite(value) || !Number.isFinite(max) || max <= 0 || value < 0 || value > max) {
-      return <p role="status" className="card-muted">No valid usage measurement is available.</p>
-    }
-    const pct = max > 0 ? Math.max(0, Math.min(100, (value / max) * 100)) : 0
-    return <div><div className="card-gauge" role="meter" aria-valuenow={value} aria-valuemin={0} aria-valuemax={max}><span style={{ width: `${pct}%` }} /></div><p className="card-muted">{formatCell(value, 'number')} of {formatCell(max, 'number')}</p></div>
-  }
-  if (widget === 'detail') return <dl className="card-kv">{scalarsOf(result.data).map(([k, v]) => <div key={k}><dt>{k.replace(/_/g, ' ')}</dt><dd>{v}</dd></div>)}</dl>
-  const rows = rowsOf(result.data)
-  if (rows.length === 0) return <p className="card-muted">Nothing to show yet.</p>
-  if (widget === 'list') return <ul className="card-list">{rows.map((row, i) => <li key={i}>{typeof row === 'object' && row ? String(row.title ?? row.name ?? row.id ?? JSON.stringify(row)) : String(row)}</li>)}</ul>
-  const columns = region.columns || Object.keys(rows[0] || {}).slice(0, 5).map(key => ({ key, label: key }))
-  return <div className="card-scroll"><table className="card-table"><thead><tr>{columns.map(c => <th key={c.key} scope="col">{c.label}</th>)}</tr></thead>
-    <tbody>{rows.map((row, i) => <tr key={i}>{columns.map(c => <td key={c.key}><Cell value={row?.[c.key]} column={c} /></td>)}</tr>)}</tbody></table></div>
 }
 
 export function SettingsWidget({ plugin }: { plugin: PluginInfo }) {

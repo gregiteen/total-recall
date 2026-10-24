@@ -17,6 +17,7 @@ import {
 } from './plugin-distribution.mjs';
 import { ensurePluginRecord, installPluginDependencies } from './plugin-store.mjs';
 import { projectPluginsDir, globalPluginsDir, listBundledPlugins, discoverPlugins } from './plugin-loader.mjs';
+import { writeFixturePlugin } from './testing/plugin-fixture.mjs';
 
 const FORBIDDEN = /rating|review|install_?count|download|verified|stars?\b/i;
 
@@ -194,7 +195,7 @@ describe('plugin-store', () => {
   it('links a local directory and refuses duplicates', async () => {
     const src = path.join(tmp, 'my-plugin');
     fs.mkdirSync(src);
-    fs.writeFileSync(path.join(src, 'plugin.json'), JSON.stringify({ id: 'my-plugin', name: 'Mine', version: '0.1.0', description: 'Local plugin' }));
+    writeFixturePlugin(src, { id: 'my-plugin', name: 'Mine', version: '0.1.0', description: 'Local plugin' }, { fs, path });
     const res = await installPlugin(src, { projectRoot: projA, link: true });
     expect(res.source.kind).toBe('link');
     expect(fs.lstatSync(path.join(projectPluginsDir(projA), 'my-plugin')).isSymbolicLink()).toBe(true);
@@ -207,7 +208,7 @@ describe('plugin-store', () => {
 
   it('replaces source explicitly, retaining original files and operator configuration',async()=>{
     const source=path.join(tmp,'replacement');fs.mkdirSync(source);
-    fs.writeFileSync(path.join(source,'plugin.json'),JSON.stringify({id:'replacement',name:'Replacement',version:'0.1.0',description:'Fixture'}));
+    writeFixturePlugin(source,{id:'replacement',name:'Replacement',version:'0.1.0',description:'Fixture'},{fs,path});
     fs.writeFileSync(path.join(source,'content.txt'),'first');
     await installPlugin(source,{projectRoot:projA});
     const plugin=discoverPlugins(projA).find(plugin=>plugin.id==='replacement');

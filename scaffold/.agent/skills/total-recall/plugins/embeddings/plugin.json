@@ -55,6 +55,17 @@
     "handler": "./ui/card.js",
     "element": "tr-embeddings-card"
   },
+  "ui": {
+    "elements": [
+      {
+        "id": "card",
+        "kind": "card",
+        "tag": "tr-embeddings-card",
+        "module": "ui/card.js",
+        "description": "Embeddings card face"
+      }
+    ]
+  },
   "status": {
     "command": "status",
     "refresh_seconds": 60

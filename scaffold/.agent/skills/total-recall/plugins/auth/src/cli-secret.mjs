@@ -219,6 +219,8 @@ function printHelp() {
       --no-example        Skip .env.example
       --no-global         Only keys bound to this repo (skip unbound)
       --replace-all       Overwrite entire .env (default: merge TR block only)
+      --rename STORE=ENV  Write a store key under the env name an app expects
+                           (repeatable, comma separated)
       --remote <name>     Also push the SSOT projection to a configured remote
                            target over SSH (see 'auth secret remote') instead of
                            (or in addition to) a local file
@@ -344,6 +346,7 @@ function parseArgs(args) {
     noExample: false,
     noGlobal: false,
     replaceAll: false,
+    rename: {},
     exportEnv: false,
     exportAll: false,
     enqueue: false,
@@ -530,6 +533,18 @@ function parseArgs(args) {
       case '--replace-all':
         out.replaceAll = true;
         break;
+      case '--rename': {
+        // Write a store key under the variable name an app expects. An app
+        // reads the provider's plain variable name, but each app must own a
+        // distinct credential in the store, so prefix the store key per app
+        // (for example APP_A_PROVIDER_KEY, APP_B_PROVIDER_KEY, ...).
+        const spec = String(args[++i] || '');
+        for (const pair of spec.split(',')) {
+          const [from, to] = pair.split('=').map((v) => (v || '').trim());
+          if (from && to) out.rename[from] = to;
+        }
+        break;
+      }
       case '--from-clipboard':
         out.fromClipboard = true;
         break;
@@ -1180,6 +1195,7 @@ export default async function secretCli(argv) {
         const r = await deployEnvToRemote(brainDir, opts.key, {
           dryRun: opts.dryRun,
           keys: opts.keys.length ? opts.keys : undefined,
+          rename: opts.rename,
         });
         if (r.dryRun) {
           console.log(`\n  📤 dry-run remote deploy → ${r.target} (${r.host})`);
@@ -1442,6 +1458,7 @@ export default async function secretCli(argv) {
         includeGlobal: !opts.noGlobal,
         replaceAll: !!opts.replaceAll,
         keys: opts.keys.length ? opts.keys : undefined,
+        rename: opts.rename,
       };
 
       if (opts.remote) {

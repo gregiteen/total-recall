@@ -180,6 +180,7 @@ export async function deployEnvToRemote(brainDir, targetName, opts = {}) {
     keys: opts.keys?.length ? opts.keys : target.keys,
     projectPath,
     projectSlug: opts.projectSlug || projectSlugFromPath(projectPath),
+    rename: opts.rename,
   });
 
   const remoteFile = path.posix.join(target.remotePath, target.filename || '.env');

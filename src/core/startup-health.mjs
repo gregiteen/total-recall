@@ -2,7 +2,7 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { spawn } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { readProcessCommand } from './pid-lock.mjs';
 import { CLI_COMMANDS } from './cli-commands.mjs';
@@ -33,15 +33,52 @@ export async function verifyListener(pid, url, { run = runBounded, cwd = process
   return result.code === 0 && !result.reason && result.output.split(/\r?\n/).includes(`p${pid}`);
 }
 
-export function processIdentity(pidFile, hint, { alive = pid => { try { process.kill(pid, 0); return true; } catch { return false; } }, command = readProcessCommand } = {}) {
+/** A process's working directory, or null when it cannot be determined. */
+export function readProcessCwd(pid, { run = spawnSync } = {}) {
+  try {
+    const res = run('lsof', ['-a', '-p', String(pid), '-d', 'cwd', '-Fn'], { encoding: 'utf8', timeout: 5_000 });
+    if (res.status !== 0 || !res.stdout) return null;
+    const line = res.stdout.split(/\r?\n/).find(l => l.startsWith('n'));
+    return line ? line.slice(1) || null : null;
+  } catch { return null; }
+}
+
+/**
+ * Does the process holding `pid` look like the entry at `hint`?
+ *
+ * A launch agent starts its program with a path relative to the service's
+ * WorkingDirectory (`node src/server/index.mjs`), so the recorded command line
+ * carries no absolute path. Resolving it against the *caller's* cwd made this
+ * check depend on where the operator happened to stand: `total-recall startup
+ * check` run from any other directory reported a healthy local server as
+ * `server-process-unverified`. Resolve against the process's own cwd instead,
+ * and accept an entry-tail match as corroboration — the same suffix rule
+ * `pid-lock.mjs` already uses to decide a lock is ours.
+ */
+export function processIdentity(pidFile, hint, { alive = pid => { try { process.kill(pid, 0); return true; } catch { return false; } }, command = readProcessCommand, cwd = readProcessCwd } = {}) {
   let pid;
   try { pid = Number(fs.readFileSync(pidFile, 'utf8').trim()); } catch { return { status: 'not-started' }; }
   if (!Number.isInteger(pid) || pid <= 0 || !alive(pid)) return { status: 'stopped' };
   const cmd = command(pid);
   if (!cmd) return { status: 'unknown', reason: 'process-identity-unavailable' };
   const script = cmd.trim().match(/^(?:\S*node(?:\s+--[^ ]+)*)\s+(\S+)/)?.[1];
-  let matches = false;
-  try { matches = Boolean(script) && fs.realpathSync(script) === fs.realpathSync(hint); } catch {}
+  let matches = false, resolved = false;
+  if (script) {
+    // Absolute script paths resolve directly; relative ones resolve against the
+    // process's own working directory, never the caller's.
+    const bases = path.isAbsolute(script) ? [null] : [cwd(pid)];
+    for (const base of bases) {
+      try {
+        const target = fs.realpathSync(base ? path.resolve(base, script) : script);
+        resolved = true;
+        if (target === fs.realpathSync(hint)) { matches = true; break; }
+      } catch {}
+    }
+    // Only when no root could be resolved at all may the entry tail stand in as
+    // corroboration. A path that DID resolve to a different install is a second
+    // installation, not an unresolvable one, and must stay a conflict.
+    if (!matches && !resolved) matches = script.split(path.sep).slice(-2).join('/') === path.join(path.basename(path.dirname(hint)), path.basename(hint));
+  }
   return matches ? { status: 'running', pid } : { status: 'conflict', reason: 'foreign-pid' };
 }
 
@@ -146,7 +183,17 @@ export async function startupHealth({ cwd = process.cwd(), brainDir, brainUrl = 
       }
     } catch { report.brain = { status: 'offline', reason: 'instructions-unreachable' }; }
   }
-  const candidates = [path.join(cwd, 'ssss'), path.join(cwd, 'node_modules', '.bin', 'ssss')];
+  // SSSS is tooling that may be vendored by the project under test, installed
+  // alongside this package, or only on PATH. Searching `cwd` alone reported a
+  // working install as `unavailable` whenever the operator ran the check from
+  // anywhere other than a repository root, which made `shared_ready` depend on
+  // the caller's directory rather than on the machine.
+  const candidates = [
+    path.join(cwd, 'ssss'),
+    path.join(cwd, 'node_modules', '.bin', 'ssss'),
+    path.join(packageRoot, 'node_modules', '.bin', 'ssss'),
+    path.join(packageRoot, '..', '.bin', 'ssss'),
+  ];
   const tool = candidates.find(file => { try { fs.accessSync(file, fs.constants.X_OK); return fs.statSync(file).isFile(); } catch { return false; } }) || 'ssss';
   const tooling = await run(tool, ['--help'], { cwd });
   report.ssss = { status: tooling.code === 0 && !tooling.reason && /ssss/i.test(tooling.output) ? 'available' : 'unavailable', role: report.ssss.role };

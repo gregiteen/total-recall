@@ -4,6 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { parseCron, cronMatches, latestDueSlot, minuteSlot, runDuePluginTasks, taskRunsOnNode } from './plugin-tasks.mjs';
 import { projectPluginsDir, getPlugin } from './plugin-loader.mjs';
+import { writeFixturePlugin } from './testing/plugin-fixture.mjs';
 import { patchPluginRecord } from './plugin-store.mjs';
 import matter from 'gray-matter';
 
@@ -56,11 +57,11 @@ describe('runDuePluginTasks', () => {
     const dir = path.join(projectPluginsDir(root), 'ticker');
     fs.mkdirSync(dir, { recursive: true });
     fs.writeFileSync(path.join(dir, 'cli.mjs'), 'export async function run() {}');
-    fs.writeFileSync(path.join(dir, 'plugin.json'), JSON.stringify({
+    writeFixturePlugin(dir, {
       id: 'ticker', name: 'Ticker', version: '1.0.0', description: 'Scheduled task fixture',
       cli: { command: 'ticker', handler: './cli.mjs' },
       tasks: [{ intent: 'Tick', schedule: '*/10 * * * *', command: 'tick' }]
-    }));
+    }, { fs, path });
   });
 
   afterEach(() => {
