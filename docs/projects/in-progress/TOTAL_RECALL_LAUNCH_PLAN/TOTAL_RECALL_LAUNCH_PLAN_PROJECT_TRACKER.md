@@ -21,6 +21,15 @@
 
 ## Active acceptance checklist
 
+### Measurement substrate (added 2026-10-24)
+
+The plan argued several things from anecdotes because nothing measured them. That gap is now closed for the capsule, which is the number that governs every session.
+
+- [x] **Capsule telemetry.** Every `total-recall context` call records one line; read with `total-recall context-stats`. Records counts and identifiers only — never rule text, capsule content, query text or credentials — and is bounded by its own size cap, because an append-only log in this repo reached 306 MB and silently broke every backup for five weeks. `TR_CONTEXT_TELEMETRY=off` disables it.
+- [x] **First measurement (2026-10-24).** All five actions show **0% overflow** at the configured 16,000 budget with ~5,900 tokens of headroom — so the documented `ready:true` gate **passes**, and TR-003's "12 of 13 overflow" claim is **stale**. Every action also reports `excluded = 0`, meaning **nothing is optional** and the budget is currently the only lever.
+- [x] **Design rationale and the candidate pipeline** live in [`docs/MEASUREMENT_AND_INNOVATION.md`](../../../MEASUREMENT_AND_INNOVATION.md) — a living file outside `docs/projects/`, so it adds no second project and cannot drift into one.
+- [ ] Reconcile the archived TR-003 overflow claim so the next agent does not re-investigate it.
+
 ### Phase 0 — Consolidation (complete)
 
 - [x] Audit all 13 in-progress projects and record current evidence.

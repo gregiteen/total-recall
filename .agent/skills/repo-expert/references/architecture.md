@@ -6,7 +6,7 @@ description: >-
   file before executing.
 repo_scoped: true
 repository_id: "total-recall-brain"
-generated_at: 2026-10-24T08:24:09.036Z
+generated_at: 2026-10-24T08:55:19.636Z
 generated_from: total-recall
 ---
 
@@ -18,7 +18,7 @@ generated_from: total-recall
 
 ## Stack
 
-- **Languages**: JavaScript (722 files), Markdown (257 files), TypeScript (130 files), CSS (12 files)
+- **Languages**: JavaScript (728 files), Markdown (258 files), TypeScript (130 files), CSS (12 files)
 - **Frameworks**: React, Express
 - **Tests**: Vitest
 - **Module system**: module
@@ -110,7 +110,7 @@ templates/
 
 ## CLI Commands
 
-67 commands in `src/cli/`:
+68 commands in `src/cli/`:
 
 | Command | File | Description |
 |---------|------|-------------|
@@ -126,6 +126,7 @@ templates/
 | command | command.mjs | Generate `total-recall <name> config|<collection>|detect|ini |
 | config | config.mjs |  |
 | connect | connect.mjs |  |
+| context-stats | context-stats.mjs | total-recall context-stats — read the capsule measurement le |
 | context | context.mjs |  |
 | daemon | daemon.mjs | total-recall daemon |
 | deploy-ui | deploy-ui.mjs | deploy-ui.mjs |
@@ -153,8 +154,7 @@ templates/
 | memory-init | memory-init.mjs |  |
 | memory-plugin | memory-plugin.mjs |  |
 | mesh | mesh.mjs |  |
-| migrate | migrate.mjs |  |
-| ... | +27 more | |
+| ... | +28 more | |
 
 ## API Routes
 
@@ -517,8 +517,9 @@ templates/
 
 ## Core Modules
 
-154 modules in `src/core/`:
+156 modules in `src/core/`:
 
+- **action-predictor** — exports: buildActionQuestions, shortlistActions, predictNextAction
 - **agent-manager** — exports: loadAgentState, saveAgentState, isProcessRunning, listAgents, buildRemoteSpawnCommand, spawnAgent, killAgent, getAgentLogs
 - **api-routes** — exports: silenceInfoLogs, actionFor, loadApiRoutes
 - **append-log** — exports: compactAppendLogs
@@ -545,6 +546,7 @@ templates/
 - **context-cache** — exports: loadSectionCache, saveSectionCache, computeSectionHash, getCachedSection, manageContextBudget
 - **context-compiler** — exports: compileContext, renderCapsule, capsuleResponse, previewContext
 - **context-policy** — exports: curatedRules, ruleAppliesToRepo, selectRules, assembleContext
+- **context-telemetry** — exports: ledgerPath, recordCapsule, readLedger, summariseLedger
 - **crons** — exports: runCrons
 - **daemon-control** — exports: readPid, getDaemonStatus, startDaemon, stopDaemon, ensureDaemonRunning
 - **daemon-loop** — exports: writeInterrupt, acquirePidLock, reassertPidLock, releasePidLock

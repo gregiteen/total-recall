@@ -6,6 +6,7 @@ import { compileContext, capsuleResponse, renderCapsule } from '../core/context-
 import { isBrainEnabled } from '../core/brain-registry.mjs';
 import { surfaceInputsHash } from '../core/command-surface.mjs';
 import { readConfigValue } from './config.mjs';
+import { recordCapsule } from '../core/context-telemetry.mjs';
 
 export default async function context(args = []) {
   if (!args.length || args.includes('--help')) {
@@ -46,6 +47,13 @@ export default async function context(args = []) {
     derivedDir, contributions: legacyRuleContributions(skillsDir), versionInputs: surfaceInputsHash({ skillsDir }) });
   if (debug && format === 'text') throw new Error('--debug requires --format json');
   const response = capsuleResponse(result, { total: budget, debug, format });
+  // Measured before the admission branch, so a capsule that failed to fit is
+  // recorded too. Those refusals are the samples the budget decision needs, and
+  // a measurement that only counts successes would hide the exact case it
+  // exists to explain.
+  recordCapsule({ ...result.stats, total_tokens: result.stats.total_tokens }, {
+    derivedDir, action: actions, query, consumer: 'cli',
+  });
   if (!response.ready && !debug) {
     // Admission failed: emitting bodies here makes each budget retry load the
     // same rules again. Keep the full set in the compiler/API, and admit it only
