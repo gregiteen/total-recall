@@ -35,4 +35,40 @@ describe('brain.mjs', () => {
       fs.rmSync(root, { recursive: true, force: true });
     }
   });
+  it('register keeps brain state out of git, and import restores a vault through validated writes', async () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'tr-brain-import-'));
+    const agent = path.join(root, 'global-agent'), project = path.join(root, 'project'), archive = path.join(root, 'archive');
+    const previousCode = process.exitCode;
+    vi.stubEnv('AGENT_DIR', agent);
+    const log = vi.spyOn(console, 'log').mockImplementation(() => {});
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      fs.mkdirSync(project);
+      await brain(['register', project]);
+      expect(fs.readFileSync(path.join(project, '.gitignore'), 'utf8')).toContain('.agent/skills/total-recall/config/brain.json');
+
+      fs.mkdirSync(path.join(archive, 'facts'), { recursive: true });
+      fs.writeFileSync(path.join(archive, 'facts', 'archived-fact.md'),
+        '---\ntype: memory\nslug: archived-fact\ntitle: Archived fact\ncategory: facts\nstatus: active\n---\n\nKept with its repository.\n');
+      fs.writeFileSync(path.join(archive, 'index.md'), '# index\n');
+      const vault = path.join(project, '.agent/skills/total-recall/memory-vault');
+
+      await brain(['import', archive, '--to', project, '--dry-run']);
+      expect(fs.existsSync(path.join(vault, 'facts', 'archived-fact.md'))).toBe(false);
+
+      await brain(['import', archive, '--to', project]);
+      expect(process.exitCode ?? 0).toBe(previousCode ?? 0);
+      const written = fs.readFileSync(path.join(vault, 'facts', 'archived-fact.md'), 'utf8');
+      expect(written).toContain('slug: archived-fact');
+      expect(written).toContain('Kept with its repository.');
+
+      log.mockClear();
+      await brain(['import', archive, '--to', project]);
+      expect(log.mock.calls.flat().join(' ')).toContain('Imported 0 node(s)');
+    } finally {
+      process.exitCode = previousCode;
+      log.mockRestore(); error.mockRestore(); vi.unstubAllEnvs();
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
 });

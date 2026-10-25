@@ -16,6 +16,10 @@ function printHelp() {  console.log(`
     register <project-path>    Track any project path (full brain + registry)
     unregister <project-path>  Remove a project directory path from the registry
     ensure <project-path>      Ensure a full project brain layout + register
+    import <vault-dir> --to <project-path> [--dry-run]
+                               Import every memory node from another vault directory
+                               (an archive or a retired brain) into that project's
+                               brain through validated writes; existing slugs are kept
 
   Any repo works — pass absolute or relative paths you choose. No product defaults.
 
@@ -27,6 +31,7 @@ function printHelp() {  console.log(`
     npx total-recall brain off hermes-agent
     npx total-recall brain on global
     npx total-recall brain unregister /path/to/project
+    npx total-recall brain import ~/Archive/old-brain/memory-vault --to ~/code/my-lib
 
   Skill multi-repo sync: registered projects + TR_SYNC_REPOS + skill track/--repo
   `);
@@ -57,6 +62,9 @@ export default async function brain(args) {
       break;
     case 'ensure':
       await handleEnsure(args.slice(1), globalBrainDir);
+      break;
+    case 'import':
+      await handleImport(args.slice(1));
       break;
     case 'on':
     case 'off':
@@ -104,11 +112,14 @@ async function handleEnsure(targetArgs, globalBrainDir) {
     tags: ['project-brain', 'full-brain'],
   });
   const health = inspectProjectBrain(abs);
+  const { ensureProjectGitignore } = await import('./init.mjs');
+  const ignored = ensureProjectGitignore(abs);
   console.log(`\n  ✅ Full project brain ready`);
   console.log(`     Repo:  ${result.repoRoot}`);
   console.log(`     Brain: ${result.brainDir}`);
   console.log(`     complete=${health.complete} full_brain=${health.full_brain}`);
   console.log(`     directories created +${result.dirs_created}`);
+  if (ignored.length) console.log(`     .gitignore +${ignored.length} brain-state exclusions`);
   console.log('');
 }
 
@@ -224,6 +235,11 @@ async function handleRegister(registryPath, targetArgs) {
       register: true,
     });
     console.log(`  ✅ Full project brain ready at ${path.join(absoluteRoot, '.agent', 'skills', 'total-recall')}`);
+    // A registered repo carries a brain whose config holds a live PAT; keep it
+    // out of git the same way `init --project` does.
+    const { ensureProjectGitignore } = await import('./init.mjs');
+    const ignored = ensureProjectGitignore(absoluteRoot);
+    if (ignored.length) console.log(`  ✅ .gitignore +${ignored.length} brain-state exclusions`);
   } catch (err) {
     console.error(`  ⚠️  Could not fully provision brain layout: ${err.message}`);
     process.exitCode = 1;
@@ -298,6 +314,58 @@ async function handleUnregister(registryPath, targetArgs) {
 
   fs.writeFileSync(registryPath, JSON.stringify(registry, null, 2), 'utf8');
   console.log(`  ✅ Successfully unregistered project: "${absoluteRoot}"`);
+}
+
+/**
+ * Import memory nodes from a vault directory into a project's brain.
+ *
+ * The source is read, never written: an archived brain, or the vault of a brain
+ * being retired. Every node goes through the validated SSSS write path at the
+ * same vault-relative path, so the target's event log records each one. A slug
+ * the target already holds is left alone, which makes a rerun safe.
+ */
+async function handleImport(targetArgs) {
+  const toIdx = targetArgs.indexOf('--to');
+  const source = targetArgs.find((a, i) => !a.startsWith('-') && i !== toIdx + 1);
+  const target = toIdx !== -1 ? targetArgs[toIdx + 1] : null;
+  const dryRun = targetArgs.includes('--dry-run');
+  if (!source || !target) {
+    console.error('  ⚠️  Usage: npx total-recall brain import <vault-dir> --to <project-path> [--dry-run]');
+    process.exit(1);
+  }
+  const sourceDir = path.resolve(source);
+  const projectRoot = path.resolve(target);
+  if (!fs.existsSync(sourceDir) || !fs.statSync(sourceDir).isDirectory()) {
+    console.error(`  ⚠️  Source vault not found: ${sourceDir}`);
+    process.exit(1);
+  }
+  const vaultDir = path.join(projectRoot, '.agent', 'skills', 'total-recall', 'memory-vault');
+  if (!fs.existsSync(vaultDir)) {
+    console.error(`  ⚠️  No project brain at ${projectRoot}. Run: npx total-recall brain register ${projectRoot}`);
+    process.exit(1);
+  }
+  if (path.resolve(sourceDir) === path.resolve(vaultDir)) {
+    console.error('  ⚠️  Source and target are the same vault.');
+    process.exit(1);
+  }
+  const { loadNodes } = await import('../core/vault.mjs');
+  const { writeNodeValidatedAsync } = await import('../core/validated-write.mjs');
+  const existing = new Set(loadNodes(vaultDir).map(n => n.slug));
+  let imported = 0, skipped = 0;
+  const failed = [];
+  for (const node of loadNodes(sourceDir)) {
+    if (existing.has(node.slug)) { skipped++; continue; }
+    const rel = path.relative(sourceDir, node._filePath).split(path.sep).join('/');
+    if (dryRun) { imported++; continue; }
+    const { _filePath, _filepath, ...clean } = node;
+    const result = await writeNodeValidatedAsync(clean, vaultDir, { path: rel });
+    if (result.success) { imported++; existing.add(node.slug); }
+    else failed.push(`${rel}: ${result.validation?.errors?.join('; ') || result.error}`);
+  }
+  const verb = dryRun ? 'Would import' : 'Imported';
+  console.log(`  ${failed.length ? '⚠️ ' : '✅'} ${verb} ${imported} node(s) into ${vaultDir}; ${skipped} already present`);
+  for (const line of failed) console.error(`     ✗ ${line}`);
+  if (failed.length) process.exitCode = 1;
 }
 
 function countMdFiles(dir) {
