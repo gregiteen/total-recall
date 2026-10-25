@@ -95,23 +95,19 @@ export async function runOkfIngest(args) {
     for (const item of report.errors) {
       console.log(`    • ${item.file}: ${item.error}`);
     }
-    process.exit(1);
+    process.exitCode = 1;
+    return;
   }
 
   if (report.imported.length > 0 && !opts.dryRun) {
-    // Recompile active memory surfaces and indexes in the background to avoid blocking the CLI call.
-    console.log('\n  ⏳ Recompiling active memory surfaces and indexes in the background...');
-    try {
-      const { spawn } = await import('node:child_process');
-      const child = spawn(process.argv[0], [process.argv[1], 'compile'], {
-        detached: true,
-        stdio: 'ignore'
-      });
-      child.unref();
-      console.log('  ✅ Background compilation started.');
-    } catch (err) {
-      console.warn(`  ⚠️  Background recompilation spawn failed: ${err.message}`);
-    }
+    console.log('\n  ⏳ Recompiling memory surfaces and indexes...');
+    const { spawn } = await import('node:child_process');
+    await new Promise((resolve, reject) => {
+      const child = spawn(process.argv[0], [process.argv[1], 'compile', ...(layer === 'project' ? ['--project'] : layer === 'global' ? ['--global'] : [])], { stdio: 'inherit' });
+      child.once('error', reject);
+      child.once('exit', (code, signal) => code === 0 ? resolve() : reject(new Error(`Compilation failed (${signal || code})`)));
+    });
+    console.log('  ✅ Compilation completed.');
   }
 }
 

@@ -5,9 +5,9 @@ import { MemoryNodeSchema } from './schema.mjs';
 
 describe('Skill Evals Programmatic Assertions', () => {
   describe('OKF Skill Evals', () => {
-    it('okf-adapter-present: okf-adapter.mjs exists', () => {
+    it('OKF implementation belongs to its plugin', () => {
       const adapterPath = path.join(process.cwd(), 'src/core/okf-adapter.mjs');
-      expect(fs.existsSync(adapterPath)).toBe(true);
+      expect(fs.existsSync(adapterPath)).toBe(false);
     });
 
     it('okf-schema-extension: MemoryNodeSchema supports description and resource', () => {

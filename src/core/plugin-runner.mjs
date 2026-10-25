@@ -10,6 +10,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { PACKAGE_ROOT, resolvePluginFile } from './plugin-loader.mjs';
 import { readPluginRecord } from './plugin-store.mjs';
+import { pluginExecutionEnabled } from './plugin-state.mjs';
 import { setPluginActive } from './plugin-activation.mjs';
 
 const CHILD = path.join(path.dirname(fileURLToPath(import.meta.url)), 'plugin-runner-child.mjs');
@@ -52,7 +53,7 @@ export function runPluginCommand(plugin, options = {}) {
       output: JSON.stringify(result), durationMs: 0, timedOut: false,
     }));
   }
-  if (readPluginRecord(plugin)?.runtime_enabled === false && !['status', 'health', 'jobs', '--help', '-h', 'help'].includes(operation)) {
+  if (!pluginExecutionEnabled(plugin, { projectRoot: cwd }) && !['status', 'health', 'jobs', '--help', '-h', 'help'].includes(operation)) {
     return Promise.reject(new Error(`Plugin ${plugin.id} is inactive; run total-recall plugin on ${plugin.id}`));
   }
   const declaredTimeout = plugin?.manifest?.cli?.subcommands?.find(item => item.name === operation)?.timeout_ms;

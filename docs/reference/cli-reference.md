@@ -222,7 +222,7 @@ Validate all vault Markdown nodes against SSSS v2 Zod schema constraints, or che
   ```
 - **Options**:
   - `--strict`: Treat warnings as errors (exit 1 on any issue).
-  - `--okf`: Verify OKF v0.1 draft metadata compliance (checks for title, description, tags, and updated timestamp).
+  - `--okf`: Inspect title, description, tags and timestamps through the active OKF plugin. This is metadata lint, not complete specification conformance.
   - `--json`: Output results as JSONL.
   - `--vault <path>`: Override vault directory (default: ~/.agent/memory-vault).
 

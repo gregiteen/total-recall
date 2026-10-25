@@ -15,7 +15,7 @@ export function buildPluginCatalog(projectRoot = process.cwd(), { discover = dis
     return {
       id: plugin.id, name: manifest.name || plugin.id, version: manifest.version || null,
       scope: plugin.scope, valid: plugin.valid === true, errors: plugin.errors || [],
-      activation: pluginActivation(plugin),
+      activation: pluginActivation(plugin, { projectRoot }),
       description: manifest.description || '', namespace: manifest.cli?.command || null,
       callable, operations: [...(manifest.cli?.subcommands || []).filter(command => !['on', 'off'].includes(command.name)),
         ...['on', 'off'].map(name => ({ name, description: `${name === 'on' ? 'Enable' : 'Disable'} host execution and compile surfaces`, effect: 'write', output: 'json', args: [] }))].map(command => ({

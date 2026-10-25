@@ -38,7 +38,10 @@ describe('project-brain', () => {
     });
     expect(result.full_brain).toBe(true);
     expect(fs.existsSync(path.join(result.brainDir, 'memory-vault', 'facts'))).toBe(true);
-    expect(fs.existsSync(path.join(result.brainDir, 'openwiki'))).toBe(false);
+    // The scaffold ships an `openwiki` directory, so its presence is expected and
+    // proves nothing. What matters is that provisioning needs no plugin install
+    // of its own: the shared folder serves this repository.
+    expect(fs.existsSync(path.join(result.brainDir, 'plugins', 'auth'))).toBe(false);
     expect(fs.existsSync(path.join(result.brainDir, 'sessions'))).toBe(true);
     expect(fs.existsSync(path.join(result.brainDir, 'scheduler', 'queue'))).toBe(true);
     expect(fs.existsSync(path.join(result.brainDir, 'skills-registry', 'index.yaml'))).toBe(true);

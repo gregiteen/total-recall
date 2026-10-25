@@ -51,7 +51,7 @@ function printHelp() {
     --global           Lint the global vault (default)
     --project          Lint the project vault for the current repo
     --strict           Treat warnings as errors (exit 1 on any issue)
-    --okf              Verify OKF v0.1 draft metadata compliance
+    --okf              Inspect metadata through the installed OKF plugin
     --plugins          Validate all installed plugin manifests (plugin.json)
     --json             Output results as JSONL
     --help, -h         Show this help

@@ -31,7 +31,7 @@ import {
 } from './plugin-bundle.mjs';
 import { writeVfsDocument, patchVfsDocument, deleteVfsDocument, appendVfsEvent } from './ssss-operation-service.mjs';
 import { findVfsDocumentByPath } from './vfs-documents.mjs';
-import { readActivationRecord } from './plugin-state.mjs';
+import { readActivationRecord, projectActivationOverride } from './plugin-state.mjs';
 
 const execFileAsync = promisify(execFile);
 const ID_PATTERN = /^[a-z][a-z0-9-]{1,63}$/;
@@ -60,6 +60,18 @@ export function readPluginRecord(plugin) {
   const record = findVfsDocumentByPath(recordPath(plugin.id), vaultFor(plugin));
   if (!record) throw new Error('Canonical plugin record could not be read');
   return record;
+}
+
+/**
+ * A repository's own enablement for a shared plugin, read from its project
+ * brain. This is an overlay, never an install: it is absent for a repository
+ * that has never switched the plugin either way.
+ */
+export function readProjectActivationRecord(id, projectRoot) {
+  if (!projectRoot) return null;
+  const { file } = projectActivationOverride(id, projectRoot);
+  if (!readActivationRecord(file, id)) return null;
+  return findVfsDocumentByPath(recordPath(id), vaultForPluginsDir(projectPluginsDir(projectRoot)));
 }
 
 export async function emit(vaultRoot, id, kind, payload) {
@@ -162,6 +174,65 @@ export async function patchPluginRecord(plugin, patches) {
     intent: `Update plugin record ${plugin.id}`,
     vaultRoot: vaultFor(plugin)
   });
+}
+
+/**
+ * Write one repository's enablement for a shared plugin as a `plugin_record`
+ * overlay in that repository's brain. Passing `null` clears the repository's own
+ * setting so it follows the shared one again. The overlay never installs the
+ * plugin: a repository without it uses the shared folder's copy.
+ */
+export async function patchProjectActivationRecord(id, projectRoot, runtimeEnabled, { manifest = null } = {}) {
+  if (!ID_PATTERN.test(id)) throw new Error('Invalid plugin identity');
+  const pluginsDir = projectPluginsDir(projectRoot);
+  const vaultRoot = vaultForPluginsDir(pluginsDir);
+  const now = new Date().toISOString();
+  // Clear: the overlay is rewritten without `runtime_enabled`, which is what
+  // "follow the shared setting" means. A patch cannot remove a key, so this
+  // replaces the document rather than merging into it.
+  if (runtimeEnabled === null) {
+    const existing = readProjectActivationRecord(id, projectRoot);
+    if (!existing) return null;
+    const { runtime_enabled: _dropped, ...frontmatter } = { ...(existing.frontmatter || {}) };
+    await writeVfsDocument(recordPath(id), {
+      ...frontmatter,
+      type: 'plugin_record',
+      runtime_disabled: false,
+      timestamp: now
+    }, existing.body ?? buildPluginDocumentBody(manifest || {}, id), {
+      actorRole: 'system',
+      intent: `Clear repository activation override for plugin ${id}`,
+      vaultRoot
+    });
+    return readProjectActivationRecord(id, projectRoot);
+  }
+  if (typeof runtimeEnabled !== 'boolean') throw new Error('Plugin activation requires a boolean or null');
+  const previous = readProjectActivationRecord(id, projectRoot);
+  if (previous) {
+    return patchVfsDocument(recordPath(id), { runtime_enabled: runtimeEnabled, timestamp: now }, {
+      actorRole: 'system',
+      intent: `Set repository activation for plugin ${id}`,
+      vaultRoot
+    });
+  }
+  const m = manifest || {};
+  const frontmatter = {
+    type: 'plugin_record',
+    title: m.name || id,
+    description: `Repository activation for shared plugin ${id}.`,
+    timestamp: now,
+    plugin_id: id,
+    category: 'plugins',
+    tags: ['plugin', 'activation-override'],
+    runtime_enabled: runtimeEnabled,
+    source: { kind: 'shared', ref: globalPluginsDir() }
+  };
+  await writeVfsDocument(recordPath(id), frontmatter, buildPluginDocumentBody(m, id), {
+    actorRole: 'system',
+    intent: `Record repository activation for plugin ${id}`,
+    vaultRoot
+  });
+  return frontmatter;
 }
 
 /** Facts about one installed plugin, merged with its record. */

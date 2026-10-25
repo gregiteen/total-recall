@@ -32,7 +32,6 @@
   "src/core/memory-layers.mjs",
   "src/core/memory-schema.mjs",
   "src/core/memory-title.mjs",
-  "src/core/okf-adapter.mjs",
   "src/core/ollama-embeddings.mjs",
   "src/core/operation-validator.mjs",
   "src/core/parallel-context.mjs",
