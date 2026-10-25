@@ -40,6 +40,20 @@ describe('native plugin SSSS state', () => {
     await expect(executePluginState({ ...request, value: { id: 2 } })).rejects.toThrow(/idempotency conflict/);
     await expect(executePluginState({ ...request, file: path.join(path.dirname(file), 'other.json') })).rejects.toThrow(/idempotency conflict/);
   });
+  it('serializes concurrent ledger appends without dropping audit records', async () => {
+    const file = fixture();
+    const results = await Promise.all([0, 1, 2, 3].map(id => executePluginState({ file, plugin: 'auth', action: 'append', value: { id } })));
+    expect(results.every(result => result.receipt.success)).toBe(true);
+    const rows = new PluginStateStore(file, 'auth').read([]);
+    expect(rows.map(row => row.id).sort()).toEqual([0, 1, 2, 3]);
+  });
+  it('times out on a persistent guard without deleting it', async () => {
+    const file = fixture(), lock = path.join(path.dirname(file), '.ssss', '.mutation-lock');
+    fs.mkdirSync(lock, { recursive: true });
+    await expect(executePluginState({ file, plugin: 'auth', action: 'append', value: { id: 1 }, guardTimeoutMs: 30 })).rejects.toThrow(/busy/);
+    expect(fs.statSync(lock).isDirectory()).toBe(true);
+    expect(new PluginStateStore(file, 'auth').read([])).toEqual([]);
+  });
   it('rejects root and document symlinks, invalid owners and unowned guards', () => {
     const file = fixture(), root = path.dirname(file), outside = fs.mkdtempSync(path.join(os.tmpdir(), 'plugin-outside-')); roots.push(outside);
     fs.symlinkSync(outside, path.join(root, '.ssss'));

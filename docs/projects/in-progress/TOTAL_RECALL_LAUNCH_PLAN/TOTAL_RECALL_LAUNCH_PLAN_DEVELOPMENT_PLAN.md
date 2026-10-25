@@ -151,3 +151,13 @@ TR-007 (identity, tenancy, credits, AI gateway, app-shell, enrichment), TR-009 (
 ## Sequencing rule
 
 Phases 1 and 2 run first and can run in parallel with each other. Phase 4 does not wait on them. Phase 5 is mostly documentation cleanup. Phase 6 runs last and is the only phase that can declare launch.
+
+MESH-VIEWS-01: first add failing model/DOM/view regressions against the audited card. Implement the fixed read contract and measured, nonmutating doctor; author each screen by hand from ui/DESIGN.md. Preserve generated owner changes. Run owner suite, manifest/card checks, dependency audit, real CLI observations and visual360/768/1280 inspection. Record outcomes, update memory/OpenWiki and commit. The prior approval covers pushing core/OKF/OpenWiki; ask before a mesh push or deployment under push-only-on-request.
+
+Add the requested manifest integration/capability matrix to MESH-VIEWS-01: hand-author explicit declarations, validate operation/runtime/endpoint references in owner tests, render supported versus observed states, and verify the actual integration reads. Fix the observed policy/auth store inconsistency without mutating credentials or policy. Keep future primitive-grant enforcement out of metadata claims.
+
+Close observed A-031 in the generic state owner with failing concurrent-append and persistent-guard regressions, bounded acquisition serialization, raw kernel receipt/record verification and final full core suite. Synchronize the auth host-store runtime into the existing bundled owner. Preserve read-only frame enforcement while exposing its allowed operation list; verify the actual strict JSON bridge.
+
+Finish actual outer screen navigation: generic iframe owner-screen discovery, channel-validated selection, owner active-screen feedback and declaration-based menu/flipper. Verify real frame/message identities and next/previous selection without deriving screens from commands. Rebuild frontend and rerun final full suite after source changes.
+
+MESH-VIEWS-01 source delivery complete: core2430 tests/377 files, owner345 mesh/223 auth tests,30 focused frame tests,8 gates and frontend build pass; all final source hashes match. Real opaque-frame next/previous/internal selection and dark-token360/768/1280 CSS layouts are verified. New source commits await explicit push instruction; no deployment/release. Broader provider quotas, confined workflows, instruction consumption and complete launch acceptance remain in progress under this plan.

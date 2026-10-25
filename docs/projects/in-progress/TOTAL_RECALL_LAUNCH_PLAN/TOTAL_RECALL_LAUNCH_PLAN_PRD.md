@@ -153,3 +153,11 @@ Named so it is not re-litigated:
 4. L1–L6 hold, each with a recorded command and host.
 5. `R26`'s complete journey passes as a single recorded artifact.
 6. No shipped document teaches `card_layout`.
+
+MESH-VIEWS-01: deliver the mesh owner's Machines, Flows, Placement, Boundary and Join views. Machines separates Control/Path/Login/Run and shows recorded I/O dates and fresh presence. Placement distinguishes measured present/absent from unknown and filters by required capabilities. Flows delegates to existing owners and reports each read failure. Boundary shows membership, policy and secret names only; unsupported routes/tunnels/exposure remain explicitly unreadable. Join never renders enrollment credentials and requires target-specific confirmation before re-enrollment. No new host-imposed screens or simulated state.
+
+MESH-VIEWS-01 manifest acceptance: declare the mesh owner's provided primitives, consumed integrations, served endpoints and task placement. The matrix distinguishes declared support from current verified/failed/unavailable observations; host-specific IDs, secrets and success claims never enter the package manifest. Verify the control/auth credential-store binding, declared CLI references and supported read effects.
+
+A-031: normal concurrent authenticated reads must not lose audit records or spuriously fail while another short native mutation owns the guard. Queue acquisition for a bounded interval, retain explicit timeout/failure and preserve existing guards. No unaudited credential read fallback.
+
+MESH-VIEWS-01 source acceptance passes: five designed views, eleven declared integrations/nine primitives, actual source evidence, read-only handoffs, target confirmation in writable hosts and real sandbox navigation. Core2430/mesh345/auth223 tests and8 gates pass. Declaration does not imply primitive grants, universal provider readiness, execution of scheduled declarations or deployment acceptance; those limits are part of the displayed result.

@@ -162,3 +162,11 @@ The original two decisions are no longer open launch blockers. Their disposition
 | **D2** | Historical overflow superseded by telemetry at the configured project budget | No current overflow blocker; LR-3 sync remains open | No new universal default or curation policy is inferred |
 
 Brand/trademark naming from TR-010 FC-F is **not** a launch decision and moves out of scope with the product roadmap.
+
+MESH-VIEWS-01 remains in tr-plugin-mesh: the hand-authored card owns its five screen descriptions and domain presentation. `mesh view <screen>` is a declared read operation with fixed owner CLI sources and per-source timestamp/result/error envelopes; arbitrary command execution is not accepted. Existing host loading/runner contracts remain generic. Status, doctor and leader paint independently; screen-specific sources load lazily and clear on failed refresh. No new persistent product store. Mutations continue through declared owner operations and explicit UI action confirmation.
+
+Mesh capability declarations remain plugin-owned metadata validated by the owner; core is not a new mesh implementation or authorization engine. A declared capability references an existing command/runtime contract and read-only observation source. The view returns those declarations and per-integration evidence, with the card showing both. Unsupported enforcement of P1's future primitive grants is not claimed by metadata.
+
+The generic native plugin-state owner serializes guard acquisition before read/compare/kernel commit. A bounded async wait handles transient contention without changing optimistic version/idempotency semantics or stealing/removing an existing guard. The generic frame now exposes frozen permitted-operation names so owner screens render read-only handoffs instead of unusable mutation controls.
+
+Final MESH-VIEWS-01 owner commits: authb092d91, meshfd9831d/469e8c1. The frame transports only validated declarations/selections and its frozen permitted-operation names. Mesh owns both capability-matrix tables and all five screen bodies. The host native guard waits boundedly without stealing guards; auth's selector is reused in the bundled owner through a pinned explicit runtime file. Final combined source and rendered-frame verification is recorded in MESH-VIEWS-01 evidence; no serving-release state is inferred.

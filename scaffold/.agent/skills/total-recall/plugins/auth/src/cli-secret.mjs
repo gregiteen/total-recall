@@ -58,6 +58,7 @@ import {
 } from './secrets-remote-deploy.mjs';
 import { listProviders, getProvider } from './provider-catalog.mjs';
 import { resolveBrainDir, parseLayerFlag, detectProjectBrain } from './agent-dir.mjs';
+import { hostSecretsBrainDir } from './host-secrets-store.mjs';
 import fs from 'node:fs';
 import { ensureProjectId } from './project-id.mjs';
 import path from 'node:path';
@@ -656,7 +657,8 @@ export default async function secretCli(argv) {
 
   let brainDir;
   try {
-    brainDir = process.env.TR_SECRETS_BRAIN || process.env.TR_BRAIN || resolveBrainDir(layer);
+    if (layer === 'project') throw new Error('Secrets have one host store; --project does not apply.');
+    brainDir = hostSecretsBrainDir();
   } catch (err) {
     console.error(`❌ ${err.message}`);
     process.exit(1);
