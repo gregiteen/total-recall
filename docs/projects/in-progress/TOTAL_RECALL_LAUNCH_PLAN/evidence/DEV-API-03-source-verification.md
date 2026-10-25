@@ -2,6 +2,8 @@
 
 Actor: Codex. Host: Gregorys-Mac-mini.local, sanctioned Mac mini, local disk. Baseline commit: `182ee62`. Source-only stage; no npm release, fleet propagation or serving activation. The existing five-file project stays in progress.
 
+Implementation published to origin/main as `884f7af`; actual push exited0. HEAD/upstream equality and clean tree were independently verified after that push. The tracker records the documentation-only publication follow-up.
+
 ## Implemented boundary
 
 Restricted `ssss.write` requires `invoke:restricted`, `ssss:write` and `brain:server`. Only descriptive fact creation is supported. Exact input validation rejects rule categories, caller-selected paths/slugs, arbitrary metadata, foreign/global selectors and routing tags. The shared memory owner generates UUID paths and uses an agent principal with memory:create only through the existing SSSS kernel. Facts cannot replace existing memory or become instruction nodes through this adapter.
