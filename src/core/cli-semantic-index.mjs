@@ -30,7 +30,7 @@ const CORE_METADATA = {
     effect: 'read'
   },
   init: {
-    description: 'Bootstrap global or project brain and openwiki documentation.',
+    description: 'Bootstrap a portable global or project memory brain.',
     usage: 'total-recall init [--project]',
     effect: 'write'
   },

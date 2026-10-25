@@ -28,7 +28,7 @@ describe('project-brain', () => {
     fs.rmSync(globalBrain, { recursive: true, force: true });
   });
 
-  it('ensureFullProjectBrain creates vault, openwiki, sessions, registry', () => {
+  it('ensureFullProjectBrain creates portable memory without documentation plugins', () => {
     const repo = path.join(root, 'my-app');
     fs.mkdirSync(repo, { recursive: true });
     const result = ensureFullProjectBrain(repo, {
@@ -38,7 +38,7 @@ describe('project-brain', () => {
     });
     expect(result.full_brain).toBe(true);
     expect(fs.existsSync(path.join(result.brainDir, 'memory-vault', 'facts'))).toBe(true);
-    expect(fs.existsSync(path.join(result.brainDir, 'openwiki'))).toBe(true);
+    expect(fs.existsSync(path.join(result.brainDir, 'openwiki'))).toBe(false);
     expect(fs.existsSync(path.join(result.brainDir, 'sessions'))).toBe(true);
     expect(fs.existsSync(path.join(result.brainDir, 'scheduler', 'queue'))).toBe(true);
     expect(fs.existsSync(path.join(result.brainDir, 'skills-registry', 'index.yaml'))).toBe(true);

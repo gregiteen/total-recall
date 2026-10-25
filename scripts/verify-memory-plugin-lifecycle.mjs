@@ -33,7 +33,7 @@ try {
   assert.equal(fs.existsSync(brainDir), false);
   await command(['init']);
   assert.equal(JSON.parse(fs.readFileSync(path.join(brainDir, 'config', 'brain.json'), 'utf8')).role, 'global');
-  for (const feature of ['scheduler', 'sessions', 'openwiki', 'skills-registry']) {
+  for (const feature of ['scheduler', 'sessions', 'skills-registry']) {
     assert.equal(fs.existsSync(path.join(brainDir, feature)), false, `Memory init created feature state: ${feature}`);
   }
   await exec('git', ['init', '-q'], { cwd, env });

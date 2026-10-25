@@ -9,7 +9,6 @@
  *     memory-derived/
  *     sessions/
  *     scheduler/queue/
- *     openwiki/
  *     skills-registry/
  *     config/brain.json
  *   <repo>/.agent/skills/<user-skills>/  ← sibling agent skills
@@ -65,35 +64,6 @@ function copyDirMerge(src, dest) {
 }
 
 /**
- * Seed openwiki pages (templates if packaged).
- */
-export function ensureOpenWiki(brainDir) {
-  const wikiDir = path.join(brainDir, 'openwiki');
-  const created = ensureDir(wikiDir);
-  const templateRoot = path.join(ROOT, 'templates', 'openwiki');
-  let files = 0;
-  if (fs.existsSync(templateRoot)) {
-    files = copyDirMerge(templateRoot, wikiDir);
-  } else {
-    const pages = {
-      'README.md': `# OpenWiki\n\nProject knowledge docs for this Total Recall brain.\n`,
-      'memory.md': `# Memory\n\nUse \`npx total-recall remember\` / \`recall\` with --project.\n`,
-      'skills.md': `# Skills\n\nUser skills: \`.agent/skills/<name>/SKILL.md\`.\n`,
-      'ide.md': `# IDE\n\n\`npx total-recall connect <ide>\`\n`,
-      'secrets.md': `# Secrets\n\nNever put secrets in openwiki or vault markdown.\n`,
-    };
-    for (const [name, body] of Object.entries(pages)) {
-      const dest = path.join(wikiDir, name);
-      if (!fs.existsSync(dest)) {
-        fs.writeFileSync(dest, body);
-        files++;
-      }
-    }
-  }
-  return { wikiDir, created, files_added: files };
-}
-
-/**
  * Ensure core total-recall skill package files exist (SKILL.md minimum).
  */
 export function ensureCoreSkillPackage(brainDir) {
@@ -111,7 +81,7 @@ export function ensureCoreSkillPackage(brainDir) {
     skillMd,
     `---
 name: total-recall
-description: "Use this skill to operate Total Recall — portable memory, instructions, openwiki, skill deploy, and secrets."
+description: "Use this skill to operate Total Recall — portable memory, instructions and plugin discovery."
 ---
 
 # Total Recall — Project Brain
@@ -170,7 +140,6 @@ export function ensureFullProjectBrain(repoRoot, opts = {}) {
   }
 
   const core = ensureCoreSkillPackage(brainDir);
-  const wiki = ensureOpenWiki(brainDir);
   const identity = writeBrainIdentity(brainDir, { name, tags });
 
   // Empty skills registry if missing
@@ -207,7 +176,6 @@ export function ensureFullProjectBrain(repoRoot, opts = {}) {
     skillsDir,
     full_brain: true,
     identity,
-    openwiki: wiki,
     core,
     dirs_created: dirsCreated,
     created_top: created,
@@ -258,7 +226,6 @@ export function inspectProjectBrain(repoRoot) {
     brainDir: fs.existsSync(brainDir),
     skillMd: fs.existsSync(path.join(brainDir, 'SKILL.md')),
     memoryVault: fs.existsSync(path.join(brainDir, 'memory-vault')),
-    openwiki: fs.existsSync(path.join(brainDir, 'openwiki')),
     sessions: fs.existsSync(path.join(brainDir, 'sessions')),
     scheduler: fs.existsSync(path.join(brainDir, 'scheduler')),
     skillsRegistry: fs.existsSync(path.join(brainDir, 'skills-registry')),

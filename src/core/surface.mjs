@@ -510,7 +510,7 @@ async function writeShim(shimPath, skillsDir, nodes = [], { vaultDir, derivedDir
         if (!fs.statSync(target).isFile()) throw new Error('Linked instruction target must be a regular file');
         // Preserve both the link and authored target text; replace only our block.
         const raw = fs.readFileSync(target, 'utf8');
-        atomicWrite(target, injectDirectives(raw, rulesBlock));
+        writeVerifiedSurface(target, injectDirectives(raw, rulesBlock));
         return true;
       } else {
         const raw = fs.readFileSync(shimPath, 'utf8');
@@ -521,19 +521,24 @@ async function writeShim(shimPath, skillsDir, nodes = [], { vaultDir, derivedDir
         }
         
         const updated = injectDirectives(cleaned, rulesBlock);
-        atomicWrite(shimPath, updated);
+        writeVerifiedSurface(shimPath, updated);
         return true;
       }
     } else {
       if (!fs.existsSync(shimDir)) {
         fs.mkdirSync(shimDir, { recursive: true });
       }
-      atomicWrite(shimPath, fullContent);
+      writeVerifiedSurface(shimPath, fullContent);
       return true;
     }
   } catch (err) {
     throw new Error(`Cannot update instruction surface ${path.basename(shimPath)}: ${err.code || err.message}`);
   }
+}
+
+function writeVerifiedSurface(file, content) {
+  atomicWrite(file, content);
+  if (fs.readFileSync(file, 'utf8') !== content) throw new Error('Instruction read-back verification failed');
 }
 
 /**
@@ -592,15 +597,39 @@ function readConnectedClients(clientsPath) {
     }
     
     return null;
-  } catch {
-    return null;
+  } catch (err) {
+    throw new Error(`Cannot read connected instruction clients: ${err.code || err.message}`);
   }
+}
+
+function instructionFiles(instructionsFile, skillsDir) {
+  const base = path.dirname(instructionsFile);
+  const agent = skillsDir ? path.dirname(skillsDir) : path.join(base, '.agent');
+  const clients = readConnectedClients(path.join(agent, 'skills', 'total-recall', 'config', 'clients.json'));
+  return [...new Set([instructionsFile, ...[...(clients || [])].flatMap(client =>
+    (CLIENT_SHIMS[client] || []).map(file => path.join(base, file)))])];
+}
+
+function describeInstruction(file, base) {
+  return { file: path.relative(base, file), target: path.relative(base, fs.realpathSync(file)), sha256: sourceHash(file) };
+}
+
+/** Derived hashes certify exact output bytes and link bindings, never runtime consumption. */
+function instructionArtifactsMatch(files, base, manifestFile) {
+  try {
+    const manifest = JSON.parse(fs.readFileSync(manifestFile, 'utf8'));
+    if (manifest.version !== 1 || !Array.isArray(manifest.files) || manifest.files.length !== files.length) return false;
+    return files.every((file, index) => {
+      const current = describeInstruction(file, base), previous = manifest.files[index];
+      return previous?.file === current.file && previous.target === current.target && previous.sha256 === current.sha256;
+    });
+  } catch { return false; }
 }
 
 /**
  * Compile shims asynchronously.
  */
-async function compilePointers(instructionsFile, skillsDir, nodes = [], { vaultDir, derivedDir, force = false } = {}) {
+async function compilePointers(instructionsFile, skillsDir, nodes = [], { vaultDir, derivedDir, force = false, files = instructionFiles(instructionsFile, skillsDir) } = {}) {
   const agentDir = path.dirname(instructionsFile);
   // `instructionsFile` is always `<agentDir>/INSTRUCTIONS.md`, so agentDir is
   // already the directory the surface belongs in. Do not derive it again.
@@ -617,12 +646,6 @@ async function compilePointers(instructionsFile, skillsDir, nodes = [], { vaultD
   // (rebuild.mjs: `<agentDir>/INSTRUCTIONS.md` with skillsDir `<agentDir>/skills`;
   // plugin-store.mjs likewise), so the peel was never correct for either.
   const baseDir = agentDir;
-  let injectedCount = 0;
-
-  // Always write the canonical INSTRUCTIONS.md
-  if (await writeShim(path.join(baseDir, 'INSTRUCTIONS.md'), skillsDir, nodes, { vaultDir, derivedDir, force })) {
-    injectedCount++;
-  }
 
   // Determine which client shims to write.
   // `baseDir/.agent/skills/...` only holds for a PROJECT brain. For the global
@@ -632,9 +655,6 @@ async function compilePointers(instructionsFile, skillsDir, nodes = [], { vaultD
   // stopped updating. Derive the brain dir from the caller's skillsDir instead,
   // which is correct for both layers. Fall back to the legacy guess only when
   // skillsDir was not supplied.
-  const brainDirForConfig = skillsDir ? path.dirname(skillsDir) : path.join(baseDir, '.agent');
-  const clientsPath = path.join(brainDirForConfig, 'skills', 'total-recall', 'config', 'clients.json');
-  const connectedClients = readConnectedClients(clientsPath);
 
   // Client shims are written BESIDE INSTRUCTIONS.md, in the same directory, so
   // the surface directory is decided in exactly one place: `instructionsFile`.
@@ -646,20 +666,9 @@ async function compilePointers(instructionsFile, skillsDir, nodes = [], { vaultD
   // `instructionsFile`; this function must not re-derive or relocate it. Doing
   // so previously wrote every project shim into `<repo>/.agent/AGENTS.md`, where
   // no harness looks, while still reporting a successful compilation.
-  if (connectedClients !== null) {
-    // Only write shims for connected clients
-    for (const client of connectedClients) {
-      const files = CLIENT_SHIMS[client];
-      if (!files) continue;
-      for (const file of files) {
-        if (await writeShim(path.join(baseDir, file), skillsDir, nodes, { vaultDir, derivedDir, force })) {
-          injectedCount++;
-        }
-      }
-    }
-  }
+  for (const file of files) await writeShim(file, skillsDir, nodes, { vaultDir, derivedDir, force });
   
-  return injectedCount;
+  return files.length;
 }
 
 /**
@@ -710,13 +719,17 @@ export async function compileSurface({ vaultDir, skillsDir, derivedDir, instruct
   // Commands and skills feed the surface too; a change to either must recompile
   // even when no memory node changed.
   const inputsHashFile = path.join(derivedDir, 'surface-inputs-hash.txt');
-  const inputsHash = sourceHash(SURFACE_SOURCE) + catalog.fingerprint + surfaceInputsHash({ commandDirs: commandDirsFor(skillsDir), skillsDir });
+  const files = instructionFiles(instructionsFile, skillsDir);
+  const surfaceDir = path.dirname(instructionsFile);
+  const artifactsFile = path.join(derivedDir, 'surface-artifacts.json');
+  const inputsHash = sourceHash(SURFACE_SOURCE) + catalog.fingerprint + JSON.stringify(files) + surfaceInputsHash({ commandDirs: commandDirsFor(skillsDir), skillsDir });
 
   if (!force && fs.existsSync(hashFile)) {
     const storedHash = fs.readFileSync(hashFile, 'utf8').trim();
     const storedGlobal = fs.existsSync(globalHashFile) ? fs.readFileSync(globalHashFile, 'utf8').trim() : '';
     const storedInputs = fs.existsSync(inputsHashFile) ? fs.readFileSync(inputsHashFile, 'utf8').trim() : '';
-    if (storedHash === currentHash && storedGlobal === globalHash && storedInputs === inputsHash) {
+    if (storedHash === currentHash && storedGlobal === globalHash && storedInputs === inputsHash &&
+        instructionArtifactsMatch(files, surfaceDir, artifactsFile)) {
       return {
         nodesProcessed: nodes.length,
         skillsInjected: 0,
@@ -729,7 +742,7 @@ export async function compileSurface({ vaultDir, skillsDir, derivedDir, instruct
   }
 
   // 1. Write pointer and active rules to all instruction shims
-  const skillsInjected = await compilePointers(instructionsFile, skillsDir, ruleNodes, { vaultDir, derivedDir, force });
+  const skillsInjected = await compilePointers(instructionsFile, skillsDir, ruleNodes, { vaultDir, derivedDir, force, files });
 
   // 2. Build derived indexes (powers semantic search API)
   if (!fs.existsSync(derivedDir)) {
@@ -821,16 +834,8 @@ export async function compileSurface({ vaultDir, skillsDir, derivedDir, instruct
   atomicWrite(hashFile, currentHash);
   atomicWrite(globalHashFile, globalHash);
   atomicWrite(inputsHashFile, inputsHash);
+  atomicWrite(artifactsFile, JSON.stringify({ version: 1, files: files.map(file => describeInstruction(file, surfaceDir)) }, null, 2));
   writeProjectionManifest(derivedDir, currentHash);
-
-  // 6. Generate live OKF Index and Log
-  try {
-    const { generateLiveIndex, generateLiveLog } = await import('./okf-adapter.mjs');
-    generateLiveIndex(vaultDir);
-    generateLiveLog(vaultDir);
-  } catch (err) {
-    logger.warn('surface', `Failed to generate live OKF index/log: ${err.message}`);
-  }
 
   return {
     nodesProcessed: nodes.length,
@@ -876,7 +881,8 @@ function writeProjectionManifest(derivedDir, vaultHash) {
       { file: 'local-search.json', disposable: true },
       { file: 'embeddings.jsonl', disposable: true },
       { file: 'cli-semantic-index.json', disposable: true },
-      { file: 'vault-hash.txt', disposable: true }
+      { file: 'vault-hash.txt', disposable: true },
+      { file: 'surface-artifacts.json', disposable: true }
     ],
     rebuild_command: 'npx total-recall compile'
   };

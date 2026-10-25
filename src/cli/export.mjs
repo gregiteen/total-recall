@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { parseLayerFlag, resolveBrainDir } from './agent-dir.mjs';
-import { exportBundle } from '../core/okf-adapter.mjs';
+import { loadPluginModule } from '../core/plugin-runtime.mjs';
 
 export default async function exportCommand(args) {
   const { layer, remainingArgs } = parseLayerFlag(args);
@@ -51,6 +51,7 @@ export default async function exportCommand(args) {
   console.log(`  📂 Destination:  ${opts.outputPath} (Format: ${opts.format})`);
 
   try {
+    const { exportBundle } = await loadPluginModule('okf', 'adapter', { activeRequired: true });
     const report = await exportBundle(vaultDir, opts.outputPath, {
       format: opts.format,
       stripSsss: opts.stripSsss

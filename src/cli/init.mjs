@@ -77,63 +77,6 @@ function copyDirMerge(src, dest, dryRun) {
   }
 }
 
-/**
- * Ship openwiki with the brain (global or project). Prefer packaged templates;
- * fall back to a minimal set of pages so every brain has docs.
- */
-async function ensureOpenWiki(brainDir, isProject, dryRun) {
-  const wikiDirs = [path.join(brainDir, 'openwiki')];
-  if (isProject) {
-    wikiDirs.push(path.join(process.cwd(), 'openwiki'));
-  }
-  const templateRoot = fs.existsSync(path.join(ROOT, 'scaffold', 'openwiki'))
-    ? path.join(ROOT, 'scaffold', 'openwiki')
-    : path.join(ROOT, 'templates', 'openwiki');
-
-  for (const wikiDir of wikiDirs) {
-    if (ensureDir(wikiDir, dryRun)) {
-      logOk(`Created openwiki at ${path.relative(process.cwd(), wikiDir) || wikiDir}`);
-    }
-    if (fs.existsSync(templateRoot)) {
-      copyDirMerge(templateRoot, wikiDir, dryRun);
-    } else {
-      // Minimal fallback pages when templates/ not packaged yet
-      const pages = {
-        'README.md': `# OpenWiki\n\nPortable knowledge docs for this Total Recall brain (${isProject ? 'project' : 'global'}).\n\n- Not the SSSS memory vault — use vault nodes for rules/facts.\n- Use these pages for architecture, stack, and how-to knowledge.\n`,
-        'architecture.md': `# Architecture\n\nComponent overview, domain boundaries, and runtime execution flow.\n`,
-        'stack.md': `# Stack\n\nRuntime dependencies, frameworks, and system tools.\n`,
-        'memory.md': `# Memory\n\nHow this brain stores invariants, preferences, and facts.\n\nUse \`npx total-recall remember\` / \`recall\` / \`compile\`.\n`,
-        'ide.md': `# IDE personalization\n\nConnect surfaces with \`npx total-recall connect <ide>\`.\nInjected blocks live inside BEGIN/END INJECTED MEMORY markers only.\n`,
-        'skills.md': `# Skills\n\nUser skills live in \`.agent/skills/<name>/\` (siblings of total-recall).\nTotal Recall tracks and deploys skills; it does not nest product skills inside itself.\n`,
-        'secrets.md': `# Secrets\n\nAPI keys and credentials belong in the encrypted secrets store — never in openwiki or instruction shims.\n`,
-      };
-      for (const [name, body] of Object.entries(pages)) {
-        const dest = path.join(wikiDir, name);
-        if (fs.existsSync(dest)) continue;
-        if (!dryRun) fs.writeFileSync(dest, body);
-        logOk(`Seeded openwiki/${name}`);
-      }
-    }
-  }
-
-  // Auto-ingest into memory graph when project is initialized
-  if (isProject && !dryRun) {
-    try {
-      const { discoverPlugins } = await import('../core/plugin-loader.mjs');
-      const { runPluginCommand } = await import('../core/plugin-runner.mjs');
-      const plugins = discoverPlugins(process.cwd());
-      const openwikiPlugin = plugins.find((p) => p.id === 'openwiki');
-      const targetWiki = path.join(process.cwd(), 'openwiki');
-      if (openwikiPlugin && fs.existsSync(targetWiki)) {
-        await runPluginCommand(openwikiPlugin, { subcommand: 'ingest', args: [targetWiki] });
-        logOk('Ingested openwiki into semantic knowledge graph');
-      }
-    } catch {
-      // Best-effort ingestion
-    }
-  }
-}
-
 function parseArgs(args) {
   const opts = {
     dryRun: false,
@@ -565,32 +508,10 @@ export default async function init(args) {
       }
     }
 
-    // Optional LLM OpenWiki agent (interactive only). openwiki CLI has no --yes flag.
-    // Non-interactive init always uses TR template openwiki via ensureOpenWiki() below.
-    const runOpenwiki = (await ask('\n  [3.8] Run OpenWiki agent to auto-document this codebase? (y/N): ')).trim().toLowerCase();
-    if (runOpenwiki === 'y' || runOpenwiki === 'yes') {
-      console.error('\n  Starting OpenWiki agent (--init). This is interactive / network-using.');
-      console.error('  Tip: skip this and use TR template openwiki (step 3.6) for offline setup.');
-      spawnSync('npx', ['-y', 'openwiki', '--init'], { stdio: 'inherit', cwd: process.cwd() });
-    }
-
-    const runOkf = (await ask('\n  [3.9] Would you like to import an existing OKF knowledge bundle? (y/N): ')).trim().toLowerCase();
-    if (runOkf === 'y' || runOkf === 'yes') {
-      const bundlePath = (await ask('  Enter path to OKF bundle: ')).trim();
-      if (bundlePath) {
-        spawnSync('npx', ['-y', 'total-recall', 'ingest', 'okf', bundlePath], { stdio: 'inherit', cwd: process.cwd() });
-      }
-    }
-
     rl.close();
   } else {
-    // Non-interactive (--yes / non-TTY): never call openwiki CLI (no --yes support; can hang).
-    // Step 3.6 ensureOpenWiki() ships portable template pages offline.
     if (!deployMode) {
       deployMode = 'local';
-    }
-    if (!opts.dryRun) {
-      log('Skipping external openwiki agent in non-interactive mode (templates via ensureOpenWiki).');
     }
   }
 
@@ -682,12 +603,6 @@ export default async function init(args) {
   // Nested packages under total-recall/skills/ are no longer promoted as IDE skills
   // (TR_CORE_FOCUS). Implementation lives in total-recall/modules/. User skills are
   // only those with SKILL.md directly under .agent/skills/<name>/.
-
-  // ── Step 3.6: Ensure openwiki ships with the brain (offline templates; always) ──
-  // This is the non-interactive openwiki path. External `openwiki --init` is optional
-  // and only offered interactively (that CLI has no --yes flag).
-  logStep('3.6/4', 'Ensuring openwiki is present');
-  await ensureOpenWiki(brainDir, isProject, opts.dryRun);
 
   if (isProject) {
     logStep('3.6/4', 'Ensuring repository-specific expert');

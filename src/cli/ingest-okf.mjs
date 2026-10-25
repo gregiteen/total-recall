@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { parseLayerFlag, resolveBrainDir } from './agent-dir.mjs';
-import { importBundle } from '../core/okf-adapter.mjs';
+import { loadPluginModule } from '../core/plugin-runtime.mjs';
 
 export async function runOkfIngest(args) {
   const { layer, remainingArgs } = parseLayerFlag(args);
@@ -69,6 +69,7 @@ export async function runOkfIngest(args) {
   console.log(`  🧠 Target Brain: ${layer} (${vaultDir})`);
   if (opts.dryRun) console.log('  ⚠️  DRY RUN: No actual writes will be committed.');
 
+  const { importBundle } = await loadPluginModule('okf', 'adapter', { activeRequired: true });
   const report = await importBundle(opts.bundlePath, vaultDir, {
     dryRun: opts.dryRun,
     category: opts.category,
