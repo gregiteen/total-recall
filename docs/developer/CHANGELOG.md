@@ -1,3 +1,26 @@
+## 3.41.1 — 2026-10-25
+
+- Treat Hermes Agent as an `AGENTS.md` client and stop writing its memory.
+  Hermes reads `MEMORY.md` only from `~/.hermes/memories/`, which is the
+  agent's own curated notes store, and loads project rules from the
+  `AGENTS.md` chain (git root to cwd) as context files. Compile wrote a
+  per-repository `.hermes/memories/MEMORY.md` that nothing read, and
+  `connect hermes` overwrote the agent's notes with the first 2,200 characters
+  of `INSTRUCTIONS.md`, which ended mid-word before any rule. `hermes` and
+  `hermes-agent` now project `AGENTS.md` (a symlink to `INSTRUCTIONS.md`) like
+  Codex; `~/.hermes/memories/` is never written. The `.hermes/skills`
+  projection is unchanged.
+
+- Add `brain import <vault-dir> --to <project-path> [--dry-run]`. It imports
+  every memory node from another vault directory, such as an archived or
+  retired brain, into a project's brain through validated SSSS writes at the
+  same vault-relative paths. Slugs the target already holds are left alone, so
+  a rerun is safe.
+
+- `brain register` and `brain ensure` now write the brain-state `.gitignore`
+  rules that `init --project` writes, so a registered repository no longer
+  risks committing its brain's live PAT.
+
 ## 3.41.0 — 2026-10-25
 
 - One shared plugin folder with per-repository on/off. The nine defaults —
