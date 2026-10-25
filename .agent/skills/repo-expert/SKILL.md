@@ -4,14 +4,14 @@ description: Read for repository architecture and ownership; load only relevant 
 repo_scoped: true
 repository_id: "total-recall-brain"
 generated_from: total-recall
-generated_at: 2026-10-25T02:20:49.657Z
+generated_at: 2026-10-25T02:31:17.579Z
 ---
 
 # total-recall-brain — Codebase Architecture
 
 The Vibe Coding Brain & Autonomous Software Factory: memory, rules, secrets, and 33 visual plugins automatically managed across all your devices.
 
-- **Languages**: JavaScript (742 files), Markdown (258 files), TypeScript (130 files), CSS (12 files)
+- **Languages**: JavaScript (744 files), Markdown (258 files), TypeScript (130 files), CSS (12 files)
 - **Frameworks**: React, Express
 - **Module system**: module
 - **Tests**: Vitest

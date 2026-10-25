@@ -8,6 +8,8 @@
 
 ## Priority order
 
+DEV-API-05 current batch: add strict registry/toggle reads for authorization, bind restricted project UUID grants to verified canonical brains, share the existing read/fact adapters and mutation serialization, filter discovery, and cancel changed bindings. Verify two-project isolation, no implicit server access, scope/issuer denial, unsafe/mismatched/duplicate IDs, disabled/unregistered targets and running-work revocation. Keep existing CLI identity/brain/auth controls. Run focused/full Mini suites and configured gates, document source evidence and publish the whole tree.
+
 DEV-API-04 current batch: close the in-process decision cancellation gap using the existing bounded executor and owner APIs. Verify both success shapes, missing credentials/provider failure, timeout/output caps, running-work revocation and sanitized errors using real child executions with disposable owner adapters. Run focused/full Mini suites and configured gates, update evidence and publish the complete working tree. Provider spending limits, broader restricted workflows and launch acceptance remain open.
 
 DEV-API-03 completed source stage: fact-only server-brain creation through the shared validated memory owner, exact input/target schemas, generated paths, create-only principal and generator-free indexing. Evidence records actual HTTP write/read, CLI and Mini suite/gate verification. Generic restricted owner adapters and provider quotas remain unfinished work within this plan.

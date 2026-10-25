@@ -1,5 +1,7 @@
 # TOTAL_RECALL_LAUNCH_PLAN — Product Requirements
 
+DEV-API-05 acceptance: restricted memory may target `project:<uuid>` only with the effective auth-owned `brain:project-<uuid>` grant and existing read/write family grant. The target must remain registered, enabled, physically bound to that project and identity-matched. Resolve no caller paths or default project for a project-only key. Discovery lists only granted usable target IDs. Recheck the binding and issuer/role authority while work runs; removal, disablement or identity/path change stops continuation. Writes remain create-only descriptive facts with generator-free indexing and truthful commit state.
+
 DEV-API-04 acceptance: both full-mode decision operations must use the shared bounded child executor and terminate on timeout, disconnect or revoked authority. Preserve structured successful owner results and explicit provider/credential failures; never return child logs or credential-bearing exceptions. Cancellation cannot reverse remote work already accepted. Restricted provider execution and spending ceilings remain unsupported.
 
 > **Project Prefix**: `TOTAL_RECALL_LAUNCH_PLAN`

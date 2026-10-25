@@ -19,7 +19,7 @@ function makeApp(scopes = full, options = {}) {
   const store = { loadKeys: () => keys, keyHasScope: (k, s) => !k.revoked && (!k.expires_at || Date.parse(k.expires_at) > Date.now()) &&
     (!s || (!k.roleDenied && (k.scopes.includes('*') || k.scopes.includes(s)))) };
   const auth = (req, _res, next) => { req.auth = { type: 'pat', id: 'test-key' }; next(); };
-  app = express().use(express.json()).use(createInvokeRouter({ auth, store, execute, audit: event => audits.push(event), cwd: dir, serverBrain: dir, ...options }));
+  app = express().use(express.json()).use(createInvokeRouter({ auth, store, execute, audit: event => audits.push(event), cwd: dir, serverBrain: dir, registryBrain: dir, ...options }));
 }
 // Each Supertest request owns a short-lived listener; do not reuse its socket
 // after another request has closed that listener (Node's keep-alive default).
@@ -251,6 +251,71 @@ describe('lifecycle and real restricted read adapter', () => {
     expect(res.body.ok).toBe(true); expect(res.body.result.nodes[0].slug).toBe('rehearsal');
     expect(res.body.result.nodes[0].snippet).toContain('retrieval proof');
     expect(fs.existsSync(path.join(dir, 'logs'))).toBe(false);
+  });
+});
+
+describe('restricted registered project brains', () => {
+  const first = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', second = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
+  const target = id => `project:${id}`, grant = id => `brain:project-${id}`;
+  let projects;
+  function registry() {
+    fs.mkdirSync(path.join(dir, 'config'), { recursive: true });
+    fs.writeFileSync(path.join(dir, 'config/project-registry.json'), JSON.stringify(projects));
+  }
+  beforeEach(() => {
+    projects = [first, second].map((id, i) => {
+      const root = path.join(dir, `project-${i}`), brainDir = path.join(root, '.agent/skills/total-recall');
+      fs.mkdirSync(path.join(brainDir, 'config'), { recursive: true });
+      fs.writeFileSync(path.join(brainDir, 'config/brain.json'), JSON.stringify({ project_id: id }));
+      return { path: root, brainDir, project_id: id, name: `private-project-${i}` };
+    });
+    registry();
+  });
+  const scopes = id => ['invoke:restricted', 'ssss:read', 'ssss:write', grant(id)];
+  it('writes and recalls only its granted project in real credential-free children', async () => {
+    const { executeInvokeChild } = await import('../invoke-execution.mjs');
+    makeApp(scopes(first), { execute: executeInvokeChild });
+    const caps = await post('capabilities');
+    expect(caps.body.result.targets).toEqual([target(first)]);
+    expect(JSON.stringify(caps.body)).not.toContain('private-project');
+    expect(JSON.stringify(caps.body)).not.toContain(dir);
+    const written = await post('ssss.write', { target: target(first), content: 'project alpine boundary' });
+    expect(written.body).toMatchObject({ ok: true, result: { committed: true, indexed: true } });
+    expect(fs.existsSync(path.join(projects[0].brainDir, written.body.result.path))).toBe(true);
+    expect(fs.existsSync(path.join(projects[1].brainDir, 'memory-vault'))).toBe(false);
+    expect((await post('ssss.read', { target: target(first), query: 'alpine boundary' })).body.result.nodes[0].slug).toBe(written.body.result.slug);
+    expect((await post('ssss.read', { target: target(second), query: 'alpine' })).status).toBe(403);
+    expect((await post('ssss.read', { query: 'alpine' })).status).toBe(403);
+    expect(audits.some(a => a.target === target(first) && a.outcome === 'success')).toBe(true);
+    expect(JSON.stringify(audits)).not.toContain('project alpine');
+  });
+  it('does not grant project access through brain:server or an issuer ceiling', async () => {
+    makeApp(read);
+    expect((await post('capabilities')).body.result.targets).toEqual(['server']);
+    expect((await post('ssss.read', { target: target(first), query: 'x' })).status).toBe(403);
+    makeApp(scopes(first)); keys[0].issued_by = 'parent';
+    keys.push({ id: 'parent', scopes: ['invoke:restricted', 'ssss:read', 'ssss:write', grant(second)], issued_by: 'local-operator' });
+    expect((await post('capabilities')).body.result.targets).toEqual([]);
+    expect((await post('ssss.read', { target: target(first), query: 'x' })).status).toBe(403);
+    expect(execute).not.toHaveBeenCalled();
+  });
+  it.each(['unregister', 'disable', 'identity', 'path'])('cancels active project work after %s', async change => {
+    makeApp(scopes(first));
+    let invocation, release;
+    execute.mockImplementation(options => { invocation = options; return new Promise(resolve => { release = resolve; }); });
+    const running = post('ssss.read', { target: target(first), query: 'x' }).then(r => r);
+    await vi.waitFor(() => expect(invocation).toBeTruthy());
+    if (change === 'unregister') { projects.shift(); registry(); }
+    if (change === 'disable') fs.writeFileSync(path.join(dir, 'config/brain-toggles.json'), JSON.stringify({ [projects[0].brainDir]: false }));
+    if (change === 'identity') fs.writeFileSync(path.join(projects[0].brainDir, 'config/brain.json'), '{}');
+    if (change === 'path') {
+      projects[0].brainDir = projects[1].brainDir; projects[0].path = projects[1].path;
+      fs.writeFileSync(path.join(projects[0].brainDir, 'config/brain.json'), JSON.stringify({ project_id: first }));
+      registry();
+    }
+    await vi.waitFor(() => expect(invocation.signal.aborted).toBe(true));
+    release({ exit_code: null, stdout: '', termination_reason: 'authority-ended' });
+    expect((await running).body.error.code).toBe('authority-ended');
   });
 });
 

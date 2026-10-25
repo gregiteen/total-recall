@@ -40,9 +40,26 @@ function readJson(file, fallback) {
   }
 }
 
+/** Authorization consumers must distinguish missing metadata from corruption. */
+function readStrictJson(file, fallback) {
+  try { return JSON.parse(fs.readFileSync(file, 'utf8')); }
+  catch (err) { if (err.code === 'ENOENT') return fallback; throw new Error('Brain registry metadata is unavailable'); }
+}
+
+export function readRegisteredProjects(globalBrainDir = globalBrainDirFor()) {
+  const rows = readStrictJson(registryPath(globalBrainDir), []);
+  if (!Array.isArray(rows) || rows.some(row => !row || typeof row !== 'object' || Array.isArray(row))) {
+    throw new Error('Invalid project registry');
+  }
+  return rows;
+}
+
 /** `{ [resolvedBrainDir]: false }` for every brain switched off. */
-export function readBrainToggles(globalBrainDir = globalBrainDirFor()) {
-  const data = readJson(togglesPath(globalBrainDir), {});
+export function readBrainToggles(globalBrainDir = globalBrainDirFor(), { strict = false } = {}) {
+  const data = strict ? readStrictJson(togglesPath(globalBrainDir), {}) : readJson(togglesPath(globalBrainDir), {});
+  if (strict && (!data || typeof data !== 'object' || Array.isArray(data) || Object.values(data).some(v => typeof v !== 'boolean'))) {
+    throw new Error('Invalid brain toggles');
+  }
   return data && typeof data === 'object' && !Array.isArray(data) ? data : {};
 }
 

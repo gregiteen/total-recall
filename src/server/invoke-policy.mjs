@@ -30,27 +30,29 @@ function resolveAuthority(req, { loadKeys, keyHasScope }) {
   const full = chain.every(k => k.scopes?.includes('invoke:full')) && allows('invoke:full');
   const restricted = chain[0].scopes?.includes('invoke:restricted') && allows('invoke:restricted');
   if (!full && !restricted) throw new InvokeError(403, 'invoke-grant-required', 'Explicit invoke:full or invoke:restricted grant required; legacy keys are not migrated automatically.');
-  return { id: chain[0].id, mode: full ? 'full' : 'restricted', allows };
+  return { id: chain[0].id, scopes: chain[0].scopes, mode: full ? 'full' : 'restricted', allows };
 }
 
-export function operationAllowed(authority, operation, scope) {
+export function operationAllowed(authority, operation, scope, targets = ['server']) {
   if (scope && !authority.allows(scope)) return false;
   if (operation === 'capabilities') return true;
   if (authority.mode === 'full') return true;
-  return ['ssss.read', 'ssss.write'].includes(operation) && authority.allows('brain:server');
+  return ['ssss.read', 'ssss.write'].includes(operation) && targets.some(target =>
+    authority.allows(target === 'server' ? 'brain:server' : `brain:project-${target.slice('project:'.length)}`));
 }
 
-export function authorizeInvoke(authority, operation, scope, params) {
+export function authorizeInvoke(authority, operation, scope, params, targets = ['server']) {
   if (scope && !authority.allows(scope)) throw new InvokeError(403, 'insufficient-scope', `Operation requires scope '${scope}'.`);
-  if (!operationAllowed(authority, operation, scope)) {
+  if (!operationAllowed(authority, operation, scope, targets)) {
     throw new InvokeError(403, 'unsupported-restricted-operation', 'No confined owner adapter is available for this operation.');
   }
   if (authority.mode === 'restricted') {
-    if (params.target !== undefined && params.target !== 'server' || params.scope !== undefined) {
-      throw new InvokeError(403, 'target-denied', 'Restricted memory is bound to the granted server brain.');
+    if (operation === 'capabilities') return;
+    if (!targets.includes(params.target ?? 'server') || params.scope !== undefined) {
+      throw new InvokeError(403, 'target-denied', 'Restricted memory requires an available granted brain target.');
     }
     if (operation === 'ssss.write') {
-      try { validateConfinedFact(params); }
+      try { validateConfinedFact({ ...params, target: 'server' }); }
       catch { throw new InvokeError(400, 'invalid-fact', 'Restricted writes accept only fact content, optional title and plain tags.'); }
       return;
     }

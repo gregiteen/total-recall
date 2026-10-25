@@ -12,7 +12,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
-import { listPluginFiles, hashPluginDir } from './plugin-bundle.mjs';
+import { pluginBundleFiles, hashPluginDir } from './plugin-bundle.mjs';
 import { listBundledPlugins } from './plugin-loader.mjs';
 import { isGitSource } from './plugin-store.mjs';
 
@@ -190,15 +190,21 @@ export async function vendorPlugin(source, dest, options = {}) {
       throw new Error(`Brick '${manifest.id}' is already in this project.`);
     }
 
-    const files = listPluginFiles(srcDir);
-    const sha256 = hashPluginDir(srcDir).sha256;
+    // A plugin that declares a capability is vendored as a brick: capability
+    // code only, no UI and no host manifest. Anything else is copied whole.
+    const audience = manifest.capability ? 'brick' : 'host';
+    const files = pluginBundleFiles(srcDir, { audience });
     fs.mkdirSync(target, { recursive: true });
     for (const f of files) {
       const out = path.join(target, f.path);
       fs.mkdirSync(path.dirname(out), { recursive: true });
-      fs.copyFileSync(f.abs, out);
+      if (f.data) fs.writeFileSync(out, f.data);
+      else fs.copyFileSync(f.abs, out);
       fs.chmodSync(out, f.mode);
     }
+    // The recorded hash describes the vendored files, so drift detection stays
+    // correct when a brick is a reduced copy of its source plugin.
+    const sha256 = hashPluginDir(target).sha256;
     const vendoredAt = new Date().toISOString();
     const provenance = {
       vendored_from: manifest.id,

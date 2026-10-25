@@ -1,5 +1,14 @@
 # TOTAL_RECALL_LAUNCH_PLAN — Audit
 
+## DEV-API-05 project target baseline
+
+**Audit Status**: Complete
+**Audited commit**: 80c95dc
+
+Codex, Gregorys-Mac-mini.local (Node v25.9.0), 2026-10-25 UTC: inspected invoke authority/execution, confined memory, brain registry/project identity and auth scope validation. Fresh baseline86 tests/2 files pass, exit0 (`/tmp/tr-api05-baseline.log`); shared runtime ready. Existing auth accepts two-part dynamic scopes and enforces role/issuer ceilings, so `brain:project-<uuid>` needs no second key/grant store or auth-repository change. Existing `project-id --all --json`, `brain register/on/off` and auth key issuance supply operator controls. The current restricted policy binds all memory to `brain:server`; registry reads intended for display silently default on corrupt data and are unsuitable as authorization inputs.
+
+Current official Node permission documentation reviewed (https://nodejs.org/api/permissions.html, retrieved 2026-10-25 UTC). Permissions constrain trusted code and are not malicious-code isolation. Proposed adapter resolves only granted registered UUIDs, verifies brain identity and canonical project path, honors enabled state with strict metadata reads, and pins the resolved target throughout execution. Read/write children receive only the selected canonical brain; fact inputs retain the existing closed schema. Discovery lists only usable granted target IDs, never project paths/names. Registry removal, disablement, identity/path change or grant loss cancels running work. Server-brain grants retain their existing behavior. Broader owner adapters, provider budgets and full launch acceptance remain open. This batch changes source/tests/docs and Git publication only.
+
 ## DEV-API-04 decision cancellation baseline
 
 **Audit Status**: Complete

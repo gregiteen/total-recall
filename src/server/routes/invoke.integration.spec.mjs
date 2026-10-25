@@ -8,6 +8,7 @@ import { loadPluginModule } from '../../core/plugin-runtime.mjs';
 import { buildLocalSearchIndex } from '../../core/fast-recall.mjs';
 import matter from '../../core/frontmatter.mjs';
 import { createInvokeRouter } from './invoke.mjs';
+import { ensureProjectId } from '../../core/project-id.mjs';
 
 /**
  * Independent-agent acceptance: actual auth-owner keys, actual loopback HTTP,
@@ -15,13 +16,13 @@ import { createInvokeRouter } from './invoke.mjs';
  * operator credentials, external providers or serving release are involved.
  */
 describe('independent agent invoke round trip', () => {
-  let dir, server, origin, store;
+  let dir, server, origin, store, serverBrain, projectId, projectBrain;
   const audits = [];
   const restrictedScopes = ['invoke:restricted', 'ssss:read', 'brain:server'];
 
   beforeAll(async () => {
     dir = fs.mkdtempSync(path.join(os.tmpdir(), 'invoke-independent-agent-'));
-    const serverBrain = path.join(dir, '.agent/skills/total-recall');
+    serverBrain = path.join(dir, '.agent/skills/total-recall');
     const { createKeyStore } = await loadPluginModule('auth', 'access-keys');
     const { createServerAuth } = await loadPluginModule('auth', 'server-auth');
     store = createKeyStore({ brainDir: serverBrain });
@@ -44,9 +45,16 @@ describe('independent agent invoke round trip', () => {
     buildLocalSearchIndex([{ ...node, _filePath: file }], {
       vaultDir, derivedDir: path.join(serverBrain, 'memory-derived'),
     });
+    const projectRoot = path.join(dir, 'registered-project');
+    projectBrain = path.join(projectRoot, '.agent/skills/total-recall');
+    projectId = ensureProjectId(projectBrain).project_id;
+    fs.mkdirSync(path.join(serverBrain, 'config'), { recursive: true });
+    fs.writeFileSync(path.join(serverBrain, 'config/project-registry.json'), JSON.stringify([
+      { path: projectRoot, brainDir: projectBrain, project_id: projectId },
+    ]));
 
     const app = express().use(express.json()).use(createInvokeRouter({
-      auth: auth.requireAuth, store, cwd: dir, serverBrain,
+      auth: auth.requireAuth, store, cwd: dir, serverBrain, registryBrain: serverBrain,
       audit: event => audits.push(event),
     }));
     server = await new Promise((resolve, reject) => {
@@ -125,6 +133,33 @@ describe('independent agent invoke round trip', () => {
     }
     const legacy = store.issueKey('independent-agent-legacy', { scopes: ['*'] });
     expect((await invoke(legacy, 'capabilities')).body.error.code).toBe('invoke-grant-required');
+  });
+
+  it('enforces real auth-owned project scopes, roles and issuer ceilings through write/read children', async () => {
+    const scope = `brain:project-${projectId}`, target = `project:${projectId}`;
+    const projectRead = ['invoke:restricted', 'ssss:read', scope];
+    const reader = store.issueKey('project-reader', { scopes: projectRead });
+    const caps = await invoke(reader, 'capabilities');
+    expect(caps.body.result.targets).toEqual([target]);
+    expect(JSON.stringify(caps.body)).not.toContain(projectBrain);
+    expect((await invoke(reader, 'ssss.read', { query: 'server acceptance', target: 'server' })).status).toBe(403);
+    expect((await invoke(reader, 'ssss.write', { target, content: 'read-only denial' })).status).toBe(403);
+    const writer = store.issueKey('project-writer', { scopes: [...projectRead, 'ssss:write'] });
+    const created = await invoke(writer, 'ssss.write', { target, content: 'registered project quartz boundary' });
+    expect(created.body).toMatchObject({ ok: true, result: { committed: true, indexed: true } });
+    expect(fs.existsSync(path.join(projectBrain, created.body.result.path))).toBe(true);
+    expect(fs.existsSync(path.join(serverBrain, created.body.result.path))).toBe(false);
+    const recalled = await invoke(reader, 'ssss.read', { target, query: 'quartz boundary' });
+    expect(recalled.body.result.nodes[0].slug).toBe(created.body.result.slug);
+    store.setRole('project-reader', projectRead);
+    const roleKey = store.issueKey('project-role-key', { scopes: ['invoke:restricted', '*'], role: 'project-reader' });
+    expect((await invoke(roleKey, 'capabilities')).body.result.targets).toEqual([target]);
+    expect((await invoke(roleKey, 'ssss.write', { target, content: 'role ceiling' })).status).toBe(403);
+    const serverIssuer = store.issueKey('server-only-issuer', { scopes: [...restrictedScopes, 'keys:write'] });
+    expect(() => store.issueKey('forbidden-project-delegate', { scopes: projectRead, issuer: serverIssuer })).toThrow('beyond the issuer');
+    store.revokeKey(writer.id);
+    expect((await invoke(writer, 'ssss.write', { target, content: 'after revocation' })).status).toBe(401);
+    expect(JSON.stringify(audits)).not.toContain('registered project quartz');
   });
 
   it('enforces actual auth-owner role ceilings and delegation ceilings', async () => {

@@ -7,6 +7,7 @@ import {
   isBrainEnabled,
   listLocalBrains,
   readBrainToggles,
+  readRegisteredProjects,
   setBrainEnabled,
 } from './brain-registry.mjs';
 
@@ -18,6 +19,23 @@ function tmp() {
 }
 afterEach(() => {
   while (dirs.length) fs.rmSync(dirs.pop(), { recursive: true, force: true });
+});
+
+it('fails closed for corrupt authorization metadata while allowing absent registries', () => {
+  const root = tmp();
+  expect(readRegisteredProjects(root)).toEqual([]);
+  expect(readBrainToggles(root, { strict: true })).toEqual({});
+  fs.mkdirSync(path.join(root, 'config'));
+  for (const value of ['not-json', '{}', '[null]']) {
+    fs.writeFileSync(path.join(root, 'config/project-registry.json'), value);
+    expect(() => readRegisteredProjects(root)).toThrow();
+  }
+  for (const value of ['not-json', '[]', '{"/brain":"false"}']) {
+    fs.writeFileSync(path.join(root, 'config/brain-toggles.json'), value);
+    expect(() => readBrainToggles(root, { strict: true })).toThrow();
+  }
+  fs.writeFileSync(path.join(root, 'config/project-registry.json'), '[{"project_id":"legacy"}]');
+  expect(readRegisteredProjects(root)).toEqual([{ project_id: 'legacy' }]);
 });
 
 function setup() {

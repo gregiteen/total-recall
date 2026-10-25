@@ -6,7 +6,7 @@ description: >-
   file before executing.
 repo_scoped: true
 repository_id: "total-recall-brain"
-generated_at: 2026-10-25T02:20:49.657Z
+generated_at: 2026-10-25T02:31:17.579Z
 generated_from: total-recall
 ---
 
@@ -18,7 +18,7 @@ generated_from: total-recall
 
 ## Stack
 
-- **Languages**: JavaScript (742 files), Markdown (258 files), TypeScript (130 files), CSS (12 files)
+- **Languages**: JavaScript (744 files), Markdown (258 files), TypeScript (130 files), CSS (12 files)
 - **Frameworks**: React, Express
 - **Tests**: Vitest
 - **Module system**: module
@@ -283,7 +283,7 @@ templates/
 - `GET /api/integrations/active`
 - `POST /api/integrations/connect`
 
-### invoke (7 endpoints)
+### invoke (9 endpoints)
 
 - `GET /v1/invoke/capabilities`
 - `POST /v1/invoke`
@@ -534,7 +534,7 @@ templates/
 - **autopull-install** — exports: packageRoot, buildLaunchAgentPlist, buildCronLine, mergeCrontab, detectLaunchAgentPort, installAutoPull
 - **blackboard** — exports: loadBlackboard, saveBlackboard, updateBlackboardState, clearBlackboard
 - **bound-hosts** — exports: registerBoundHost, unregisterBoundHost, getBoundHosts, resetBoundHosts, isLoopbackHost, isReachableFromOtherDevices
-- **brain-registry** — exports: globalBrainDirFor, readBrainToggles, isBrainEnabled, setBrainEnabled, listLocalBrains, findLocalBrain
+- **brain-registry** — exports: globalBrainDirFor, readRegisteredProjects, readBrainToggles, isBrainEnabled, setBrainEnabled, listLocalBrains, findLocalBrain
 - **brain-state** — exports: isBrainState, rsyncExcludes, findBrainState
 - **brain-updates** — exports: installedBrainPackage, discoverBrainConsumers, brainInstallOwner, updateAllBrains
 - **cache-prune** — exports: sessionIngestedGuard, agentHomeFor, isProtected, pruneCaches, formatBytes, maybePruneCaches
@@ -606,7 +606,7 @@ templates/
 - **parallel-context** — exports: streamParallelContext, checkFlashHealth
 - **pid-lock** — exports: entryPathHint, readProcessCommand, shouldHonorPidLock
 - **plugin-activation** — exports: setPluginActive
-- **plugin-bundle** — exports: listPluginFiles, hashPluginDir, packPlugin, decodeBundle, writeEntriesAtomic, copyPluginAtomic
+- **plugin-bundle** — exports: listPluginFiles, pluginBundleFiles, hashPluginDir, packPlugin, decodeBundle, writeEntriesAtomic, copyPluginAtomic
 - **plugin-catalog** — exports: buildPluginCatalog, refreshPluginCatalog
 - **plugin-context** — exports: assemblePluginContexts, startPluginDirectedWatcher
 - **plugin-cron** — exports: parseCron, cronMatches

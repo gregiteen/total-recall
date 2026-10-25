@@ -2,6 +2,8 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { execFileSync } from 'node:child_process';
+import { pathToFileURL } from 'node:url';
 import { vendorPlugin, listBricks, satisfiesRange, PROVENANCE_FILE, BRICKS_FILE } from './plugin-vendor.mjs';
 
 let root;
@@ -127,5 +129,43 @@ describe('vendorPlugin', () => {
       mk('top', { version: '1.0.0', requires: 'base' });
       await expect(vendorPlugin('tr-plugin-top', undefined, opts())).rejects.toThrow(/must be an array/);
     });
+  });
+});
+
+describe('vendoring a capability as a brick', () => {
+  it('copies capability code only and runs without Total Recall', async () => {
+    const src = path.join(root, 'tr-plugin-pay');
+    fs.mkdirSync(path.join(src, 'capability'), { recursive: true });
+    fs.mkdirSync(path.join(src, 'ui'));
+    fs.writeFileSync(path.join(src, 'plugin.json'), JSON.stringify({
+      id: 'pay', name: 'Pay', version: '1.0.0', description: 'd',
+      capability: { entry: 'capability/index.mjs', exports: ['charge'] },
+      ui: { elements: [{ id: 'card', kind: 'card', tag: 'pay-card', module: 'ui/card.js' }] },
+      cli: { command: 'pay', handler: './cli.mjs' }
+    }));
+    fs.writeFileSync(path.join(src, 'capability', 'index.mjs'), 'export const charge = (n) => n * 2;\n');
+    fs.writeFileSync(path.join(src, 'ui', 'card.js'), 'spawn("total-recall status")');
+    fs.writeFileSync(path.join(src, 'cli.mjs'), 'process.env.TOTAL_RECALL_BIN');
+    fs.writeFileSync(path.join(src, 'package.json'), '{"name":"pay"}');
+
+    const result = await vendorPlugin('tr-plugin-pay', undefined, { projectRoot: root });
+    const dest = path.join(root, 'bricks', 'pay');
+    expect(fs.existsSync(path.join(dest, 'ui'))).toBe(false);
+    expect(fs.existsSync(path.join(dest, 'cli.mjs'))).toBe(false);
+    const manifest = JSON.parse(fs.readFileSync(path.join(dest, 'plugin.json'), 'utf8'));
+    expect(manifest).toMatchObject({ id: 'pay', brick: true });
+    expect(manifest.ui).toBeUndefined();
+    expect(manifest.cli).toBeUndefined();
+    expect(result.files).toBe(3);
+
+    // No file in the brick can reach Total Recall, and it works with the binary absent.
+    for (const f of ['plugin.json', 'package.json', 'capability/index.mjs']) {
+      expect(fs.readFileSync(path.join(dest, f), 'utf8')).not.toMatch(/total-recall|TOTAL_RECALL/i);
+    }
+    const run = execFileSync(process.execPath, ['--input-type=module', '-e',
+      `import { charge } from ${JSON.stringify(pathToFileURL(path.join(dest, 'capability', 'index.mjs')).href)}; console.log(charge(2));`],
+    { env: { PATH: '/nonexistent', TOTAL_RECALL_BIN: '/nonexistent' }, encoding: 'utf8' });
+    expect(run.trim()).toBe('4');
+    expect(listBricks(root)[0].status).toBe('unchanged');
   });
 });
