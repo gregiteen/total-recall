@@ -1,6 +1,6 @@
 ## 3.41.2 — 2026-10-25
 
-- Bundle auth 1.2.2. `auth secret remote deploy` and `export-env` now replace
+- Bundle auth 1.2.3. `auth secret remote deploy` and `export-env` now replace
   a key everywhere in the target file: a key the managed block defines is
   removed from the hand-managed text, so a rotated value can no longer sit next
   to the old one (loaders disagree on first- or last-wins). A `--keys` deploy
@@ -19,8 +19,11 @@
   minted locally: `STRIPE_WEBHOOK_SECRET` matched the self-generated
   `_WEBHOOK_SECRET` pattern, so `rotate-auto` would have broken signature
   checks. Providers declare these as `issued_keys`.
-- Bundle mesh 0.2.3 (the five owner-designed mesh screens) and openwiki 0.1.2
+- Bundle mesh 0.2.4 (the five owner-designed mesh screens) and openwiki 0.1.2
   (bootstrap and seed templates).
+- The auth and mesh npm packages no longer ship their test files, whose
+  fixtures named private products, logins and machines; the shipped-package
+  rule already kept those names out of the scaffold copies.
 - Track the scaffold's openwiki plugin in git. An unanchored `openwiki/` ignore
   rule, meant for the generated folder at the repository root, also matched
   `scaffold/.agent/skills/total-recall/plugins/openwiki/`, so source checkouts

@@ -195,7 +195,7 @@ Control server unverified; mesh disconnected; a source unreadable (named, with i
 
 ## Identity of a machine
 
-A machine is keyed by its mesh address everywhere on the card. The client reports names that differ from the node records (the cloud server as `portfolio-site`, the phone as `localhost`), so a name is a label and never a key.
+A machine is keyed by its mesh address everywhere on the card. The client reports names that differ from the node records (for example a cloud server reported as `web-01`, a phone as `localhost`), so a name is a label and never a key.
 
 ## Layout and accessibility
 
