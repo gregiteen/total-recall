@@ -6,7 +6,7 @@ description: >-
   file before executing.
 repo_scoped: true
 repository_id: "total-recall-brain"
-generated_at: 2026-10-25T05:42:19.495Z
+generated_at: 2026-10-25T06:30:05.726Z
 generated_from: total-recall
 ---
 
@@ -18,7 +18,7 @@ generated_from: total-recall
 
 ## Stack
 
-- **Languages**: JavaScript (748 files), Markdown (246 files), TypeScript (130 files), CSS (12 files)
+- **Languages**: JavaScript (749 files), Markdown (235 files), TypeScript (130 files), CSS (12 files)
 - **Frameworks**: React, Express
 - **Tests**: Vitest
 - **Module system**: module
@@ -54,13 +54,6 @@ extension/
   sidepanel/  (3 items)
 fixtures/
   invalid/  (5 items)
-  okf-bundles/
-    cross-linked/  (2 items)
-    full/  (2 items)
-    minimal/  (1 items)
-    nested/  (2 items)
-    no-frontmatter/  (1 items)
-    with-reserved/  (3 items)
   valid/  (8 items)
 frontend/
   public/
@@ -85,7 +78,7 @@ src/
   cli/
     app/  (2 items)
     ingest/  (4 items)
-    plugin/  (19 items)
+    plugin/  (20 items)
   core/
     app-deploy/  (23 items)
     plugin-contracts/  (6 items)
@@ -520,7 +513,7 @@ templates/
 
 ## Core Modules
 
-160 modules in `src/core/`:
+159 modules in `src/core/`:
 
 - **action-predictor** — exports: buildActionQuestions, shortlistActions, predictNextAction
 - **agent-manager** — exports: loadAgentState, saveAgentState, isProcessRunning, listAgents, buildRemoteSpawnCommand, spawnAgent, killAgent, getAgentLogs
@@ -595,7 +588,6 @@ templates/
 - **network-interfaces**
 - **notifications** — exports: sendSystemNotification, listNotificationRules, createNotificationRule, deleteNotificationRule, recordNotificationDelivery, listNotificationHistory, sendTestNotification
 - **obsidian-sync** — exports: syncObsidianToVault, watchObsidianDirectory
-- **okf-adapter** — exports: okfConceptToSsssNode, ssssNodeToOkfConcept, importBundle, exportBundle, lintOkfCompliance, generateLiveIndex, generateLiveLog
 - **ollama-embeddings** — exports: normalizeBaseUrl, listOllamaModels, resolveOllamaEndpoint, embeddingWidth, canEmbed, selectEmbeddingModel, getOllamaEmbedding, describeEmbeddingCandidates
 - **operation-validator** — exports: processOperation, processOperationAsync, acquireLease, releaseLease
 - **optimizer** — exports: proposalKey, loadOpenProposalKeys, dedupeProposals, createProposal, generateMemoryCleanupProposals, generateSkillImprovementProposals, generateWorkflowRepairProposals, generateModelRoutingProposals
@@ -620,8 +612,8 @@ templates/
 - **plugin-runtime** — exports: loadPluginModule, loadPluginRouters, unavailablePluginOperation
 - **plugin-setup** — exports: setupInstalledPlugins
 - **plugin-state-store** — exports: executePluginState, listPluginStates
-- **plugin-state** — exports: pluginActivation, readActivationRecord
-- **plugin-store** — exports: recordPath, recordPluginsDir, vaultFor, readPluginRecord, emit, buildPluginDocumentBody, ensurePluginRecord, syncAllPluginRecords
+- **plugin-state** — exports: projectActivationOverride, pluginActivation, pluginExecutionEnabled, readActivationRecord
+- **plugin-store** — exports: recordPath, recordPluginsDir, vaultFor, readPluginRecord, readProjectActivationRecord, emit, buildPluginDocumentBody, ensurePluginRecord
 - **plugin-tasks** — exports: taskRunsOnNode, minuteSlot, latestDueSlot, runDuePluginTasks, startPluginTaskScheduler, stopPluginTaskScheduler
 - **plugin-updates** — exports: remoteGitHead, checkPlugin, updateInstalledPlugins
 - **plugin-vendor** — exports: readBricks, listBricks, satisfiesRange, vendorPlugin
@@ -635,7 +627,7 @@ templates/
 - **registration-watch**
 - **remote-vault-sync** — exports: importRemoteBundle, runSync
 - **repo-sync** — exports: isGeneratedSurface, syncAllRepos, syncSingleRepo
-- **required-plugins** — exports: inspectRequiredPlugins, ensureRequiredPlugins
+- **required-plugins** — exports: inspectRequiredPlugins, ensureRequiredPlugins, auditProjectPluginCopies
 - **research-gate** — exports: resolveAutonomousConfig, loadAutonomousConfig, requestResearch, defaultCoverageCheck, proposeAutonomousResearch
 - **research-queue** — exports: compileResearchProjectSummary, syncResearchProjectNode, loadQueue, saveQueue, listQueue, normalizeTopic, addToQueue, updateQueueItem
 - **research-surface** — exports: extractSynthesis, isUsableSynthesis, extractFindings, selectResearchBriefs, formatResearchBriefs, findRelevantResearch, formatChatResearch

@@ -18,7 +18,7 @@ export async function assemblePluginContexts({ projectRoot = process.cwd(), vaul
   const blocks = [];
 
   for (const plugin of plugins) {
-    if (!plugin.valid || !pluginActivation(plugin).enabled) continue;
+    if (!plugin.valid || !pluginActivation(plugin, { projectRoot: resolvedProjectRoot }).enabled) continue;
     const { manifest, dir, id } = plugin;
     const name = manifest.name || id;
 

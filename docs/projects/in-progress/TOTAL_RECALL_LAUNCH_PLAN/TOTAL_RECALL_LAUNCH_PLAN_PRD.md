@@ -2,6 +2,8 @@
 
 PLUGIN-BOUNDARY-01: OpenWiki and OKF are standalone plugin capabilities. Core must contain no built-in OKF converter/projector or OpenWiki seed pages/automatic bootstrap. Preserve generic host memory contracts and narrow CLI compatibility delegation to active declared owners. Plugin absence or disablement yields explicit failure for owner operations while ordinary memory/init/compile stays usable. Plugin commands validate actual inputs; no canned success. Existing authored wiki files remain untouched.
 
+Source acceptance is documented in [boundary verification](evidence/PLUGIN-BOUNDARY-01-source-verification.md). Structural OKF validation does not certify every semantic/domain schema. Plugin UI remains separately owned; neither these checks nor instruction artifact delivery certify complete launch readiness.
+
 LR-1 artifact acceptance: successful compilation verifies the exact instruction bytes at every required canonical/client path. Incremental skips require matching input configuration and verified output bindings/content; deleted, edited or retargeted outputs trigger repair or explicit failure. Preserve authored content and safe symlinks. Stale compiler processes cannot report rebuild success. Actual harness readback is a distinct requirement.
 
 LR-1 follow-up: status, startup and daemon lifecycle share installation-aware process identity. Live foreign or unreadable owners remain conflict/unknown and block automatic starts; status names expected and resolved entry paths when available. Retain the legacy daemon string field and add structured observation. Source verification does not certify a serving release.

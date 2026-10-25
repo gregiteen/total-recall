@@ -30,7 +30,7 @@ describe('plugin host activation lifecycle', () => {
     const plugin = discoverPlugin('activation-demo', root);
     await patchPluginRecord(plugin, { task_runs: { tick: '2026-01-01T12:00' } });
     const off = await setPluginActive(plugin.id, false, { projectRoot: root });
-    expect(off.compilation.ok).toBe(true); expect(pluginActivation(plugin).state).toBe('inactive');
+    expect(off.compilation.ok).toBe(true); expect(pluginActivation(plugin, { projectRoot: root }).state).toBe('inactive');
     const library = () => JSON.parse(fs.readFileSync(path.join(root, '.agent/skills/total-recall/memory-derived/cli-library.json')));
     expect(library().plugins.find(p => p.id === plugin.id).activation.state).toBe('inactive');
     expect(fs.readFileSync(path.join(root, 'AGENTS.md'), 'utf8')).toMatch(/activation-demo.*inactive/);

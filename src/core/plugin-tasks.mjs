@@ -14,6 +14,7 @@
  */
 import { discoverPlugins } from './plugin-loader.mjs';
 import { readPluginRecord, patchPluginRecord, ensurePluginRecord } from './plugin-store.mjs';
+import { pluginExecutionEnabled } from './plugin-state.mjs';
 import { runPluginCommand } from './plugin-runner.mjs';
 import { appendVfsEvent } from './ssss-operation-service.mjs';
 import { vaultForPluginsDir } from './plugin-loader.mjs';
@@ -75,7 +76,8 @@ export async function runDuePluginTasks(options = {}) {
 
     let record = readPluginRecord(plugin);
     if (!record) record = await ensurePluginRecord(plugin);
-    if (record?.runtime_enabled === false) continue;
+    // Scheduled work follows the repository's own setting for a shared plugin.
+    if (!pluginExecutionEnabled(plugin, { projectRoot })) continue;
     const runs = { ...(record?.task_runs || {}) };
     let changed = false;
 

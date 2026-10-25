@@ -2,6 +2,8 @@
 
 ## PLUGIN-BOUNDARY-01 — OpenWiki and OKF ownership
 
+Source remediation is implemented in core and the two existing owner repositories. [Boundary and artifact evidence](evidence/PLUGIN-BOUNDARY-01-source-verification.md) records migrated behavior, negative cases and retained failures. Final combined-source counts and identity reside in the tracker; plugin UI and complete launch acceptance are outside this source-stage closure.
+
 **Audit Status**: Complete
 **Audited commit**: 4e33bc2 (instruction artifact changes are an identified in-progress working-tree overlay)
 

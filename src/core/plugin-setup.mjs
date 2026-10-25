@@ -1,13 +1,15 @@
 /** Run declared, enabled plugin setup through the normal isolated CLI runner. */
 import { discoverPlugins } from './plugin-loader.mjs';
-import { readPluginRecord } from './plugin-store.mjs';
+import { pluginExecutionEnabled } from './plugin-state.mjs';
 import { runPluginCommand } from './plugin-runner.mjs';
 
-export async function setupInstalledPlugins({root=process.cwd(),plugins=discoverPlugins(root),run=runPluginCommand,record=readPluginRecord}={}) {
+export async function setupInstalledPlugins({root=process.cwd(),plugins=discoverPlugins(root),run=runPluginCommand,activation=pluginExecutionEnabled}={}) {
   const results=[];
   for(const plugin of plugins) {
     const command=plugin.manifest?.runtime?.setup_command;
-    if(!plugin.valid || !command || record(plugin)?.runtime_enabled===false)continue;
+    if(!plugin.valid || !command)continue;
+    // Setup follows the repository's own setting for a shared plugin.
+    if(!activation(plugin,{projectRoot:root}))continue;
     if(!plugin.manifest.cli?.subcommands?.some(operation=>operation.name===command)) {
       results.push({id:plugin.id,ok:false,error:'Runtime setup must name a declared CLI operation'});continue;
     }

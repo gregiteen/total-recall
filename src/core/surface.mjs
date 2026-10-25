@@ -400,7 +400,7 @@ export function buildInstalledPluginsSummary(projectRoot = process.cwd()) {
       const desc = (p.manifest.description || 'Plugin capability').replace(/\s+/g, ' ').slice(0, 30).trimEnd();
       const ops = (p.manifest.cli?.subcommands || []).map(sub => sub.name).filter(Boolean);
       const shown = ops.join(' | ');
-      lines.push(`- **${p.id}** v${p.manifest.version || 'unknown'} · ${pluginActivation(p).state} · \`total-recall ${cmd}\` ${shown ? `[${shown}]` : '(no operations)'}: ${desc}`);
+      lines.push(`- **${p.id}** v${p.manifest.version || 'unknown'} · ${pluginActivation(p, { projectRoot }).state} · \`total-recall ${cmd}\` ${shown ? `[${shown}]` : '(no operations)'}: ${desc}`);
     }
     return lines.join('\n') + '\n';
   } catch {

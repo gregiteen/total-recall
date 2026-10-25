@@ -323,7 +323,7 @@ router.post("/api/plugins/:id/run", requireAuth, requireScope("config:write"), a
 
     if (execution) {
       if (stdin !== undefined) return badRequest(res, 'Credential operations require direct local execution');
-      if (!pluginActivation(plugin).enabled && !['on', 'off', 'status', 'health', 'jobs', '--help', 'help'].includes(subcommand)) return badRequest(res, `Plugin ${plugin.id} is inactive`);
+      if (!pluginActivation(plugin, { projectRoot: projectRoot() }).enabled && !['on', 'off', 'status', 'health', 'jobs', '--help', 'help'].includes(subcommand)) return badRequest(res, `Plugin ${plugin.id} is inactive`);
       const { loadPluginModule } = await import('../../core/plugin-runtime.mjs');
       const owner = await loadPluginModule('cli-agents', 'command-executor', { activeRequired: true });
       const result = await owner.executeCommand({ plugin, subcommand, args, execution, projectRoot: projectRoot() });

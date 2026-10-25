@@ -718,7 +718,7 @@ describe('skills-registry', () => {
     const result = trackRepo(brain, app);
     expect(result.full_brain).toBe(true);
     expect(fs.existsSync(path.join(result.brainDir, 'memory-vault'))).toBe(true);
-    expect(fs.existsSync(path.join(result.brainDir, 'openwiki'))).toBe(true);
+    expect(fs.existsSync(path.join(result.brainDir, 'openwiki'))).toBe(false);
     const roots = loadKnownRepoRoots(brain, { includeCwd: false });
     expect(roots).toContain(path.resolve(app));
   });

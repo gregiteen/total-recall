@@ -45,16 +45,16 @@ function ensureDir(dir) {
   return false;
 }
 
-function copyDirMerge(src, dest) {
+function copyDirMerge(src, dest, { skip = new Set() } = {}) {
   if (!fs.existsSync(src)) return 0;
   let n = 0;
   ensureDir(dest);
   for (const entry of fs.readdirSync(src, { withFileTypes: true })) {
-    if (entry.name === '.git' || entry.name === 'node_modules') continue;
+    if (entry.name === '.git' || entry.name === 'node_modules' || skip.has(entry.name)) continue;
     const from = path.join(src, entry.name);
     const to = path.join(dest, entry.name);
     if (entry.isDirectory()) {
-      n += copyDirMerge(from, to);
+      n += copyDirMerge(from, to, { skip });
     } else if (!fs.existsSync(to)) {
       fs.copyFileSync(from, to);
       n++;
@@ -65,14 +65,20 @@ function copyDirMerge(src, dest) {
 
 /**
  * Ensure core total-recall skill package files exist (SKILL.md minimum).
+ *
+ * The required plugins live in one shared folder per machine. `sharedBrainDir`
+ * names the global brain that owns them; without it the ambient global brain is
+ * used, which is what an interactive CLI run means.
  */
-export function ensureCoreSkillPackage(brainDir) {
-  ensureRequiredPlugins(brainDir);
+export function ensureCoreSkillPackage(brainDir, { sharedBrainDir } = {}) {
+  ensureRequiredPlugins(brainDir, sharedBrainDir ? { sharedBrainDir } : {});
   const skillMd = path.join(brainDir, 'SKILL.md');
   if (fs.existsSync(skillMd)) return { seeded: false };
   const scaffold = path.join(ROOT, 'scaffold', '.agent', 'skills', 'total-recall');
   if (fs.existsSync(scaffold)) {
-    copyDirMerge(scaffold, brainDir);
+    // `plugins/` is deliberately skipped: the defaults live in one shared folder
+    // per machine, and copying them here is what put a copy in every repository.
+    copyDirMerge(scaffold, brainDir, { skip: new Set(['plugins']) });
     return { seeded: true, from: 'scaffold' };
   }
   // Scaffold directory missing — warn and fall back to a minimal SKILL.md
@@ -139,7 +145,7 @@ export function ensureFullProjectBrain(repoRoot, opts = {}) {
     if (ensureDir(d)) dirsCreated++;
   }
 
-  const core = ensureCoreSkillPackage(brainDir);
+  const core = ensureCoreSkillPackage(brainDir, { sharedBrainDir: opts.globalBrainDir });
   const identity = writeBrainIdentity(brainDir, { name, tags });
 
   // Empty skills registry if missing

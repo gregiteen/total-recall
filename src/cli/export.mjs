@@ -64,7 +64,7 @@ export default async function exportCommand(args) {
     console.log(`  ✅ Export completed successfully.\n`);
   } catch (err) {
     console.error(`\n  ❌ Export failed: ${err.message}\n`);
-    process.exit(1);
+    process.exitCode = 1;
   }
 }
 

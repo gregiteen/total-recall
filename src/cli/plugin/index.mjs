@@ -4,6 +4,7 @@ import { removePlugin, sharePlugin } from './remove.mjs';
 import { listAvailable, listPeers, searchPlugins } from './search.mjs';
 import { createPlugin } from './create.mjs';
 import { vendorPlugin, listProjectBricks } from './vendor.mjs';
+import { manageProjectPluginCopies } from './copies.mjs';
 import { managePluginLicense } from './monetization.mjs';
 import { getPlugin, getPluginMonetization } from '../../core/plugin-loader.mjs';
 import { describePlugin } from '../../core/plugin-store.mjs';
@@ -26,7 +27,11 @@ Commands:
   list                      Installed plugins (project & global) with source and sharing
   library [--plugin ID]      Installed CLI operation library (--json for agents)
   refresh                   Rebuild installed command inventories and instruction surfaces
-  on <id> / off <id>         Enable/disable host execution; compile catalogs and surfaces
+  copies [dir] [--apply]    Audit this repository's leftover copies of the shared default
+                            plugins; --apply removes only the ones identical to the shared install
+  on <id> / off <id>         Enable/disable host execution for this repository alone
+                              --all-repos   Change the shared setting for every repository
+                              --clear       Drop this repository's override; follow the shared setting
   available [query]         Plugins bundled with this Total Recall package
   peers [query]             Plugins your mesh peers share (queried live)
   search <query>            Search bundled plugins and mesh peers
@@ -98,8 +103,25 @@ export async function run(argv = []) {
     return;
   }
   if (command === 'on' || command === 'off') {
-    const result = await setPluginActive(rest[0], command === 'on');
-    console.log(JSON.stringify(result));
+    const id = rest.find(argument => !argument.startsWith('-'));
+    if (!id) throw new Error(`Usage: total-recall plugin ${command} <id> [--all-repos|--clear]`);
+    const flags = rest.filter(argument => argument.startsWith('-'));
+    const unknown = flags.find(flag => !['--all-repos', '--clear', '--json'].includes(flag));
+    if (unknown) throw new Error(`Unsupported plugin ${command} option: ${unknown}`);
+    if (flags.includes('--all-repos') && flags.includes('--clear')) throw new Error('Choose --all-repos or --clear, not both');
+    if (flags.includes('--clear')) {
+      if (command === 'off') throw new Error('--clear removes a repository override; use it with on, not off');
+      const cleared = await setPluginActive(id, true, { clear: true });
+      const activation = cleared.activation || {};
+      console.log(flags.includes('--json') ? JSON.stringify(cleared)
+        : `♻️  ${id} follows the shared setting again in this repository (${activation.state || 'unknown'})`);
+      if (!cleared.compilation.ok) process.exitCode = 1;
+      return;
+    }
+    const result = await setPluginActive(id, command === 'on', { scope: flags.includes('--all-repos') ? 'shared' : 'project' });
+    const activation = result.activation || {};
+    if (flags.includes('--json')) console.log(JSON.stringify(result));
+    else console.log(`${command === 'on' ? '✅' : '⛔'} ${id} ${command === 'on' ? 'enabled' : 'disabled'} for ${result.scope === 'shared' ? 'every repository' : 'this repository'} (${activation.state || 'unknown'})`);
     if (!result.compilation.ok) process.exitCode = 1;
     return;
   }
@@ -111,6 +133,11 @@ export async function run(argv = []) {
 
   if (rest.includes('--help') || rest.includes('-h')) {
     printHelp();
+    return;
+  }
+
+  if (command === 'copies' || command === 'duplicates') {
+    await manageProjectPluginCopies(rest);
     return;
   }
 

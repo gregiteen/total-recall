@@ -187,6 +187,8 @@ describe('compatibility initialization explicit root isolation', () => {
         });
         expect(fs.existsSync(path.join(selected, 'skills', 'total-recall', 'config', 'brain.json'))).toBe(true);
         expect(fs.existsSync(path.join(home, '.agent'))).toBe(false);
+        expect(fs.existsSync(path.join(selected, 'skills', 'total-recall', 'openwiki'))).toBe(false);
+        expect(fs.existsSync(path.join(cwd, 'openwiki'))).toBe(false);
         const result = execFileSync(process.execPath, [fileURLToPath(new URL('../../bin/total-recall.mjs', import.meta.url)), 'auth', 'password', 'set', '--stdin', '--json'], {
           cwd, timeout: 20000, encoding: 'utf8', input: 'fixture-password-only\n',
           env: { ...process.env, HOME: home, AGENT_DIR: selected, _TR_TEST_AGENT_DIR: selected,
