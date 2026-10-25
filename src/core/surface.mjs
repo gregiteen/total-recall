@@ -567,8 +567,8 @@ const CLIENT_SHIMS = {
   vscode:             ['.github/copilot-instructions.md', '.vscode/copilot-instructions.md'],
   githubCopilot:      ['.github/copilot-instructions.md'],
   pi:                 ['AGENTS.md'],
-  hermes:             ['.hermes/memories/MEMORY.md'],
-  'hermes-agent':     ['.hermes/memories/MEMORY.md'],
+  hermes:             ['AGENTS.md'],
+  'hermes-agent':     ['AGENTS.md'],
   dsh:                ['AGENTS.md'],
   'deepseek-harness': ['AGENTS.md'],
   openclaw:           ['MEMORY.md', 'AGENTS.md']
