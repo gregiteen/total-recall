@@ -26,26 +26,58 @@ function envHeader() {
 `;
 }
 
+const ASSIGNMENT = /^\s*(?:export\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*=/;
+
+function assignedKey(line) {
+  const m = ASSIGNMENT.exec(line);
+  return m ? m[1] : null;
+}
+
+/** Drop assignments of `keys` from hand-managed text so the managed block is the only definition. */
+function withoutKeys(text, keys) {
+  if (!keys.size) return text;
+  return text.split('\n').filter((line) => !keys.has(assignedKey(line))).join('\n');
+}
+
 /**
  * Merge a managed TR secrets block into an existing .env without wiping
  * non-secret / hand-managed keys outside the BEGIN/END markers.
  *
+ * A key the block defines is removed from the text outside the block: dotenv
+ * loaders disagree on whether the first or last assignment wins, so a stale
+ * copy left outside would shadow the rotated value under some of them.
+ * With `partial`, the block carries only some keys (a `--keys` deploy), so the
+ * previous block's other entries are kept rather than dropped.
+ *
  * @param {string} existing - current file contents (or '')
  * @param {string} managedBody - full block including BEGIN/END marks
+ * @param {{ partial?: boolean }} [opts]
  * @returns {string}
  */
-export function mergeEnvManagedBlock(existing, managedBody) {
-  const managed = String(managedBody || '').trimEnd() + '\n';
+export function mergeEnvManagedBlock(existing, managedBody, { partial = false } = {}) {
+  let managed = String(managedBody || '').trimEnd() + '\n';
   const text = existing == null ? '' : String(existing);
 
   if (!text.trim()) return managed;
 
   const beginIdx = text.indexOf(BEGIN_MARK);
   const endIdx = text.indexOf(END_MARK);
+  const hasBlock = beginIdx !== -1 && endIdx !== -1 && endIdx > beginIdx;
 
-  if (beginIdx !== -1 && endIdx !== -1 && endIdx > beginIdx) {
-    const before = text.slice(0, beginIdx).replace(/\s+$/, '');
-    const after = text.slice(endIdx + END_MARK.length).replace(/^\r?\n?/, '');
+  if (partial && hasBlock) {
+    const fresh = new Set(managed.split('\n').map(assignedKey).filter(Boolean));
+    const kept = text.slice(beginIdx, endIdx).split('\n')
+      .filter((line) => { const key = assignedKey(line); return key && !fresh.has(key); });
+    if (kept.length) {
+      const end = managed.lastIndexOf(END_MARK);
+      managed = `${managed.slice(0, end)}${kept.join('\n')}\n${managed.slice(end)}`;
+    }
+  }
+  const managedKeys = new Set(managed.split('\n').map(assignedKey).filter(Boolean));
+
+  if (hasBlock) {
+    const before = withoutKeys(text.slice(0, beginIdx), managedKeys).replace(/\s+$/, '');
+    const after = withoutKeys(text.slice(endIdx + END_MARK.length).replace(/^\r?\n?/, ''), managedKeys);
     const parts = [];
     if (before) parts.push(before.endsWith('\n') ? before : `${before}\n`);
     parts.push(managed.endsWith('\n') ? managed : `${managed}\n`);
@@ -56,8 +88,41 @@ export function mergeEnvManagedBlock(existing, managedBody) {
   }
 
   // No prior TR block — append managed section after existing content
-  const base = text.endsWith('\n') ? text : `${text}\n`;
+  const rest = withoutKeys(text, managedKeys);
+  const base = rest.endsWith('\n') ? rest : `${rest}\n`;
   return `${base}\n${managed}`;
+}
+
+/**
+ * Refuse a shared plugin path as a secret-projection target.
+ *
+ * The shared plugin folder lives at `<agentDir>/skills/total-recall/plugins` and
+ * normally holds one symlink per plugin pointing at that plugin's owner
+ * checkout. A projection written there lands in a plugin repository, which is
+ * not an application and must never hold an application's secrets.
+ *
+ * @param {string} abs absolute, existing directory
+ */
+export function assertNotSharedPluginPath(abs) {
+  const agentDir = process.env.AGENT_DIR || process.env._TR_TEST_AGENT_DIR || path.join(os.homedir(), '.agent');
+  const pluginsRoot = path.join(agentDir, 'skills', 'total-recall', 'plugins');
+  const candidates = new Set([path.resolve(abs)]);
+  try { candidates.add(fs.realpathSync(abs)); } catch { /* unreadable path */ }
+  for (const candidate of candidates) {
+    if (candidate === pluginsRoot || candidate.startsWith(pluginsRoot + path.sep)) {
+      throw new Error(`Refusing to write secrets into the shared plugin folder: ${abs}. Name the application repository with --path.`);
+    }
+    let entries = [];
+    try { entries = fs.readdirSync(pluginsRoot, { withFileTypes: true }); } catch { return; }
+    for (const entry of entries) {
+      if (!entry.isSymbolicLink()) continue;
+      let target;
+      try { target = fs.realpathSync(path.join(pluginsRoot, entry.name)); } catch { continue; }
+      if (candidate === target || candidate.startsWith(target + path.sep)) {
+        throw new Error(`Refusing to write secrets into the plugin checkout ${target} (reached as ${abs}). Name the application repository with --path.`);
+      }
+    }
+  }
 }
 
 /**
@@ -172,6 +237,8 @@ ${exampleLines.join('\n')}${exampleLines.length ? '\n' : ''}`;
     keys: selected.map((s) => s.key),
     count: selected.length,
     store: resolveSecretsPath(brainDir),
+    // [outKey, value] pairs for in-process comparison (remote verify). Never log them.
+    entries: selected.map(({ outKey, value }) => [outKey, value]),
   };
 }
 
@@ -194,6 +261,11 @@ export async function exportEnvToProject(brainDir, projectPath, opts = {}) {
   if (!fs.existsSync(abs) || !fs.statSync(abs).isDirectory()) {
     throw new Error(`Project path is not a directory: ${abs}`);
   }
+  // A secret projection belongs to a repository. The shared plugin folder links
+  // every plugin to its owner checkout, so exporting with the default cwd —
+  // inside a plugin — wrote a plaintext .env of the whole store into 30 plugin
+  // repositories. Refuse that target rather than requiring a flag to avoid it.
+  assertNotSharedPluginPath(abs);
 
   const filename = opts.filename || '.env';
   const target = {

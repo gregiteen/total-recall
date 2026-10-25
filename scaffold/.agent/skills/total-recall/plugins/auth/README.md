@@ -46,3 +46,13 @@ Google OAuth credentials use the selected auth brain's encrypted store. Configur
 Google lifecycle metadata, role policies, key registries and request audit ledgers use the native host SSSS state contract. Ciphertext remains in the auth-owned opaque resource adapter. This source requires the updated native host contract; older published hosts need an explicit compatible update. Fixture tests do not certify live Google consent or deployed CRM consumer adapters.
 
 Native-only state: new installations use validated SSSS records and the shared auth owner. Legacy imports and compatibility fallback formats are not supported.
+
+### Host credential-store binding
+
+Runtime consumers that need the host's credential authority use the declared
+`host-secrets-store` module and its `hostSecretsBrainDir()` export. The auth CLI
+uses the same selector. A caller's project `AGENT_DIR`, `TR_BRAIN` or working
+directory never selects a second store. `TR_SECRETS_BRAIN` is the operational
+override; `_TR_TEST_BRAIN_DIR` and `_TR_TEST_AGENT_DIR` preserve disposable test
+isolation. Resolving this path performs no credential read or initialization.
+Explicit low-level store APIs retain their existing selected-store semantics.

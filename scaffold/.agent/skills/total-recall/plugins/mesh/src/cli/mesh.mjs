@@ -46,6 +46,7 @@ function printHelp() {
   Usage: total-recall mesh <command> [options]
 
     status                 Control-server reachability and credential state
+    view <screen>          Read Machines, Flows, Placement, Boundary or Join sources (--json)
     doctor                 Probe reachability & compute capabilities across all nodes
     nodes                  List mesh nodes and how to reach each one
     ssh <node> [cmd…]      Open a session using the node's recorded access
@@ -194,9 +195,9 @@ export default async function meshCli(argv = []) {
     }
 
     if (command === 'doctor' || command === 'diagnostics') {
-      console.log('\n🩺 Total Recall — Mesh Diagnostics & Compute Capability Audit\n');
       const enriched = listEnrichedMeshNodes(vaultRoot);
       const isJson = args.includes('--json');
+      if (!isJson) console.log('\n🩺 Total Recall — Mesh Diagnostics & Compute Capability Audit\n');
 
       const stripAnsi = (s) => String(s || '').replace(/\x1b\[[0-9;]*m/g, '');
       const pad = (s, l) => String(s || '') + ' '.repeat(Math.max(0, l - stripAnsi(s).length));
@@ -217,13 +218,17 @@ export default async function meshCli(argv = []) {
           reachable: false,
           error: null
         };
+        nodeInfo.tested_runtimes = ['ollama', 'docker', 'node', 'git'];
+        nodeInfo.tested_harnesses = ['agy', 'claude', 'codex', 'gemini'];
 
         if (node.self) {
           try {
             const { detectHarnesses } = await import('../core/meta-harness.mjs');
-            nodeInfo.harnesses = detectHarnesses().filter(h => h.available).map(h => h.id);
-          } catch {}
-          nodeInfo.runtimes = ['node', 'git'];
+            const detected = detectHarnesses();
+            nodeInfo.harnesses = detected.filter(h => h.available).map(h => h.id);
+            nodeInfo.tested_harnesses = detected.map(h => h.id);
+          } catch { nodeInfo.tested_harnesses = []; }
+          nodeInfo.runtimes = nodeInfo.tested_runtimes.filter(tool => spawnSync('/bin/sh', ['-c', 'command -v "$1"', 'mesh-probe', tool], { encoding: 'utf8', timeout: 3000 }).status === 0);
           nodeInfo.reachable = true;
         } else if (resolved.complete) {
           try {
@@ -233,16 +238,12 @@ export default async function meshCli(argv = []) {
             // reachable machines as down.
             const res = await execMeshCommand(node.hostname, probeCmd, { vaultRoot, timeoutMs: 15000 });
             nodeInfo.reachable = res.success;
-            if (res.success && !node.access?.verified_at) {
-              // A login that just worked is the only kind worth sharing with peers.
-              await setMeshNodeAccess(node.hostname, { verified_at: new Date().toISOString() }, { vaultRoot });
-            }
             if (res.success) {
               const parts = res.stdout.split(/\s+/);
               for (const part of parts) {
                 const [k, v] = part.split('=');
                 if (v && v.trim()) {
-                  if (['agy', 'claude', 'codex', 'gemini', 'ollama'].includes(k)) {
+                  if (['agy', 'claude', 'codex', 'gemini'].includes(k)) {
                     nodeInfo.harnesses.push(k);
                   } else {
                     nodeInfo.runtimes.push(k);
@@ -769,6 +770,10 @@ export default async function meshCli(argv = []) {
       } catch (err) {
         if (reportPolicyModeError(err)) return;
         throw err;
+      }
+      if (args.includes('--json')) {
+        console.log(JSON.stringify({ configured: current.configured, policy: current.policy, updatedAt: current.updatedAt || null }));
+        return;
       }
       if (!current.configured) {
         console.log('No policy is set on the control server.');

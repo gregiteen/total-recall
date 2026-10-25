@@ -1,3 +1,31 @@
+## 3.41.2 — 2026-10-25
+
+- Bundle auth 1.2.2. `auth secret remote deploy` and `export-env` now replace
+  a key everywhere in the target file: a key the managed block defines is
+  removed from the hand-managed text, so a rotated value can no longer sit next
+  to the old one (loaders disagree on first- or last-wins). A `--keys` deploy
+  merges into the existing managed block instead of dropping its other keys.
+  `remote deploy` takes `--path <repo>` so repo-bound keys resolve from any
+  directory, and SSH read failures are reported instead of treated as an empty
+  file.
+- New auth commands. `auth secret fingerprint --from-clipboard|--stdin`
+  identifies a credential (length, type prefix, fingerprint, store keys with the
+  same value) without printing it, and `--expect-prefix`/`--not <KEY>` fail on
+  a wrong value. `auth secret remote verify <target>` compares a deployed file
+  with the store by fingerprint. `auth secret remote import-pm2 <target> --app
+  <name> --keys …` moves keys out of a pm2 app's captured environment, which
+  otherwise overrides the deployed file.
+- Provider-issued webhook secrets are rolled in the provider console, never
+  minted locally: `STRIPE_WEBHOOK_SECRET` matched the self-generated
+  `_WEBHOOK_SECRET` pattern, so `rotate-auto` would have broken signature
+  checks. Providers declare these as `issued_keys`.
+- Bundle mesh 0.2.3 (the five owner-designed mesh screens) and openwiki 0.1.2
+  (bootstrap and seed templates).
+- Track the scaffold's openwiki plugin in git. An unanchored `openwiki/` ignore
+  rule, meant for the generated folder at the repository root, also matched
+  `scaffold/.agent/skills/total-recall/plugins/openwiki/`, so source checkouts
+  lacked a required default plugin that the npm package carried.
+
 ## 3.41.1 — 2026-10-25
 
 - Treat Hermes Agent as an `AGENTS.md` client and stop writing its memory.

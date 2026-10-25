@@ -2,9 +2,15 @@
   "$schema": "https://github.com/gregiteen/total-recall/blob/main/metadata.plugin.schema.json",
   "id": "mesh",
   "name": "Headscale",
-  "version": "0.2.2",
+  "version": "0.2.3",
   "description": "Control-server mesh administration, Tailscale SSH, and peer node discovery.",
   "license": "MIT",
+  "requires": [
+    {
+      "id": "auth",
+      "range": ">=1.2.1"
+    }
+  ],
   "branding": {
     "name": "Headscale",
     "color": "#818cf8",
@@ -90,10 +96,34 @@
         "effect": "write",
         "output": "json",
         "args": [
-          {"name":"operation","label":"Operation","type":"string","positional":true,"required":true},
-          {"name":"node","label":"Node","type":"string","positional":true,"required":true},
-          {"name":"source","label":"Source","type":"string","positional":true,"required":true},
-          {"name":"destination","label":"Destination","type":"string","positional":true,"required":true}
+          {
+            "name": "operation",
+            "label": "Operation",
+            "type": "string",
+            "positional": true,
+            "required": true
+          },
+          {
+            "name": "node",
+            "label": "Node",
+            "type": "string",
+            "positional": true,
+            "required": true
+          },
+          {
+            "name": "source",
+            "label": "Source",
+            "type": "string",
+            "positional": true,
+            "required": true
+          },
+          {
+            "name": "destination",
+            "label": "Destination",
+            "type": "string",
+            "positional": true,
+            "required": true
+          }
         ]
       },
       {
@@ -103,8 +133,30 @@
       },
       {
         "name": "view",
-        "description": "Inspect live mesh state",
-        "effect": "read"
+        "description": "Read independent owner observations for mesh screens",
+        "effect": "read",
+        "timeout_ms": 60000,
+        "args": [
+          {
+            "name": "screen",
+            "label": "Screen",
+            "type": "choice",
+            "positional": true,
+            "options": [
+              "machines",
+              "flows",
+              "placement",
+              "boundary",
+              "join"
+            ]
+          },
+          {
+            "name": "json",
+            "label": "JSON output",
+            "type": "boolean",
+            "flag": "--json"
+          }
+        ]
       },
       {
         "name": "nodes",
@@ -145,7 +197,7 @@
       {
         "name": "enroll",
         "description": "Mesh enroll operation",
-        "effect": "write"
+        "effect": "destructive"
       },
       {
         "name": "preauthkey",
@@ -292,5 +344,187 @@
   "distribution": {
     "tier": "official",
     "license": "open"
+  },
+  "mesh": {
+    "version": 1,
+    "description": "Declared support and observation contracts; declarations are not live readiness or primitive grants.",
+    "provides": [
+      {
+        "id": "node-inventory",
+        "operation": "status",
+        "runtime": "mesh",
+        "observation": "machines.status"
+      },
+      {
+        "id": "execution-probe",
+        "operation": "doctor",
+        "runtime": "mesh",
+        "observation": "doctor"
+      },
+      {
+        "id": "remote-execution",
+        "operation": "exec",
+        "runtime": "mesh",
+        "observation": "doctor"
+      },
+      {
+        "id": "path-probe",
+        "operation": "ping",
+        "runtime": "mesh",
+        "observation": "ping"
+      },
+      {
+        "id": "presence",
+        "operation": "presence",
+        "runtime": "presence",
+        "observation": "machines.presence"
+      },
+      {
+        "id": "file-push",
+        "operation": "file",
+        "runtime": "mesh",
+        "observation": null
+      },
+      {
+        "id": "secret-grants",
+        "operation": "grants",
+        "runtime": "mesh-identity",
+        "observation": "flows.grants"
+      },
+      {
+        "id": "control-policy",
+        "operation": "policy",
+        "runtime": "headscale-client",
+        "observation": "boundary.policy"
+      },
+      {
+        "id": "enrollment",
+        "operation": "enroll",
+        "runtime": "mesh-enroll",
+        "observation": "join.status"
+      }
+    ],
+    "integrations": [
+      {
+        "id": "auth",
+        "owner": "auth",
+        "purpose": "One host credential store; no values in views",
+        "observation": "machines.status",
+        "evidence": "control.verified"
+      },
+      {
+        "id": "headscale",
+        "owner": "mesh",
+        "purpose": "Control server authentication and membership",
+        "observation": "machines.status",
+        "evidence": "control.verified"
+      },
+      {
+        "id": "tailscale",
+        "owner": "mesh",
+        "purpose": "Client enrollment and mesh network state",
+        "observation": "machines.status",
+        "evidence": "network_available"
+      },
+      {
+        "id": "ssh",
+        "owner": "mesh",
+        "purpose": "Per-machine execution probes",
+        "observation": "doctor",
+        "evidence": "reachable per machine"
+      },
+      {
+        "id": "presence",
+        "owner": "mesh",
+        "purpose": "Authenticated fresh activity observations",
+        "observation": "machines.presence",
+        "evidence": "peer states and timestamps"
+      },
+      {
+        "id": "plugin-sharing",
+        "owner": "mesh",
+        "purpose": "Peer plugin inventories",
+        "observation": "flows.plugins",
+        "evidence": "peer status"
+      },
+      {
+        "id": "updates",
+        "owner": "core",
+        "purpose": "Last automatic maintenance report",
+        "observation": "flows.updates",
+        "evidence": "recorded last result"
+      },
+      {
+        "id": "schedules",
+        "owner": "user-automations",
+        "purpose": "Task declarations and node placement",
+        "observation": "flows.tasks",
+        "evidence": "node inventory; no execution inferred"
+      },
+      {
+        "id": "agents",
+        "owner": "core",
+        "purpose": "Running and recent process inventory",
+        "observation": "flows.agents",
+        "evidence": "process records"
+      },
+      {
+        "id": "alerts",
+        "owner": "operator-alerts",
+        "purpose": "Recorded delivery attempts",
+        "observation": "flows.alerts",
+        "evidence": "ledger result; no recipient view inferred"
+      },
+      {
+        "id": "deployments",
+        "owner": "deploy",
+        "purpose": "Selected project release state",
+        "observation": "flows.deployments",
+        "evidence": "configured slot; no fleet-wide inference"
+      }
+    ],
+    "endpoints": [
+      {
+        "path": "/api/mesh/presence/local",
+        "method": "GET",
+        "runtime": "route-mesh-presence",
+        "authentication": "mesh peer"
+      },
+      {
+        "path": "/api/mesh/plugins",
+        "method": "GET",
+        "runtime": "route-plugins-mesh",
+        "authentication": "mesh peer"
+      }
+    ],
+    "task_placement": "Declared task placement is selected-node or per-node; actual execution requires a verified daemon report.",
+    "unavailable": [
+      "transfer-history",
+      "service-health-cli",
+      "exit-node-management",
+      "subnet-route-management",
+      "tunnel-inventory",
+      "public-exposure-inventory",
+      "speed-measurement",
+      "messages",
+      "shared-file-spaces"
+    ]
+  },
+  "capability": {
+    "entry": "capability/index.mjs",
+    "dependencies": [],
+    "exports": [
+      "createControlServer",
+      "createHeadscaleApi",
+      "buildMeshSshPolicy",
+      "meshTargetOf",
+      "sshExec",
+      "assertSecureControlUrl",
+      "normalizeControlUrl",
+      "shellQuote",
+      "patchConfig",
+      "parseChecksum",
+      "consoleConfig"
+    ]
   }
 }

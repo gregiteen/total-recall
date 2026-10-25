@@ -80,6 +80,9 @@ export function mergeSecretMeta(prev = {}, patch = {}) {
   });
   assign('auto_rotate', (v) => !!v);
   assign('notes', (v) => (v == null || v === '' ? null : String(v)));
+  // The app-facing name a production key stands in for: GRO_CRM_TICKETS_SIGNING_SECRET
+  // provides TICKETS_SIGNING_SECRET to the repos it is bound to (see resolveSecretKey).
+  assign('provides', (v) => (v == null || v === '' ? null : String(v)));
   assign('project_path', (v) => (v == null || v === '' ? null : String(v)));
   assign('headscale_url', (v) => (v == null || v === '' ? null : String(v)));
   // Command that prints the headscale server log. Watch mode needs it because
@@ -478,11 +481,13 @@ export async function updateSecretMeta(brainDir, key, patch = {}, opts = {}) {
     throw new Error(`Secret not found: ${key}`);
   }
   const prev = secrets[META_KEY].keys[key] || {};
-  secrets[META_KEY].keys[key] = mergeSecretMeta(prev, {
-    ...patch,
-    updated_at: new Date().toISOString(),
-    created_at: prev.created_at || new Date().toISOString(),
-  });
+  // updated_at dates the value (set, rotate). A metadata write — labels, account
+  // sync, tracking — records meta_updated_at instead, so it never makes a stale
+  // value look fresh or pushes back its rotation.
+  secrets[META_KEY].keys[key] = {
+    ...mergeSecretMeta(prev, { ...patch, created_at: prev.created_at || new Date().toISOString() }),
+    meta_updated_at: new Date().toISOString(),
+  };
   await saveSecrets(brainDir, secrets);
   appendAudit(brainDir, {
     action: 'meta',
@@ -553,6 +558,22 @@ export async function setSecret(brainDir, key, value, opts = {}) {
   });
 
   return { key, set: true };
+}
+
+/**
+ * The store key that answers `key` for one repo. Production services own
+ * distinct credentials under app-specific names; a key bound to the repo whose
+ * `provides` is `key` wins over the plain (developer) key. Two such keys for the
+ * same repo and name are ambiguous and refused, never guessed between.
+ */
+export async function resolveSecretKey(brainDir, key, repo) {
+  if (!repo) return key;
+  const secrets = ensureMeta(await loadSecrets(brainDir));
+  const meta = secrets[META_KEY].keys;
+  const hits = Object.keys(meta).filter((k) => k !== key && meta[k]?.provides === key
+    && Array.isArray(meta[k].repos) && meta[k].repos.includes(repo) && secrets[k] != null && secrets[k] !== '');
+  if (hits.length > 1) throw new Error(`${hits.join(' and ')} both provide ${key} for ${repo}; keep one`);
+  return hits[0] || key;
 }
 
 /**
