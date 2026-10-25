@@ -1,3 +1,49 @@
+## 3.41.0 — 2026-10-25
+
+- One shared plugin folder with per-repository on/off. The nine defaults —
+  auth, mesh, openwiki, composable-cli, cli-agents, code-quality, security,
+  embeddings and git-sentinel — now live once, in the global brain, and every
+  repository resolves them from there. A repository switches a shared plugin on
+  or off with its own `plugin_record` overlay: `plugin on|off <id>` applies to
+  the current repository, `--all-repos` changes the shared setting for the whole
+  machine, and `--clear` drops the override so the repository follows the shared
+  setting again. Activation reads (catalog, compiled surfaces, context
+  injection, routers, the runner, scheduled tasks, setup and the API) all
+  resolve the calling repository. Previously a shared plugin could only be
+  switched on or off for every repository at once.
+
+- Stop copying plugins into repositories. `ensureRequiredPlugins` no longer
+  installs into a project brain — it seeds the shared brain and validates that
+  the project resolves it — and `ensureCoreSkillPackage` no longer copies the
+  scaffold's `plugins/` directory into every repository. The defaults had been
+  copied into each repository brain, which is what put 588 plugin copies across
+  56 repositories.
+
+- A plugin folder is never a project. `detectProjectBrain` walked up from the
+  working directory and stopped only at `$HOME`, so any path inside the shared
+  plugin folder resolved as a project root. Because that folder links each
+  plugin to its owner checkout, running the CLI from inside a plugin
+  provisioned a complete nested brain into the plugin itself, recursively. The
+  walk now refuses the shared folder, its link targets and anything beneath
+  them, while a registered plugin repository stays an ordinary project. It also
+  resolves the agent directory live, so an overridden `AGENT_DIR` is honoured.
+
+- `plugin copies [dir] [--apply]` audits a repository's leftover copies of the
+  shared defaults against the bundled source and removes only the ones that are
+  byte-identical, leaving a copy with local edits in place and reporting it.
+
+- Fix the recompile a project plugin's on/off triggered: switching a
+  project-owned plugin rebuilt the global surface, so the repository's own
+  catalog and instruction file kept reporting the old state.
+
+- Fix required-plugin validation preferring an empty project `plugins/`
+  directory over the shared install, which made `init --project`, `trackRepo`
+  and `brain ensure` fail on a freshly provisioned repository.
+
+- Plugin cards: owner screens render from the plugin's own declarations and
+  audited plugin state is serialized, so concurrent owner screens no longer
+  interleave their reads.
+
 ## 3.40.7 — 2026-10-23
 
 - Keep per-brain state out of git. Twelve repositories tracked
