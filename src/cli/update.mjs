@@ -110,7 +110,7 @@ export default async function update(args = []) {
 
   if (opts.allBrains) {
     const summary = await updateAllBrains({ brainDir, roots: opts.repos,
-      dryRun: !opts.apply || opts.dryRun });
+      dryRun: !opts.apply || opts.dryRun, ensureDefaults: true });
     if (summary.failed) process.exitCode = 1;
     if (opts.json) console.log(JSON.stringify(summary, null, 2));
     else {

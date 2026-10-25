@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { readPluginsDir, PACKAGE_ROOT, resolvePluginFile } from './plugin-loader.mjs';
 import { DEFAULT_PLUGIN_IDS } from './default-plugins.mjs';
+import { comparePackageVersions } from './package-version.mjs';
 import { preparePluginDependencies } from './plugin-dependencies.mjs';
 
 export function inspectRequiredPlugins(brainDir) {
@@ -26,6 +27,15 @@ export function inspectRequiredPlugins(brainDir) {
   return { status: errors.length ? 'failed' : 'ready', errors };
 }
 
+/** Only a copy that declares an older release than the bundled one is refreshed; damaged same-release copies still fail. */
+function isStaleInstall(target, source) {
+  try {
+    const installed = JSON.parse(fs.readFileSync(path.join(target, 'plugin.json'), 'utf8')).version;
+    const bundled = JSON.parse(fs.readFileSync(path.join(source, 'plugin.json'), 'utf8')).version;
+    return comparePackageVersions(installed, bundled) === -1;
+  } catch { return false; }
+}
+
 export function ensureRequiredPlugins(brainDir, { sourceDir = path.join(PACKAGE_ROOT, 'scaffold', '.agent', 'skills', 'total-recall', 'plugins') } = {}) {
   // Validate the complete package before changing any installation.
   for (const id of DEFAULT_PLUGIN_IDS) {
@@ -33,10 +43,14 @@ export function ensureRequiredPlugins(brainDir, { sourceDir = path.join(PACKAGE_
   }
   for (const id of DEFAULT_PLUGIN_IDS) {
   const target = path.join(brainDir, 'plugins', id);
+  const source = path.join(sourceDir, id);
   if (!fs.existsSync(target)) {
-    const source = path.join(sourceDir, id);
     fs.mkdirSync(path.dirname(target), { recursive: true });
     fs.cpSync(source, target, { recursive: true, force: false, errorOnExist: true });
+  } else if (isStaleInstall(target, source)) {
+    // A vendored copy that no longer validates (or predates the bundled release) is replaced; node_modules stays.
+    for (const entry of fs.readdirSync(target)) if (entry !== 'node_modules') fs.rmSync(path.join(target, entry), { recursive: true, force: true });
+    for (const entry of fs.readdirSync(source)) if (entry !== 'node_modules') fs.cpSync(path.join(source, entry), path.join(target, entry), { recursive: true });
   }
   preparePluginDependencies(target);
   }

@@ -30,4 +30,13 @@ describe('required native auth installation', () => {
     fs.writeFileSync(path.join(root, 'plugins/auth/plugin.json'), '{}');
     expect(() => ensureRequiredPlugins(root)).toThrow(/auth plugin/);
   });
+  it('refreshes an install that predates the bundled release and keeps node_modules', () => {
+    const root = fixture(); ensureRequiredPlugins(root);
+    const dir = path.join(root, 'plugins/auth');
+    const manifest = JSON.parse(fs.readFileSync(path.join(dir, 'plugin.json'), 'utf8'));
+    fs.writeFileSync(path.join(dir, 'plugin.json'), JSON.stringify({ ...manifest, version: '1.0.1', card_layout: 'legacy' }));
+    expect(inspectRequiredPlugins(root).status).toBe('failed');
+    expect(ensureRequiredPlugins(root).status).toBe('ready');
+    expect(JSON.parse(fs.readFileSync(path.join(dir, 'plugin.json'), 'utf8')).version).toBe(manifest.version);
+  });
 });

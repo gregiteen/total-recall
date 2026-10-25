@@ -29,7 +29,7 @@ export async function maintainCliSurfaces({brainDir,brains,force=false,run=runBo
     const current=fingerprint(root);
     if(!force && previous?.fingerprint===current){results.push({root,status:'current'});continue;}
     const result=await run(process.execPath,[path.join(PACKAGE_ROOT,'bin/total-recall.mjs'),'plugin','refresh',...(brain.kind==='global'?['--global']:[])],{cwd:root,timeoutMs:600000,maxBytes:262144});
-    if(result.code!==0){results.push({root,status:'failed',error:result.reason || result.output?.slice(-1000) || 'CLI compilation failed'});continue;}
+    if(result.code!==0){results.push({root,status:'failed',error:result.reason || (result.stderr || result.output)?.trim().slice(-1000) || `CLI compilation failed (exit ${result.code})`});continue;}
     fs.mkdirSync(path.dirname(file),{recursive:true});
     const temp=`${file}.${process.pid}.tmp`;fs.writeFileSync(temp,JSON.stringify({fingerprint:current,compiledAt:new Date().toISOString()}));fs.renameSync(temp,file);
     results.push({root,status:'refreshed'});

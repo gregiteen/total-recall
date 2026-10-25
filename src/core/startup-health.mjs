@@ -12,8 +12,8 @@ export const cliEntry = path.join(packageRoot, 'bin/total-recall.mjs');
 
 export function runBounded(binary, args, { cwd = process.cwd(), timeoutMs = 15000, maxBytes = 262144 } = {}) {
   return new Promise(resolve => {
-    let child, output = '', size = 0, reason = null, settled = false, timer, escalation;
-    const finish = code => { if (settled) return; settled = true; clearTimeout(timer); resolve({ code, output, reason }); };
+    let child, output = '', stderr = '', size = 0, reason = null, settled = false, timer, escalation;
+    const finish = code => { if (settled) return; settled = true; clearTimeout(timer); resolve({ code, output, stderr: stderr.slice(-2000), reason }); };
     const kill = signal => { try { if (process.platform !== 'win32' && child.pid) process.kill(-child.pid, signal); else child.kill(signal); } catch {} };
     const stop = why => { if (reason || settled) return; reason = why; kill('SIGTERM'); escalation = setTimeout(() => { kill('SIGKILL'); finish(null); }, 500); };
     try { child = spawn(binary, args, { cwd, shell: false, detached: process.platform !== 'win32', stdio: ['ignore', 'pipe', 'pipe'] }); }
@@ -21,7 +21,7 @@ export function runBounded(binary, args, { cwd = process.cwd(), timeoutMs = 1500
     timer = setTimeout(() => stop('timeout'), timeoutMs);
     child.on('error', () => { reason = 'spawn-failed'; clearTimeout(escalation); finish(null); });
     child.stdout.on('data', chunk => { size += chunk.length; if (size <= maxBytes) output += chunk.toString(); else stop('output-limit'); });
-    child.stderr.on('data', chunk => { size += chunk.length; if (size > maxBytes) stop('output-limit'); });
+    child.stderr.on('data', chunk => { size += chunk.length; if (size <= maxBytes) stderr += chunk.toString(); else stop('output-limit'); });
     child.on('close', code => { if (!reason) finish(code); });
   });
 }
