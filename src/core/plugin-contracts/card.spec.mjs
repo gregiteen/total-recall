@@ -143,3 +143,23 @@ describe('card contract', () => {
     expect(validateCardContract(m).errors.join('\n')).toMatch(/workspace.permissions/);
   });
 });
+
+describe('brick declaration', () => {
+  const brick = () => ({
+    id: 'demo', name: 'Demo', version: '1.0.0', description: 'A brick.',
+    brick: true, capability: { entry: 'capability/index.mjs', exports: ['createClient'] }
+  });
+  it('needs no card face', () => {
+    expect(validateCardContract(brick()).errors).toEqual([]);
+  });
+  it('still requires a face when it is not a brick', () => {
+    const plugin = { ...brick(), brick: undefined };
+    expect(validateCardContract(plugin).errors.join('\n')).toMatch(/must declare the plugin's card face/);
+  });
+  it('rejects UI on a brick and a bad capability', () => {
+    expect(validateCardContract({ ...brick(), ui: { elements: [face] } }).errors.join('\n')).toMatch(/ships without UI/);
+    expect(validateCardContract({ ...brick(), capability: { entry: '../x.mjs', exports: [] } }).errors.join('\n'))
+      .toMatch(/relative .*path[\s\S]*non-empty array/);
+    expect(validateCardContract({ ...brick(), capability: { entry: 'ui/card.js', exports: ['a'] } }).errors.join('\n')).toMatch(/\.js|ui\//);
+  });
+});

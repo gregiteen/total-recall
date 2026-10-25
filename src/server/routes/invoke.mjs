@@ -1,11 +1,10 @@
 /** Optional developer API. Explicit grants precede every owner execution. */
 import { Router } from 'express';
 import path from 'node:path';
-import fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { requireAuth } from '../auth.mjs';
 import { loadKeys, keyHasScope } from '../keys.mjs';
-import { brainDir, globalAgentDir } from '../../core/config.mjs';
+import { brainDir, globalAgentDir, globalBrainDir } from '../../core/config.mjs';
 import { logger } from '../../core/logger.mjs';
 import crypto from 'node:crypto';
 import { appendVfsEvent } from '../../core/ssss-operation-service.mjs';
@@ -13,6 +12,7 @@ import { CLI_COMMANDS } from '../../core/cli-commands.mjs';
 import { buildPluginCatalog } from '../../core/plugin-catalog.mjs';
 import { listSurfaceCommands } from '../../core/command-surface.mjs';
 import { invokeAuthority, authorizeInvoke, operationAllowed } from '../invoke-policy.mjs';
+import { restrictedBrainTargets } from '../invoke-targets.mjs';
 import { INVOKE_LIMITS, InvokeError, executeInvokeChild, requireSuccessfulRun, invokeEnvironment, absoluteTarget } from '../invoke-execution.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../..');
@@ -34,14 +34,14 @@ const fail = (res, status, operation, code, message, extra = {}) => res.status(s
 });
 
 /** Only scopes that can execute are advertised. */
-function capabilitiesFor(authority, limits = INVOKE_LIMITS) {
+function capabilitiesFor(authority, limits = INVOKE_LIMITS, targets = ['server']) {
   const families = {};
   for (const [name, def] of Object.entries(OPERATIONS)) {
-    if (!operationAllowed(authority, name, def.scope)) continue;
+    if (!operationAllowed(authority, name, def.scope, targets)) continue;
     (families[def.family] ||= []).push({ operation: name, scope: def.scope });
   }
   return { operations: families, families: Object.keys(families), mode: authority.mode,
-    targets: authority.mode === 'full' ? 'host' : ['server'],
+    targets: authority.mode === 'full' ? 'host' : targets,
     credentials: authority.mode === 'full' ? 'host-auth-owner' : [],
     provider_spending: authority.mode === 'full' ? 'trusted-host-authority' : 0,
     limits };
@@ -50,8 +50,10 @@ function capabilitiesFor(authority, limits = INVOKE_LIMITS) {
 /** Injectable dependencies allow real HTTP tests with disposable auth-owned keys. */
 export function createInvokeRouter({ auth = requireAuth, store = { loadKeys, keyHasScope },
   execute = executeInvokeChild, audit,
-  cwd = process.cwd(), serverBrain = brainDir, limits = INVOKE_LIMITS } = {}) {
+  cwd = process.cwd(), serverBrain = brainDir, registryBrain = globalBrainDir, limits = INVOKE_LIMITS } = {}) {
   const router = Router();
+  const resolveTargets = authority => authority.mode === 'restricted' ?
+    restrictedBrainTargets(authority, { serverBrain, registryBrain }) : new Map();
   const recordAudit = audit || (event => appendVfsEvent(`invoke/${crypto.randomUUID()}`, event, {
     vaultRoot: path.join(serverBrain, 'memory-vault'), workspaceId: 'invoke', actorRole: 'system', intent: 'Record developer invoke outcome',
   }));
@@ -60,7 +62,7 @@ export function createInvokeRouter({ auth = requireAuth, store = { loadKeys, key
   router.get('/v1/invoke/capabilities', auth, (req, res) => {
     try {
       const authority = invokeAuthority(req, store);
-      res.json({ ok: true, operation: 'capabilities', result: capabilitiesFor(authority, limits), error: null });
+      res.json({ ok: true, operation: 'capabilities', result: capabilitiesFor(authority, limits, [...resolveTargets(authority).keys()]), error: null });
     } catch (err) { fail(res, err.status || 503, 'capabilities', err.code || 'authority-unavailable', err.code ? err.message : 'Authority validation unavailable.'); }
   });
   router.post('/v1/invoke', auth, async (req, res) => {
@@ -74,15 +76,17 @@ export function createInvokeRouter({ auth = requireAuth, store = { loadKeys, key
       if (!params || typeof params !== 'object' || Array.isArray(params)) throw new InvokeError(400, 'invalid-params', 'params must be an object.');
       if (Buffer.byteLength(JSON.stringify(params)) > 16384) throw new InvokeError(413, 'input-limit', 'Invoke parameters exceed 16 KiB.');
       authority = invokeAuthority(req, store);
-      authorizeInvoke(authority, operation, def.scope, params);
+      const targets = resolveTargets(authority), targetNames = [...targets.keys()];
+      authorizeInvoke(authority, operation, def.scope, params, targetNames);
+      target = authority.mode === 'restricted' ? (operation === 'capabilities' ? null : params.target ?? 'server') : absoluteTarget(params.target, cwd);
+      const selectedBrain = authority.mode === 'restricted' && target ? targets.get(target) : serverBrain;
       if (authority.mode === 'restricted' && operation === 'ssss.write') {
-        const brain = fs.realpathSync(serverBrain);
+        const brain = selectedBrain;
         if (mutatingBrains.has(brain)) throw new InvokeError(429, 'brain-write-busy', 'A confined write is already active for this brain.');
         mutatingBrains.add(brain); mutationBrain = brain;
       }
       if (total >= limits.concurrency || (active.get(authority.id) || 0) >= limits.perKey) throw new InvokeError(429, 'concurrency-limit', 'Execution concurrency limit reached.');
       total++; active.set(authority.id, (active.get(authority.id) || 0) + 1); counted = true;
-      target = authority.mode === 'restricted' ? 'server' : absoluteTarget(params.target, cwd);
       try { await recordAudit({ caller: authority.id, mode: authority.mode, operation, target, outcome: 'authorized' }); }
       catch { throw new InvokeError(503, 'audit-unavailable', 'Execution audit is unavailable; no work was started.'); }
       controller = new AbortController();
@@ -92,18 +96,20 @@ export function createInvokeRouter({ auth = requireAuth, store = { loadKeys, key
         try {
           const current = invokeAuthority(req, store);
           if (current.mode !== authority.mode) throw new Error('mode changed');
-          authorizeInvoke(current, operation, def.scope, params);
+          const currentTargets = resolveTargets(current);
+          authorizeInvoke(current, operation, def.scope, params, [...currentTargets.keys()]);
+          if (current.mode === 'restricted' && target && currentTargets.get(target) !== selectedBrain) throw new Error('target changed');
         } catch { controller.abort(); }
       };
       revalidate();
       timer = setInterval(revalidate, 250); timer.unref?.();
-      const context = { authority, target, serverBrain, signal: controller.signal, limits,
+      const context = { authority, target, serverBrain, selectedBrain, signal: controller.signal, limits,
         run: options => {
           revalidate();
           return execute({ ...options, signal: controller.signal, limits });
         } };
       let result;
-      if (operation === 'capabilities') result = capabilitiesFor(authority, limits);
+      if (operation === 'capabilities') result = capabilitiesFor(authority, limits, targetNames);
       else result = await HANDLERS[operation](params, context);
       if (operation === 'ssss.write' && authority.mode === 'restricted') mutationResult = result;
       revalidate();
@@ -168,7 +174,7 @@ const HANDLERS = {
     if (typeof query !== 'string' || !query.trim() || query.startsWith('-')) throw new InvokeError(400, 'invalid-query', 'query must be nonempty text, not a CLI option.');
     if (category !== undefined && (typeof category !== 'string' || !/^[a-z][a-z-]{0,63}$/.test(category))) throw new InvokeError(400, 'invalid-category', 'Invalid category.');
     if (context.authority.mode === 'restricted') {
-      const brain = fs.realpathSync(context.serverBrain);
+      const brain = context.selectedBrain;
       const run = requireSuccessfulRun(await context.run({ entry: path.join(root, 'src/server/invoke-read-child.mjs'),
         cwd: root, env: invokeEnvironment(false), timeoutMs, nodeArgs: ['--max-old-space-size=128', '--permission',
           `--allow-fs-read=${path.join(root, 'src')}`, `--allow-fs-read=${path.join(root, 'node_modules')}`,
@@ -208,7 +214,7 @@ const HANDLERS = {
   async 'ssss.write'(params, context) {
     const { category, title, content, tags, scope, timeoutMs } = params;
     if (context.authority.mode === 'restricted') {
-      const brain = fs.realpathSync(context.serverBrain);
+      const brain = context.selectedBrain;
       const run = await context.run({ entry: path.join(root, 'src/server/invoke-write-child.mjs'),
         cwd: root, env: invokeEnvironment(false), timeoutMs, nodeArgs: ['--max-old-space-size=128', '--permission',
           `--allow-fs-read=${path.join(root, 'src')}`, `--allow-fs-read=${path.join(root, 'node_modules')}`,
@@ -217,7 +223,7 @@ const HANDLERS = {
           `--allow-fs-write=${path.join(brain, 'memory-vault', '*')}`,
           `--allow-fs-write=${path.join(brain, 'memory-derived')}`,
           `--allow-fs-write=${path.join(brain, 'memory-derived', '*')}`],
-        input: JSON.stringify({ brain, params, caller: context.authority.id }) });
+        input: JSON.stringify({ brain, params: { ...params, target: 'server' }, caller: context.authority.id }) });
       let result;
       try { result = JSON.parse(run.stdout); } catch { /* interruption may precede output */ }
       if (run.exit_code !== 0 || run.termination_reason || run.truncated) {

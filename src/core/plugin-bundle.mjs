@@ -49,6 +49,40 @@ export function listPluginFiles(pluginDir) {
   return out;
 }
 
+const BRICK_ROOT_FILES = /^(package\.json|LICENSE[^/]*|README[^/]*)$/i;
+
+/**
+ * Files a plugin distributes to one audience.
+ *
+ * `host` is every file, for a mesh peer or a Total Recall installation.
+ * `brick` is the host-free capability only: the directory holding
+ * `capability.entry`, plus package.json, LICENSE and README. The UI, the CLI
+ * handler and the host manifest never leave with a brick, so a vendored copy
+ * has no UI and no path back to Total Recall. Its plugin.json is a reduced
+ * copy (identity and capability), returned as `data` rather than read from disk.
+ * @returns {Array<{ path: string, abs: string, size: number, mode: number, data?: Buffer }>}
+ */
+export function pluginBundleFiles(pluginDir, { audience = 'host' } = {}) {
+  const files = listPluginFiles(pluginDir);
+  if (audience === 'host') return files;
+  if (audience !== 'brick') throw new Error(`Unknown bundle audience '${audience}'`);
+  const root = fs.realpathSync(pluginDir);
+  const manifest = JSON.parse(fs.readFileSync(path.join(root, 'plugin.json'), 'utf8'));
+  const entry = manifest.capability?.entry;
+  if (typeof entry !== 'string') throw new Error(`Plugin '${manifest.id}' declares no capability.entry, so it cannot be vendored as a brick`);
+  const capDir = path.posix.dirname(entry);
+  const inCap = (p) => (capDir === '.' ? p === entry : p.startsWith(`${capDir}/`));
+  const kept = files.filter((f) => f.path.split('/')[0] !== 'ui' && (inCap(f.path) || BRICK_ROOT_FILES.test(f.path)));
+  if (!kept.some((f) => f.path === entry)) throw new Error(`capability.entry '${entry}' does not exist in plugin '${manifest.id}'`);
+  const reduced = Buffer.from(`${JSON.stringify({
+    id: manifest.id, name: manifest.name, version: manifest.version, description: manifest.description,
+    brick: true, capability: manifest.capability,
+    ...(manifest.requires ? { requires: manifest.requires } : {})
+  }, null, 2)}\n`);
+  return [...kept, { path: 'plugin.json', abs: null, size: reduced.length, mode: 0o644, data: reduced }]
+    .sort((a, b) => (a.path < b.path ? -1 : a.path > b.path ? 1 : 0));
+}
+
 function hashEntries(entries) {
   const h = crypto.createHash('sha256');
   for (const e of entries) {

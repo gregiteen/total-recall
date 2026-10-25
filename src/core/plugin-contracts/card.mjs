@@ -118,6 +118,16 @@ function validateCardFace(manifest, errors, warnings) {
     errors.push("'card_layout' is not supported: a card face is bespoke owner code in ui.elements[], never a shared template");
   }
   const elements = manifest.ui?.elements;
+  // A brick is distributed as capability code alone. It carries no UI, so it
+  // has no face; every other plugin still requires exactly one.
+  if (manifest.brick === true) {
+    validateCapability(manifest, errors);
+    if (manifest.ui !== undefined && Array.isArray(elements) && elements.length > 0) {
+      errors.push("a brick ships without UI: remove 'ui.elements' or drop 'brick: true'");
+    }
+    return;
+  }
+  if (manifest.capability !== undefined) validateCapability(manifest, errors);
   if (!Array.isArray(elements) || elements.length === 0) {
     // A scaffold is a freshly created plugin whose face has not been authored
     // yet. It must be installable so the author can iterate, but it is not a
@@ -135,6 +145,24 @@ function validateCardFace(manifest, errors, warnings) {
   const faces = elements.filter((element) => plain(element) && element.kind === 'card');
   if (faces.length === 0) errors.push("'ui.elements' must declare an element of kind 'card'");
   if (faces.length > 1) errors.push("'ui.elements' must declare exactly one card face; further screens use kind 'panel'");
+}
+
+/**
+ * `capability {entry, exports}` names the host-free module a project vendors:
+ * a relative path inside the plugin, and the exported names it promises.
+ */
+function validateCapability(manifest, errors) {
+  const cap = manifest.capability;
+  if (!plain(cap)) { errors.push("'capability' must declare {entry, exports}"); return; }
+  const entry = cap.entry;
+  if (typeof entry !== 'string' || !/^[A-Za-z0-9._\/-]{1,200}\.m?js$/.test(entry) || entry.startsWith('/') || entry.split('/').includes('..')) {
+    errors.push("capability.entry must be a relative .js or .mjs path inside the plugin");
+  } else if (entry.split('/')[0] === 'ui') {
+    errors.push('capability.entry must not live under ui/: a brick contains no UI');
+  }
+  if (!Array.isArray(cap.exports) || cap.exports.length === 0 || cap.exports.some((n) => typeof n !== 'string' || !/^[A-Za-z_$][\w$]*$/.test(n))) {
+    errors.push('capability.exports must be a non-empty array of export names');
+  }
 }
 
 function validateBranding(branding, errors, warnings) {
