@@ -4,7 +4,7 @@ description: Read for repository architecture and ownership; load only relevant 
 repo_scoped: true
 repository_id: "total-recall-brain"
 generated_from: total-recall
-generated_at: 2026-10-25T07:37:59.219Z
+generated_at: 2026-10-25T07:47:50.453Z
 ---
 
 # total-recall-brain — Codebase Architecture

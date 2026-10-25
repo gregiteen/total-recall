@@ -6,7 +6,7 @@ description: >-
   file before executing.
 repo_scoped: true
 repository_id: "total-recall-brain"
-generated_at: 2026-10-25T07:37:59.219Z
+generated_at: 2026-10-25T07:47:50.453Z
 generated_from: total-recall
 ---
 
@@ -110,7 +110,7 @@ templates/
 | api | api.mjs | total-recall api — every HTTP API route as a CLI verb. |
 | backfill | backfill.mjs |  |
 | backup | backup.mjs | total-recall backup |
-| brain | brain.mjs |  |
+| brain | brain.mjs | Import memory nodes from a vault directory into a project's  |
 | brief | brief.mjs | total-recall brief |
 | chat | chat.mjs | Total Recall CLI Chat Interface |
 | collab | collab.mjs | total-recall collab |
