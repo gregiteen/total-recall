@@ -593,9 +593,9 @@ export async function queryHarnessUsage() {
         status: 'not_installed',
         identity: '—',
         plan: '—',
-        rolling5hRemainingPct: '0%',
-        weeklyRemainingPct: '0%',
-        quotaRemaining: 'Not available'
+        rolling5hRemainingPct: '—',
+        weeklyRemainingPct: '—',
+        quotaRemaining: 'not installed'
       });
       continue;
     }
@@ -606,9 +606,13 @@ export async function queryHarnessUsage() {
 
     let identity = 'Detected local install';
     let plan = 'Standard';
-    let quotaRemaining = 'Active';
-    let rolling5hRemainingPct = '100%';
-    let weeklyRemainingPct = '100%';
+    // Never invent a quota. These fields held hardcoded literals ('100%', '98%', '85%') that read
+    // like measurements but came from no source at all — no provider usage endpoint was called, so
+    // the table reported fictional headroom for every harness. A figure appears here only when a
+    // real source produced it; otherwise the value is honestly unknown.
+    let quotaRemaining = 'unknown — no usage endpoint integrated';
+    let rolling5hRemainingPct = '—';
+    let weeklyRemainingPct = '—';
     let isAuthed = h.authed;
     let authRoute = h.authRoute;
 
@@ -620,9 +624,6 @@ export async function queryHarnessUsage() {
           if (acc.active) identity = acc.active;
         }
         plan = 'Google AI Ultra / Pro';
-        rolling5hRemainingPct = '100%';
-        weeklyRemainingPct = '98%';
-        quotaRemaining = '5h window: 100% | Weekly compute: 98%';
       } catch {}
     } else if (h.id === 'claude') {
       try {
@@ -632,9 +633,6 @@ export async function queryHarnessUsage() {
           if (cData.userID) identity = `User: ${cData.userID.slice(0, 8)}...`;
           plan = cData.opusProMigrationComplete ? 'Claude Pro / Max (Opus enabled)' : 'Claude Pro';
         }
-        rolling5hRemainingPct = '85%';
-        weeklyRemainingPct = '92%';
-        quotaRemaining = '5h window: 85% remaining | Weekly cap: 92% remaining';
       } catch {}
     } else if (h.id === 'codex') {
       try {
@@ -659,15 +657,7 @@ export async function queryHarnessUsage() {
           }
           plan = 'ChatGPT Subscription (GPT-4o/Codex)';
         }
-        if (isAuthed) {
-          rolling5hRemainingPct = '94%';
-          weeklyRemainingPct = '96%';
-          quotaRemaining = '5h reasoning: 94% remaining | Weekly quota: 96% remaining';
-        } else {
-          rolling5hRemainingPct = '0% (expired)';
-          weeklyRemainingPct = '0% (expired)';
-          quotaRemaining = 'Authentication expired';
-        }
+        if (!isAuthed) quotaRemaining = 'unavailable — authentication expired';
       } catch {}
     } else if (h.id === 'grok') {
       try {
@@ -685,15 +675,7 @@ export async function queryHarnessUsage() {
           }
           plan = 'Grok Build Tier';
         }
-        if (isAuthed) {
-          rolling5hRemainingPct = '100%';
-          weeklyRemainingPct = '100%';
-          quotaRemaining = '5h rate window: 100% | Weekly allowance: 100%';
-        } else {
-          rolling5hRemainingPct = '0% (expired)';
-          weeklyRemainingPct = '0% (expired)';
-          quotaRemaining = 'Token expired (refresh needed)';
-        }
+        if (!isAuthed) quotaRemaining = 'unavailable — token expired (refresh needed)';
       } catch {}
     } else if (h.id === 'gemini') {
       try {
@@ -703,9 +685,6 @@ export async function queryHarnessUsage() {
           if (acc.active) identity = acc.active;
         }
         plan = 'Google AI API / Subscription';
-        rolling5hRemainingPct = '100%';
-        weeklyRemainingPct = '100%';
-        quotaRemaining = 'Standard rate limits active';
       } catch {}
     } else if (h.id === 'ollama') {
       identity = 'Local Machine';
@@ -716,9 +695,7 @@ export async function queryHarnessUsage() {
     } else if (h.id === 'hermes') {
       identity = 'Hermes Supervisor';
       plan = 'Autonomous Agent Runtime';
-      rolling5hRemainingPct = '100%';
-      weeklyRemainingPct = '100%';
-      quotaRemaining = 'Active broker & gateway';
+      quotaRemaining = 'local runtime — no metered quota';
     } else if (h.id === 'dsh') {
       let model = 'deepseek/deepseek-v4.1-flash';
       try {
@@ -729,9 +706,9 @@ export async function queryHarnessUsage() {
       } catch {}
       identity = model;
       plan = 'DeepSeek Dedicated Harness';
-      rolling5hRemainingPct = '95%';
-      weeklyRemainingPct = '98%';
-      quotaRemaining = 'DeepSeek reasoning pool active';
+      // dsh bills through OpenRouter metered credit and publishes no quota figures of its own, so
+      // none are shown. Point the reader at the one place the real number exists.
+      quotaRemaining = 'metered — see OpenRouter credits';
     } else if (h.id === 'openclaw') {
       let channelsStr = 'telegram, qqbot';
       try {
@@ -745,8 +722,6 @@ export async function queryHarnessUsage() {
         }
       } catch {}
       plan = 'Multi-Channel Gateway';
-      rolling5hRemainingPct = '100%';
-      weeklyRemainingPct = '100%';
       quotaRemaining = `Channels: ${channelsStr}`;
     }
 
