@@ -6,8 +6,8 @@ import { createPlugin } from './create.mjs';
 import { vendorPlugin, listProjectBricks } from './vendor.mjs';
 import { manageProjectPluginCopies } from './copies.mjs';
 import { managePluginLicense } from './monetization.mjs';
-import { getPlugin, getPluginMonetization } from '../../core/plugin-loader.mjs';
-import { describePlugin } from '../../core/plugin-store.mjs';
+import { getPlugin, getPluginMonetization, globalPluginsDir, projectPluginsDir } from '../../core/plugin-loader.mjs';
+import { describePlugin, pruneReplacementArchives, replacementArchiveDir } from '../../core/plugin-store.mjs';
 import { buildPluginCatalog } from '../../core/plugin-catalog.mjs';
 import { setPluginActive } from '../../core/plugin-activation.mjs';
 
@@ -29,6 +29,10 @@ Commands:
   refresh                   Rebuild installed command inventories and instruction surfaces
   copies [dir] [--apply]    Audit this repository's leftover copies of the shared default
                             plugins; --apply removes only the ones identical to the shared install
+  replacements [--prune] [--keep N] [--project] [--json]
+                            Copies kept by install --replace (default: shared folder). Reports
+                            the space; --prune keeps the newest N per plugin (default 1) and
+                            drops node_modules from the kept ones
   on <id> / off <id>         Enable/disable host execution for this repository alone
                               --all-repos   Change the shared setting for every repository
                               --clear       Drop this repository's override; follow the shared setting
@@ -133,6 +137,25 @@ export async function run(argv = []) {
 
   if (rest.includes('--help') || rest.includes('-h')) {
     printHelp();
+    return;
+  }
+
+  if (command === 'replacements') {
+    const keepAt = rest.indexOf('--keep');
+    const keep = keepAt === -1 ? 1 : Number(rest[keepAt + 1]);
+    if (!Number.isInteger(keep) || keep < 0) {
+      console.error('Usage: total-recall plugin replacements [--prune] [--keep N] [--project] [--json]');
+      process.exitCode = 1;
+      return;
+    }
+    const dir = replacementArchiveDir(rest.includes('--project') ? projectPluginsDir(process.cwd()) : globalPluginsDir());
+    const apply = rest.includes('--prune');
+    const r = pruneReplacementArchives(dir, { keep, apply });
+    if (rest.includes('--json')) { console.log(JSON.stringify({ ...r, applied: apply }, null, 2)); return; }
+    const gb = (r.bytesFreed / 1073741824).toFixed(2);
+    console.log(`\n  ${r.archiveDir}`);
+    console.log(`  ${r.kept.length + r.removed.length} retained cop${r.kept.length + r.removed.length === 1 ? 'y' : 'ies'}; keeping ${r.kept.length}, ${apply ? 'removed' : 'would remove'} ${r.removed.length}, ${apply ? 'stripped' : 'would strip'} node_modules from ${r.stripped.length}`);
+    console.log(`  ${apply ? 'Freed' : 'Would free'} ${gb} GB${apply ? '' : ' — run with --prune to apply'}\n`);
     return;
   }
 
