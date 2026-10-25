@@ -1,7 +1,8 @@
 import { importHostModule } from '../host-runtime.mjs';
 const { loadPluginModule: __loadOwnedPlugin } = await importHostModule('src/core/plugin-runtime.mjs');
 import { assertSecureControlUrl, normalizeControlUrl, headscaleUrlFromEnv, findHeadscaleKeyMeta } from './headscale-client.mjs';
-const { setSecret, defaultBrainDir } = await __loadOwnedPlugin('auth', 'secrets-store');
+const { setSecret } = await __loadOwnedPlugin('auth', 'secrets-store');
+const { hostSecretsBrainDir } = await __loadOwnedPlugin('auth', 'host-secrets-store');
 
 export async function verifyCredential(value, url, fetchImpl = fetch) {
   if (typeof value !== 'string' || !value.trim()) throw new Error('A credential is required');
@@ -18,8 +19,9 @@ export async function verifyCredential(value, url, fetchImpl = fetch) {
   return { verified: true, url: normalizeControlUrl(url) };
 }
 
-export async function saveCredential({ key, value, configuration = {}, brainDir = defaultBrainDir() }, dependencies = {}) {
+export async function saveCredential({ key, value, configuration = {} }, dependencies = {}) {
   if (key !== 'HEADSCALE_API_KEY') throw new Error('Unsupported mesh credential');
+  const brainDir = hostSecretsBrainDir();
   const meta = await findHeadscaleKeyMeta(brainDir);
   const url = configuration.controlUrl || headscaleUrlFromEnv() || meta?.headscale_url;
   if (!url) throw new Error('Set the control server URL before saving the credential');

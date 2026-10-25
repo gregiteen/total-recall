@@ -1,6 +1,6 @@
 import { spawn } from 'node:child_process';
 import { getLocalPresence, resolveActiveDevice } from './mesh-activity.mjs';
-import { getMeshPeers, execMeshCommand } from './mesh.mjs';
+import { getMeshPeers, listEnrichedMeshNodes, meshVaultRoot, execMeshCommand } from './mesh.mjs';
 import { getMeshSyncAuthorization } from './mesh-auth.mjs';
 
 function validRecord(record, peer) {
@@ -11,12 +11,12 @@ export async function getMeshPresence({ fetchImpl = fetch, includePeers = true }
   const local = getLocalPresence();
   const peers = [];
   if (includePeers) {
-    const candidates = getMeshPeers({ includeSelf: false }).filter(peer => peer.online && peer.ip);
-    const authorization = candidates.length ? await getMeshSyncAuthorization() : null;
+    const candidates = listEnrichedMeshNodes(meshVaultRoot()).filter(peer => !peer.self && !peer.vault_only && peer.online && peer.ip);
+    const authorization = candidates.some(peer => Number.isInteger(Number(peer.brain_port)) && Number(peer.brain_port) > 0 && Number(peer.brain_port) <= 65535) ? await getMeshSyncAuthorization() : null;
     await Promise.all(candidates.map(async peer => {
       try {
-        const port = Number(peer.brain_port || process.env.TR_SERVER_PORT || 3000);
-        if (!Number.isInteger(port) || port < 1 || port > 65535) throw new Error('Invalid peer service port');
+        const port = Number(peer.brain_port);
+        if (!Number.isInteger(port) || port < 1 || port > 65535) throw new Error('No valid presence service port is recorded for this peer');
         const response = await fetchImpl(`http://${peer.ip}:${port}/api/mesh/presence/local`, { headers: { Authorization: authorization }, redirect: 'error', signal: AbortSignal.timeout(10000) });
         if (!response.ok) throw new Error(`Peer HTTP ${response.status}`);
         const record = await response.json();

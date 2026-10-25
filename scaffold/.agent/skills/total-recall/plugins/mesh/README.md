@@ -45,3 +45,13 @@ This copies the plugin's source, skills, tests and docs into `bricks/mesh` and r
 **Use it directly with Total Recall (for your own machines and workflow).** Install it with `total-recall plugin install https://github.com/gregiteen/tr-plugin-mesh.git` and run `total-recall mesh`. Manage its credentials with `total-recall auth secret` and its skills with `total-recall skill`.
 
 Native-only state: new installations use validated SSSS records and the shared auth owner. Legacy imports and compatibility fallback formats are not supported.
+
+## Mesh screens and integration declarations
+
+The card defines Machines, Flows, Placement, Boundary and Join. Machines separates control membership, path checks, recorded login and actual execution. Hardware cells retain their measurement dates; failed or untested runtime probes remain unknown. Placement filters confirmed capabilities and includes the integration matrix declared in `plugin.json.mesh`.
+
+`total-recall mesh view <machines|flows|placement|boundary|join> --json` reads fixed owner commands. Each source carries its command, attempt time and either data or an explicit error. `mesh.provides` references declared operations/runtime modules; `mesh.integrations` identifies each owner and the meaning of its evidence; `mesh.endpoints` identifies served peer routes. These are declarations, not primitive grants or proof every provider action works. Read-only views never perform enrollment, policy changes, grant edits, deployments or secret transfers.
+
+The dashboard supplies frozen `host.operations`. Read-only cards show CLI handoffs for login administration and re-enrollment. A writable host may expose those declared actions; re-enrollment then requires target-specific confirmation. Enrollment keys never enter the card.
+
+Auth's `host-secrets-store` runtime supplies the single host-store selector for control credentials and mesh-sync authentication. Project `AGENT_DIR`/`TR_BRAIN` cannot divert these reads. Native SSSS audit contention is serialized by the generic host; errors still fail closed. The corresponding source runtime must be installed; missing modules never select a fallback implementation.

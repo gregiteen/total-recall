@@ -15,6 +15,10 @@
  *     class?: 'provider_api' | 'provider_browser' | 'self_generated' | 'manual',
  *     high_risk?: boolean,
  *     manual_keys?: string[],
+ *     // Keys the provider issues that a name pattern would otherwise class as self-minted
+ *     // (a Stripe webhook signing secret ends in _WEBHOOK_SECRET but only Stripe can issue it),
+ *     // with the console page where each is rolled.
+ *     issued_keys?: { [key: string]: string },
  *     // A provider that lets the account mint and revoke its own keys over its API. The management
  *     // credential is a separate stored secret; without it the provider cannot rotate itself, which
  *     // is what made 'provider_api' a class with no implementation.
@@ -345,7 +349,12 @@ export const PROVIDER_CATALOG = [
       notes: 'Live keys are payment-critical. Roll with a grace window; never revoke before export confirms.',
     },
     // Stripe exposes no API to mint or roll secret keys — dashboard only, by design.
-    rotation: { class: 'provider_browser', high_risk: true },
+    rotation: {
+      class: 'provider_browser',
+      high_risk: true,
+      // Signing secrets are issued per webhook endpoint; a self-minted value fails every signature check.
+      issued_keys: { STRIPE_WEBHOOK_SECRET: 'https://dashboard.stripe.com/webhooks' },
+    },
     default_monthly_cap_usd: null,
     tiers: [{ id: 'payg', label: 'Pay as you go', monthly_usd: null }],
   },

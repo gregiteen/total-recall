@@ -1,0 +1,192 @@
+/**
+ * Headscale control-server API, host-free.
+ *
+ * The caller supplies the control-server URL, the API key and the HTTP
+ * transport, so this module reads no credential store and no environment. The
+ * Total Recall host resolves the key from its auth plugin and passes it in;
+ * a vendored copy passes its own.
+ */
+
+const DEFAULT_TIMEOUT_MS = 10_000;
+
+/**
+ * Reject non-HTTPS control servers (loopback excepted for local development).
+ * Bearer tokens must never travel in cleartext over a network hop.
+ */
+export function assertSecureControlUrl(url) {
+  const parsed = new URL(url);
+  const isLoopback = ['localhost', '127.0.0.1', '::1'].includes(parsed.hostname);
+  if (parsed.protocol !== 'https:' && !(isLoopback && parsed.protocol === 'http:')) {
+    throw new Error('Headscale URL must use HTTPS (HTTP is allowed only for loopback development)');
+  }
+  return parsed;
+}
+
+/** Strip a trailing slash so path joining stays predictable. */
+export function normalizeControlUrl(url) {
+  const value = String(url || '').trim();
+  return value.endsWith('/') ? value.slice(0, -1) : value;
+}
+
+/** A fetch with a deadline, used when the caller supplies no transport. */
+function timedFetch(fetchImpl) {
+  return async (url, options = {}) => {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), options.timeoutMs || DEFAULT_TIMEOUT_MS);
+    try {
+      return await fetchImpl(url, { ...options, signal: controller.signal });
+    } finally {
+      clearTimeout(timer);
+    }
+  };
+}
+
+/**
+ * Bind a client to one control server.
+ * @param {{ url: string, token: string, fetch?: (url: string, options: object) => Promise<Response> }} options
+ *   `fetch` receives `timeoutMs` in its options and is responsible for honouring it.
+ */
+export function createHeadscaleApi({ url, token, fetch: transport } = {}) {
+  const base = normalizeControlUrl(url);
+  if (!base) throw new Error('A Headscale control server URL is required');
+  assertSecureControlUrl(base);
+  if (typeof token !== 'string' || !token) throw new Error('A Headscale API key is required');
+  const send = transport || timedFetch(globalThis.fetch);
+
+  /** Authenticated JSON request; a non-2xx answer throws with `status` and a bounded `detail`. */
+  async function request(path, options = {}) {
+    const cleanPath = path.startsWith('/') ? path : `/${path}`;
+    const res = await send(`${base}${cleanPath}`, {
+      ...options,
+      headers: {
+        ...options.headers,
+        Authorization: `Bearer ${token}`,
+        Accept: 'application/json',
+        'Content-Type': 'application/json',
+      },
+      timeoutMs: options.timeoutMs || DEFAULT_TIMEOUT_MS,
+    });
+    if (!res.ok) {
+      const errorText = await res.text().catch(() => '');
+      const error = new Error(`Headscale API error (${res.status} ${res.statusText})`);
+      error.status = res.status;
+      error.detail = errorText.slice(0, 500);
+      throw error;
+    }
+    const contentType = res.headers.get('content-type') || '';
+    if (contentType.includes('application/json')) return res.json();
+    throw new Error('Control server returned a non-JSON response');
+  }
+
+  /**
+   * Resolve a control-server user to both of its identifying forms.
+   * User-facing names resolve to the current API numeric ID.
+   */
+  async function resolveUser(requested) {
+    const data = await request('/api/v1/user');
+    const users = data?.users || [];
+    if (requested) {
+      const match = users.find(
+        (u) => String(u.id) === String(requested) || u.name === requested || (u.email && u.email === requested),
+      );
+      if (match) return { id: String(match.id), name: match.name };
+      // Unknown to us — pass it through and let the control server decide.
+      return { id: String(requested), name: String(requested) };
+    }
+    if (!users.length) return null;
+    return { id: String(users[0].id), name: users[0].name };
+  }
+
+  /** Mint using the current numeric-user API without older-version retries. */
+  async function createPreAuthKey(options = {}) {
+    const ttlMinutes = Number.isFinite(options.ttlMinutes) ? options.ttlMinutes : 10;
+    const expiration = options.expiration || new Date(Date.now() + ttlMinutes * 60_000).toISOString();
+    const ref = options.userRef || await resolveUser(options.user);
+    if (!ref?.id || !/^[0-9]+$/.test(String(ref.id))) throw new Error('Select a registered numeric control-server user');
+    const user = String(ref.id);
+    const data = await request('/api/v1/preauthkey', {
+      method: 'POST', body: JSON.stringify({ user, reusable: options.reusable === true,
+        ephemeral: options.ephemeral === true, expiration, aclTags: options.aclTags || [] }),
+    });
+    const key = data?.preAuthKey?.key;
+    if (typeof key !== 'string' || !key) throw new Error('Headscale did not return a pre-auth key');
+    return { key, expiration, user, raw: data };
+  }
+
+  /**
+   * Read the control server's ACL policy.
+   *
+   * Requires the server to run with `policy.mode: database` — in `file` mode the
+   * policy lives on the control server's disk and the API cannot manage it.
+   *
+   * Headscale returns a 500 (not a 404) when database mode is on but the policy
+   * table is still empty, so an unset policy is normalised to `policy: null`
+   * rather than thrown. That distinction matters: "no policy yet" is the expected
+   * first-run state, whereas a real transport or auth failure must still surface.
+   */
+  async function getPolicy() {
+    try {
+      const data = await request('/api/v1/policy');
+      return { policy: data?.policy ?? null, updatedAt: data?.updatedAt ?? null, configured: Boolean(data?.policy), raw: data };
+    } catch (err) {
+      const detail = String(err.detail || '');
+      const emptyPolicyTable = err.status === 404 || (err.status === 500 && /policy|not found|no such/i.test(detail));
+      if (emptyPolicyTable) return { policy: null, updatedAt: null, configured: false, unset: true, raw: null };
+      if (err.status === 400 && /database/i.test(detail)) {
+        const modeError = new Error('Headscale is running in file policy mode; set `policy.mode: database` to manage the policy over the API');
+        modeError.status = err.status;
+        modeError.detail = err.detail;
+        modeError.code = 'POLICY_MODE_FILE';
+        throw modeError;
+      }
+      throw err;
+    }
+  }
+
+  /**
+   * Replace the control server's ACL policy.
+   *
+   * `policy` may be an object (serialised here) or an already-formatted
+   * HuJSON/JSON string. Headscale validates server-side and rejects the write if
+   * the policy's own `tests` block fails, so a bad policy never lands.
+   */
+  async function setPolicy(policy) {
+    if (!policy) throw new Error('A policy is required');
+    const serialised = typeof policy === 'string' ? policy : JSON.stringify(policy, null, 2);
+    const data = await request('/api/v1/policy', { method: 'PUT', body: JSON.stringify({ policy: serialised }) });
+    return { policy: data?.policy ?? serialised, updatedAt: data?.updatedAt ?? null, raw: data };
+  }
+
+  return { url: base, request, resolveUser, createPreAuthKey, getPolicy, setPolicy };
+}
+
+/**
+ * Build a policy that lets every mesh member reach every other member, and use
+ * Tailscale SSH between them as any non-root user.
+ *
+ * This is deliberately the simple single-operator shape: one person's own
+ * machines, all equally trusted. It is NOT appropriate for a multi-tenant
+ * tailnet — headscale membership is the trust boundary, so anything admitted to
+ * the mesh inherits this access. Narrow `src`/`dst` before adding a node you do
+ * not control.
+ *
+ * root is excluded via `autogroup:nonroot`: SSH-ing straight to root over the
+ * mesh removes the audit trail that makes per-user access worth having.
+ */
+export function buildMeshSshPolicy({ allowRoot = false } = {}) {
+  return {
+    acls: [{ action: 'accept', src: ['*'], dst: ['*:*'] }],
+    ssh: [
+      {
+        action: 'accept',
+        // autogroup:member, not autogroup:self. 'self' limits a member to SSH on their own
+        // devices, so no node on the mesh could reach any other one and every cross-machine
+        // operation fell back to key auth that had never been set up — which reads as the peer
+        // being unreachable. The point of this policy is that members reach each other.
+        src: ['autogroup:member'],
+        dst: ['autogroup:member'],
+        users: allowRoot ? ['autogroup:nonroot', 'root'] : ['autogroup:nonroot'],
+      },
+    ],
+  };
+}

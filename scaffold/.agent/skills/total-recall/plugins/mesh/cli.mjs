@@ -18,7 +18,15 @@ export async function run(argv = []) {
     const at=args.indexOf('--mode');const mode=at<0?0o600:Number.parseInt(args[at+1],8);
     console.log(JSON.stringify(await putMeshFile({node:args[2],source:args[3],destination:args[4],mode})));return;
   }
-  if (sub === 'status' || sub === 'view' || sub === 'probe') {
+  if (sub === 'view') {
+    const { readMeshView } = await import('./src/core/screen-view.mjs');
+    if (args.slice(1).some(arg => arg.startsWith('-') && arg !== '--json')) throw new Error('view accepts a screen and --json only');
+    const names = args.slice(1).filter(arg => arg !== '--json');
+    if (names.length > 1) throw new Error('view accepts one screen');
+    console.log(JSON.stringify(await readMeshView(names[0])));
+    return;
+  }
+  if (sub === 'status' || sub === 'probe') {
     const result = await meshStatus();
     console.log(JSON.stringify(result));
     if (sub === 'probe' && !result.control.verified) process.exitCode = 1;

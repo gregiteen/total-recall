@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
-import { meshTargetOf, provisionHeadscale, updateHeadscale, updateConsole, sshExec } from '../core/headscale-server.mjs';
+import { meshTargetOf, provisionHeadscale, updateHeadscale, updateConsole, sshExec } from '../../capability/control-server.mjs';
 import { saveCredential } from '../core/credentials.mjs';
 import { brainDir } from '../core/config.mjs';
 import { PluginStateStore } from '../ssss-store.mjs';

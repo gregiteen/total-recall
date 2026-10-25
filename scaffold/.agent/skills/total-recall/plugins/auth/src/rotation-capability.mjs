@@ -115,6 +115,21 @@ export function getRotationPlan(key, meta = {}) {
     };
   }
 
+  const issuer = meta.provider ? getProvider(meta.provider) : providerForKeyName(k);
+  const issuedConsole = Object.entries(issuer?.rotation?.issued_keys || {})
+    .find(([name]) => name.toUpperCase() === k.toUpperCase())?.[1];
+  if (issuedConsole) {
+    return {
+      ...base,
+      class: 'provider_browser',
+      provider: issuer.id,
+      console_url: issuedConsole,
+      high_risk: !!issuer.rotation.high_risk,
+      automatable: true,
+      reason: `${issuer.name} issues this value; roll it in the console, never mint it locally`,
+    };
+  }
+
   if (matchesAny(k, SELF_GENERATED_PATTERNS)) {
     return {
       ...base,

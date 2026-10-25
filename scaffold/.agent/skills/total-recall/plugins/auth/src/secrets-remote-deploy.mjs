@@ -18,7 +18,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { buildEnvProjection, mergeEnvManagedBlock, projectSlugFromPath } from './secrets-env-export.mjs';
-import { resolveSecretsPath } from './secrets-store.mjs';
+import { resolveSecretsPath, loadSecrets, setSecret, secretValueFingerprint } from './secrets-store.mjs';
 import { authState } from './metadata-state.mjs';
 
 /**
@@ -114,6 +114,7 @@ function runSsh(target, remoteCommand, { input } = {}) {
     input: input != null ? input : undefined,
     encoding: 'utf8',
     timeout: 20000,
+    maxBuffer: 16 * 1024 * 1024,
   });
   return result;
 }
@@ -128,6 +129,7 @@ function quoteRemotePath(p) {
  */
 function fetchRemoteFile(target, remoteFile) {
   const r = runSsh(target, `cat ${quoteRemotePath(remoteFile)} 2>/dev/null || true`);
+  if (r.error || r.status !== 0) throw new Error(`SSH read failed for target "${target.name}": ${r.error?.message || (r.stderr || '').slice(0, 300)}`);
   if (r.error) throw new Error(`SSH connect failed for target "${target.name}": ${r.error.message}`);
   return r.stdout || '';
 }
@@ -209,7 +211,7 @@ export async function deployEnvToRemote(brainDir, targetName, opts = {}) {
   }
 
   const existing = fetchRemoteFile(target, remoteFile);
-  const merged = mergeEnvManagedBlock(existing, projection.body);
+  const merged = mergeEnvManagedBlock(existing, projection.body, { partial: Boolean(opts.keys?.length) });
   writeRemoteFile(target, remoteFile, merged);
 
   let restarted = false;
@@ -230,6 +232,113 @@ export async function deployEnvToRemote(brainDir, targetName, opts = {}) {
     restarted,
     restartOutput: restartOutput ? restartOutput.slice(0, 2000) : null,
   };
+}
+
+/**
+ * Parse dotenv text into key -> { value, count }. The last assignment wins, as
+ * in dotenv; `count` exposes duplicates, which loaders resolve differently.
+ */
+export function parseDotenv(text) {
+  const out = new Map();
+  for (const raw of String(text || '').split(/\r?\n/)) {
+    const m = /^\s*(?:export\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*)$/.exec(raw);
+    if (!m) continue;
+    let value = m[2].trim();
+    if (value.length >= 2 && value.startsWith('"') && value.endsWith('"')) {
+      try { value = JSON.parse(value); } catch { value = value.slice(1, -1); }
+    } else if (value.length >= 2 && value.startsWith("'") && value.endsWith("'")) {
+      value = value.slice(1, -1);
+    } else {
+      value = value.replace(/\s+#.*$/, '');
+    }
+    out.set(m[1], { value, count: (out.get(m[1])?.count || 0) + 1 });
+  }
+  return out;
+}
+
+function findTarget(brainDir, targetName) {
+  const target = loadRemoteTargets(brainDir).find((t) => t.name === targetName);
+  if (!target) throw new Error(`Unknown remote target "${targetName}". List them with: total-recall auth secret remote list`);
+  return target;
+}
+
+/**
+ * Compare a deployed remote file with what the store would project there, key
+ * by key, by value fingerprint. Values never leave this process.
+ *
+ * @param {string} brainDir
+ * @param {string} targetName
+ * @param {{ keys?: string[], projectPath?: string }} opts
+ */
+export async function verifyRemote(brainDir, targetName, opts = {}) {
+  const target = findTarget(brainDir, targetName);
+  const projectPath = opts.projectPath || process.cwd();
+  const projection = await buildEnvProjection(brainDir, {
+    includeGlobal: target.includeGlobal !== false,
+    keys: opts.keys?.length ? opts.keys : target.keys,
+    projectPath,
+    projectSlug: projectSlugFromPath(projectPath),
+  });
+  const remoteFile = path.posix.join(target.remotePath, target.filename || '.env');
+  const remote = parseDotenv(fetchRemoteFile(target, remoteFile));
+  const projected = new Set(projection.entries.map(([key]) => key));
+  const rows = projection.entries.map(([key, value]) => {
+    const found = remote.get(key);
+    const status = !found ? 'missing'
+      : secretValueFingerprint(found.value) === secretValueFingerprint(value) ? 'match' : 'differs';
+    return { key, status, duplicates: found ? found.count - 1 : 0 };
+  });
+  return {
+    target: target.name,
+    host: target.host,
+    remoteFile,
+    rows,
+    remoteOnly: [...remote.keys()].filter((key) => !projected.has(key)),
+    ok: rows.every((row) => row.status === 'match' && !row.duplicates),
+  };
+}
+
+/**
+ * Move named keys out of a pm2 app's captured environment into the store, so
+ * the app can run from the store's projection instead. pm2 keeps the
+ * environment a process was first started with and lets it override the
+ * app's env file, which hides stale and unneeded credentials from the store.
+ * Only the keys asked for are read; nothing is printed.
+ *
+ * @param {string} brainDir
+ * @param {string} targetName
+ * @param {{ app: string, keys: string[], apply?: boolean, overwrite?: boolean, repos?: string[] }} opts
+ */
+export async function importFromPm2(brainDir, targetName, opts = {}) {
+  if (!opts.app) throw new Error('import-pm2 requires --app <pm2 process name>');
+  if (!opts.keys?.length) throw new Error('import-pm2 requires --keys: import only what the app needs');
+  const target = findTarget(brainDir, targetName);
+  const r = runSsh(target, 'pm2 jlist');
+  if (r.error || r.status !== 0) throw new Error(`pm2 jlist failed on "${target.name}": ${r.error?.message || (r.stderr || '').slice(0, 300)}`);
+  const raw = r.stdout || '';
+  let list;
+  // pm2 may print "[PM2] …" notices before the JSON array; start where the array does.
+  const start = raw.search(/^\[\s*(?:\{|\])/m);
+  try { list = JSON.parse(raw.slice(start)); } catch { throw new Error('pm2 jlist did not return JSON'); }
+  if (start === -1 || !Array.isArray(list)) throw new Error('pm2 jlist did not return JSON');
+  const proc = list.find((p) => p.name === opts.app);
+  if (!proc) throw new Error(`pm2 process "${opts.app}" not found on "${target.name}"`);
+  const env = proc.pm2_env?.env || {};
+  const secrets = await loadSecrets(brainDir);
+  const rows = [];
+  for (const key of opts.keys) {
+    const value = env[key] ?? proc.pm2_env?.[key];
+    if (value == null || value === '') { rows.push({ key, status: 'absent', applied: false }); continue; }
+    const stored = secrets[key];
+    const status = stored == null || stored === '' ? 'new' : String(stored) === String(value) ? 'same' : 'conflict';
+    let applied = false;
+    if (opts.apply && (status === 'new' || (status === 'conflict' && opts.overwrite))) {
+      await setSecret(brainDir, key, String(value), opts.repos?.length ? { repos: opts.repos } : {});
+      applied = true;
+    }
+    rows.push({ key, status, applied });
+  }
+  return { target: target.name, app: opts.app, rows };
 }
 
 /**

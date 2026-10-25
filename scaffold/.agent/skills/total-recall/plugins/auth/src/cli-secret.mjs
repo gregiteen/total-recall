@@ -15,6 +15,8 @@
 import {
   setSecret,
   getSecret,
+  secretValueFingerprint,
+  resolveSecretKey,
   listSecretsMeta,
   rotateSecret,
   deleteSecret,
@@ -55,9 +57,11 @@ import {
   removeRemoteTarget,
   deployEnvToRemote,
   deployKeyToRemotes,
+  verifyRemote,
+  importFromPm2,
 } from './secrets-remote-deploy.mjs';
 import { listProviders, getProvider } from './provider-catalog.mjs';
-import { resolveBrainDir, parseLayerFlag, detectProjectBrain } from './agent-dir.mjs';
+import { parseLayerFlag, detectProjectBrain } from './agent-dir.mjs';
 import { hostSecretsBrainDir } from './host-secrets-store.mjs';
 import fs from 'node:fs';
 import { ensureProjectId } from './project-id.mjs';
@@ -233,12 +237,21 @@ function printHelp() {
       list                 Show configured targets (no secret values)
       remove <name>        Delete a target
       deploy <name>        Push the SSOT projection to that target now
-                            [--dry-run] [--keys k1,k2]
+                            [--dry-run] [--keys k1,k2] [--path <repo>]
+      verify <name>        Compare the deployed file with the store by fingerprint
+                            (match/differs/missing/duplicate; no values) [--keys] [--path]
+      import-pm2 <name>    Move named keys from a pm2 app's captured env into the store
+                            --app <pm2 name> --keys k1,k2 [--apply] [--overwrite] [--repo r]
+    merge-store <dir>     Fold a stray per-repo store into this one (dry run unless --apply).
+                           Missing keys are imported, equal keys gain the binding, differing
+                           keys are conflicts: settle with --take K or --rename SRC=DEST
+      --repo <name>       Bind imported keys to this repo
+      --bind-same         Also bind keys whose value already matches (only for an app's own store)
+      --dates-from-source Restore an older value date for keys whose value is identical
     diff-env              Compare repo .env files against the store (no values printed)
       --path <dir>        Single repo (default: every project-registry path)
       --filename .env     File to compare (default .env; server/<name> also checked)
       --strict            Exit 1 on any drift or unadopted key
-      --layer project     Compare against the project-local store (default: global)
     import-env            Import selected local .env credentials into auth
       --all / --file / --overwrite / --dry-run
     catalog               Full catalog: keys, providers, usage, rotation, cost, tracking
@@ -258,6 +271,7 @@ function printHelp() {
       --shared-ok         Allow this key to share its value with other secret names
       --no-shared-ok
       --repo <name>       Bind to exactly ONE product repo (not multi)
+      --unbind <repo>     Remove a repo binding (comma separated for several)
       --repos <name>      Same as --repo (single name only; multi rejected)
       --tier <id>         Subscription tier
       --monthly-cost <n>  Planned monthly $ 
@@ -272,6 +286,10 @@ function printHelp() {
     --headscale-url <https-url>
     rotation-due          List keys overdue for rotation
       --enqueue           Create daemon tasks + browser-use prompts for each due key
+    fingerprint           Identify a credential without printing it: length, type
+                           prefix, fingerprint and the store keys holding the same
+                           value. --from-clipboard | --stdin; --expect-prefix <p>
+                           and --not <KEY> fail (exit 1) on a wrong value.
     rotate-browser <key>  Drive the provider console in TR's browser and rotate
       --print-only        Only print instructions
       --headless          Allow headless for verified recipes
@@ -379,7 +397,7 @@ function parseArgs(args) {
   let i = 1;
   if (out.command === 'remote') {
     if (args[i] && !args[i].startsWith('--')) out.subcommand = args[i++];
-    if (['add', 'remove', 'rm', 'deploy'].includes(out.subcommand) && args[i] && !args[i].startsWith('--')) {
+    if (['add', 'remove', 'rm', 'deploy', 'verify', 'import-pm2'].includes(out.subcommand) && args[i] && !args[i].startsWith('--')) {
       out.key = args[i++]; // reused as the remote target name
     }
   }
@@ -395,6 +413,7 @@ function parseArgs(args) {
       'rm',
       'generate',
       'account-sync',
+      'merge-store',
     ].includes(out.command) &&
     args[i] &&
     !args[i].startsWith('--')
@@ -458,6 +477,21 @@ function parseArgs(args) {
       case '--dry-run':
         out.dryRun = true;
         break;
+      case '--apply':
+        out.apply = true;
+        break;
+      case '--bind-same':
+        out.bindSame = true;
+        break;
+      case '--dates-from-source':
+        out.datesFromSource = true;
+        break;
+      case '--unbind':
+        out.unbind = (out.unbind || []).concat(String(args[++i] || '').split(',').map((v) => v.trim()).filter(Boolean));
+        break;
+      case '--take':
+        out.take = String(args[++i] || '').split(',').map((v) => v.trim()).filter(Boolean);
+        break;
       case '--overwrite':
         out.overwrite = true;
         break;
@@ -507,6 +541,9 @@ function parseArgs(args) {
       case '--label':
         out.label = args[++i];
         break;
+      case '--provides':
+        out.provides = args[++i];
+        break;
       case '--project':
         out.project = args[++i];
         break;
@@ -517,8 +554,7 @@ function parseArgs(args) {
         out.path = args[++i];
         break;
       case '--layer':
-        out.layer = args[++i];
-        break;
+        throw new Error('Secrets have one store; --layer does not apply');
       case '--all-projects':
         out.allProjects = true;
         break;
@@ -607,6 +643,15 @@ function parseArgs(args) {
       case '--stdin':
         out.stdin = true;
         break;
+      case '--app':
+        out.app = args[++i];
+        break;
+      case '--expect-prefix':
+        out.expectPrefix = args[++i];
+        break;
+      case '--not':
+        out.notKey = args[++i];
+        break;
       case '--launch-agent':
         out.launchAgents.push(args[++i]);
         break;
@@ -637,6 +682,21 @@ function parseArgs(args) {
   return out;
 }
 
+/** The host's single secrets store; TR_SECRETS_BRAIN is the only override (deploy/ops/tests). */
+export function secretsStoreDir() {
+  return hostSecretsBrainDir();
+}
+
+/** Name of the repo the command runs in (its project root's directory name), or null outside one. */
+function currentRepoName() {
+  try {
+    const project = detectProjectBrain(process.cwd());
+    return project ? path.basename(project.projectRoot || path.dirname(path.dirname(project.agentDir))) : null;
+  } catch {
+    return null;
+  }
+}
+
 /** Id of the project the command runs in (created on first use), or null outside a project. */
 function currentProjectId() {
   try {
@@ -649,24 +709,30 @@ function currentProjectId() {
 
 export default async function secretCli(argv) {
   const { layer, remainingArgs } = parseLayerFlag(argv);
-  const opts = parseArgs(remainingArgs);
+  let opts;
+  try {
+    opts = parseArgs(remainingArgs);
+  } catch (err) {
+    console.error(`❌ ${err.message}`);
+    process.exit(1);
+  }
   if (opts.help || !opts.command) {
     printHelp();
     return;
   }
 
-  let brainDir;
-  try {
-    if (layer === 'project') throw new Error('Secrets have one host store; --project does not apply.');
-    brainDir = hostSecretsBrainDir();
-  } catch (err) {
-    console.error(`❌ ${err.message}`);
+  // One store per host. A project brain in the cwd never selects a different
+  // secrets.enc: that is how per-repo stores appeared and drifted from the real
+  // one. Repo binding lives in each key's metadata (`meta <key> --repo`).
+  if (layer === 'project') {
+    console.error('❌ Secrets have one store; --project does not apply. Bind a key to a repo with `auth secret meta <key> --repo <name>`.');
     process.exit(1);
   }
+  const brainDir = secretsStoreDir();
 
-  if (opts.stdin) {
+  if (opts.stdin && opts.command !== 'fingerprint') {
     if (!['set', 'rotate', 'rekey'].includes(opts.command)) {
-      console.error('❌ --stdin is only valid with `set`, `rotate`, or `rekey`');
+      console.error('❌ --stdin is only valid with `set`, `rotate`, `rekey`, or `fingerprint`');
       process.exit(1);
     }
     if (opts.command !== 'rekey' && !opts.key) {
@@ -776,7 +842,8 @@ export default async function secretCli(argv) {
         console.error('Usage: total-recall auth secret set <key> <value>');
         process.exit(1);
       }
-      await setSecret(brainDir, opts.key, opts.value, {
+      const setKey = await resolveSecretKey(brainDir, opts.key, currentRepoName());
+      await setSecret(brainDir, setKey, opts.value, {
         tags: opts.tags != null ? opts.tags : undefined,
         project_id: currentProjectId(),
         provider: opts.provider || inferProvider(opts.key),
@@ -793,7 +860,7 @@ export default async function secretCli(argv) {
         project_path: opts.project,
         headscale_url: opts.headscale_url,
       });
-      console.log(`\n  ✅ Secret set: ${opts.key}`);
+      console.log(`\n  ✅ Secret set: ${setKey}${setKey !== opts.key ? ` (provides ${opts.key} for this repo)` : ''}`);
       console.log(`     store: ${resolveSecretsPath(brainDir)}`);
       console.log(`     (value not printed)\n`);
       return;
@@ -1019,6 +1086,14 @@ export default async function secretCli(argv) {
       }
       const patch = {};
       if (opts.repos.length) patch.repos = opts.repos;
+      if (opts.unbind?.length) {
+        const row = (await listSecretsMeta(brainDir)).find((r) => r.key === opts.key);
+        if (!row) {
+          console.error(`❌ Secret not found: ${opts.key}`);
+          process.exit(1);
+        }
+        patch.repos = (patch.repos || row.repos || []).filter((r) => !opts.unbind.includes(r));
+      }
       if (opts.tier != null) patch.subscription_tier = opts.tier;
       if (opts.monthly_cost != null) patch.monthly_cost_usd = opts.monthly_cost;
       if (opts.monthly_cap != null) patch.monthly_cap_usd = opts.monthly_cap;
@@ -1028,6 +1103,7 @@ export default async function secretCli(argv) {
       if (opts.notes) patch.notes = opts.notes;
       if (opts.tags != null) patch.tags = opts.tags;
       if (opts.label) patch.label = opts.label;
+      if (opts.provides !== undefined) patch.provides = opts.provides;
       if (opts.project) patch.project_path = opts.project;
       if (opts.provider) patch.provider = opts.provider;
       if (opts.scope) patch.scope = opts.scope;
@@ -1081,7 +1157,8 @@ export default async function secretCli(argv) {
         process.exit(1);
       }
       const project_id = currentProjectId();
-      const r = await getSecret(brainDir, opts.key, { project_id });
+      const resolved = await resolveSecretKey(brainDir, opts.key, currentRepoName());
+      const r = await getSecret(brainDir, resolved, { project_id });
       if (opts.json) {
         console.log(JSON.stringify(r.found ? { found: true, value: r.value } : { found: false }));
         return;
@@ -1097,6 +1174,13 @@ export default async function secretCli(argv) {
 
     if (opts.command === 'list') {
       const rows = await listSecretsMeta(brainDir);
+      if (opts.json) {
+        // Metadata for monitoring: bindings, tags, provides, provider and
+        // verification. Never the value, its full hash or a masked preview.
+        const safe = rows.map(({ masked, fingerprint_full, value, ...row }) => row);
+        console.log(JSON.stringify({ store: resolveSecretsPath(brainDir), keys: safe }, null, 2));
+        return;
+      }
       if (!rows.length) {
         console.log(`\n  No secrets in ${resolveSecretsPath(brainDir)}\n`);
         return;
@@ -1125,6 +1209,33 @@ export default async function secretCli(argv) {
       return;
     }
 
+    if (opts.command === 'fingerprint') {
+      // Identify a credential without seeing it: which store keys hold the same
+      // value, its length and its non-secret type prefix. Lets an operator check
+      // the clipboard holds the new key before `rotate --from-clipboard`.
+      const value = opts.fromClipboard ? readSystemClipboard() : opts.stdin ? readStdinValue() : '';
+      if (!value) {
+        console.error('Usage: total-recall auth secret fingerprint --from-clipboard|--stdin [--expect-prefix <p>] [--not <KEY>] [--json]');
+        process.exit(1);
+      }
+      const fp = secretValueFingerprint(value);
+      const matches = (await listSecretsMeta(brainDir)).filter((row) => row.fingerprint_full === fp).map((row) => row.key);
+      const prefix = (value.match(/^(?:(?:sk|rk|pk)_(?:live|test)_|whsec_|ghp_|github_pat_|npm_|dop_v1_|sk-or-v1-|sk-ant-|AIza|tr_)/) || [null])[0];
+      const r = { length: value.length, prefix, fingerprint: fp.slice(0, 12), whitespace: /\s/.test(value), store_matches: matches };
+      const problems = [];
+      if (opts.expectPrefix && !value.startsWith(opts.expectPrefix)) problems.push(`does not start with ${opts.expectPrefix}`);
+      if (opts.notKey && matches.includes(opts.notKey)) problems.push(`equals the current ${opts.notKey}`);
+      if (opts.json) console.log(JSON.stringify({ ...r, ok: !problems.length, problems }, null, 2));
+      else {
+        console.log(`\n  🔏 length ${r.length}  prefix ${r.prefix || '(none)'}  fingerprint ${r.fingerprint}${r.whitespace ? '  CONTAINS WHITESPACE' : ''}`);
+        console.log(`     store keys with this value: ${matches.join(', ') || 'none'}`);
+        for (const p of problems) console.log(`  ❌ ${p}`);
+        console.log('');
+      }
+      if (problems.length) process.exitCode = 1;
+      return;
+    }
+
     if (opts.command === 'remote') {
       if (!opts.subcommand) {
         console.error(
@@ -1132,7 +1243,9 @@ export default async function secretCli(argv) {
             '  add <name> --host <h> --path </remote/dir> [--user root] [--port 22] [--filename .env] [--restart-cmd "..."]\n' +
             '  list\n' +
             '  remove <name>\n' +
-            '  deploy <name> [--dry-run] [--keys k1,k2]',
+            '  deploy <name> [--dry-run] [--keys k1,k2] [--path <repo>]\n' +
+            '  verify <name> [--keys k1,k2] [--path <repo>] [--json]\n' +
+            '  import-pm2 <name> --app <pm2 name> --keys k1,k2 [--apply] [--overwrite] [--repo r] [--json]',
         );
         process.exit(1);
       }
@@ -1198,6 +1311,7 @@ export default async function secretCli(argv) {
           dryRun: opts.dryRun,
           keys: opts.keys.length ? opts.keys : undefined,
           rename: opts.rename,
+          projectPath: opts.path ? path.resolve(opts.path) : undefined,
         });
         if (r.dryRun) {
           console.log(`\n  📤 dry-run remote deploy → ${r.target} (${r.host})`);
@@ -1208,6 +1322,50 @@ export default async function secretCli(argv) {
         if (r.restarted) console.log(`     restart: ok`);
         else if (r.restartOutput) console.log(`     restart: FAILED — ${r.restartOutput.slice(0, 300)}`);
         console.log(`     (values written with mode 0600 remotely; not printed)\n`);
+        return;
+      }
+
+      if (opts.subcommand === 'verify') {
+        if (!opts.key) {
+          console.error('Usage: total-recall auth secret remote verify <name> [--keys k1,k2] [--path <repo>] [--json]');
+          process.exit(1);
+        }
+        const r = await verifyRemote(brainDir, opts.key, {
+          keys: opts.keys.length ? opts.keys : undefined,
+          projectPath: opts.path ? path.resolve(opts.path) : undefined,
+        });
+        if (opts.json) console.log(JSON.stringify(r, null, 2));
+        else {
+          console.log(`\n  🔎 ${r.target} (${r.host}:${r.remoteFile})`);
+          for (const row of r.rows) {
+            const mark = row.status === 'match' && !row.duplicates ? '✅' : '❌';
+            console.log(`  ${mark} ${row.key.padEnd(36)} ${row.status}${row.duplicates ? ` (+${row.duplicates} duplicate)` : ''}`);
+          }
+          console.log(`     ${r.remoteOnly.length} key(s) on the remote are not in the projection`);
+          console.log(`     ${r.ok ? 'in sync' : 'DRIFT'} (values compared by fingerprint; none printed)\n`);
+        }
+        if (!r.ok) process.exitCode = 1;
+        return;
+      }
+
+      if (opts.subcommand === 'import-pm2') {
+        if (!opts.key || !opts.app || !opts.keys.length) {
+          console.error('Usage: total-recall auth secret remote import-pm2 <name> --app <pm2 name> --keys k1,k2 [--apply] [--overwrite] [--repo r] [--json]');
+          process.exit(1);
+        }
+        const r = await importFromPm2(brainDir, opts.key, {
+          app: opts.app,
+          keys: opts.keys,
+          apply: opts.apply,
+          overwrite: opts.overwrite,
+          repos: opts.repos,
+        });
+        if (opts.json) console.log(JSON.stringify(r, null, 2));
+        else {
+          console.log(`\n  📥 pm2 ${r.app} on ${r.target}${opts.apply ? '' : ' (dry run; add --apply to store)'}`);
+          for (const row of r.rows) console.log(`  • ${row.key.padEnd(36)} ${row.status}${row.applied ? ' → stored' : ''}`);
+          console.log('     (values read in-process; none printed)\n');
+        }
         return;
       }
 
@@ -1515,17 +1673,42 @@ export default async function secretCli(argv) {
       return;
     }
 
+    if (opts.command === 'merge-store') {
+      if (!opts.key) {
+        console.error('❌ Usage: auth secret merge-store <source brain dir> [--repo <name>] [--tags a,b] [--rename SRC=DEST] [--take K1,K2] [--apply] [--json]');
+        process.exit(1);
+      }
+      const { mergeStore } = await import('./secrets-merge.mjs');
+      const report = await mergeStore(brainDir, path.resolve(opts.key), {
+        apply: opts.apply === true,
+        bindSame: opts.bindSame === true,
+        datesFromSource: opts.datesFromSource === true,
+        repo: opts.repos.length ? opts.repos : undefined,
+        tags: opts.tags,
+        rename: opts.rename,
+        take: opts.take,
+        actor: 'cli',
+      });
+      if (opts.json) {
+        console.log(JSON.stringify(report, null, 2));
+      } else {
+        console.log(`\n  merge-store ${report.applied ? 'applied' : 'dry run (add --apply to write)'} → ${resolveSecretsPath(brainDir)}`);
+        console.log(`  imported ${report.imported.length} · renamed ${report.renamed.length} · taken ${report.taken.length} · same ${report.same.length}${report.redated ? ` (${report.redated} redated)` : ''} · conflicts ${report.conflicts.length}`);
+        for (const c of report.conflicts) {
+          console.log(`  ⚠️  ${c.key}: target ${c.target.fingerprint} (updated ${c.target.updated_at || '?'}, ${c.target.tracking_status || 'unverified'}) vs source ${c.source.fingerprint} (updated ${c.source.updated_at || '?'}, ${c.source.tracking_status || 'unverified'})`);
+        }
+        console.log('');
+      }
+      if (report.conflicts.length) process.exitCode = 2;
+      return;
+    }
+
     if (opts.command === 'diff-env') {
       const { diffEnvAgainstStore, resolveEnvFiles } = await import('./secrets-env-diff.mjs');
       const { loadProjectRegistry } = await import('./secrets-env-export.mjs');
-      const { globalBrainDir } = await import('./config.mjs');
 
-      // Compare against the GLOBAL store, not whichever layer the cwd resolves
-      // to. A repo with its own .agent/ shadows the global store, so running
-      // this from inside one would diff .env files against a project-local
-      // store and report drift that is really just two different stores —
-      // which is how the real drift stayed invisible. --layer project opts in.
-      const compareBrainDir = opts.layer === 'project' ? brainDir : globalBrainDir;
+      // Always the single store: a repo's own .agent/ never selects another one.
+      const compareBrainDir = brainDir;
 
       const roots = opts.path
         ? [path.resolve(opts.path)]

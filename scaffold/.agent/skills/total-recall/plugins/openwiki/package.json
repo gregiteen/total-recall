@@ -1,0 +1,19 @@
+{
+  "name": "tr-plugin-openwiki",
+  "version": "0.1.2",
+  "type": "module",
+  "description": "Multi-repo knowledge graph and documentation wiki engine for Total Recall",
+  "scripts": {
+    "test": "node --test test/*.test.mjs"
+  },
+  "license": "MIT",
+  "files": [
+    "cli.mjs",
+    "plugin.json",
+    "README.md",
+    "LICENSE",
+    "ui/",
+    "src/",
+    "templates/"
+  ]
+}

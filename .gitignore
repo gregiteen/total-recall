@@ -137,7 +137,7 @@ server.log
 # Generated per machine by `total-recall init` / `compile` / `connect` — never committed here
 .gemini/commands/
 .agent/commands/
-openwiki/
+/openwiki/
 .windsurfrules
 WINDSURF.md
 .cursor/rules/

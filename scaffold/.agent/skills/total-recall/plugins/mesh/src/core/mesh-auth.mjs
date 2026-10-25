@@ -2,8 +2,8 @@ import { importHostModule } from '../host-runtime.mjs';
 const { loadPluginModule: __loadOwnedPlugin } = await importHostModule('src/core/plugin-runtime.mjs');
 import crypto from 'node:crypto';
 import net from 'node:net';
-import { brainDir } from './config.mjs';
 const { getSecret } = await __loadOwnedPlugin('auth', 'secrets-store');
+const { hostSecretsBrainDir } = await __loadOwnedPlugin('auth', 'host-secrets-store');
 
 export function normalizeRemoteAddress(value) {
   const address = String(value || '').trim();
@@ -20,7 +20,7 @@ export function isMeshOrLoopbackAddress(value) {
 }
 
 export async function getMeshSyncToken() {
-  const result = await getSecret(brainDir, 'TR_MESH_SYNC_TOKEN', {
+  const result = await getSecret(hostSecretsBrainDir(), 'TR_MESH_SYNC_TOKEN', {
     action: 'use',
     actor: 'mesh-sync-auth',
   });

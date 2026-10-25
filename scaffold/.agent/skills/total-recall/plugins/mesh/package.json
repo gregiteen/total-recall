@@ -1,10 +1,10 @@
 {
   "name": "tr-plugin-mesh",
-  "version": "0.2.2",
+  "version": "0.2.3",
   "type": "module",
   "description": "Headscale and Tailscale SSH control-server mesh administration and node discovery",
   "scripts": {
-    "test": "node --test test/*.test.mjs"
+    "test": "node --test test/*.test.mjs && vitest run"
   },
   "license": "MIT",
   "dependencies": {
@@ -16,6 +16,7 @@
     "README.md",
     "LICENSE",
     "ui/",
+    "capability/",
     "src/"
   ]
 }

@@ -117,9 +117,12 @@ export async function provisionHeadscale(target, { exec = sshExec(target), fetch
   await must(exec('headscale configtest'), 'headscale configtest');
 
   log('start');
-  await must(exec('systemctl enable --now headscale'), 'Starting Headscale');
+  // The package starts Headscale at install with the example config (loopback :8080);
+  // `enable --now` leaves that process running, so restart to load the written config.
+  await must(exec('systemctl enable headscale && systemctl restart headscale'), 'Starting Headscale');
   let healthy = false;
-  for (let i = 0; i < 20 && !healthy; i++) {
+  // The first start also obtains the Let's Encrypt certificate, so allow it about a minute.
+  for (let i = 0; i < 40 && !healthy; i++) {
     healthy = (await exec(`curl -fsS https://${target.domain}/health`)).code === 0;
     if (!healthy) await wait(1500);
   }
