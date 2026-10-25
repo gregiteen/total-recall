@@ -146,7 +146,8 @@ describe('vendoring a capability as a brick', () => {
     fs.writeFileSync(path.join(src, 'capability', 'index.mjs'), 'export const charge = (n) => n * 2;\n');
     fs.writeFileSync(path.join(src, 'ui', 'card.js'), 'spawn("total-recall status")');
     fs.writeFileSync(path.join(src, 'cli.mjs'), 'process.env.TOTAL_RECALL_BIN');
-    fs.writeFileSync(path.join(src, 'package.json'), '{"name":"pay"}');
+    fs.writeFileSync(path.join(src, 'package.json'), '{"name":"pay","version":"1.0.0","devDependencies":{"total-recall-brain":"^3"}}');
+    fs.writeFileSync(path.join(src, 'README.md'), 'Run total-recall pay');
 
     const result = await vendorPlugin('tr-plugin-pay', undefined, { projectRoot: root });
     const dest = path.join(root, 'bricks', 'pay');
@@ -157,6 +158,7 @@ describe('vendoring a capability as a brick', () => {
     expect(manifest.ui).toBeUndefined();
     expect(manifest.cli).toBeUndefined();
     expect(result.files).toBe(3);
+    expect(fs.existsSync(path.join(dest, 'README.md'))).toBe(false);
 
     // No file in the brick can reach Total Recall, and it works with the binary absent.
     for (const f of ['plugin.json', 'package.json', 'capability/index.mjs']) {

@@ -49,17 +49,18 @@ export function listPluginFiles(pluginDir) {
   return out;
 }
 
-const BRICK_ROOT_FILES = /^(package\.json|LICENSE[^/]*|README[^/]*)$/i;
+const BRICK_ROOT_FILES = /^LICENSE[^/]*$/i;
 
 /**
  * Files a plugin distributes to one audience.
  *
  * `host` is every file, for a mesh peer or a Total Recall installation.
  * `brick` is the host-free capability only: the directory holding
- * `capability.entry`, plus package.json, LICENSE and README. The UI, the CLI
+ * `capability.entry`, plus LICENSE. package.json is regenerated with only its
+ * runtime fields, and the README is left behind because it documents the host. The UI, the CLI
  * handler and the host manifest never leave with a brick, so a vendored copy
- * has no UI and no path back to Total Recall. Its plugin.json is a reduced
- * copy (identity and capability), returned as `data` rather than read from disk.
+ * has no UI and no path back to Total Recall. Its plugin.json and package.json
+ * are reduced copies, returned as `data` rather than read from disk.
  * @returns {Array<{ path: string, abs: string, size: number, mode: number, data?: Buffer }>}
  */
 export function pluginBundleFiles(pluginDir, { audience = 'host' } = {}) {
@@ -79,7 +80,16 @@ export function pluginBundleFiles(pluginDir, { audience = 'host' } = {}) {
     brick: true, capability: manifest.capability,
     ...(manifest.requires ? { requires: manifest.requires } : {})
   }, null, 2)}\n`);
-  return [...kept, { path: 'plugin.json', abs: null, size: reduced.length, mode: 0o644, data: reduced }]
+  const generated = [{ path: 'plugin.json', abs: null, size: reduced.length, mode: 0o644, data: reduced }];
+  const pkgFile = path.join(root, 'package.json');
+  if (fs.existsSync(pkgFile)) {
+    const pkg = JSON.parse(fs.readFileSync(pkgFile, 'utf8'));
+    const runtime = {};
+    for (const k of ['name', 'version', 'type', 'description', 'license', 'dependencies']) if (pkg[k] !== undefined) runtime[k] = pkg[k];
+    const data = Buffer.from(`${JSON.stringify(runtime, null, 2)}\n`);
+    generated.push({ path: 'package.json', abs: null, size: data.length, mode: 0o644, data });
+  }
+  return [...kept, ...generated]
     .sort((a, b) => (a.path < b.path ? -1 : a.path > b.path ? 1 : 0));
 }
 
