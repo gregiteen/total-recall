@@ -11,7 +11,7 @@ const { createInvokeRouter, OPERATIONS } = await import('./invoke.mjs');
 const { buildLocalSearchIndex } = await import('../../core/fast-recall.mjs');
 const matter = (await import('../../core/frontmatter.mjs')).default;
 
-let dir, keys, execute, audits, app;
+let dir, keys, execute, audits, app, server;
 const full = ['invoke:full', '*'];
 const read = ['invoke:restricted', 'brain:server', 'ssss:read'];
 function makeApp(scopes = full, options = {}) {
@@ -21,16 +21,23 @@ function makeApp(scopes = full, options = {}) {
   const auth = (req, _res, next) => { req.auth = { type: 'pat', id: 'test-key' }; next(); };
   app = express().use(express.json()).use(createInvokeRouter({ auth, store, execute, audit: event => audits.push(event), cwd: dir, serverBrain: dir, registryBrain: dir, ...options }));
 }
-// Each Supertest request owns a short-lived listener; do not reuse its socket
-// after another request has closed that listener (Node's keep-alive default).
-const post = (operation, params = {}) => request(app).post('/v1/invoke').set('Connection', 'close').send({ operation, params });
-beforeEach(() => {
+// Keep one listener per test, including tests that replace the injected app.
+// Rebinding an ephemeral listener for each request can trigger HTTP parse errors
+// in rapid repeated runs. Superagent already disables connection pooling.
+const post = (operation, params = {}) => request(server).post('/v1/invoke').set('Connection', 'close').send({ operation, params });
+beforeEach(async () => {
   dir = fs.mkdtempSync(path.join(os.tmpdir(), 'invoke-route-'));
   audits = [];
   execute = vi.fn(async () => ({ exit_code: 0, stdout: '[]', stderr: '', truncated: false, termination_reason: null }));
   makeApp();
+  server = http.createServer((req, res) => app(req, res));
+  await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
 });
-afterEach(() => { fs.rmSync(dir, { recursive: true, force: true }); });
+afterEach(async () => {
+  server.closeAllConnections();
+  await new Promise(resolve => server.close(resolve));
+  fs.rmSync(dir, { recursive: true, force: true });
+});
 
 describe('invoke authority and discovery', () => {
   it('declares scopes for every executable family', () => {
@@ -40,7 +47,7 @@ describe('invoke authority and discovery', () => {
     expect((await post(name)).status).toBe(404); expect(execute).not.toHaveBeenCalled();
   });
   it('requires an operation and object parameters', async () => {
-    expect((await request(app).post('/v1/invoke').send({})).status).toBe(400);
+    expect((await request(server).post('/v1/invoke').send({})).status).toBe(400);
     expect((await post('capabilities', null)).status).toBe(400);
     expect((await post('capabilities', [])).status).toBe(400);
   });
@@ -57,7 +64,7 @@ describe('invoke authority and discovery', () => {
   });
   it('lists only confined restricted operations in both discovery paths', async () => {
     makeApp(read);
-    for (const response of [await request(app).get('/v1/invoke/capabilities'), await post('capabilities')]) {
+    for (const response of [await request(server).get('/v1/invoke/capabilities'), await post('capabilities')]) {
       expect(Object.values(response.body.result.operations).flat().map(o => o.operation).sort()).toEqual(['capabilities', 'ssss.read']);
       expect(response.body.result.provider_spending).toBe(0);
     }
@@ -348,7 +355,7 @@ describe('bounded full-mode decision owners', () => {
     const limits = { timeoutMs: 500, outputBytes: 100, concurrency: 2, perKey: 1 };
     makeApp(full, { limits });
     expect((await post('capabilities')).body.result.limits).toEqual(limits);
-    expect((await request(app).get('/v1/invoke/capabilities')).body.result.limits).toEqual(limits);
+    expect((await request(server).get('/v1/invoke/capabilities')).body.result.limits).toEqual(limits);
   });
   it('runs prediction in a child with the selected project root', async () => {
     owner(success); await real();
