@@ -6,7 +6,7 @@ description: >-
   file before executing.
 repo_scoped: true
 repository_id: "total-recall-brain"
-generated_at: 2026-10-25T04:28:54.352Z
+generated_at: 2026-10-25T05:42:19.495Z
 generated_from: total-recall
 ---
 
@@ -18,7 +18,7 @@ generated_from: total-recall
 
 ## Stack
 
-- **Languages**: JavaScript (746 files), Markdown (246 files), TypeScript (130 files), CSS (12 files)
+- **Languages**: JavaScript (748 files), Markdown (246 files), TypeScript (130 files), CSS (12 files)
 - **Frameworks**: React, Express
 - **Tests**: Vitest
 - **Module system**: module
@@ -520,7 +520,7 @@ templates/
 
 ## Core Modules
 
-159 modules in `src/core/`:
+160 modules in `src/core/`:
 
 - **action-predictor** — exports: buildActionQuestions, shortlistActions, predictNextAction
 - **agent-manager** — exports: loadAgentState, saveAgentState, isProcessRunning, listAgents, buildRemoteSpawnCommand, spawnAgent, killAgent, getAgentLogs
@@ -623,6 +623,7 @@ templates/
 - **plugin-state** — exports: pluginActivation, readActivationRecord
 - **plugin-store** — exports: recordPath, recordPluginsDir, vaultFor, readPluginRecord, emit, buildPluginDocumentBody, ensurePluginRecord, syncAllPluginRecords
 - **plugin-tasks** — exports: taskRunsOnNode, minuteSlot, latestDueSlot, runDuePluginTasks, startPluginTaskScheduler, stopPluginTaskScheduler
+- **plugin-updates** — exports: remoteGitHead, checkPlugin, updateInstalledPlugins
 - **plugin-vendor** — exports: readBricks, listBricks, satisfiesRange, vendorPlugin
 - **post-mortem** — exports: readSessionTranscript, deriveSessionProject, runPostMortem, runComplianceAudit
 - **project-brain** — exports: resolveProjectBrainPaths, ensureCoreSkillPackage, ensureFullProjectBrain, ensureAndRegisterProjectBrain, inspectProjectBrain

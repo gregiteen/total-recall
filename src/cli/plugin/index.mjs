@@ -41,6 +41,9 @@ Commands:
                               --link, -l    Symlink a local directory instead of copying
                               --replace     Replace an install, retain previous source and restore on failure
                               --global, -g  Install for every project on this machine
+  update [--check] [--json]  Reinstall every plugin whose git repo, mesh peer or source
+                            directory moved ahead (--check only reports; also runs hourly
+                            in 'update --automatic')
    share <id>                Offer an installed plugin by direct link and mesh
   unshare <id>              Stop offering it
   remove <id>               Uninstall (--global for the machine-wide copy)
@@ -167,6 +170,22 @@ export async function run(argv = []) {
 
   if (command === 'install' || command === 'add') {
     await installPlugin(rest);
+    return;
+  }
+
+  if (command === 'update' || command === 'upgrade') {
+    const { updateInstalledPlugins } = await import('../../core/plugin-updates.mjs');
+    const { recompileAfterPluginMutation } = await import('../../core/plugin-store.mjs');
+    // Only the shared plugin folder is maintained; repos switch shared plugins on and off.
+    const report = await updateInstalledPlugins({ roots: [(await import('node:os')).homedir()], dryRun: rest.includes('--check') });
+    if (report.updated > 0) await recompileAfterPluginMutation(process.cwd(), true);
+    if (rest.includes('--json')) console.log(JSON.stringify(report, null, 2));
+    else {
+      const mark = { updated: '⬆️ ', current: '✅', behind: '⏳', failed: '❌', linked: '🔗', pinned: '📌', package: '📦', unmanaged: '⚠️ ' };
+      for (const row of report.results) console.log(`${mark[row.status] || '•'} ${row.id || row.root} ${row.status}${row.version ? ` v${row.version}` : ''}${row.error ? ` — ${row.error}` : ''}`);
+      console.log(`\n${report.updated} updated, ${report.failed} failed, ${report.unmanaged} with no install source`);
+    }
+    if (report.failed) process.exitCode = 1;
     return;
   }
 

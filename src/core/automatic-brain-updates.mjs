@@ -10,6 +10,7 @@ import { readProcessCommand, shouldHonorPidLock } from './pid-lock.mjs';
 import { updateGlobalBrainPackages } from './global-brain-updates.mjs';
 import { updateMeshBrainPackages } from './mesh-brain-updates.mjs';
 import { updateSourceBrainPackages } from './source-brain-updates.mjs';
+import { updateInstalledPlugins } from './plugin-updates.mjs';
 
 export function automaticUpdateStatus(brainDir) {
   let last;
@@ -34,7 +35,7 @@ export function startAutomaticBrainUpdates({brainDir,intervalMs=60*60*1000,run=r
   return {tick,stop(){stopped=true;clearInterval(timer);}};
 }
 
-export async function runAutomaticBrainUpdates({brainDir,fleet=false,force=false,skipThrottle=false,intervalMs=60*60*1000,update=updateAllBrains,compile=maintainCliSurfaces,globalUpdate=updateGlobalBrainPackages,meshUpdate=updateMeshBrainPackages,sourceUpdate=updateSourceBrainPackages,now=Date.now}={}) {
+export async function runAutomaticBrainUpdates({brainDir,fleet=false,force=false,skipThrottle=false,intervalMs=60*60*1000,update=updateAllBrains,compile=maintainCliSurfaces,globalUpdate=updateGlobalBrainPackages,meshUpdate=updateMeshBrainPackages,sourceUpdate=updateSourceBrainPackages,pluginUpdate=updateInstalledPlugins,now=Date.now}={}) {
   if(!force && !isPackageAutoUpdateEnabled())return {skipped:true,reason:'disabled',results:[]};
   const file=path.join(brainDir,'memory-derived/automatic-brain-updates.json');
   let saved;try{saved=JSON.parse(fs.readFileSync(file,'utf8'));}catch{}
@@ -56,10 +57,12 @@ export async function runAutomaticBrainUpdates({brainDir,fleet=false,force=false
       const summary=await update({brainDir,dryRun:false,ensureDefaults:true});
       const global=summary.versions?await globalUpdate({versions:summary.versions}):{failed:1,results:[],error:'Cannot maintain global packages without verified published versions'};
       const sources=summary.versions?await sourceUpdate({brainDir,versions:summary.versions}):{failed:1,results:[]};
+      // The shared plugin folder follows the source each plugin was installed from (git, mesh peer, directory).
+      const plugins=await pluginUpdate({roots:[path.resolve(brainDir,'../../..')]});
       const mesh=fleet && summary.versions?await meshUpdate({versions:summary.versions,version:summary.versions['total-recall-brain']}):{failed:0,results:[],scope:'local-only'};
-      const changed=summary.updated>0 || global.results.some(row=>row.status==='updated') || sources.results.some(row=>row.status==='updated') || JSON.stringify(saved?.versions)!==JSON.stringify(summary.versions);
+      const changed=summary.updated>0 || plugins.updated>0 || global.results.some(row=>row.status==='updated') || sources.results.some(row=>row.status==='updated') || JSON.stringify(saved?.versions)!==JSON.stringify(summary.versions);
       const surfaces=await compile({brainDir,force:changed});
-      report={...summary,global,sources,mesh,surfaces,failed:(summary.failed || 0)+global.failed+sources.failed+mesh.failed+(surfaces.ok?0:surfaces.results.filter(row=>row.status==='failed').length),checkedAt:now()};
+      report={...summary,global,sources,plugins,mesh,surfaces,failed:(summary.failed || 0)+global.failed+sources.failed+plugins.failed+mesh.failed+(surfaces.ok?0:surfaces.results.filter(row=>row.status==='failed').length),checkedAt:now()};
     }catch(error){report={failed:1,error:error.message,checkedAt:now(),results:[]};}
     const temporary=`${file}.${process.pid}.tmp`;fs.writeFileSync(temporary,JSON.stringify(report,null,2));fs.renameSync(temporary,file);
     return report;

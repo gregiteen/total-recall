@@ -72,7 +72,8 @@ function printHelp() {
         Pin the same published versions, use npm/pnpm, replace shared dependency
         links with independent local installs, and verify every resolved version.
     total-recall update --automatic [--json]
-        Daemon maintenance: update both packages, ensure defaults and refresh surfaces.
+        Daemon maintenance: update both packages, ensure defaults, update every
+        installed plugin from its recorded source and refresh surfaces.
     total-recall update --status [--json]
         Read the actual last automatic maintenance report without starting work.
 
