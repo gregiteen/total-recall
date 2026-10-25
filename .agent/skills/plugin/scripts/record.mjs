@@ -82,7 +82,8 @@ if (manifest) {
 
   // Card declaration
   const elements = manifest.ui?.elements || [];
-  const faces = elements.filter((e) => e && (e.kind === 'card' || e.kind === 'panel'));
+  // One face (kind 'card') plus any number of screens (kind 'panel'); a panel is never the face.
+  const faces = elements.filter((e) => e && e.kind === 'card');
   if (manifest.card_layout !== undefined) {
     record('manifest', 'FAIL', 'no template', "'card_layout' is declared; a face is bespoke owner code");
   } else {

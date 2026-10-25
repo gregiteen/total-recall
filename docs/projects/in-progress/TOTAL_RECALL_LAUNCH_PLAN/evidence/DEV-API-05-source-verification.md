@@ -33,4 +33,6 @@ Project-grant implementation SHA-256:
 | `src/server/routes/invoke.mjs` | `1d922dbba73d8303a2b86a9d1e1486292ece277b474a167f301daef8292e49db` |
 | `src/core/brain-registry.mjs` | `1ad6ec1ad2371957b1830f2bce375cdf529c119ce6bed7e1652853f8655874fa` |
 
+The final frozen-source hash manifest also covers the automatic-registration changes in `src/cli/brain.mjs`, `src/core/memory-brain.mjs`, `src/core/project-id.mjs` and their regression tests. Shared-source commits6dbc9cf,886e34e and39148f2 preserve both the project-grant work and concurrent brick work; final test evidence applies to the combined source, without certifying every brick requirement as complete.
+
 Broader restricted owner adapters/mutation schemas, provider spending controls, fleet/distribution/upgrade evidence and complete launch acceptance remain in progress. Stable project target grants do not complete API-1–API-6. No unverified brick-completion claim is made from the concurrent source changes.
