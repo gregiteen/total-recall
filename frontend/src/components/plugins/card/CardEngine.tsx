@@ -98,7 +98,7 @@ export function CardEngine({ plugin }: { plugin: PluginInfo }) {
       {card.description && <p className="card-muted card-description">{card.description}</p>}
       <CardScenes plugin={plugin}>
         {card.face
-          ? <PluginPanel plugin={plugin} elementId={card.face.id} readOnly />
+          ? <PluginPanel plugin={plugin} elementId={card.face.id} />
           : <p className="card-error" role="alert">{plugin.name} has not supplied its card face.</p>}
       </CardScenes>
       {card.branding.provider && <footer className="card-footer">{card.branding.provider.url ? <a href={card.branding.provider.url} target="_blank" rel="noreferrer noopener">{card.branding.provider.name}</a> : card.branding.provider.name} is a trademark of its owner. This plugin connects to the service with your own account.</footer>}

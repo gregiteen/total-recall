@@ -417,6 +417,67 @@ export async function installPluginDependencies(dest, id) {
   return { installed: true, packages };
 }
 
+const REPLACEMENT_NAME = /^(.+)-([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/;
+
+/** Where `install --replace` keeps the copy it replaced, beside a plugins directory. */
+export function replacementArchiveDir(pluginsDir) {
+  return path.join(path.dirname(pluginsDir), 'memory-derived', 'plugin-replacements');
+}
+
+function directoryBytes(dir) {
+  let total = 0;
+  for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+    const full = path.join(dir, entry.name);
+    if (entry.isDirectory()) total += directoryBytes(full);
+    else if (entry.isFile()) total += fs.statSync(full).size;
+  }
+  return total;
+}
+
+/**
+ * Bound the copies `install --replace` keeps. Every replacement archives the
+ * previous install, dependencies included, and nothing removed them, so the
+ * hourly automatic plugin update grew the archive without limit: 73 copies
+ * filled a laptop disk. Keep the newest `keep` copies of each plugin (or of
+ * `id` only), without node_modules, which a rollback reinstalls. A rename
+ * keeps a directory's old mtime, so the copy just archived is named in
+ * `prefer` and always counts as the newest.
+ *
+ * @param {string} archiveDir
+ * @param {{ id?: string, keep?: number, apply?: boolean, prefer?: string }} [opts]
+ */
+export function pruneReplacementArchives(archiveDir, { id, keep = 1, apply = true, prefer } = {}) {
+  if (!fs.existsSync(archiveDir)) return { archiveDir, kept: [], removed: [], stripped: [], bytesFreed: 0 };
+  const byId = new Map();
+  for (const name of fs.readdirSync(archiveDir)) {
+    const m = REPLACEMENT_NAME.exec(name);
+    const full = path.join(archiveDir, name);
+    if (!m || (id && m[1] !== id) || !fs.statSync(full).isDirectory()) continue;
+    (byId.get(m[1]) || byId.set(m[1], []).get(m[1])).push({ name, full, mtime: fs.statSync(full).mtimeMs });
+  }
+  const kept = [], removed = [], stripped = [];
+  let bytesFreed = 0;
+  for (const copies of byId.values()) {
+    copies.sort((a, b) => (b.name === prefer) - (a.name === prefer) || b.mtime - a.mtime);
+    copies.forEach((copy, index) => {
+      if (index >= keep) {
+        bytesFreed += directoryBytes(copy.full);
+        if (apply) fs.rmSync(copy.full, { recursive: true, force: true });
+        removed.push(copy.name);
+        return;
+      }
+      kept.push(copy.name);
+      const modules = path.join(copy.full, 'node_modules');
+      if (fs.existsSync(modules)) {
+        bytesFreed += directoryBytes(modules);
+        if (apply) fs.rmSync(modules, { recursive: true, force: true });
+        stripped.push(copy.name);
+      }
+    });
+  }
+  return { archiveDir, kept, removed, stripped, bytesFreed };
+}
+
 /**
  * Install a plugin.
  * @param {string} source  bundled id | public share URL | `peer:<host>/<id>` | git URL | local path
@@ -439,7 +500,7 @@ export async function installPlugin(source, options = {}) {
   const prepareDestination=id=>{
     const target=path.join(pluginsDir,id);
     if(!options.replace || !fs.existsSync(target))return assertNotInstalled(id,pluginsDir);
-    const archive=path.join(path.dirname(pluginsDir),'memory-derived/plugin-replacements',`${id}-${crypto.randomUUID()}`);
+    const archive=path.join(replacementArchiveDir(pluginsDir),`${id}-${crypto.randomUUID()}`);
     fs.mkdirSync(path.dirname(archive),{recursive:true});
     fs.renameSync(target,archive);previousDirectory={target,archive};
   };
@@ -522,6 +583,11 @@ export async function installPlugin(source, options = {}) {
     if (stat.isSymbolicLink()) fs.unlinkSync(dest);
     else fs.rmSync(dest, { recursive: true, force: true });
     throw new Error(`Plugin files were written but its record could not be: ${err.message}`);
+  }
+
+  // The install succeeded: keep only this replacement's copy of the plugin, without dependencies.
+  if (previousDirectory) {
+    pruneReplacementArchives(replacementArchiveDir(pluginsDir), { id: manifest.id, keep: 1, prefer: path.basename(previousDirectory.archive) });
   }
 
   // A batch of installs (automatic updates) compiles once after the batch instead.

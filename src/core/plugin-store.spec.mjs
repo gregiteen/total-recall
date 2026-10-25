@@ -15,7 +15,7 @@ import {
   packPublicPlugin,
   patchPluginRecord
 } from './plugin-distribution.mjs';
-import { ensurePluginRecord, installPluginDependencies } from './plugin-store.mjs';
+import { ensurePluginRecord, installPluginDependencies, pruneReplacementArchives, replacementArchiveDir } from './plugin-store.mjs';
 import { projectPluginsDir, globalPluginsDir, listBundledPlugins, discoverPlugins } from './plugin-loader.mjs';
 import { writeFixturePlugin } from './testing/plugin-fixture.mjs';
 
@@ -219,6 +219,54 @@ describe('plugin-store', () => {
     expect(fs.readFileSync(path.join(result.plugin.dir,'content.txt'),'utf8')).toBe('second');
     const {readPluginRecord}=await import('./plugin-store.mjs');
     expect(readPluginRecord(discoverPlugins(projA).find(plugin=>plugin.id==='replacement')).configuration).toEqual({preserved:true});
+  });
+
+  it('keeps one dependency-free copy per plugin however many times it is replaced', async () => {
+    const source = path.join(tmp, 'churn'); fs.mkdirSync(source);
+    writeFixturePlugin(source, { id: 'churn', name: 'Churn', version: '0.1.0', description: 'Fixture' }, { fs, path });
+    await installPlugin(source, { projectRoot: projA });
+    let last;
+    for (const n of [1, 2, 3, 4]) {
+      // The installed copy carries dependencies, as a real install does.
+      const installed = path.join(projectPluginsDir(projA), 'churn');
+      fs.mkdirSync(path.join(installed, 'node_modules', 'dep'), { recursive: true });
+      fs.writeFileSync(path.join(installed, 'node_modules', 'dep', 'big.bin'), 'x'.repeat(1000));
+      fs.writeFileSync(path.join(source, 'content.txt'), `v${n}`);
+      last = await installPlugin(source, { projectRoot: projA, replace: true });
+    }
+    const archive = replacementArchiveDir(projectPluginsDir(projA));
+    const left = fs.readdirSync(archive).filter((name) => name.startsWith('churn-'));
+    expect(left).toEqual([path.basename(last.previousDirectory)]);
+    expect(fs.readFileSync(path.join(last.previousDirectory, 'content.txt'), 'utf8')).toBe('v3');
+    expect(fs.existsSync(path.join(last.previousDirectory, 'node_modules'))).toBe(false);
+  });
+
+  it('prunes existing archives on request, preferring the named copy and reporting without --apply', () => {
+    const archive = path.join(tmp, 'archive');
+    const make = (name, ageMs) => {
+      const dir = path.join(archive, name);
+      fs.mkdirSync(path.join(dir, 'node_modules'), { recursive: true });
+      fs.writeFileSync(path.join(dir, 'node_modules', 'f'), 'y'.repeat(500));
+      const t = new Date(Date.now() - ageMs); fs.utimesSync(dir, t, t);
+      return name;
+    };
+    const old = make('alpha-11111111-1111-4111-8111-111111111111', 1000);
+    const newer = make('alpha-22222222-2222-4222-8222-222222222222', 10);
+    const beta = make('beta-tool-33333333-3333-4333-8333-333333333333', 50);
+    fs.mkdirSync(path.join(archive, 'not-an-archive'));
+
+    const report = pruneReplacementArchives(archive, { apply: false });
+    expect(report.removed).toEqual([old]);
+    expect(report.kept.sort()).toEqual([beta, newer].sort());
+    expect(report.bytesFreed).toBeGreaterThan(0);
+    expect(fs.existsSync(path.join(archive, old))).toBe(true);
+
+    const preferred = pruneReplacementArchives(archive, { id: 'alpha', prefer: old });
+    expect(preferred.kept).toEqual([old]);
+    expect(fs.existsSync(path.join(archive, newer))).toBe(false);
+    expect(fs.existsSync(path.join(archive, old, 'node_modules'))).toBe(false);
+    expect(fs.existsSync(path.join(archive, beta, 'node_modules'))).toBe(true);
+    expect(fs.existsSync(path.join(archive, 'not-an-archive'))).toBe(true);
   });
 
   it('keeps the record of a bundled scaffold plugin out of the shipped package', async () => {
