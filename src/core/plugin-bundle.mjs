@@ -86,6 +86,16 @@ export function pluginBundleFiles(pluginDir, { audience = 'host' } = {}) {
     const pkg = JSON.parse(fs.readFileSync(pkgFile, 'utf8'));
     const runtime = {};
     for (const k of ['name', 'version', 'type', 'description', 'license', 'dependencies']) if (pkg[k] !== undefined) runtime[k] = pkg[k];
+    // A capability that declares its own dependencies keeps only those: the plugin's other
+    // dependencies serve the host side (routes, CLI) and never leave with the brick.
+    const own = manifest.capability.dependencies;
+    if (own !== undefined) {
+      if (!Array.isArray(own) || own.some((d) => typeof d !== 'string')) throw new Error(`Plugin '${manifest.id}' capability.dependencies must be an array of package names`);
+      const missing = own.filter((d) => !pkg.dependencies?.[d]);
+      if (missing.length) throw new Error(`Plugin '${manifest.id}' capability.dependencies names packages its package.json does not depend on: ${missing.join(', ')}`);
+      const kept = Object.fromEntries(own.map((d) => [d, pkg.dependencies[d]]));
+      if (Object.keys(kept).length) runtime.dependencies = kept; else delete runtime.dependencies;
+    }
     const data = Buffer.from(`${JSON.stringify(runtime, null, 2)}\n`);
     generated.push({ path: 'package.json', abs: null, size: data.length, mode: 0o644, data });
   }
