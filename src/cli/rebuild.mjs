@@ -80,6 +80,7 @@ export async function runRebuild(options = {}) {
   console.log('🏗️  Recompiling surface from canonical vault...');
   try {
     const stats = await compileSurface({ vaultDir, skillsDir, derivedDir, instructionsFile, force: Boolean(options.force) });
+    if (stats.reason === 'stale-surface-code') throw new Error('Compiler source changed; restart this process before rebuilding instruction surfaces.');
     console.log(`✅ Processed ${stats.nodesProcessed} canonical memory nodes.`);
     console.log(`✅ Injected memory into ${stats.skillsInjected} skill files.`);
     console.log(`✅ Rebuilt graph-index.jsonl, memory-layers.jsonl, and skill-routes.jsonl.`);
@@ -150,6 +151,7 @@ export async function compileRegisteredProjects({ brains = listLocalBrains(), co
         derivedDir: path.join(brain.brainDir, 'memory-derived'),
         instructionsFile: path.join(surfaceDir, 'INSTRUCTIONS.md'),
       });
+      if (stats.reason === 'stale-surface-code') throw new Error('Compiler source changed; restart this process before rebuilding instruction surfaces.');
       console.log(`✅ ${brain.name}: ${stats.skipped ? 'unchanged' : `rules recompiled (${stats.skillsInjected} surfaces)`}`);
     } catch (err) {
       failed += 1;

@@ -10,6 +10,71 @@ import crypto from 'node:crypto';
 import { replaceFirstManagedInjectionBlock, heuristicCompact, buildRulesBlock, extractWikilinks, mergeGlobalRuleNodes, isSurfaceCodeStale, compileSurface } from './surface.mjs';
 import { ruleFingerprint } from './context-policy.mjs';
 
+describe('instruction artifact integrity', () => {
+  async function withBrain(layer, test) {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'tr-artifacts-'));
+    const workspace = path.join(root, layer);
+    const agent = path.join(workspace, '.agent');
+    const skillsDir = path.join(agent, 'skills');
+    const brain = path.join(skillsDir, 'total-recall');
+    const config = path.join(brain, 'config');
+    const surface = layer === 'global' ? agent : workspace;
+    const options = { skillsDir, vaultDir: path.join(brain, 'memory-vault'),
+      derivedDir: path.join(brain, 'memory-derived'), instructionsFile: path.join(surface, 'INSTRUCTIONS.md'), semantic: false };
+    for (const dir of [config, options.vaultDir, options.derivedDir]) fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(path.join(config, 'clients.json'), JSON.stringify(['codex']));
+    try { await test({ root, surface, config, options }); }
+    finally { vi.restoreAllMocks(); fs.rmSync(root, { recursive: true, force: true }); }
+  }
+
+  for (const layer of ['global', 'project']) {
+    it(`${layer}: rejects a silent no-op write even with an existing nonempty surface`, () => withBrain(layer, async ({ options }) => {
+      fs.writeFileSync(options.instructionsFile, '# stale authored text\n');
+      const rename = fs.renameSync.bind(fs);
+      vi.spyOn(fs, 'renameSync').mockImplementation((from, to) => {
+        if (to !== options.instructionsFile) rename(from, to);
+      });
+      await expect(compileSurface(options)).rejects.toThrow(/verification|read-back/i);
+      expect(fs.existsSync(path.join(options.derivedDir, 'vault-hash.txt'))).toBe(false);
+    }));
+
+    it(`${layer}: repairs deleted and edited outputs before allowing an unchanged skip`, () => withBrain(layer, async ({ surface, options }) => {
+      await compileSurface(options);
+      expect(fs.existsSync(path.join(options.vaultDir, 'index.md'))).toBe(false);
+      expect(fs.existsSync(path.join(options.vaultDir, 'log.md'))).toBe(false);
+      expect((await compileSurface(options)).skipped).toBe(true);
+      const shim = path.join(surface, 'AGENTS.md');
+      fs.unlinkSync(shim);
+      expect((await compileSurface(options)).skipped).not.toBe(true);
+      expect(fs.readFileSync(shim, 'utf8')).toContain('TOTAL RECALL');
+      fs.writeFileSync(options.instructionsFile, '# authored note\n');
+      expect((await compileSurface(options)).skipped).not.toBe(true);
+      const repaired = fs.readFileSync(options.instructionsFile, 'utf8');
+      expect(repaired).toContain('TOTAL RECALL');
+      expect(repaired).toContain('# authored note');
+      expect((await compileSurface(options)).skipped).toBe(true);
+    }));
+
+    it(`${layer}: client configuration changes invalidate output reuse`, () => withBrain(layer, async ({ surface, config, options }) => {
+      await compileSurface(options);
+      fs.writeFileSync(path.join(config, 'clients.json'), JSON.stringify(['codex', 'claude-code']));
+      expect((await compileSurface(options)).skipped).not.toBe(true);
+      expect(fs.readFileSync(path.join(surface, 'CLAUDE.md'), 'utf8')).toContain('TOTAL RECALL');
+    }));
+
+    it(`${layer}: refuses a cached shim retargeted outside its selected workspace`, () => withBrain(layer, async ({ root, surface, options }) => {
+      await compileSurface(options);
+      const outside = path.join(root, 'outside.md');
+      const content = fs.readFileSync(path.join(surface, 'AGENTS.md'), 'utf8');
+      fs.writeFileSync(outside, content);
+      fs.unlinkSync(path.join(surface, 'AGENTS.md'));
+      fs.symlinkSync(outside, path.join(surface, 'AGENTS.md'));
+      await expect(compileSurface(options)).rejects.toThrow(/outside the selected project/);
+      expect(fs.readFileSync(outside, 'utf8')).toBe(content);
+    }));
+  }
+});
+
 describe('compileSurface writes the surface where the harness reads it', () => {
   // Regression: compilePointers stripped a trailing `.agent` from the
   // instructions directory, so the GLOBAL brain (whose instructionsFile is

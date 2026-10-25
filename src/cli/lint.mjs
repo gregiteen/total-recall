@@ -72,7 +72,8 @@ export default async function lint(args) {
   const vaultDir = opts.vault || path.join(resolveBrainDir(effectiveLayer), 'memory-vault');
 
   if (opts.okf) {
-    const { lintOkfCompliance } = await import('../core/okf-adapter.mjs');
+    const { loadPluginModule } = await import('../core/plugin-runtime.mjs');
+    const { lintOkfCompliance } = await loadPluginModule('okf', 'adapter', { activeRequired: true });
     const report = lintOkfCompliance(vaultDir, { strict: opts.strict });
 
     if (opts.json) {

@@ -108,7 +108,7 @@ async function handleEnsure(targetArgs, globalBrainDir) {
   console.log(`     Repo:  ${result.repoRoot}`);
   console.log(`     Brain: ${result.brainDir}`);
   console.log(`     complete=${health.complete} full_brain=${health.full_brain}`);
-  console.log(`     openwiki files +${result.openwiki?.files_added || 0}, dirs +${result.dirs_created}`);
+  console.log(`     directories created +${result.dirs_created}`);
   console.log('');
 }
 
@@ -213,7 +213,7 @@ async function handleRegister(registryPath, targetArgs) {
     process.exit(1);
   }
 
-  // Full project brain for any user repo (vault, openwiki, sessions, …)
+  // Full project brain for any user repo (vault, sessions, registry, …)
   try {
     const { ensureFullProjectBrain } = await import('../core/project-brain.mjs');
     const globalBrainDir = path.join(getGlobalAgentDir(), 'skills', 'total-recall');

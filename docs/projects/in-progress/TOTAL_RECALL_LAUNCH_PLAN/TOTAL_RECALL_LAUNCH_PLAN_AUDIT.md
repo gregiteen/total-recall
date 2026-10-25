@@ -1,5 +1,27 @@
 # TOTAL_RECALL_LAUNCH_PLAN — Audit
 
+## PLUGIN-BOUNDARY-01 — OpenWiki and OKF ownership
+
+**Audit Status**: Complete
+**Audited commit**: 4e33bc2 (instruction artifact changes are an identified in-progress working-tree overlay)
+
+Greg explicitly confirmed extraction in this chat. Core still holds the complete OKF adapter and tests, automatic OKF compiler projections, OpenWiki bootstrap/templates and interactive setup. OKF's plugin CLI currently fabricates validation and probe success. OpenWiki's existing ingestion already lives in its plugin. Fresh pre-extraction Mini baseline43 tests/6 files passes, exit0 (`/tmp/tr-boundary-baseline.log`); prior8 gates pass. Plugin owners run their own baselines before backend edits. Existing dirty plugin files are preserved, with no UI authoring in this stage.
+
+Finding A-029 (P1-high, fix now): move OKF mapping/import/export/lint/projection implementation and tests into its plugin; core CLI aliases bind the declared active runtime module and fail if unavailable. Remove automatic OKF projection from core compilation. Move OpenWiki bootstrap/templates into its plugin's explicit CLI and remove its core provisioning/readiness dependency. Core initialization remains complete without documentation plugins; existing wiki files are preserved. Shared memory validation/writes remain generic host services. No fallback implementation in core. Preserve real owner behavior and report unsupported operations honestly.
+
+Official primary OKF spec reviewed: https://github.com/GoogleCloudPlatform/knowledge-catalog/blob/main/okf/SPEC.md (v0.2 as retrieved2026-10-25). Format `type` is required; index/log are optional reserved files; no central type registry exists. This extraction does not claim universal conformance beyond executable owner validation. The plugin recipe explicitly authorizes delegation of separable backend extraction; narrow agents own these two plugin backend paths and preserve prior authored/dirty files. This does not authorize changes to other plugin implementations, production state or deployment.
+
+## LR-1 instruction artifact integrity follow-up
+
+**Audit Status**: Complete
+**Audited commit**: 4e33bc2
+
+Codex, sanctioned Mac mini, October24 (2026-10-25 UTC): inspected complete compiler write/cache paths and rebuild command, connected-client mapping and existing surface/rebuild tests. Fresh baseline58 tests/4 files pass, exit0 (`/tmp/tr-surfaces-baseline.log`);8 configured full-tier gates pass,0 findings. Shared runtime is ready. Existing fourteen-section audit remains applicable; this stage changes core derived instruction artifacts, tests and docs. No plugin source, key state or runtime activation is included.
+
+Finding A-028 (P1-high, fix in this project): `compileSurface` skips solely from input hashes, ignoring missing/edited instruction outputs and connected-client configuration. `writeShim` trusts an atomic write without reading its result; rebuild accepts any pre-existing nonempty INSTRUCTIONS.md. A suppressed write can therefore report success and a deleted client shim can remain absent indefinitely. Record verified relative output paths, canonical bindings and hashes in a disposable artifact manifest; only skip when current required outputs and inputs match. Recompile damaged outputs while preserving authored text, verify every write and reject stale-code skips in rebuild callers. Baseline tests do not inject silent write failures; add meaningful failing regressions before implementation.
+
+Official Codex discovery documentation reviewed: https://learn.chatgpt.com/docs/agent-configuration/agents-md (retrieved2026-10-25 UTC). Codex reads its home guidance and root-to-cwd project files with override/size rules. Compiler artifact integrity proves filesystem delivery only; actual runtime consumption across supported harnesses and discovery overrides remains separate acceptance. Initial imports briefly failed while zod files were absent; files reappeared, imports/OpenWiki/startup then passed without this agent reinstalling dependencies. No failed command is counted as passing evidence.
+
 ## LR-1 shared daemon identity follow-up
 
 **Audit Status**: Complete

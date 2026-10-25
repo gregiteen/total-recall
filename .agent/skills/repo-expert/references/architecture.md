@@ -6,7 +6,7 @@ description: >-
   file before executing.
 repo_scoped: true
 repository_id: "total-recall-brain"
-generated_at: 2026-10-25T04:12:55.100Z
+generated_at: 2026-10-25T04:28:54.352Z
 generated_from: total-recall
 ---
 
@@ -18,7 +18,7 @@ generated_from: total-recall
 
 ## Stack
 
-- **Languages**: JavaScript (746 files), Markdown (258 files), TypeScript (130 files), CSS (12 files)
+- **Languages**: JavaScript (746 files), Markdown (246 files), TypeScript (130 files), CSS (12 files)
 - **Frameworks**: React, Express
 - **Tests**: Vitest
 - **Module system**: module
@@ -78,8 +78,7 @@ models/
   catalog/
     total-recall/  (1 items)
 openwiki/  (8 items)
-scaffold/
-  openwiki/  (6 items)
+scaffold/  (0 items)
 scratch/  (2 items)
 scripts/  (23 items)
 src/
@@ -98,7 +97,6 @@ templates/
   default-config/  (4 items)
   memory/  (1 items)
   obsidian-queries/  (4 items)
-  openwiki/  (6 items)
 ```
 
 ## Entry Points
@@ -627,7 +625,7 @@ templates/
 - **plugin-tasks** — exports: taskRunsOnNode, minuteSlot, latestDueSlot, runDuePluginTasks, startPluginTaskScheduler, stopPluginTaskScheduler
 - **plugin-vendor** — exports: readBricks, listBricks, satisfiesRange, vendorPlugin
 - **post-mortem** — exports: readSessionTranscript, deriveSessionProject, runPostMortem, runComplianceAudit
-- **project-brain** — exports: resolveProjectBrainPaths, ensureOpenWiki, ensureCoreSkillPackage, ensureFullProjectBrain, ensureAndRegisterProjectBrain, inspectProjectBrain
+- **project-brain** — exports: resolveProjectBrainPaths, ensureCoreSkillPackage, ensureFullProjectBrain, ensureAndRegisterProjectBrain, inspectProjectBrain
 - **project-id** — exports: readProjectId, ensureProjectId, repairProjectIds
 - **project-status** — exports: outstandingProjectStatus, formatOutstandingProjectStatus
 - **proposal-applier** — exports: findDissimilarPair, appendProposalAudit, listProposals, getProposal, setProposalStatus, revertProposal, hasHandler, applyProposal

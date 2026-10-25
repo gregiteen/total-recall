@@ -61,7 +61,7 @@ async function printHelp() {
   Usage: total-recall <command> [options]
 
   Core (default product path):
-    init [--project]    Bootstrap global or project brain + openwiki
+    init [--project]    Bootstrap a portable global or project brain
     new <name> [--with ids]  Create a project (ssss new + Total Recall) with plugins as owned bricks
     connect <client>    Wire IDE surface (Cursor, Claude, Codex, Grok, Replit, Lovable)
     remember / forget / edit   Write-path memory (SSSS vault)
