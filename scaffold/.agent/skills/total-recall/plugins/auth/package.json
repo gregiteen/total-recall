@@ -1,6 +1,6 @@
 {
   "name": "tr-plugin-auth",
-  "version": "1.2.3",
+  "version": "1.2.4",
   "description": "White-label Total Recall auth plugin: Passkey biometric FIDO2 and Google OAuth2 authentication.",
   "type": "module",
   "main": "cli.mjs",

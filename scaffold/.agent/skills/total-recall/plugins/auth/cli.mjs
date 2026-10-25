@@ -9,6 +9,7 @@
 import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
+import { hostSecretsBrainDir } from './src/host-secrets-store.mjs';
 
 function resolveTrPath() {
   const localTr = path.join(process.cwd(), 'bin', 'total-recall.mjs');
@@ -19,13 +20,13 @@ function resolveTrPath() {
 }
 
 async function resolveSecret(key) {
-  const { getSecret, defaultBrainDir } = await import('./src/secrets-store.mjs');
-  const result = await getSecret(process.env.TR_SECRETS_BRAIN || defaultBrainDir(), key, { actor: 'auth-cli', action: 'use' });
+  const { getSecret } = await import('./src/secrets-store.mjs');
+  const result = await getSecret(hostSecretsBrainDir(), key, { actor: 'auth-cli', action: 'use' });
   return result.found ? result.value : null;
 }
 
 function resolveBrainDir() {
-  return process.env.TR_SECRETS_BRAIN || process.env.TR_BRAIN || path.join(process.env.HOME || '', '.agent', 'skills', 'total-recall');
+  return hostSecretsBrainDir();
 }
 
 async function listStoredPasskeys() {
@@ -33,7 +34,11 @@ async function listStoredPasskeys() {
   return listPasskeys(resolveBrainDir());
 }
 
-async function handleStatus(json) {
+async function handleStatus(subArgs, json) {
+  if (Array.isArray(subArgs) && (subArgs.includes('--help') || subArgs.includes('-h') || subArgs[0] === 'help')) {
+    console.log('Usage: total-recall auth status [--json]');
+    return;
+  }
   const passkeys = await listStoredPasskeys();
   const googleClientId = await resolveSecret('GOOGLE_CLIENT_ID');
   const googleClientSecret = await resolveSecret('GOOGLE_CLIENT_SECRET');
@@ -87,8 +92,14 @@ async function handleStatus(json) {
 }
 
 async function handlePasskey(subArgs, json) {
-  const passkeys = await listStoredPasskeys();
   const action = subArgs[0] || 'list';
+
+  if (action === 'help' || action === '--help' || action === '-h') {
+    console.log('Usage: total-recall auth passkey [list|status|delete <id>] [--json]');
+    return;
+  }
+
+  const passkeys = await listStoredPasskeys();
 
   if (action === 'list') {
     if (json) {
@@ -112,25 +123,80 @@ async function handlePasskey(subArgs, json) {
     return;
   }
 
+  if (action === 'delete' || action === 'remove' || action === 'rm') {
+    const id = subArgs[1];
+    if (!id) {
+      console.error('Credential ID required: total-recall auth passkey delete <id>');
+      process.exitCode = 1;
+      return;
+    }
+    const { deletePasskey } = await import('./src/webauthn-store.mjs');
+    const result = deletePasskey(resolveBrainDir(), id);
+    if (!result.found) {
+      console.error(`Passkey not found: ${id}`);
+      process.exitCode = 1;
+      return;
+    }
+    if (json) {
+      console.log(JSON.stringify({ success: true, deleted: id }));
+    } else {
+      console.log(`Passkey removed: ${id}`);
+    }
+    return;
+  }
+
   console.error(`Unknown passkey action: ${action}`);
   process.exitCode = 1;
 }
 
 async function handleGoogle(subArgs, json) {
-  const { createGoogleOAuth } = await import('./src/google-oauth.mjs');
-  const google = createGoogleOAuth({ brainDir: resolveBrainDir() });
   const action = subArgs[0] || 'status';
-  if (action === 'accounts') { console.log(JSON.stringify({ accounts: google.status() })); return; }
-  if (action === 'refresh' || action === 'disconnect') {
-    if (!subArgs[1]) throw new Error('Google account identifier required');
-    if (action === 'refresh') { await google.access(subArgs[1]); console.log(JSON.stringify({ accounts: google.status() })); }
-    else console.log(JSON.stringify(await google.disconnect(subArgs[1])));
+  if (action === 'help' || action === '--help' || action === '-h') {
+    console.log('Usage: total-recall auth google [status|connect|accounts|refresh <id>|disconnect <id>] [--json]');
     return;
   }
-  if (!['status', 'connect'].includes(action)) throw new Error('Use google status|connect|accounts|refresh|disconnect');
+  const { createGoogleOAuth } = await import('./src/google-oauth.mjs');
+  const google = createGoogleOAuth({ brainDir: resolveBrainDir() });
+  if (action === 'accounts') {
+    const accounts = google.status();
+    if (json) {
+      console.log(JSON.stringify({ accounts }));
+    } else {
+      console.log(`Google Connected Accounts: ${accounts.length}`);
+      for (const a of accounts) {
+        console.log(`  • [${a.status}] ${a.email || a.account_id} (Expires: ${a.expiry || 'never'})`);
+      }
+    }
+    return;
+  }
+  if (action === 'refresh' || action === 'disconnect') {
+    if (!subArgs[1]) {
+      console.error(`Google account identifier required: total-recall auth google ${action} <id>`);
+      process.exitCode = 1;
+      return;
+    }
+    if (action === 'refresh') {
+      await google.access(subArgs[1]);
+      const accounts = google.status();
+      if (json) console.log(JSON.stringify({ accounts }));
+      else console.log(`Account ${subArgs[1]} refreshed.`);
+    } else {
+      const res = await google.disconnect(subArgs[1]);
+      if (json) console.log(JSON.stringify(res));
+      else console.log(`Account ${subArgs[1]} disconnected.`);
+    }
+    return;
+  }
+  if (!['status', 'connect'].includes(action)) {
+    console.error(`Unknown action: ${action}. Use: total-recall auth google [status|connect|accounts|refresh|disconnect]`);
+    process.exitCode = 1;
+    return;
+  }
   let cfg;
   try { cfg = google.config(); } catch {
-    console.log(JSON.stringify({ configured: false, error: 'Configure GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET and GOOGLE_REDIRECT_URI in auth' })); process.exitCode = 2; return;
+    console.log(JSON.stringify({ configured: false, error: 'Configure GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET and GOOGLE_REDIRECT_URI in auth' }));
+    process.exitCode = 2;
+    return;
   }
   // Browser initiation sets its own HttpOnly state cookie; never manufacture a state-less consent URL in the CLI.
   const authUrl = new URL('/auth/google', cfg.redirectUri).href;
@@ -138,7 +204,11 @@ async function handleGoogle(subArgs, json) {
   console.log(json ? JSON.stringify(out) : `Open sign-in: ${authUrl}`);
 }
 
-async function handleProbe(json) {
+async function handleProbe(subArgs, json) {
+  if (Array.isArray(subArgs) && (subArgs.includes('--help') || subArgs.includes('-h') || subArgs[0] === 'help')) {
+    console.log('Usage: total-recall auth probe [--json]');
+    return;
+  }
   const host = process.env.TR_HOST || 'http://localhost:3000';
   const endpoints = ['/auth/status', '/auth/providers', '/health'];
   const results = [];
@@ -182,7 +252,11 @@ async function handleProbe(json) {
   if (!allOk) process.exitCode = 1;
 }
 
-async function handleSession(json) {
+async function handleSession(subArgs, json) {
+  if (Array.isArray(subArgs) && (subArgs.includes('--help') || subArgs.includes('-h') || subArgs[0] === 'help')) {
+    console.log('Usage: total-recall auth session [--json]');
+    return;
+  }
   const brain = resolveBrainDir();
   const secretExists = Boolean(await resolveSecret('SESSION_SECRET'));
 
@@ -208,7 +282,11 @@ async function handleSecret(subArgs, json) {
   await secretCli(forwarded);
 }
 
-async function handleAudit(json) {
+async function handleAudit(subArgs, json) {
+  if (Array.isArray(subArgs) && (subArgs.includes('--help') || subArgs.includes('-h') || subArgs[0] === 'help')) {
+    console.log('Usage: total-recall auth audit [--json]');
+    return;
+  }
   const brain = resolveBrainDir();
   const webauthnPath = path.join(brain, 'config', 'webauthn.json');
   const findings = [];
@@ -284,16 +362,41 @@ async function handleAudit(json) {
 }
 
 async function handleRotate(subArgs, json) {
+  if (Array.isArray(subArgs) && (subArgs.includes('--help') || subArgs.includes('-h') || subArgs[0] === 'help')) {
+    console.log('Usage: total-recall auth rotate [--collaboration] [--json]');
+    return;
+  }
   const { createSessionCredentials } = await import('./src/session-credentials.mjs');
   const { defaultBrainDir } = await import('./src/secrets-store.mjs');
   const purpose = subArgs.includes('--collaboration') ? 'collaboration' : 'dashboard';
   const result = createSessionCredentials({ brainDir: process.env.TR_SECRETS_BRAIN || defaultBrainDir() }).rotateSession(purpose);
   console.log(json ? JSON.stringify(result) : 'Auth signing credential rotated; existing sessions are invalidated.');
 }
+
 async function handlePassword(args, json) {
-  if (args[0] !== 'set' || !args.includes('--stdin') || args.slice(1).some(value => !['--stdin', '--force-reset'].includes(value))) throw new Error('Use auth password set --stdin');
+  if (!Array.isArray(args) || args.includes('--help') || args.includes('-h') || args[0] === 'help') {
+    console.log('Usage: total-recall auth password set --stdin [--force-reset]');
+    console.log('       total-recall auth password status [--json]');
+    return;
+  }
+  if (args[0] === 'status') {
+    const { createSessionCredentials } = await import('./src/session-credentials.mjs');
+    const state = createSessionCredentials({ brainDir: resolveBrainDir() }).dashboardState();
+    if (json) {
+      console.log(JSON.stringify(state));
+    } else {
+      console.log(`Dashboard Password: ${state.configured ? 'Configured' : 'Not configured'}`);
+      if (state.forcePasswordReset) console.log('  • Password reset is currently enforced');
+    }
+    return;
+  }
+  if (args[0] !== 'set' || !args.includes('--stdin') || args.slice(1).some(value => !['--stdin', '--force-reset'].includes(value))) {
+    console.error('Use: total-recall auth password set --stdin [--force-reset]');
+    process.exitCode = 1;
+    return;
+  }
   const chunks = []; let size = 0;
-  for await (const chunk of process.stdin) { size += chunk.length; if (size > 8192) throw new Error('Password input exceeds limit'); chunks.push(chunk); }
+  for await (const chunk of process.stdin) { size += chunk.length; if (size > 8192) { console.error('Password input exceeds limit'); process.exitCode = 1; return; } chunks.push(chunk); }
   const password = Buffer.concat(chunks).toString('utf8').replace(/\r?\n$/, '');
   const { createSessionCredentials } = await import('./src/session-credentials.mjs');
   const result = await createSessionCredentials({ brainDir: resolveBrainDir() }).setDashboardPassword(password, { forcePasswordReset: args.includes('--force-reset') });
@@ -313,10 +416,10 @@ export async function run(argv = []) {
 
   switch (command) {
     case 'status':
-      await handleStatus(isJson);
+      await handleStatus(rest, isJson);
       break;
     case 'audit':
-      await handleAudit(isJson);
+      await handleAudit(rest, isJson);
       break;
     case 'rotate':
       await handleRotate(rest, isJson);
@@ -328,32 +431,95 @@ export async function run(argv = []) {
       await handlePasskey(rest, isJson);
       break;
     case 'key': {
+      if (rest.includes('--help') || rest.includes('-h') || rest[0] === 'help') {
+        console.log('Usage: total-recall auth key list [--json]');
+        console.log('       total-recall auth key issue <name> --scopes <csv> [--role <role>] [--kind <kind>] [--expires <date>] [--json]');
+        console.log('       total-recall auth key revoke <id> [--json]');
+        console.log('       total-recall auth key usage [id] [--json]');
+        console.log('       total-recall auth key roles [--json]');
+        console.log('       total-recall auth key role-set <name> --scopes <csv> [--json]');
+        break;
+      }
       const { createKeyStore } = await import('./src/access-keys.mjs');
       const store = createKeyStore({ brainDir: resolveBrainDir() });
       const [action = 'list', id] = rest;
       const flag = name => { const at = rest.indexOf(name); return at < 0 ? undefined : rest[at + 1]; };
       let result;
-      if (action === 'list') result = store.loadKeys().map(({ token_hash, ...key }) => key);
-      else if (action === 'issue') result = store.issueKey(id, { scopes: flag('--scopes')?.split(','), role: flag('--role'), kind: flag('--kind'), expires_at: flag('--expires') });
-      else if (action === 'revoke') result = store.revokeKey(id);
-      else if (action === 'usage') result = store.listKeyUsage(id);
-      else if (action === 'roles') result = store.loadRoles();
-      else if (action === 'role-set') result = store.setRole(id, flag('--scopes')?.split(','));
-      else throw new Error('Use auth key list|issue <name> --scopes <csv> [--role role] [--expires date]|revoke <id>|usage [id]|roles|role-set <name> --scopes <csv>');
-      console.log(JSON.stringify(result)); break;
+      if (action === 'list') {
+        const keys = store.loadKeys().map(({ token_hash, ...key }) => key);
+        if (isJson) {
+          console.log(JSON.stringify(keys));
+        } else {
+          console.log(`Access Keys: ${keys.length}`);
+          for (const k of keys) {
+            const status = k.revoked ? '[REVOKED]' : '[ACTIVE]';
+            console.log(`  • ${status} ${k.name} (${k.token_prefix}…)`);
+            console.log(`    ID: ${k.id}`);
+            console.log(`    Scopes: ${(k.scopes || []).join(', ') || 'none'}`);
+            if (k.expires_at) console.log(`    Expires: ${k.expires_at}`);
+            if (k.last_used_at) console.log(`    Last used: ${k.last_used_at} (${k.hit_count} hits)`);
+          }
+        }
+        break;
+      } else if (action === 'issue') {
+        result = store.issueKey(id, { scopes: flag('--scopes')?.split(','), role: flag('--role'), kind: flag('--kind'), expires_at: flag('--expires') });
+      } else if (action === 'revoke') {
+        result = store.revokeKey(id);
+      } else if (action === 'usage') {
+        result = store.listKeyUsage(id);
+      } else if (action === 'roles') {
+        result = store.loadRoles();
+      } else if (action === 'role-set') {
+        result = store.setRole(id, flag('--scopes')?.split(','));
+      } else {
+        console.error('Use: total-recall auth key list|issue|revoke|usage|roles|role-set');
+        process.exitCode = 1;
+        break;
+      }
+      if (isJson) {
+        console.log(JSON.stringify(result));
+      } else {
+        if (action === 'issue') {
+          console.log(`Key issued: ${result.name} (${result.id})`);
+          console.log(`Token: ${result.token}`);
+          console.log('Store this token now; it will not be displayed again.');
+        } else if (action === 'revoke') {
+          console.log(`Key revoked: ${id}`);
+        } else {
+          console.log(JSON.stringify(result, null, 2));
+        }
+      }
+      break;
     }
     case 'agent': {
       // Sign in an agent CLI that authenticates on its own terminal. The pty lives in
       // scripts/agent-login-pty.py because Node has none and this plugin carries no pty library;
       // this routes the plugin's own surface to it.
+      if (rest.includes('--help') || rest.includes('-h') || rest[0] === 'help') {
+        console.log('Usage: total-recall auth agent list [--json]');
+        console.log('       total-recall auth agent login <agent> [--code <code>] [--code-file <path>] [--url-file <path>] [--json]');
+        break;
+      }
       const { loginAgent, AGENT_LOGIN_PROFILES } = await import('./src/agent-login.mjs');
       const [action = 'list', name] = rest;
       const flag = (n) => { const at = rest.indexOf(n); return at < 0 ? undefined : rest[at + 1]; };
       if (action === 'list') {
-        console.log(JSON.stringify(Object.keys(AGENT_LOGIN_PROFILES).map((id) => ({ id, ...AGENT_LOGIN_PROFILES[id] }))));
+        const list = Object.keys(AGENT_LOGIN_PROFILES).map((id) => ({ id, ...AGENT_LOGIN_PROFILES[id] }));
+        if (isJson) {
+          console.log(JSON.stringify(list));
+        } else {
+          console.log('Supported Agent Profiles:');
+          for (const item of list) {
+            console.log(`  • ${item.id}: ${item.name || item.id}`);
+          }
+        }
         break;
       }
-      if (action !== 'login') throw new Error('Use auth agent list | auth agent login <agent> [--code <code>] [--code-file <path>] [--url-file <path>]');
+      if (action !== 'login') {
+        console.error('Use: total-recall auth agent list | total-recall auth agent login <agent>');
+        process.exitCode = 1;
+        break;
+      }
       const result = await loginAgent({
         agent: name,
         code: flag('--code'),
@@ -371,10 +537,10 @@ export async function run(argv = []) {
       await handleGoogle(rest, isJson);
       break;
     case 'probe':
-      await handleProbe(isJson);
+      await handleProbe(rest, isJson);
       break;
     case 'session':
-      await handleSession(isJson);
+      await handleSession(rest, isJson);
       break;
     case 'secret':
     case 'secrets':

@@ -163,7 +163,8 @@ class AuthPanel extends HTMLElement {
         .badge-ok { background: rgba(16, 185, 129, 0.2); color: #34d399; border: 1px solid rgba(16, 185, 129, 0.4); }
         .badge-muted { background: rgba(156, 163, 175, 0.2); color: #9ca3af; border: 1px solid rgba(156, 163, 175, 0.3); }
         button {
-          min-height: 40px;
+          min-height: 44px;
+          min-width: 44px;
           padding: 8px 16px;
           border-radius: 8px;
           border: 1px solid #374151;
@@ -180,6 +181,7 @@ class AuthPanel extends HTMLElement {
         button.primary:hover { background: #4338ca; }
         input {
           width: 100%;
+          min-height: 44px;
           padding: 10px;
           border-radius: 6px;
           border: 1px solid #374151;
@@ -195,7 +197,7 @@ class AuthPanel extends HTMLElement {
       </style>
 
       <header>
-        <h2> Auth & Credentials</h2>
+        <h2>Auth &amp; Credentials</h2>
         <button id="btn-refresh">Refresh Status</button>
       </header>
 
