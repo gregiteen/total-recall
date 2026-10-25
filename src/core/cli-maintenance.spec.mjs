@@ -14,6 +14,8 @@ describe('automatic CLI surfaces',()=>{
    expect((await maintainCliSurfaces(options)).results[0].status).toBe('current');
    version='two';run.mockResolvedValueOnce({code:1,output:'Compilation failed'});
    expect((await maintainCliSurfaces(options)).ok).toBe(false);
+   run.mockResolvedValueOnce({code:1,output:'',stderr:'Required plugin auth is missing or invalid'});
+   expect((await maintainCliSurfaces(options)).results[0].error).toContain('Required plugin auth');
    expect((await maintainCliSurfaces(options)).results[0].status).toBe('refreshed');
    expect((await maintainCliSurfaces({...options,force:true})).results[0].status).toBe('refreshed');
    expect(run.mock.calls[0][1]).toContain('refresh');
