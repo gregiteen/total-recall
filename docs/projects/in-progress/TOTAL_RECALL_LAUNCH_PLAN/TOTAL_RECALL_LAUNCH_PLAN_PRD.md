@@ -1,5 +1,7 @@
 # TOTAL_RECALL_LAUNCH_PLAN — Product Requirements
 
+DEV-API-04 acceptance: both full-mode decision operations must use the shared bounded child executor and terminate on timeout, disconnect or revoked authority. Preserve structured successful owner results and explicit provider/credential failures; never return child logs or credential-bearing exceptions. Cancellation cannot reverse remote work already accepted. Restricted provider execution and spending ceilings remain unsupported.
+
 > **Project Prefix**: `TOTAL_RECALL_LAUNCH_PLAN`
 > **Kanban State**: In Progress
 > **Author**: Claude (DeepSeek Harness)

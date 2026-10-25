@@ -1,5 +1,14 @@
 # TOTAL_RECALL_LAUNCH_PLAN — Audit
 
+## DEV-API-04 decision cancellation baseline
+
+**Audit Status**: Complete
+**Audited commit**: 96a7ddb
+
+Codex, Gregorys-Mac-mini.local, 2026-10-25 UTC: source review found both decision handlers execute provider/plugin code directly inside the HTTP server, outside `executeInvokeChild`. The authority monitor aborts a controller these handlers never consume; configured child timeout/output limits therefore do not govern them. Fresh Mini baseline:57 tests/2 files passed, exit0 (`/tmp/tr-api04-baseline.log`). Current official Node child-process documentation (https://nodejs.org/api/child_process.html, retrieved 2026-10-25 UTC) confirms detached process groups and close/error lifecycle. Installed decision CLI/client/auth owner and action predictor were inspected; no new provider protocol or credential store is needed.
+
+Remediation: run existing decision owner APIs in a full-mode bounded child, pass structured parameters through stdin, resolve credentials only through the existing auth adapter inside that child, and reuse cancellation/concurrency/output ceilings. Preserve typed decision and prediction results; normalize missing credentials, provider failure and invalid owner output without leaking owner exception text or child logs. Restricted decision operations remain denied. Killing a child stops local continuation, not accepted remote billing; per-provider budgets and broader API/launch acceptance remain open. No serving or npm activation in this source stage.
+
 ## DEV-API-03 confined mutation baseline
 
 **Audit Status**: Complete

@@ -5,6 +5,7 @@ import request from 'supertest';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import http from 'node:http';
 vi.mock('../auth.mjs', () => ({ requireAuth: (req, _res, next) => next() }));
 const { createInvokeRouter, OPERATIONS } = await import('./invoke.mjs');
 const { buildLocalSearchIndex } = await import('../../core/fast-recall.mjs');
@@ -250,5 +251,126 @@ describe('lifecycle and real restricted read adapter', () => {
     expect(res.body.ok).toBe(true); expect(res.body.result.nodes[0].slug).toBe('rehearsal');
     expect(res.body.result.nodes[0].snippet).toContain('retrieval proof');
     expect(fs.existsSync(path.join(dir, 'logs'))).toBe(false);
+  });
+});
+
+describe('bounded full-mode decision owners', () => {
+  // Disposable transport/auth stand-ins exercise actual child lifecycle without
+  // provider billing or touching the operator's credential store.
+  function owner(client, auth = "export const readAuthSecret = () => 'fixture-only';") {
+    const plugin = path.join(dir, 'plugins/decision');
+    fs.mkdirSync(path.join(plugin, 'src'), { recursive: true });
+    fs.writeFileSync(path.join(plugin, 'src/client.mjs'), client);
+    fs.writeFileSync(path.join(plugin, 'auth-client.mjs'), auth);
+  }
+  const success = `export const DEFAULT_MODEL='fixture-model';
+    export const requestDecision = async options => ({
+      choice: () => options.state?.text || 'chosen', noul: () => true, score: () => 3, confidence: () => 0.9,
+      modelVersion: 'fixture-version', cost: 0, latencyMs: 1
+    });`;
+  const questions = { choice: {}, yes: { type: 'noul' }, score: { type: 'score' } };
+  async function real(options = {}) {
+    const { executeInvokeChild } = await import('../invoke-execution.mjs');
+    makeApp(full, { execute: executeInvokeChild, ...options });
+  }
+  it('preserves typed answers in an actual child and keeps request text out of audits', async () => {
+    owner(success); await real();
+    const res = await post('decision.run', { questions, state: { text: 'private decision text' } });
+    expect(res.body).toMatchObject({ ok: true, result: { answered: true, answers: { choice: 'private decision text', yes: true, score: 3 }, model: 'fixture-version' } });
+    expect(JSON.stringify(audits)).not.toContain('private decision');
+  });
+  it('advertises the configured execution ceilings in both discovery paths', async () => {
+    const limits = { timeoutMs: 500, outputBytes: 100, concurrency: 2, perKey: 1 };
+    makeApp(full, { limits });
+    expect((await post('capabilities')).body.result.limits).toEqual(limits);
+    expect((await request(app).get('/v1/invoke/capabilities')).body.result.limits).toEqual(limits);
+  });
+  it('runs prediction in a child with the selected project root', async () => {
+    owner(success); await real();
+    fs.mkdirSync(path.join(dir, 'memory-derived'), { recursive: true });
+    fs.writeFileSync(path.join(dir, 'memory-derived/cli-semantic-index.json'), JSON.stringify({ verbs: [
+      { id: 'fixture', verb: 'status', usage: 'chosen', name: 'Fixture command' },
+    ] }));
+    const res = await post('decision.predict', { intent: '' });
+    expect(res.body, JSON.stringify(res.body)).toMatchObject({ ok: true, result: { ok: true, abstained: false, action: { id: 'fixture' } } });
+  });
+  it.each(['decision.run', 'decision.predict'])('passes %s through the executor, never ambient server imports', async operation => {
+    execute.mockResolvedValue({ exit_code: 0, stdout: JSON.stringify({ ok: true, result: { fixture: true } }) });
+    expect((await post(operation, { questions, timeoutMs: 1200 })).body.result).toEqual({ fixture: true });
+    const call = execute.mock.calls[0][0];
+    expect(call.entry).toMatch(/invoke-decision-child\.mjs$/);
+    expect(call.cwd).toBe(dir); expect(call.timeoutMs).toBe(1200);
+    expect(JSON.parse(call.input)).toMatchObject({ operation, brain: dir, timeoutMs: 1200 });
+    expect(call.env).not.toHaveProperty('OPENROUTER_API_KEY');
+  });
+  it('reports missing credentials, provider refusal and private exceptions truthfully', async () => {
+    owner(success, 'export const readAuthSecret = () => null;'); await real();
+    expect((await post('decision.run', { questions })).body.error.code).toBe('credential-unavailable');
+    owner('export const requestDecision = async () => null;');
+    expect((await post('decision.run', { questions })).body.error.code).toBe('provider-failed');
+    owner("export const requestDecision = async () => { throw new Error('PRIVATE-provider-token'); };");
+    const failed = await post('decision.run', { questions });
+    expect(failed.body.error.code).toBe('decision-failed');
+    expect(JSON.stringify(failed.body)).not.toContain('PRIVATE');
+  });
+  it.each(['decision.run', 'decision.predict'])('terminates a hanging %s owner at the server ceiling', async operation => {
+    owner("await new Promise(() => { setInterval(() => {}, 1000); });");
+    await real({ limits: { timeoutMs: 150, outputBytes: 4096, concurrency: 4, perKey: 1 } });
+    const res = await post(operation, { questions, timeoutMs: 10000 });
+    expect(res.status).toBe(504); expect(res.body.error.code).toBe('timeout');
+    expect(res.body.result).toBeNull();
+  });
+  it('kills provider continuation on key revocation and frees the slot only after exit', async () => {
+    const marker = path.join(dir, 'owner-started');
+    owner(`import fs from 'node:fs'; fs.writeFileSync(${JSON.stringify(marker)}, String(process.pid));
+      await new Promise(() => { setInterval(() => {}, 1000); });`);
+    await real();
+    const running = post('decision.run', { questions }).then(r => r);
+    await vi.waitFor(() => expect(fs.existsSync(marker)).toBe(true));
+    const pid = Number(fs.readFileSync(marker, 'utf8'));
+    expect((await post('decision.run', { questions })).status).toBe(429);
+    keys[0].revoked = true;
+    expect((await running).body.error.code).toBe('authority-ended');
+    expect(() => process.kill(pid, 0)).toThrow();
+    keys[0].revoked = false; owner(success);
+    expect((await post('decision.run', { questions })).body.ok).toBe(true);
+  });
+  it('caps dependency logs without returning private output', async () => {
+    owner("process.stderr.write('PRIVATE'.repeat(2000)); await new Promise(() => setInterval(() => {}, 1000));");
+    await real({ limits: { timeoutMs: 2000, outputBytes: 100, concurrency: 4, perKey: 1 } });
+    const res = await post('decision.run', { questions });
+    expect(res.body.error.code).toBe('output-limit');
+    expect(JSON.stringify(res.body)).not.toContain('PRIVATE');
+  });
+  it('closes an in-flight provider connection when authority is revoked', async () => {
+    let received, closed;
+    const accepted = new Promise(resolve => { received = resolve; });
+    const disconnected = new Promise(resolve => { closed = resolve; });
+    const provider = http.createServer((_req, res) => { res.once('close', closed); received(); });
+    await new Promise(resolve => provider.listen(0, '127.0.0.1', resolve));
+    try {
+      owner(`export const requestDecision = async () => {
+        await fetch('http://127.0.0.1:${provider.address().port}'); return null;
+      };`);
+      await real();
+      const running = post('decision.run', { questions }).then(r => r);
+      await accepted;
+      keys[0].revoked = true;
+      expect((await running).body.error.code).toBe('authority-ended');
+      await disconnected;
+      expect(JSON.stringify(audits)).not.toContain('fixture-only');
+    } finally {
+      provider.closeAllConnections();
+      await new Promise(resolve => provider.close(resolve));
+    }
+  });
+  it.each([{ exit_code: 0, stdout: 'PRIVATE-not-json' }, { exit_code: 7, stdout: 'PRIVATE', stderr: 'PRIVATE' }])('sanitizes malformed or failed child output', async output => {
+    execute.mockResolvedValue(output);
+    const res = await post('decision.run', { questions });
+    expect(res.body.ok).toBe(false); expect(JSON.stringify(res.body)).not.toContain('PRIVATE');
+  });
+  it.each([0, -1, 'bad'])('rejects invalid decision timeout %s before execution', async timeoutMs => {
+    expect((await post('decision.predict', { timeoutMs })).body.error.code).toBe('invalid-timeout');
+    expect(execute).not.toHaveBeenCalled();
   });
 });

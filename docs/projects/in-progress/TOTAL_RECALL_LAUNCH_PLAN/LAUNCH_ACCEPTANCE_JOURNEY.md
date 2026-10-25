@@ -38,6 +38,8 @@ One journey, one account of record, one host per stage recorded. This is the dec
 
 ### DEV-API-01 optional developer API acceptance
 
+DEV-API-04 [source evidence](evidence/DEV-API-04-source-verification.md) covers bounded full-mode decision children, typed outputs, provider/credential failure and revocation closing an actual local HTTP connection. It proves local termination without live provider spending; provider quotas, accepted remote billing and complete external acceptance remain open.
+
 Run this matrix against the server candidate when the developer API is delivered; it does not replace the server-free CLI baseline or require a cloud host. Record commands, key grant metadata (never token values), target identity, outcomes and source/package identity.
 
 | Case | Required evidence |

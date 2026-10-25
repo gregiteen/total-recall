@@ -1,5 +1,7 @@
 # TOTAL_RECALL_LAUNCH_PLAN — Architecture
 
+DEV-API-04 implemented execution: decision route → authority-checked bounded child → installed decision client/shared auth adapter (and action predictor for prediction) → structured result. The HTTP process imports no decision provider/auth client. Full mode retains trusted host authority; it is not a malicious-code sandbox. Process-group termination prevents local provider fallback/retry continuation after authority ends, without promising remote refunds or a provider quota. Decision diagnostics are never exposed in API failures. Prediction uses the selected working directory and server-brain index, retaining the existing host-authority discovery semantics.
+
 DEV-API-03 implemented mutation path: invoke shared-auth policy → fixed server brain and exact fact schema → credential-free bounded trusted child → memory-owner creator → validated SSSS operation with a memory:create principal → local search projection. No CLI bootstrap, surface compilation, plugin generator or paid provider is involved. Paths are generated and create-only; caller metadata cannot change category, modality, target or authority. Symlink checks cover canonical, audit and derived destinations. Post-commit index failure returns explicit committed state. The adapter trusts the host operator and package source; it does not run arbitrary caller code or claim OS sandboxing. The CLI shares this owner through `remember --confined-fact`; its ordinary bootstrap is not an API confinement boundary.
 
 > **Project Prefix**: `TOTAL_RECALL_LAUNCH_PLAN`

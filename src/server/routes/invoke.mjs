@@ -34,7 +34,7 @@ const fail = (res, status, operation, code, message, extra = {}) => res.status(s
 });
 
 /** Only scopes that can execute are advertised. */
-function capabilitiesFor(authority) {
+function capabilitiesFor(authority, limits = INVOKE_LIMITS) {
   const families = {};
   for (const [name, def] of Object.entries(OPERATIONS)) {
     if (!operationAllowed(authority, name, def.scope)) continue;
@@ -44,7 +44,7 @@ function capabilitiesFor(authority) {
     targets: authority.mode === 'full' ? 'host' : ['server'],
     credentials: authority.mode === 'full' ? 'host-auth-owner' : [],
     provider_spending: authority.mode === 'full' ? 'trusted-host-authority' : 0,
-    limits: INVOKE_LIMITS };
+    limits };
 }
 
 /** Injectable dependencies allow real HTTP tests with disposable auth-owned keys. */
@@ -60,7 +60,7 @@ export function createInvokeRouter({ auth = requireAuth, store = { loadKeys, key
   router.get('/v1/invoke/capabilities', auth, (req, res) => {
     try {
       const authority = invokeAuthority(req, store);
-      res.json({ ok: true, operation: 'capabilities', result: capabilitiesFor(authority), error: null });
+      res.json({ ok: true, operation: 'capabilities', result: capabilitiesFor(authority, limits), error: null });
     } catch (err) { fail(res, err.status || 503, 'capabilities', err.code || 'authority-unavailable', err.code ? err.message : 'Authority validation unavailable.'); }
   });
   router.post('/v1/invoke', auth, async (req, res) => {
@@ -103,7 +103,7 @@ export function createInvokeRouter({ auth = requireAuth, store = { loadKeys, key
           return execute({ ...options, signal: controller.signal, limits });
         } };
       let result;
-      if (operation === 'capabilities') result = capabilitiesFor(authority);
+      if (operation === 'capabilities') result = capabilitiesFor(authority, limits);
       else result = await HANDLERS[operation](params, context);
       if (operation === 'ssss.write' && authority.mode === 'restricted') mutationResult = result;
       revalidate();
@@ -266,48 +266,44 @@ const HANDLERS = {
     return await runCliVerb({ verb: name, args, timeoutMs }, context);
   },
 
-  async 'decision.run'({ model, state, questions, timeoutMs }) {
-    if (!questions || typeof questions !== 'object') throw new Error('decision.run needs questions.');
-    const path = (await import('node:path')).default;
-    const { pathToFileURL } = await import('node:url');
-    const { brainDir } = await import('../../core/config.mjs');
-    const pluginDir = path.join(brainDir, 'plugins/decision');
-    const client = await import(pathToFileURL(path.join(pluginDir, 'src/client.mjs')).href);
-    const auth = await import(pathToFileURL(path.join(pluginDir, 'auth-client.mjs')).href);
-    const apiKey = auth.readAuthSecret('OPENROUTER_API_KEY');
-    if (!apiKey) throw new Error('No OPENROUTER_API_KEY in the credential store.');
-    const d = await client.requestDecision({
-      apiKey, model: model || client.DEFAULT_MODEL,
-      endpoint: client.DEFAULT_ENDPOINT,
-      timeoutMs: Math.min(INVOKE_LIMITS.timeoutMs, Number(timeoutMs) > 0 ? Number(timeoutMs) : client.DEFAULT_TIMEOUT_MS),
-      state: state || {}, questions,
-    });
-    // A provider failure is reported as a failure; it is never a silent default.
-    if (!d) throw new InvokeError(502, 'provider-failed', 'Decision provider failed.');
-    const answers = {};
-    for (const key of Object.keys(questions)) {
-      const type = questions[key]?.type || 'choice';
-      answers[key] = type === 'noul' ? d.noul(key) : type === 'score' ? d.score(key) : d.choice(key);
+  async 'decision.run'(params, context) {
+    if (!params.questions || typeof params.questions !== 'object' || Array.isArray(params.questions)) {
+      throw new InvokeError(400, 'invalid-questions', 'decision.run needs a question object.');
     }
-    return { answered: true, answers, model: d.modelVersion, cost_usd: d.cost, latency_ms: d.latencyMs };
+    return runDecision('decision.run', params, context);
   },
 
-  async 'decision.predict'({ intent, state = {}, limit = 20 }) {
-    const path = (await import('node:path')).default;
-    const { pathToFileURL } = await import('node:url');
-    const { brainDir } = await import('../../core/config.mjs');
-    const { predictNextAction } = await import('../../core/action-predictor.mjs');
-    const pluginDir = path.join(brainDir, 'plugins/decision');
-    const client = await import(pathToFileURL(path.join(pluginDir, 'src/client.mjs')).href);
-    const auth = await import(pathToFileURL(path.join(pluginDir, 'auth-client.mjs')).href);
-    const apiKey = auth.readAuthSecret('OPENROUTER_API_KEY');
-    if (!apiKey) throw new Error('No OPENROUTER_API_KEY in the credential store.');
-    const r = await predictNextAction(intent || '', {
-      state, apiKey, requestDecision: client.requestDecision,
-      derivedDir: path.join(brainDir, 'memory-derived'),
-      model: client.DEFAULT_MODEL, endpoint: client.DEFAULT_ENDPOINT, timeoutMs: client.DEFAULT_TIMEOUT_MS,
-      limit: Math.max(5, Math.min(40, Number(limit) || 20)),
-    });
-    return r;
+  async 'decision.predict'(params, context) {
+    return runDecision('decision.predict', params, context);
   },
 };
+
+async function runDecision(operation, params, context) {
+  const requested = params.timeoutMs === undefined ? context.limits.timeoutMs : Number(params.timeoutMs);
+  if (!Number.isFinite(requested) || requested <= 0) throw new InvokeError(400, 'invalid-timeout', 'timeoutMs must be positive and finite.');
+  const timeoutMs = Math.min(requested, context.limits.timeoutMs);
+  const env = invokeEnvironment(true);
+  env.TR_INVOKE_CONTEXT = JSON.stringify({ caller: context.authority.id, mode: 'full', target: context.target });
+  const run = await context.run({ entry: path.join(root, 'src/server/invoke-decision-child.mjs'),
+    cwd: context.target, env, timeoutMs,
+    input: JSON.stringify({ operation, params, brain: context.serverBrain, timeoutMs }) });
+  // Provider/auth diagnostics may contain credentials. Unlike requested cli.run
+  // output, these pipes are never exposed, even on timeout or malformed output.
+  if (run.termination_reason || run.truncated) {
+    const code = run.termination_reason || 'output-limit';
+    throw new InvokeError(code === 'timeout' ? 504 : code === 'authority-ended' ? 403 : 422,
+      code, 'Decision execution did not complete; remote work may already have been accepted.');
+  }
+  let envelope;
+  try { envelope = JSON.parse(run.stdout); } catch { /* denied below */ }
+  if (run.exit_code !== 0) throw new InvokeError(502, 'decision-failed', 'Decision owner failed.');
+  if (envelope?.ok === false) {
+    const credential = envelope.error === 'credential-unavailable';
+    throw new InvokeError(credential ? 503 : 502, credential ? 'credential-unavailable' : 'provider-failed',
+      credential ? 'Decision credential is unavailable.' : 'Decision provider failed.');
+  }
+  if (envelope?.ok !== true || !envelope.result || typeof envelope.result !== 'object' || Array.isArray(envelope.result)) {
+    throw new InvokeError(502, 'invalid-owner-output', 'Decision owner returned invalid output.');
+  }
+  return envelope.result;
+}
