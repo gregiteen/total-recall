@@ -28,3 +28,7 @@ Full provider budgets, broader restricted owners, actual harness surface readbac
 Corrected an older tracker overclaim: the5 historical startup identity/tooling regressions do not prove that silent surface writes fail loudly. That acceptance item is explicitly unverified alongside harness readback; its original startup evidence remains preserved.
 
 Formal project audit checker, working/staged whitespace checks and reviewed19-file publication pass. Final quality report is FRESH with0 findings. OpenWiki ingestion imported8 files with0 errors, exit0; exact local fix-memory retrieval succeeds. Private brain state and disposable fixtures stay outside the Git artifact.
+
+## Git publication
+
+The separate agent's concurrent tracker commit `c7e4669` included the already staged19-file core change along with its own mesh-brick tracker update. Preserved that history and the peer's documentation; no plugin source was changed here. Commit `0bc15ae` records final verification in the remaining3 documentation files. Push exited0; HEAD and origin/main independently matched `0bc15aed20fdec11fc313028495c414875cd0953`, with0 unpushed commits and a clean tree. Rechecked the published implementation digest against the tested digest: identical. This final publication record is a documentation-only follow-up under the whole-tree rule.
