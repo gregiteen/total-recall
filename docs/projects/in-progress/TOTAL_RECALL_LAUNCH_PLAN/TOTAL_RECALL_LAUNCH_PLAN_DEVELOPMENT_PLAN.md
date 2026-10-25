@@ -8,7 +8,7 @@
 
 ## Priority order
 
-LR-1 current follow-up: close the outstanding status/lifecycle identity mismatch using a shared observer, explicit conflict/unknown state and safe start refusal. Verify adversarial lock/entry cases, CLI presentation, full Mini suite and configured gates; record source evidence and push the whole tree. Other agents retain plugin ownership. API/provider/harness/launch work remains in progress.
+LR-1 source follow-up complete: shared canonical daemon observation closes the status/lifecycle mismatch, preserves conflict/unknown and refuses unsafe lifecycle actions. Real child/CLI acceptance,69 focused tests,2412 full Mini tests/374 files and8 gates pass, actual exits0; source identity is unchanged across verification. [Evidence](evidence/LR-1-shared-daemon-identity.md). Other agents retain plugin ownership. API/provider/harness/launch work remains in progress.
 
 DEV-API-06 completed source stage: unified composed execution scope resolution with static group discovery and the selected-brain owner; exact memberships, shadow precedence, nested and `.agents` selection, and explicit root overrides are verified. Actual full-key HTTP composed effects/argv/failures and restricted denial pass. Final combined-source Mini suite2391 tests/374 files,111 focused tests and8 quality gates pass, actual exits0; source hashes match before/after. Evidence records concurrent runner preservation and publication. Plugin repositories remain assigned to the other active agent. Provider budgets, broader confined owners and launch acceptance remain in progress.
 
