@@ -198,11 +198,22 @@ export async function updateAllBrains(opts = {}) {
       if (install.status !== 0) throw new Error(install.error?.message || install.stderr?.trim().slice(-1500) || `Install exited ${install.status}`);
       for (const { consumer, row } of group.consumers) {
         row.packages = row.packages.map(dep => ({ ...dep, installed: installedBrainPackage(consumer.root, dep.key).version }));
+        // A consumer may legitimately resolve the package from its own node_modules — nested plugin
+        // directories do exactly that. Requiring the owner's hoisted copy reported a correct install
+        // as a failure and rolled the whole batch back, which is why 30 consumers never updated.
+        const allowedRoots = [
+          path.join(group.owner, 'node_modules') + path.sep,
+          path.join(consumer.root, 'node_modules') + path.sep,
+        ];
+        const placed = (file) => Boolean(file) && allowedRoots.some((root) => file.startsWith(root));
         const bad = consumer.deps.find(dep => {
           const actual = installedBrainPackage(consumer.root, dep.key);
-          return actual.version !== versions[dep.package] || !actual.file?.startsWith(path.join(group.owner, 'node_modules') + path.sep);
+          return actual.version !== versions[dep.package] || !placed(actual.file);
         });
-        if (bad || isLink(path.join(consumer.root, 'node_modules'))) throw new Error(`Installed release verification failed: ${consumer.root}${bad ? ` (${bad.key})` : ' (shared link)'}`);
+        // A link is only a fault when it escapes every legitimate root; a self-contained one is fine.
+        const linkPath = path.join(consumer.root, 'node_modules');
+        const linked = isLink(linkPath) && !placed(path.resolve(path.dirname(linkPath), fs.readlinkSync(linkPath)));
+        if (bad || linked) throw new Error(`Installed release verification failed: ${consumer.root}${bad ? ` (${bad.key})` : ' (shared link)'}`);
         row.status = 'updated';
       }
     } catch (error) {
