@@ -2,6 +2,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { writeFileSecure } from './secure-file.mjs';
+import { ensureProjectId } from './project-id.mjs';
 
 function ensureDir(dir) { fs.mkdirSync(dir, { recursive: true }); }
 
@@ -58,6 +59,7 @@ export function registerProjectBrain(globalBrainDir, entry) {
     name: entry.name,
     path: abs,
     brainDir: entry.brainDir,
+    project_id: ensureProjectId(entry.brainDir).project_id,
     full_brain: true,
     layer: 'project',
     tags: entry.tags || ['project-brain'],

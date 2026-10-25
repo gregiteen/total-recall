@@ -226,6 +226,8 @@ async function handleRegister(registryPath, targetArgs) {
     console.log(`  ✅ Full project brain ready at ${path.join(absoluteRoot, '.agent', 'skills', 'total-recall')}`);
   } catch (err) {
     console.error(`  ⚠️  Could not fully provision brain layout: ${err.message}`);
+    process.exitCode = 1;
+    return;
   }
 
   const brainDir = path.join(absoluteRoot, '.agent', 'skills', 'total-recall');

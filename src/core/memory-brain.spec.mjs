@@ -21,3 +21,23 @@ it('preserves identity fields and refuses to replace malformed existing state', 
     expect(fs.readFileSync(registry, 'utf8')).toBe('{}');
   } finally { fs.rmSync(root, { recursive: true, force: true }); }
 });
+
+it('registers a stable project UUID without a separate repair command', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'tr-register-id-'));
+  try {
+    const global = path.join(root, 'global'), project = path.join(root, 'project');
+    const brainDir = path.join(project, '.agent/skills/total-recall');
+    writeBrainIdentity(brainDir, { name: 'Project' });
+    const entry = { path: project, brainDir, name: 'Project' };
+    const row = registerProjectBrain(global, entry);
+    expect(row.project_id).toMatch(/^[0-9a-f-]{36}$/);
+    expect(JSON.parse(fs.readFileSync(path.join(brainDir, 'config/brain.json'), 'utf8')).project_id).toBe(row.project_id);
+    expect(registerProjectBrain(global, entry).project_id).toBe(row.project_id);
+    const file = path.join(global, 'config/project-registry.json');
+    expect(JSON.parse(fs.readFileSync(file, 'utf8'))).toHaveLength(1);
+    const before = fs.readFileSync(file, 'utf8');
+    fs.writeFileSync(path.join(brainDir, 'config/brain.json'), '{broken');
+    expect(() => registerProjectBrain(global, entry)).toThrow();
+    expect(fs.readFileSync(file, 'utf8')).toBe(before);
+  } finally { fs.rmSync(root, { recursive: true, force: true }); }
+});
