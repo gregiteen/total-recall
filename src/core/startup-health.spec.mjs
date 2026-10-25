@@ -4,11 +4,31 @@ import { inspectRequiredPlugins } from './required-plugins.mjs';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { startupHealth, processIdentity, healthVerdict, appVerdict, runBounded, verifyListener } from './startup-health.mjs';
+import { spawn } from 'node:child_process';
+import { once } from 'node:events';
+import { startupHealth, processIdentity, observeDaemon, healthVerdict, appVerdict, runBounded, verifyListener } from './startup-health.mjs';
 const health = { status: 'healthy', version: '1', uptime_seconds: 1, embedding_coverage: 1, daemon: 'running', vfs: { exists: true, skill_exists: true } };
 const run = async () => ({ code: 0, output: 'SSSS tooling', reason: null });
 const fetchGood = async url => url.pathname === '/health' ? new Response(JSON.stringify(health)) : new Response('# Instructions');
 describe('startup health truth and boundaries', () => {
+  it('identifies a real child as its own entry and a foreign installation for this daemon', async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'daemon-real-'));
+    let child;
+    try {
+      const entry = path.join(dir, 'src/core/daemon-loop.mjs');
+      fs.mkdirSync(path.dirname(entry), { recursive: true });
+      fs.writeFileSync(entry, "console.log('ready'); setInterval(() => {}, 1000);");
+      child = spawn(process.execPath, ['src/core/daemon-loop.mjs'], { cwd: dir, stdio: ['ignore', 'pipe', 'pipe'] });
+      await once(child.stdout, 'data');
+      const pidFile = path.join(dir, 'daemon.pid');
+      fs.writeFileSync(pidFile, String(child.pid));
+      expect(processIdentity(pidFile, entry)).toMatchObject({ status: 'running', pid: child.pid, entry: fs.realpathSync(entry) });
+      expect(observeDaemon(dir)).toMatchObject({ status: 'conflict', reason: 'foreign-pid', entry: fs.realpathSync(entry) });
+    } finally {
+      if (child && child.exitCode === null) { const closed = once(child, 'close'); child.kill(); await closed; }
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
   it('fails readiness when required auth is missing despite healthy services', async () => {
     inspectRequiredPlugins.mockReturnValueOnce({ status: 'failed', errors: ['auth missing'] });
     const report = await startupHealth({ brainDir: '/missing', brainUrl: 'https://example.invalid', identity: () => ({ status: 'running' }), fetchImpl: fetchGood, run });
@@ -124,13 +144,33 @@ describe('startup health truth and boundaries', () => {
       const id = processIdentity(pidFile, script, { ...base, command: () => `node ${script}`, cwd: () => '/nonexistent' });
       expect(id.status).toBe('running');
     });
-    it('accepts a corroborating entry-tail match when no root resolves', () => {
+    it('refuses a suffix match when no root resolves', () => {
       const id = processIdentity(pidFile, script, { ...base, command: () => 'node /opt/other/install/src/server/index.mjs', cwd: () => null });
-      expect(id.status).toBe('running');
+      expect(id).toMatchObject({ status: 'unknown', reason: 'process-entry-unavailable' });
+    });
+    it('does not resolve a relative entry against the caller cwd when process cwd is unavailable', () => {
+      expect(processIdentity(pidFile, script, { ...base, command: () => 'node src/server/index.mjs', cwd: () => null }))
+        .toMatchObject({ status: 'unknown', reason: 'process-entry-unavailable' });
+    });
+    it('retains uncertain liveness rather than treating permission denial as stopped', () => {
+      expect(processIdentity(pidFile, script, { alive: () => { throw new Error('EPERM'); } }))
+        .toMatchObject({ status: 'unknown', reason: 'process-liveness-unavailable' });
     });
     it('never reports running when the process is gone', () => {
       expect(processIdentity(pidFile, script, { alive: () => false, command: () => 'node src/server/index.mjs' })).toEqual({ status: 'stopped' });
     });
+  });
+  it('startup consumes the same daemon observation as lifecycle and preserves identity details', async () => {
+    const identity = (file, expected) => file.endsWith('daemon.pid')
+      ? { status: 'conflict', reason: 'foreign-pid', pid: 123, entry: '/other/src/core/daemon-loop.mjs' }
+      : { status: 'running', pid: 456 };
+    const expected = observeDaemon('/missing', { identity });
+    const report = await startupHealth({ brainDir: '/missing', brainUrl: 'http://localhost:3000',
+      identity, fetchImpl: fetchGood, listener: async () => true, run, ensure: true });
+    expect(report.daemon).toEqual(expected);
+    expect(report.ready).toBe(false);
+    expect(report.actions).toEqual([]);
+    expect(expected.expected_entry).toMatch(/src\/core\/daemon-loop\.mjs$/);
   });
   it('builtin-colliding declared command is rejected without dispatch', async () => {
     const cwd=fs.mkdtempSync(path.join(os.tmpdir(),'startup-app-'));

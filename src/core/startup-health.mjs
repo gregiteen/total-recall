@@ -52,34 +52,38 @@ export function readProcessCwd(pid, { run = spawnSync } = {}) {
  * check depend on where the operator happened to stand: `total-recall startup
  * check` run from any other directory reported a healthy local server as
  * `server-process-unverified`. Resolve against the process's own cwd instead,
- * and accept an entry-tail match as corroboration — the same suffix rule
- * `pid-lock.mjs` already uses to decide a lock is ours.
+ * An unresolved entry is unknown; a matching suffix alone cannot identify an
+ * installation and must never authorize lifecycle actions.
  */
-export function processIdentity(pidFile, hint, { alive = pid => { try { process.kill(pid, 0); return true; } catch { return false; } }, command = readProcessCommand, cwd = readProcessCwd } = {}) {
+export function processIdentity(pidFile, hint, { alive = pid => { try { process.kill(pid, 0); return true; } catch (err) { if (err.code === 'ESRCH') return false; throw err; } }, command = readProcessCommand, cwd = readProcessCwd } = {}) {
   let pid;
-  try { pid = Number(fs.readFileSync(pidFile, 'utf8').trim()); } catch { return { status: 'not-started' }; }
-  if (!Number.isInteger(pid) || pid <= 0 || !alive(pid)) return { status: 'stopped' };
-  const cmd = command(pid);
-  if (!cmd) return { status: 'unknown', reason: 'process-identity-unavailable' };
+  try { pid = Number(fs.readFileSync(pidFile, 'utf8').trim()); }
+  catch (err) { return err.code === 'ENOENT' ? { status: 'not-started' } : { status: 'unknown', reason: 'pid-unreadable' }; }
+  if (!Number.isInteger(pid) || pid <= 0) return { status: 'unknown', reason: 'invalid-pid' };
+  try { if (!alive(pid)) return { status: 'stopped' }; }
+  catch { return { status: 'unknown', reason: 'process-liveness-unavailable', pid }; }
+  let cmd;
+  try { cmd = command(pid); } catch { /* unknown below */ }
+  if (!cmd) return { status: 'unknown', reason: 'process-identity-unavailable', pid };
   const script = cmd.trim().match(/^(?:\S*node(?:\s+--[^ ]+)*)\s+(\S+)/)?.[1];
-  let matches = false, resolved = false;
+  let entry = null;
   if (script) {
     // Absolute script paths resolve directly; relative ones resolve against the
     // process's own working directory, never the caller's.
-    const bases = path.isAbsolute(script) ? [null] : [cwd(pid)];
-    for (const base of bases) {
-      try {
-        const target = fs.realpathSync(base ? path.resolve(base, script) : script);
-        resolved = true;
-        if (target === fs.realpathSync(hint)) { matches = true; break; }
-      } catch {}
-    }
-    // Only when no root could be resolved at all may the entry tail stand in as
-    // corroboration. A path that DID resolve to a different install is a second
-    // installation, not an unresolvable one, and must stay a conflict.
-    if (!matches && !resolved) matches = script.split(path.sep).slice(-2).join('/') === path.join(path.basename(path.dirname(hint)), path.basename(hint));
+    try {
+      const base = path.isAbsolute(script) ? null : cwd(pid);
+      if (!path.isAbsolute(script) && !base) throw new Error('Missing process cwd');
+      entry = fs.realpathSync(base ? path.resolve(base, script) : script);
+      if (entry === fs.realpathSync(hint)) return { status: 'running', pid, entry };
+    } catch { return { status: 'unknown', reason: 'process-entry-unavailable', pid }; }
   }
-  return matches ? { status: 'running', pid } : { status: 'conflict', reason: 'foreign-pid' };
+  return { status: 'conflict', reason: 'foreign-pid', pid, ...(entry ? { entry } : {}) };
+}
+
+/** The single installation-aware daemon observation for status and lifecycle. */
+export function observeDaemon(brainDir, { identity = processIdentity } = {}) {
+  const expected_entry = path.join(packageRoot, 'src', 'core', 'daemon-loop.mjs');
+  return { ...identity(path.join(brainDir, 'daemon.pid'), expected_entry), expected_entry, source: 'local-pid' };
 }
 
 export function healthVerdict(body) {
@@ -118,7 +122,6 @@ export async function fetchStartup(url, options = {}, fetchImpl = fetch) {
 export async function startupHealth({ cwd = process.cwd(), brainDir, brainUrl = null, token = null, brainId = null, ensure = false,
   appCheck = null, appStart = null, run = runBounded, fetchImpl = fetch, listener = verifyListener, platform = process.platform, home = os.homedir(), identity = processIdentity } = {}) {
   const actions = [];
-  const daemonFile = path.join(brainDir, 'daemon.pid');
   const serverFile = path.join(brainDir, 'server.pid');
   const report = { checked_at: new Date().toISOString(), server: { status: 'not-configured' }, brain: { status: 'unknown' }, daemon: { status: 'unknown' },
     ssss: { status: 'unknown', role: 'document-engine-tooling; no standalone daemon required' }, app: { status: 'not-declared' }, actions };
@@ -142,7 +145,7 @@ export async function startupHealth({ cwd = process.cwd(), brainDir, brainUrl = 
     } catch { return { status: 'offline', reason: 'health-unreachable' }; }
   };
   report.server = await probeServer();
-  report.daemon = local ? { ...identity(daemonFile, path.join(packageRoot, 'src', 'core', 'daemon-loop.mjs')), source: 'local-pid' } : remoteDaemon;
+  report.daemon = local ? observeDaemon(brainDir, { identity }) : remoteDaemon;
   const serverIdentity = local ? identity(serverFile, path.join(packageRoot, 'src', 'server', 'index.mjs')) : null;
   if (ensure && local && report.server.status === 'offline' && ['not-started', 'stopped'].includes(serverIdentity.status)) {
     const plist = path.join(home, 'Library', 'LaunchAgents', 'com.totalrecall.server.plist');
@@ -163,7 +166,7 @@ export async function startupHealth({ cwd = process.cwd(), brainDir, brainUrl = 
       const result = await run(process.execPath, [cliEntry, 'daemon', 'start'], { cwd });
       actions.push({ component: 'daemon', action: 'cli-start', accepted: result.code === 0 && !result.reason });
       for (let i = 0; i < 10; i++) {
-        report.daemon = { ...identity(daemonFile, path.join(packageRoot, 'src', 'core', 'daemon-loop.mjs')), source: 'local-pid' }; if (report.daemon.status === 'running') break;
+        report.daemon = observeDaemon(brainDir, { identity }); if (report.daemon.status === 'running') break;
         await new Promise(resolve => setTimeout(resolve, 200));
       }
     }

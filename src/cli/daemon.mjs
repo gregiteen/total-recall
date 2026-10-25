@@ -18,7 +18,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { resolveBrainDir } from './agent-dir.mjs';
-import { startDaemon, stopDaemon, readPid } from '../core/daemon-control.mjs';
+import { startDaemon, stopDaemon, readPid, getDaemonObservation } from '../core/daemon-control.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.join(__dirname, '..', '..');
@@ -208,6 +208,14 @@ export default async function daemon(args) {
   const useSystemd = hasSystemd();
   const useLaunchd = !useSystemd && hasLaunchd();
 
+  // Managers must honor the same brain lock as direct lifecycle operations.
+  if (['start', 'ensure', 'stop'].includes(subcommand)) {
+    const observation = getDaemonObservation();
+    if (['conflict', 'unknown'].includes(observation.status)) {
+      throw new Error(`Daemon ${subcommand} refused: ${observation.reason || observation.status}; expected ${observation.expected_entry}${observation.entry ? `, observed ${observation.entry}` : ''}`);
+    }
+  }
+
   switch (subcommand) {
     case 'ensure': {
       if(!useSystemd)throw new Error('Managed daemon ensure currently requires systemd on the daemon host');
@@ -253,6 +261,7 @@ export default async function daemon(args) {
       else await directStop();
       break;
     case 'status':
+      console.log(JSON.stringify({ daemon: getDaemonObservation() }));
       if (useSystemd) systemdStatus();
       else if (useLaunchd) launchctlStatus();
       else directStatus();

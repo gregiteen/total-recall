@@ -5,6 +5,8 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import fs from 'node:fs';
 import path from 'node:path';
 import statusCmd from './status.mjs';
+vi.mock('../core/daemon-control.mjs', () => ({ getDaemonObservation: vi.fn() }));
+import { getDaemonObservation } from '../core/daemon-control.mjs';
 
 describe('status command', () => {
   let logSpy;
@@ -13,6 +15,7 @@ describe('status command', () => {
   let fetchSpy;
 
   beforeEach(() => {
+    getDaemonObservation.mockReturnValue({ status: 'not-started', source: 'local-pid', expected_entry: '/own/daemon-loop.mjs' });
     logSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
     
     // Default mock behavior for file existence
@@ -114,6 +117,24 @@ describe('status command', () => {
       tunnel_pid: 45678,
       tunnel_alive: true
     });
+  });
+
+  it.each(['conflict', 'unknown'])('preserves %s and names installation identity in JSON and text', async status => {
+    const observation = { status, reason: 'foreign-pid', source: 'local-pid',
+      expected_entry: '/own/daemon-loop.mjs', entry: '/other/daemon-loop.mjs' };
+    getDaemonObservation.mockReturnValue(observation);
+    vi.spyOn(fs, 'statSync').mockReturnValue({ size: 100, mtime: new Date(), mtimeMs: 1 });
+    await statusCmd(['--json']);
+    const report = JSON.parse(logSpy.mock.calls[0][0]);
+    expect(report.daemon).toBe(status);
+    expect(report.daemon_observation).toEqual(observation);
+    logSpy.mockClear();
+    await statusCmd([]);
+    const logs = logSpy.mock.calls.flat().join('\n');
+    expect(logs).toContain(`${status} (foreign-pid)`);
+    expect(logs).toContain('/own/daemon-loop.mjs');
+    expect(logs).toContain('/other/daemon-loop.mjs');
+    expect(logs).not.toContain('⚪ Not Running');
   });
 
   it('accepts the server markdown instructions response', async () => {

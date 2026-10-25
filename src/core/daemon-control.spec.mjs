@@ -15,7 +15,8 @@ vi.mock('node:fs', () => ({
     openSync: vi.fn(),
     closeSync: vi.fn(),
     unlinkSync: vi.fn(),
-    renameSync: vi.fn()
+    renameSync: vi.fn(),
+    realpathSync: vi.fn()
   },
   existsSync: vi.fn(),
   readFileSync: vi.fn(),
@@ -60,7 +61,11 @@ describe('daemon-control', () => {
       if (typeof p === 'string' && p.includes('daemon-loop.mjs')) return true;
       return false;
     });
-    fs.readFileSync.mockReturnValue('');
+    fs.readFileSync.mockImplementation(p => {
+      if (!fs.existsSync(p)) throw Object.assign(new Error('missing'), { code: 'ENOENT' });
+      return '';
+    });
+    fs.realpathSync.mockImplementation(p => String(p).replace('/fixture', process.cwd()));
     fs.writeFileSync.mockReturnValue(undefined);
     fs.mkdirSync.mockReturnValue(undefined);
     fs.openSync.mockReturnValue(3);
@@ -113,7 +118,7 @@ describe('daemon-control', () => {
     it('returns null when PID file exists but process is dead (kill throws)', async () => {
       fs.existsSync.mockReturnValue(true);
       fs.readFileSync.mockReturnValue('9876\n');
-      killSpy.mockImplementation(() => { throw new Error('ESRCH'); });
+      killSpy.mockImplementation(() => { throw Object.assign(new Error('ESRCH'), { code: 'ESRCH' }); });
 
       const pid = await readPid();
 
@@ -134,6 +139,13 @@ describe('daemon-control', () => {
   // getDaemonStatus
   // ---------------------------------------------------------------------------
   describe('getDaemonStatus', () => {
+    it('retains unknown for an unreadable lock', () => {
+      fs.readFileSync.mockImplementation(() => { throw Object.assign(new Error('denied'), { code: 'EACCES' }); });
+      expect(getDaemonStatus()).toBe('unknown');
+      expect(() => startDaemon()).toThrow('pid-unreadable');
+      expect(child_process.spawn).not.toHaveBeenCalled();
+    });
+
     it("returns 'running' when a live pid is found", async () => {
       fs.existsSync.mockReturnValue(true);
       fs.readFileSync.mockReturnValue('9876\n');
@@ -147,7 +159,7 @@ describe('daemon-control', () => {
     it("returns 'dead' when PID file exists but process is no longer alive", async () => {
       fs.existsSync.mockReturnValue(true);
       fs.readFileSync.mockReturnValue('9876\n');
-      killSpy.mockImplementation(() => { throw new Error('ESRCH'); });
+      killSpy.mockImplementation(() => { throw Object.assign(new Error('ESRCH'), { code: 'ESRCH' }); });
 
       const status = await getDaemonStatus();
 
@@ -167,6 +179,28 @@ describe('daemon-control', () => {
   // startDaemon
   // ---------------------------------------------------------------------------
   describe('startDaemon', () => {
+    it('fails explicitly when the actual daemon entry is missing', () => {
+      fs.existsSync.mockReturnValue(false);
+      expect(() => startDaemon()).toThrow('Daemon script not found');
+      expect(child_process.spawn).not.toHaveBeenCalled();
+    });
+    it.each(['node /other/src/core/daemon-loop.mjs', '', 'node /other/src/core/dream.mjs'])(
+      'refuses start and ensure for an uncertain or foreign owner: %s', async stdout => {
+        fs.readFileSync.mockReturnValue('9876');
+        child_process.spawnSync.mockReturnValue({ status: 0, stdout });
+        expect(() => startDaemon()).toThrow('refused');
+        await expect(ensureDaemonRunning()).rejects.toThrow('refused');
+        expect(child_process.spawn).not.toHaveBeenCalled();
+        expect(fs.unlinkSync).not.toHaveBeenCalled();
+        expect(killSpy.mock.calls.every(([, signal]) => signal === 0)).toBe(true);
+      });
+
+    it.each(['9876junk', '0', '-1', ''])('refuses malformed lock %s without spawning', lock => {
+      fs.readFileSync.mockReturnValue(lock);
+      expect(() => startDaemon()).toThrow('invalid-pid');
+      expect(child_process.spawn).not.toHaveBeenCalled();
+    });
+
     it('spawns a detached child and returns the pid, leaving the lockfile to the daemon', async () => {
       // No existing daemon running
       fs.existsSync.mockImplementation((p) => {
@@ -221,7 +255,7 @@ describe('daemon-control', () => {
   describe('stopDaemon', () => {
     it('does not signal or unlink a live unrelated or unidentifiable process',async()=>{
       fs.existsSync.mockReturnValue(true);fs.readFileSync.mockReturnValue('9876\n');
-      for(const stdout of ['node /other/service.mjs','']){
+      for(const stdout of ['node /other/service.mjs','node /other/src/core/daemon-loop.mjs','']){
         child_process.spawnSync.mockReturnValue({status:0,stdout});
         expect(await stopDaemon()).toBe(false);
       }

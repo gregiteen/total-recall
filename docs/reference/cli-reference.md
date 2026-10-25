@@ -408,6 +408,9 @@ Manage API keys and credentials (stored in `secrets.enc`, not in the memory vaul
 ---
 
 ### `daemon`
+
+Lifecycle commands and local `startup check` share canonical entry identity for the PID lock. A live different installation reports `conflict`; unreadable locks, liveness or entry paths report `unknown`. Both states block `start`, `ensure` and `stop` before direct or managed lifecycle changes. They never count as running. `status --json` retains its daemon string and adds `daemon_observation` with status, reason, PID, expected entry and observed entry when available. `daemon status` prints this observation separately from service-manager registration. An unresolved matching filename suffix does not verify an installation. Missing daemon source fails explicitly.
+
 Manage the background worker independently of the REST server. `status` reports its PID and recent activity; restarting the REST server does not reload the worker.
 - **Usage**:
   ```bash

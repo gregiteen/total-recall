@@ -178,9 +178,11 @@ export default async function statusCmd(args) {
 
   // Daemon status
   let daemonStatus = 'unknown';
+  let daemonObservation = { status: 'unknown', reason: 'observation-unavailable' };
   try {
-    const { getDaemonStatus } = await import('../core/daemon-control.mjs');
-    daemonStatus = getDaemonStatus();
+    const { getDaemonObservation } = await import('../core/daemon-control.mjs');
+    daemonObservation = getDaemonObservation();
+    daemonStatus = daemonObservation.status === 'not-started' ? 'not_started' : daemonObservation.status === 'stopped' ? 'dead' : daemonObservation.status;
   } catch {}
 
   let localInstructions = null;
@@ -223,6 +225,7 @@ export default async function statusCmd(args) {
       tunnel_alive: tunnelAlive
     },
     daemon: daemonStatus,
+    daemon_observation: daemonObservation,
     brain: {
       url: brainUrl,
       configured: !!brainConfig,
@@ -270,7 +273,11 @@ export default async function statusCmd(args) {
   console.log(`  Dashboard UI:     ${dashboardUrl || '(not resolved)'}`);
   console.log(`  Remote Brain:     ${report.brain.url || '(none)'}`);
   console.log(`  Tunnel Process:   ${tunnelPid ? (tunnelAlive ? `🟢 Active (PID ${tunnelPid})` : '🔴 Stale PID file') : '⚪ Inactive'}`);
-  console.log(`  Daemon Status:    ${daemonStatus === 'running' ? '🟢 Running' : daemonStatus === 'dead' ? '🔴 Dead' : '⚪ Not Running'}`);
+  console.log(`  Daemon Status:    ${daemonStatus === 'running' ? '🟢 Running' : daemonStatus === 'dead' ? '🔴 Dead' : daemonStatus === 'not_started' ? '⚪ Not Running' : `⚠️ ${daemonStatus} (${daemonObservation.reason || 'unverified'})`}`);
+  if (['conflict', 'unknown'].includes(daemonStatus)) {
+    if (daemonObservation.expected_entry) console.log(`  Expected daemon:  ${daemonObservation.expected_entry}`);
+    if (daemonObservation.entry) console.log(`  Observed daemon:  ${daemonObservation.entry}`);
+  }
   console.log(`  Reachable:        ${report.brain.reachable ? 'yes' : 'no'}${report.brain.error ? `  (${report.brain.error})` : ''}`);
   console.log(`  Local INSTR.:     ${localInstructions ? `${localInstructions.bytes} bytes, sha=${localInstructions.sha256.slice(0, 12)}…` : '(not compiled)'}`);
   if (remote?.instructions_sha256) {

@@ -5,7 +5,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { logger } from './logger.mjs';
 import { agentDir, brainDir } from './config.mjs';
-import { readProcessCommand } from './pid-lock.mjs';
+import { observeDaemon } from './startup-health.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.join(__dirname, '..', '..');
@@ -22,46 +22,19 @@ const LOG_FILE = path.join(brainDir, 'logs', 'daemon.log');
  * @returns {number|null} The active PID, or null if not running/invalid.
  */
 export function readPid() {
-  try {
-    if (!fs.existsSync(PID_FILE)) return null;
-    const pid = parseInt(fs.readFileSync(PID_FILE, 'utf8').trim(), 10);
-    if (isNaN(pid) || pid <= 0) return null;
-    
-    // Check if the process is alive using signal 0
-    try {
-      process.kill(pid, 0);
-      const command=readProcessCommand(pid);
-      if(!command)throw new Error('Cannot verify daemon process identity');
-      if(!command.includes(path.join('core','daemon-loop.mjs')) && !command.includes(path.join('core','dream.mjs')))return null;
-      return pid;
-    } catch {
-      return null;
-    }
-  } catch {
-    return null;
-  }
+  const observation = getDaemonObservation();
+  return observation.status === 'running' ? observation.pid : null;
 }
+
+export function getDaemonObservation() { return observeDaemon(brainDir); }
 
 /**
  * Returns the status of the daemon process.
- * @returns {'running'|'dead'|'not_started'}
+ * @returns {'running'|'dead'|'not_started'|'conflict'|'unknown'}
  */
 export function getDaemonStatus() {
-  try {
-    const pid = readPid();
-    if (pid) {
-      return 'running';
-    }
-    
-    // If process is not running but PID file exists, it's considered dead
-    if (fs.existsSync(PID_FILE)) {
-      return 'dead';
-    }
-    
-    return 'not_started';
-  } catch {
-    return 'not_started';
-  }
+  const { status } = getDaemonObservation();
+  return status === 'not-started' ? 'not_started' : status === 'stopped' ? 'dead' : status;
 }
 
 /**
@@ -69,7 +42,11 @@ export function getDaemonStatus() {
  * @returns {number} The PID of the newly spawned daemon.
  */
 export function startDaemon() {
-  const existingPid = readPid();
+  const observation = getDaemonObservation();
+  if (['conflict', 'unknown'].includes(observation.status)) {
+    throw new Error(`Daemon start refused: ${observation.reason || observation.status}; expected ${observation.expected_entry}${observation.entry ? `, observed ${observation.entry}` : ''}`);
+  }
+  const existingPid = observation.status === 'running' ? observation.pid : null;
   if (existingPid) {
     logger.warn('daemon-control', `Daemon already running under PID ${existingPid}.`);
     return existingPid;
@@ -77,13 +54,7 @@ export function startDaemon() {
 
   const dreamScript = path.join(ROOT, 'src', 'core', 'daemon-loop.mjs');
   if (!fs.existsSync(dreamScript)) {
-    // Fallback to dream.mjs for backward compatibility
-    const fallback = path.join(ROOT, 'src', 'core', 'dream.mjs');
-    if (fs.existsSync(fallback)) {
-      logger.warn('daemon-control', 'daemon-loop.mjs not found, falling back to dream.mjs');
-    } else {
-      throw new Error(`Daemon script not found at ${dreamScript}`);
-    }
+    throw new Error(`Daemon script not found at ${dreamScript}`);
   }
 
   const logsDir = path.dirname(LOG_FILE);
