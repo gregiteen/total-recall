@@ -15,6 +15,10 @@ import { setPluginActive } from './plugin-activation.mjs';
 const CHILD = path.join(path.dirname(fileURLToPath(import.meta.url)), 'plugin-runner-child.mjs');
 export const DEFAULT_TIMEOUT_MS = 30_000;
 export const MAX_OUTPUT_BYTES = 256 * 1024;
+// A terminal call (stdin inherited from the operator) is read by a person or an
+// agent, not buffered by the server, so it gets the ceiling the host's other
+// child processes use instead of the server's bound.
+export const CLI_MAX_OUTPUT_BYTES = 16 * 1024 * 1024;
 export const MAX_INPUT_BYTES = 64 * 1024;
 
 /** A credential is one declared string on stdin, never a command-line value. */
@@ -37,6 +41,8 @@ export function validatePluginSecretInput(plugin, subcommand, input) {
  */
 export function runPluginCommand(plugin, options = {}) {
   const { subcommand = '', args = [], cwd = process.cwd(), timeoutMs: requestedTimeoutMs, stdin = 'ignore', stdinText, composable = false, secretsBrainDir } = options;
+  const maxOutputBytes = options.maxOutputBytes ?? (stdin === 'inherit' ? CLI_MAX_OUTPUT_BYTES : MAX_OUTPUT_BYTES);
+  if (!Number.isInteger(maxOutputBytes) || maxOutputBytes < 1 || maxOutputBytes > CLI_MAX_OUTPUT_BYTES) return Promise.reject(new Error(`Plugin output limit must be 1..${CLI_MAX_OUTPUT_BYTES} bytes`));
   try { validatePluginSecretInput(plugin, subcommand, stdinText); }
   catch (err) { return Promise.reject(err); }
   const operation = subcommand || args[0];
@@ -95,9 +101,9 @@ export function runPluginCommand(plugin, options = {}) {
       // Even a faulty owner that echoes stdin cannot return credential material.
       if (stdinText !== undefined) return;
       if (truncated) return;
-      if (bytes + buf.length > MAX_OUTPUT_BYTES) {
-        const partial=buf.subarray(0, MAX_OUTPUT_BYTES - bytes);chunks.push(partial);stream.push(partial);
-        bytes = MAX_OUTPUT_BYTES;
+      if (bytes + buf.length > maxOutputBytes) {
+        const partial=buf.subarray(0, maxOutputBytes - bytes);chunks.push(partial);stream.push(partial);
+        bytes = maxOutputBytes;
         truncated = true;
         return;
       }
@@ -124,11 +130,11 @@ export function runPluginCommand(plugin, options = {}) {
       clearTimeout(timer);
       let output = Buffer.concat(chunks).toString('utf8');
       if (spawnError) output += `${output ? '\n' : ''}[runner] ${spawnError.message}`;
-      if (truncated) output += `\n[runner] output truncated at ${MAX_OUTPUT_BYTES} bytes`;
+      if (truncated) output += `\n[runner] output truncated at ${maxOutputBytes} bytes`;
       if (timedOut) output += `\n[runner] killed after ${timeoutMs} ms`;
       let stderr=Buffer.concat(stderrChunks).toString('utf8');
       if(spawnError)stderr+=`\n[runner] ${spawnError.message}`;
-      if(truncated)stderr+=`\n[runner] output truncated at ${MAX_OUTPUT_BYTES} bytes`;
+      if(truncated)stderr+=`\n[runner] output truncated at ${maxOutputBytes} bytes`;
       if(timedOut)stderr+=`\n[runner] killed after ${timeoutMs} ms`;
       resolve({
         ok: !spawnError && !timedOut && exitCode === 0,
