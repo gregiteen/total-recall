@@ -8,6 +8,8 @@ There is one secrets store per host: the global auth store. The CLI never select
 
 For provider key setup, verify against an authenticated provider operation before saving; format-only checks and timeouts are not verification. Require HTTPS except explicit loopback development, reject redirects containing credentials, and return safe errors. Rotation follows verify → store/project → deploy/verify → revoke, respecting the provider's supported recipe and user authorization. Manual provider steps remain manual. Exported environment files are deployment projections, not an alternate credential authority.
 
+Every secret operation goes through `total-recall auth secret`; never read, compare or copy credential values with shell tools. Check a copied credential with `fingerprint --from-clipboard --expect-prefix <p> --not <KEY>` before `rotate <KEY> --from-clipboard`. After `remote deploy <target> --keys … [--path <repo>]`, confirm with `remote verify <target> --keys …` (fingerprint match, no values). A process manager can keep a captured environment that overrides the deployed file (pm2 does): move the keys the app uses into the store with `remote import-pm2 <target> --app <name> --keys … --apply`, then restart the app with a clean environment so it reads only the projection. Stripe webhook signing secrets are issued by Stripe; roll them in the dashboard, never mint them.
+
 Current migration remains in progress until package/bootstrap tests, all-plugin bypass checks, owner suites and end-to-end UI/API checks pass. Manifest `auth.plugin` declarations alone do not certify any of these properties.
 
 ## Sessions, passwords and legacy data
