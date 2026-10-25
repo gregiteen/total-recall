@@ -4,7 +4,8 @@ import os from 'node:os';
 import path from 'node:path';
 vi.mock('./brain-updates.mjs',()=>({updateAllBrains:vi.fn()}));
 vi.mock('./cli-maintenance.mjs',()=>({maintainCliSurfaces:vi.fn()}));
-vi.mock('./package-auto-update.mjs',()=>({isPackageAutoUpdateEnabled:()=>true}));
+vi.mock('./package-auto-update.mjs',()=>({isPackageAutoUpdateEnabled:()=>true,listUpdateRoots:()=>[{root:'/registered/app'}]}));
+vi.mock('./plugin-updates.mjs',()=>({updateInstalledPlugins:vi.fn().mockResolvedValue({updated:0,failed:0,results:[]})}));
 vi.mock('./global-brain-updates.mjs',()=>({updateGlobalBrainPackages:vi.fn().mockResolvedValue({failed:0,results:[]})}));
 vi.mock('./source-brain-updates.mjs',()=>({updateSourceBrainPackages:vi.fn().mockResolvedValue({failed:0,results:[]})}));
 import {runAutomaticBrainUpdates,automaticUpdateStatus,startAutomaticBrainUpdates} from './automatic-brain-updates.mjs';
@@ -13,6 +14,16 @@ const temporary=[];
 afterEach(()=>{vi.useRealTimers();for(const root of temporary.splice(0))fs.rmSync(root,{recursive:true,force:true});});
 const brain=()=>{const dir=fs.mkdtempSync(path.join(os.tmpdir(),'tr-automatic-'));temporary.push(dir);return dir;};
 describe('daemon automatic package maintenance',()=>{
+  it('updates the shared plugin folder and counts their failures',async()=>{
+    const brainDir=path.join(brain(),'.agent','skills','total-recall');
+    const update=vi.fn().mockResolvedValue({versions:{'total-recall-brain':'3.40.2'},failed:0,results:[]});
+    const compile=vi.fn().mockResolvedValue({ok:true,results:[]});
+    const pluginUpdate=vi.fn().mockResolvedValue({updated:1,failed:1,results:[{id:'maps',status:'updated'},{id:'gone',status:'failed',error:'source missing'}]});
+    const report=await runAutomaticBrainUpdates({brainDir,update,compile,pluginUpdate,now:()=>10000000});
+    expect(pluginUpdate).toHaveBeenCalledWith({roots:[path.resolve(brainDir,'../../..')]});
+    expect(report.plugins.updated).toBe(1);
+    expect(report.failed).toBe(1);
+  });
   it('updates both package consumers, ensures defaults and persists actual failures',async()=>{
     const brainDir=brain();
     const update=vi.fn().mockResolvedValue({versions:{'total-recall-brain':'3.40.2','@gregiteen/ssss-cli':'0.11.2'},failed:1,results:[{status:'failed'}]});

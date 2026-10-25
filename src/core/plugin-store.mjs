@@ -394,9 +394,12 @@ export async function installPlugin(source, options = {}) {
     sourceRecord = { kind: 'bundled', ref: manifest.id };
   } else if (isGitSource(source)) {
     const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'tr-plugin-'));
+    let commit;
     try {
       try {
         await execFileAsync('git', ['clone', '--depth', '1', '--', source, tmp], { timeout: 120_000 });
+        // The installed commit is what automatic updates compare against the remote head.
+        commit = (await execFileAsync('git', ['-C', tmp, 'rev-parse', 'HEAD'], { timeout: 30_000 })).stdout.trim();
       } catch (err) {
         throw new Error(`Failed to clone ${source}: ${(err.stderr || err.message || '').toString().trim()}`);
       }
@@ -406,7 +409,7 @@ export async function installPlugin(source, options = {}) {
     } finally {
       fs.rmSync(tmp, { recursive: true, force: true });
     }
-    sourceRecord = { kind: 'git', ref: source };
+    sourceRecord = { kind: 'git', ref: source, commit };
   } else {
     const abs = path.isAbsolute(source) ? source : path.resolve(projectRoot, source);
     if (!fs.existsSync(abs)) {
@@ -450,7 +453,8 @@ export async function installPlugin(source, options = {}) {
     throw new Error(`Plugin files were written but its record could not be: ${err.message}`);
   }
 
-  const compilation = await recompileAfterPluginMutation(projectRoot, isGlobal);
+  // A batch of installs (automatic updates) compiles once after the batch instead.
+  const compilation = options.recompile === false ? { skipped: true } : await recompileAfterPluginMutation(projectRoot, isGlobal);
   return {
     plugin: { id: manifest.id, name: manifest.name, version: manifest.version, dir: dest, scope },
     source: sourceRecord,
