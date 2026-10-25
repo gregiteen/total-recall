@@ -223,12 +223,23 @@ describe('connect — repo skills projected as slash commands', () => {
 });
 
 describe('connect — Hermes Agent projection', () => {
-  it('writes MEMORY.md to ~/.hermes/memories/MEMORY.md and local .hermes/memories/MEMORY.md', async () => {
+  it('creates AGENTS.md as a symlink to INSTRUCTIONS.md, which Hermes loads as a context file', async () => {
     await runConnect(['hermes']);
-    const localTarget = path.join(tmpProject, '.hermes', 'memories', 'MEMORY.md');
-    expect(fs.existsSync(localTarget)).toBe(true);
-    const content = fs.readFileSync(localTarget, 'utf8');
-    expect(content).toContain('FIXTURE_CONTENT');
+    const target = path.join(tmpProject, 'AGENTS.md');
+    expect(fs.lstatSync(target).isSymbolicLink()).toBe(true);
+    expect(fs.readlinkSync(target)).toBe('INSTRUCTIONS.md');
+    expect(fs.readFileSync(target, 'utf8')).toContain('FIXTURE_CONTENT');
+  });
+
+  it('never writes Hermes memory files, and leaves the agent-owned notes store untouched', async () => {
+    const notes = path.join(tmpHome, '.hermes', 'memories', 'MEMORY.md');
+    fs.mkdirSync(path.dirname(notes), { recursive: true });
+    fs.writeFileSync(notes, 'Hermes agent notes\n');
+    await runConnect(['hermes']);
+    await runConnect(['hermes-agent']);
+    expect(fs.readFileSync(notes, 'utf8')).toBe('Hermes agent notes\n');
+    expect(fs.existsSync(path.join(tmpHome, '.hermes', 'memories', 'USER.md'))).toBe(false);
+    expect(fs.existsSync(path.join(tmpProject, '.hermes', 'memories'))).toBe(false);
   });
 
   it('registers hermes in clients.json', async () => {
@@ -237,7 +248,7 @@ describe('connect — Hermes Agent projection', () => {
       fs.readFileSync(path.join(tmpAgentDir, 'skills', 'total-recall', 'config', 'clients.json'), 'utf8')
     );
     expect(registry.clients.hermes).toBeDefined();
-    expect(registry.clients.hermes.mode).toBe('hermes');
+    expect(registry.clients.hermes.mode).toBe('symlink');
   });
 });
 

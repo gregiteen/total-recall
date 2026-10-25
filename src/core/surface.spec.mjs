@@ -62,7 +62,14 @@ describe('instruction artifact integrity', () => {
       expect(fs.readFileSync(path.join(surface, 'CLAUDE.md'), 'utf8')).toContain('TOTAL RECALL');
     }));
 
-    it(`${layer}: refuses a cached shim retargeted outside its selected workspace`, () => withBrain(layer, async ({ root, surface, options }) => {
+    it(`${layer}: compiles Hermes as an AGENTS.md client and writes no Hermes memory`, () => withBrain(layer, async ({ surface, config, options }) => {
+      fs.writeFileSync(path.join(config, 'clients.json'), JSON.stringify({ clients: { hermes: { mode: 'symlink' } } }));
+      await compileSurface(options);
+      expect(fs.readFileSync(path.join(surface, 'AGENTS.md'), 'utf8')).toContain('TOTAL RECALL');
+      expect(fs.existsSync(path.join(surface, '.hermes', 'memories'))).toBe(false);
+    }));
+
+    it(`${layer}: refuses a cached shim retargeted outside its selected workspace`,() => withBrain(layer, async ({ root, surface, options }) => {
       await compileSurface(options);
       const outside = path.join(root, 'outside.md');
       const content = fs.readFileSync(path.join(surface, 'AGENTS.md'), 'utf8');

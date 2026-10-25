@@ -23,7 +23,7 @@ Total Recall connects to every major IDE, CLI harness, and local neural runtime:
   - **Lovable**: Repository root `AGENTS.md` and `CLAUDE.md`.
   - **DeepSeek Harness (`dsh`)**: `.dsh/memory/MEMORY.md` and `AGENTS.md`.
   - **OpenClaw**: `SOUL.md`, `AGENTS.md`, `USER.md`, and `MEMORY.md`.
-  - **Hermes Agent**: `.hermes/memories/MEMORY.md`, `USER.md`, and `AGENTS.md`.
+  - **Hermes Agent**: `AGENTS.md` (loaded as a context file from the git root to cwd) and `.hermes/skills/`. `~/.hermes/memories/` is Hermes' own notes store and is never written.
   - **Cline**: `.clinerules/total-recall.md` and `.cline/skills/`.
   - **VS Code**: `.github/copilot-instructions.md` and `.vscode/copilot-instructions.md`.
 
