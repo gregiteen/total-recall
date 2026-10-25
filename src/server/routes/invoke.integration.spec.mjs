@@ -96,6 +96,20 @@ describe('independent agent invoke round trip', () => {
     expect(response.body.result.stdout).toContain('Usage:');
   });
 
+  it('creates and recalls a fact with real auth-owned restricted keys while denying read-only mutation', async () => {
+    const reader = store.issueKey('fact-reader', { scopes: restrictedScopes });
+    expect((await invoke(reader, 'ssss.write', { content: 'denied mutation' })).status).toBe(403);
+    const writer = store.issueKey('fact-writer', { scopes: [...restrictedScopes, 'ssss:write'] });
+    const created = await invoke(writer, 'ssss.write', { category: 'fact', title: 'Confined fact', content: 'cobalt glacier observation', tags: ['acceptance'] });
+    expect(created.body, JSON.stringify(created.body)).toMatchObject({ ok: true, result: { committed: true, indexed: true } });
+    const retrieved = await invoke(reader, 'ssss.read', { query: 'cobalt glacier observation' });
+    expect(retrieved.body.result.nodes[0].slug).toBe(created.body.result.slug);
+    expect((await invoke(writer, 'ssss.write', { category: 'invariant', content: 'escalation' })).status).toBe(400);
+    store.revokeKey(writer.id);
+    expect((await invoke(writer, 'ssss.write', { content: 'after revocation' })).status).toBe(401);
+    expect(JSON.stringify(audits)).not.toContain('cobalt glacier');
+  });
+
   it('denies escalation, foreign targets and unconfined mutations even for a broad restricted key', async () => {
     const ownKey = store.issueKey('independent-agent-restricted-broad', { scopes: ['invoke:restricted', '*'] });
     for (const [operation, params] of [

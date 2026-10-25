@@ -20,7 +20,6 @@ import {
   resolvePrimitiveDefinition,
 } from '@ssss/cli/registry';
 import { detectDirectWrites } from '@ssss/cli/guard';
-import { logger } from './logger.mjs';
 import { validateMemoryNode } from './total-recall-memory-validator.mjs';
 import {
   TOTAL_RECALL_HOST_EXTENSION,
@@ -451,6 +450,8 @@ export function compareVerdicts(localResult, kernelResult) {
 }
 
 export async function shadowCompare(envelope, vaultRoot, localResult, options = {}) {
+  // Ordinary kernel mutations must not bootstrap configuration/auth/plugins.
+  const { logger } = await import('./logger.mjs');
   const dryEnvelope = { ...envelope, dry_run: true };
   try {
     const kernelResult = await processViaPackageKernel(dryEnvelope, vaultRoot, options);

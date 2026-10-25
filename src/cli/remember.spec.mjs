@@ -63,6 +63,25 @@ describe('remember and recall CLI commands', () => {
     consoleSpy.mockRestore();
   });
 
+  it('exposes the shared confined fact owner through CLI without surface compilation', async () => {
+    const log = vi.spyOn(console, 'log').mockImplementation(() => {});
+    await remember(['fact', 'CLI glacier observation', '--confined-fact', '--title', 'Glacier', '--tags', 'science']);
+    const result = JSON.parse(log.mock.calls.at(-1)[0]);
+    expect(result).toMatchObject({ committed: true, indexed: true });
+    expect(fs.existsSync(path.join(tmpAgentDir, 'skills/total-recall', result.path))).toBe(true);
+    expect(fs.existsSync(path.join(tmpAgentDir, 'INSTRUCTIONS.md'))).toBe(false);
+    await expect(remember(['invariant', 'not allowed', '--confined-fact'])).rejects.toThrow();
+    await expect(remember(['fact', 'not allowed', '--confined-fact', '--slug', 'existing'])).rejects.toThrow();
+  });
+  it('emits canonical commit identity when confined CLI indexing fails', async () => {
+    const log = vi.spyOn(console, 'log').mockImplementation(() => {});
+    fs.writeFileSync(path.join(tmpAgentDir, 'skills/total-recall/memory-derived'), 'invalid projection root');
+    await expect(remember(['fact', 'recoverable fact', '--confined-fact'])).rejects.toThrow('Fact committed');
+    const result = JSON.parse(log.mock.calls.at(-1)[0]);
+    expect(result).toMatchObject({ committed: true, indexed: false });
+    expect(fs.existsSync(path.join(tmpAgentDir, 'skills/total-recall', result.path))).toBe(true);
+  });
+
   it('writes canonical preference memory without changing the authored legacy sheet', async () => {
     const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
 

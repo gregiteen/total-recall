@@ -1,4 +1,5 @@
 import { InvokeError } from './invoke-execution.mjs';
+import { validateConfinedFact } from '../core/confined-memory.mjs';
 
 /** Resolve fresh key AND ancestors through the shared auth owner on each check. */
 export function invokeAuthority(req, { loadKeys, keyHasScope }) {
@@ -36,7 +37,7 @@ export function operationAllowed(authority, operation, scope) {
   if (scope && !authority.allows(scope)) return false;
   if (operation === 'capabilities') return true;
   if (authority.mode === 'full') return true;
-  return operation === 'ssss.read' && authority.allows('brain:server');
+  return ['ssss.read', 'ssss.write'].includes(operation) && authority.allows('brain:server');
 }
 
 export function authorizeInvoke(authority, operation, scope, params) {
@@ -46,7 +47,12 @@ export function authorizeInvoke(authority, operation, scope, params) {
   }
   if (authority.mode === 'restricted') {
     if (params.target !== undefined && params.target !== 'server' || params.scope !== undefined) {
-      throw new InvokeError(403, 'target-denied', 'Restricted retrieval is bound to the granted server brain.');
+      throw new InvokeError(403, 'target-denied', 'Restricted memory is bound to the granted server brain.');
+    }
+    if (operation === 'ssss.write') {
+      try { validateConfinedFact(params); }
+      catch { throw new InvokeError(400, 'invalid-fact', 'Restricted writes accept only fact content, optional title and plain tags.'); }
+      return;
     }
     const allowed = new Set(['query', 'category', 'limit', 'target', 'timeoutMs']);
     if (Object.keys(params).some(k => !allowed.has(k))) {
