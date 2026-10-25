@@ -165,47 +165,16 @@ async function main() {
 
     // Check if it is a dynamic integration command configured in the VFS
     try {
-      const { agentDir, resolveBrainLayer } = await import('../src/core/config.mjs');
+      const { agentDir } = await import('../src/core/config.mjs');
+      const { resolveComposedCommand } = await import('../src/core/composed-command-resolution.mjs');
       const fs = await import('node:fs');
       
-      // Check for custom project-level commands first
-      let projectAgentDir = null;
-      try {
-        const pBrain = resolveBrainLayer('project');
-        projectAgentDir = pBrain.agentDir;
-      } catch (e) { /* ignore */ }
-      
-      if (projectAgentDir) {
-        const customCmdPath = path.join(projectAgentDir, 'commands', `${command}.mjs`);
-        if (fs.existsSync(customCmdPath)) {
-          const handler = await import(customCmdPath);
-          if (handler.run) {
-            await handler.run(process.argv);
-          } else {
-            await handler.default(process.argv.slice(3));
-          }
-          return;
-        }
-      }
-
-      // Check for custom global-level commands next
-      let globalAgentDir = null;
-      try {
-        const gBrain = resolveBrainLayer('global');
-        globalAgentDir = gBrain.agentDir;
-      } catch (e) { /* ignore */ }
-
-      if (globalAgentDir) {
-        const customCmdPath = path.join(globalAgentDir, 'commands', `${command}.mjs`);
-        if (fs.existsSync(customCmdPath)) {
-          const handler = await import(customCmdPath);
-          if (handler.run) {
-            await handler.run(process.argv);
-          } else {
-            await handler.default(process.argv.slice(3));
-          }
-          return;
-        }
+      const customCmdPath = resolveComposedCommand(command);
+      if (customCmdPath) {
+        const handler = await import(customCmdPath);
+        if (handler.run) await handler.run(process.argv);
+        else await handler.default(process.argv.slice(3));
+        return;
       }
 
       const integrationPath = path.join(agentDir, 'skills', 'total-recall', 'integrations', `${command}.md`);
