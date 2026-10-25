@@ -20,6 +20,8 @@ Restricted `ssss.read` additionally requires `ssss:read` and `brain:server`, use
 
 ## Uniform dependency updates
 
+Project registration automatically creates and records its stable UUID through the existing identity owner. Malformed/non-object identities are preserved and fail explicitly; provisioning failure must not register an incomplete fallback. `project-id --all` is for legacy reconciliation, not a required step after ordinary registration.
+
 Restricted memory also accepts `project:<uuid>` with the effective auth scope `brain:project-<uuid>` plus its read/write scope. Use existing brain registration/on/off, project-id and auth-key commands. Only registered, enabled, canonical identity-matched brains execute; discovery lists granted usable IDs, never paths. Running work pins and revalidates that binding; removal, disablement or identity/path changes stop continuation. Project-only keys have no implicit server access. Writes retain the closed descriptive fact schema and validated SSSS owner.
 
 Full-mode `decision.run` and `decision.predict` execute the installed owner in bounded children, with auth-owner credential resolution inside the child. Timeout, output overflow, client disconnect and revoked authority terminate local continuation. Decision failure envelopes suppress child diagnostics; credential/provider failures are explicit. Cancellation cannot reverse accepted remote billing. Spending quotas and broader restricted adapters remain separate acceptance work.

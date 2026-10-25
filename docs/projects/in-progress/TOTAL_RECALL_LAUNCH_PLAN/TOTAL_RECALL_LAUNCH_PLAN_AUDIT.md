@@ -2,6 +2,8 @@
 
 ## DEV-API-05 project target baseline
 
+Follow-up source audit: `brain register` calls `registerProjectBrain`, but that owner omitted `project_id`; a fresh project could therefore require a manual ID/registry repair before its grant appeared. Fix registration to persist the existing identity owner's UUID automatically. The identity creator currently defaults on corrupt JSON; it must instead preserve malformed state and fail explicitly. `brain register` must stop when provisioning fails rather than register an incomplete fallback row. Verify this actual onboarding path before final acceptance.
+
 **Audit Status**: Complete
 **Audited commit**: 80c95dc
 

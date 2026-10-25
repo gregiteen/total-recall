@@ -37,7 +37,10 @@ export function readProjectId(brainDir) {
  */
 export function ensureProjectId(brainDir) {
   const file = brainJsonPath(brainDir);
-  const cfg = readJson(file, {});
+  let cfg;
+  try { cfg = JSON.parse(fs.readFileSync(file, 'utf8')); }
+  catch (err) { if (err.code === 'ENOENT') cfg = {}; else throw new Error('Existing project identity is unreadable or malformed'); }
+  if (!cfg || typeof cfg !== 'object' || Array.isArray(cfg)) throw new Error('Existing project identity must be an object');
   if (cfg.project_id) return { project_id: cfg.project_id, created: false };
   cfg.project_id = randomUUID();
   writeJsonAtomic(file, cfg);

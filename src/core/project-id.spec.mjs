@@ -46,4 +46,13 @@ describe('project-id', () => {
     expect(reg[0].project_id).toMatch(UUID);
     expect(reg[1].project_id).toBe('brain-side-id');
   });
+  it('does not overwrite malformed or non-object identities', () => {
+    const file = path.join(root, 'config/brain.json');
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    for (const raw of ['{broken', '[]', 'null']) {
+      fs.writeFileSync(file, raw);
+      expect(() => ensureProjectId(root)).toThrow();
+      expect(fs.readFileSync(file, 'utf8')).toBe(raw);
+    }
+  });
 });

@@ -18,8 +18,19 @@ No new credential/policy store or auth-owner repository change was required. Exi
 - Focused six-file suite initially passed126 tests. A repeat hit one HTTP parse error at a rapidly rebound Supertest listener (125 pass/1 fail). Source inspection confirmed Superagent already disables connection pooling, correcting the initial hypothesis. The test fixture now owns one listener per test and closes its connections explicitly; final focused126 tests/6 files pass, exit0 (`/tmp/tr-api05-focused-stable.log`). Production policy assertions were retained.
 - Project regression cases include two-project isolation, filtered discovery, read-only/issuer denials, corrupt metadata, identity mismatch/duplicates, unsafe paths/links, and cancellation after unregister, disable, identity change or physical rebind retaining the UUID.
 - Concurrent brick-contract edits appeared during verification and another process committed the complete shared tree as6dbc9cf. All changes were preserved under the standing whole-tree publication rule. The initial full suite/gate started before that final source and therefore cannot alone certify it; final verification uses the combined source plus the test-listener repair. A complete tracked-src hash manifest is retained at`/tmp/tr-api05-source-before.sha256` for comparison after final tests.
+- Initial full Mini suite passed2379 tests/373 files, actual exit0 in228.91s (`/tmp/tr-api05-full.log`). Because concurrent source edits and the listener repair occurred during that run, final acceptance requires the subsequent run and source-hash comparison.
+- Onboarding review found `brain register` did not always persist a UUID in its registry row. The registration owner now uses the existing identity creator automatically; malformed identities fail instead of being overwritten, and CLI provisioning failure no longer creates an incomplete fallback row. Actual CLI registration/preservation plus identity/brain-owner regressions pass9 tests/4 files, exit0 (`/tmp/tr-api05-onboarding-final.log`). A full run already in flight mixed old transformed registration code with the new assertion and failed that case; final acceptance reruns the frozen candidate rather than reusing that result.
 - Final full suite, configured gates and publication:recorded after completion below.
 
 ## Remaining work
+
+Project-grant implementation SHA-256:
+
+| Source | SHA-256 |
+| --- | --- |
+| `src/server/invoke-targets.mjs` | `d1ef83fe7fb65f637236862a346e1d3ee6e8e2d39c00df53989d546c51d80ae8` |
+| `src/server/invoke-policy.mjs` | `fdfb4ba5a55c11dd5337a9d82ffbfcd7c52b0a5c3537d55e903cd0e9edb95f05` |
+| `src/server/routes/invoke.mjs` | `1d922dbba73d8303a2b86a9d1e1486292ece277b474a167f301daef8292e49db` |
+| `src/core/brain-registry.mjs` | `1ad6ec1ad2371957b1830f2bce375cdf529c119ce6bed7e1652853f8655874fa` |
 
 Broader restricted owner adapters/mutation schemas, provider spending controls, fleet/distribution/upgrade evidence and complete launch acceptance remain in progress. Stable project target grants do not complete API-1–API-6. No unverified brick-completion claim is made from the concurrent source changes.
