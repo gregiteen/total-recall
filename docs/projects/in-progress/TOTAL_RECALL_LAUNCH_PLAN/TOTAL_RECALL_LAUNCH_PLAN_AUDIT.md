@@ -1,5 +1,14 @@
 # TOTAL_RECALL_LAUNCH_PLAN — Audit
 
+## DEV-API-06 composed workflow baseline
+
+**Audit Status**: Complete
+**Audited commit**: a821ecd
+
+Codex, sanctioned Mac mini, 2026-10-25 UTC: read the complete CLI composed dispatch, static command-surface owner, invoke handlers and execution environment, plus actual auth-owned HTTP acceptance. Fresh baseline:75 tests/2 files pass (`/tmp/tr-api06-baseline.log`). Shared runtime is ready. Official Node child-process documentation was consulted at https://nodejs.org/api/child_process.html. Existing evidence below supplies the broader fourteen-section audit; this scoped follow-up changes only core command resolution, invoke, tests and documentation. Another agent owns plugin implementations.
+
+Finding A-026: `commandScopeDirectories` projects exact group memberships between project and global commands, but `bin/total-recall.mjs` and invoke each implement a separate two-scope resolver. Group commands advertised on instruction surfaces cannot execute. Invoke also assumes an immediate `.agent` directory instead of the CLI's selected brain, causing disagreement for nested working directories and `.agents` brains. Fix with one shared execution resolver that honors the existing brain owner and explicit AGENT_DIR selection, keeps project/group/global precedence, and statically discovers commands without importing them. Full-mode real HTTP/child acceptance must prove literal argv, effects, nonzero exits and restricted denial. No new restricted adapter or provider spending claim.
+
 ## DEV-API-05 project target baseline
 
 Follow-up source audit: `brain register` calls `registerProjectBrain`, but that owner omitted `project_id`; a fresh project could therefore require a manual ID/registry repair before its grant appeared. Fix registration to persist the existing identity owner's UUID automatically. The identity creator currently defaults on corrupt JSON; it must instead preserve malformed state and fail explicitly. `brain register` must stop when provisioning fails rather than register an incomplete fallback row. Verify this actual onboarding path before final acceptance.
@@ -88,6 +97,7 @@ TR's optional developer API supports intentional full access alongside confined 
 | A-005 | No validated per-execution outcome ledger | SSSS authorization/outcome events, secret-free payload tests and audit-unavailable denial |
 | A-006 | Restricted mutations/owner adapters and provider quotas not complete | Open API-1–API-6 acceptance; no completed-launch or hardened-API claim |
 | A-007 | Root handoff publication conflicts with hygiene assertion | Preserve owner deliverable; assert private-state exclusion and npm exclusion |
+| A-026 | Group commands appear on surfaces but CLI/invoke omit their scope; invoke guesses the immediate `.agent` | DEV-API-06 shared selected-brain resolver and static scope projection; actual composed HTTP acceptance |
 
 ### Impact on the requested change
 

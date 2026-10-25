@@ -6,7 +6,7 @@ description: >-
   file before executing.
 repo_scoped: true
 repository_id: "total-recall-brain"
-generated_at: 2026-10-25T03:14:48.287Z
+generated_at: 2026-10-25T03:46:26.758Z
 generated_from: total-recall
 ---
 
@@ -18,7 +18,7 @@ generated_from: total-recall
 
 ## Stack
 
-- **Languages**: JavaScript (744 files), Markdown (258 files), TypeScript (130 files), CSS (12 files)
+- **Languages**: JavaScript (746 files), Markdown (258 files), TypeScript (130 files), CSS (12 files)
 - **Frameworks**: React, Express
 - **Tests**: Vitest
 - **Module system**: module
@@ -522,7 +522,7 @@ templates/
 
 ## Core Modules
 
-158 modules in `src/core/`:
+159 modules in `src/core/`:
 
 - **action-predictor** — exports: buildActionQuestions, shortlistActions, predictNextAction
 - **agent-manager** — exports: loadAgentState, saveAgentState, isProcessRunning, listAgents, buildRemoteSpawnCommand, spawnAgent, killAgent, getAgentLogs
@@ -545,6 +545,7 @@ templates/
 - **cli-quick-reference**
 - **cli-semantic-index** — exports: hashVerb, harvestAllCliVerbs, loadCliSemanticIndex, buildCliSemanticIndex, queryCliSemanticIndex
 - **command-surface** — exports: commandScopeDirectories, describeCommandFile, run, listSurfaceCommands, buildCommandsSection, surfaceInputsHash
+- **composed-command-resolution** — exports: composedCommandDirectories, resolveComposedCommand
 - **conclusion-writer** — exports: validateDraftNode, runConclusionWriter
 - **config** — exports: surfaceDir, instructionsFilePath, detectProjectBrain, getActiveBrains, resolveBrainLayer
 - **confined-memory** — exports: validateConfinedFact, createConfinedFact

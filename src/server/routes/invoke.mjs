@@ -4,13 +4,14 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { requireAuth } from '../auth.mjs';
 import { loadKeys, keyHasScope } from '../keys.mjs';
-import { brainDir, globalAgentDir, globalBrainDir } from '../../core/config.mjs';
+import { brainDir, globalBrainDir } from '../../core/config.mjs';
 import { logger } from '../../core/logger.mjs';
 import crypto from 'node:crypto';
 import { appendVfsEvent } from '../../core/ssss-operation-service.mjs';
 import { CLI_COMMANDS } from '../../core/cli-commands.mjs';
 import { buildPluginCatalog } from '../../core/plugin-catalog.mjs';
 import { listSurfaceCommands } from '../../core/command-surface.mjs';
+import { composedCommandDirectories } from '../../core/composed-command-resolution.mjs';
 import { invokeAuthority, authorizeInvoke, operationAllowed } from '../invoke-policy.mjs';
 import { restrictedBrainTargets } from '../invoke-targets.mjs';
 import { INVOKE_LIMITS, InvokeError, executeInvokeChild, requireSuccessfulRun, invokeEnvironment, absoluteTarget } from '../invoke-execution.mjs';
@@ -50,7 +51,8 @@ function capabilitiesFor(authority, limits = INVOKE_LIMITS, targets = ['server']
 /** Injectable dependencies allow real HTTP tests with disposable auth-owned keys. */
 export function createInvokeRouter({ auth = requireAuth, store = { loadKeys, keyHasScope },
   execute = executeInvokeChild, audit,
-  cwd = process.cwd(), serverBrain = brainDir, registryBrain = globalBrainDir, limits = INVOKE_LIMITS } = {}) {
+  cwd = process.cwd(), serverBrain = brainDir, registryBrain = globalBrainDir, limits = INVOKE_LIMITS,
+  commandScopes = composedCommandDirectories } = {}) {
   const router = Router();
   const resolveTargets = authority => authority.mode === 'restricted' ?
     restrictedBrainTargets(authority, { serverBrain, registryBrain }) : new Map();
@@ -103,7 +105,7 @@ export function createInvokeRouter({ auth = requireAuth, store = { loadKeys, key
       };
       revalidate();
       timer = setInterval(revalidate, 250); timer.unref?.();
-      const context = { authority, target, serverBrain, selectedBrain, signal: controller.signal, limits,
+      const context = { authority, target, serverBrain, selectedBrain, signal: controller.signal, limits, commandScopes,
         run: options => {
           revalidate();
           return execute({ ...options, signal: controller.signal, limits });
@@ -143,12 +145,9 @@ export const invokeRouter = createInvokeRouter();
 /** The categories `total-recall remember` documents. Singular, and closed. */
 const MEMORY_CATEGORIES = new Set(['invariant', 'preference', 'correction', 'fact', 'concept', 'pattern', 'anti-pattern', 'decision', 'lore']);
 
-/** The same two executable composed-command directories used by the CLI. */
-function composedCommands(cwd) {
-  return listSurfaceCommands([
-    { scope: 'project', dir: path.join(cwd, '.agent/commands') },
-    { scope: 'global', dir: path.join(globalAgentDir, 'commands') },
-  ]);
+/** Static projection of the shared CLI execution scopes. */
+function composedCommands(context) {
+  return listSurfaceCommands(context.commandScopes(context.target));
 }
 
 async function runCliVerb({ verb, args = [], timeoutMs }, context) {
@@ -158,7 +157,7 @@ async function runCliVerb({ verb, args = [], timeoutMs }, context) {
   const [command] = parts;
   const catalog = buildPluginCatalog(context.target);
   const plugin = catalog.plugins.find(p => p.namespace === command && p.callable && p.activation.enabled);
-  if (!Object.hasOwn(CLI_COMMANDS, command) && !plugin && !composedCommands(context.target).some(c => c.name === command)) {
+  if (!Object.hasOwn(CLI_COMMANDS, command) && !plugin && !composedCommands(context).some(c => c.name === command)) {
     throw new InvokeError(404, 'unregistered-command', 'Command is not registered in the authorized target.');
   }
   const env = invokeEnvironment(true);
@@ -259,14 +258,14 @@ const HANDLERS = {
 
   async 'composable.list'(_params, context) {
     const catalog = buildPluginCatalog(context.target);
-    const commands = composedCommands(context.target).filter(c => !Object.hasOwn(CLI_COMMANDS, c.name) &&
+    const commands = composedCommands(context).filter(c => !Object.hasOwn(CLI_COMMANDS, c.name) &&
       !catalog.plugins.some(p => p.callable && p.activation.enabled && p.namespace === c.name));
     return { count: commands.length, commands };
   },
 
   async 'composable.run'({ name, args = [], timeoutMs }, context) {
     if (typeof name !== 'string' || !/^[a-z][a-z0-9-]{0,63}$/.test(name)) throw new InvokeError(400, 'invalid-name', 'composable.run needs a kebab-case command name.');
-    if (Object.hasOwn(CLI_COMMANDS, name) || !composedCommands(context.target).some(c => c.name === name)) throw new InvokeError(404, 'unregistered-command', 'Composed name is not executable in the authorized target.');
+    if (Object.hasOwn(CLI_COMMANDS, name) || !composedCommands(context).some(c => c.name === name)) throw new InvokeError(404, 'unregistered-command', 'Composed name is not executable in the authorized target.');
     const catalog = buildPluginCatalog(context.target);
     if (catalog.plugins.some(p => p.callable && p.activation.enabled && p.namespace === name)) throw new InvokeError(409, 'shadowed-command', 'A plugin shadows this composed name.');
     return await runCliVerb({ verb: name, args, timeoutMs }, context);

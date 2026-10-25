@@ -16,10 +16,10 @@ const NAME = /^[a-z][a-z0-9-]{0,63}$/;
 const MAX_DESCRIPTION = 180;
 
 /** Static scope metadata shared by catalogs and instruction projections. */
-export function commandScopeDirectories(projectRoot, agentDir) {
-  const dirs = [{ scope: 'project', dir: path.join(projectRoot, '.agent', 'commands') }];
+export function commandScopeDirectories(projectRoot, agentDir, { projectAgentDir = path.join(projectRoot, '.agent') } = {}) {
+  const dirs = projectAgentDir ? [{ scope: 'project', dir: path.join(projectAgentDir, 'commands') }] : [];
   let projectId;
-  try { projectId = JSON.parse(fs.readFileSync(path.join(projectRoot, '.agent/skills/total-recall/config/brain.json'), 'utf8')).project_id; } catch {}
+  try { if (projectAgentDir) projectId = JSON.parse(fs.readFileSync(path.join(projectAgentDir, 'skills/total-recall/config/brain.json'), 'utf8')).project_id; } catch {}
   const groups = path.join(agentDir, 'skills/total-recall/groups');
   if (typeof projectId === 'string' && projectId) {
     let files = [];

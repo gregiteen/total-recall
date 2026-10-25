@@ -38,6 +38,8 @@ One journey, one account of record, one host per stage recorded. This is the dec
 
 ### DEV-API-01 optional developer API acceptance
 
+DEV-API-06 [source evidence](evidence/DEV-API-06-source-verification.md) adds actual full-mode composed workflow acceptance: group discovery, a real command effect with literal argv, truthful nonzero failure, restricted denial and revoked-key denial. Core resolution now shares project/group/global precedence and selected-brain handling across CLI/invoke; surfaces honor `.agents` locations. This does not add restricted composed execution or provider budgets. Plugin implementations remain assigned to the other active agent.
+
 DEV-API-05 [source evidence](evidence/DEV-API-05-source-verification.md) covers restricted project UUID grants through actual auth-owned loopback write/read children, role/issuer ceilings, target isolation, filtered discovery and binding-change cancellation. Broader owner adapters, provider budgets and the complete launch journey remain open.
 
 DEV-API-04 [source evidence](evidence/DEV-API-04-source-verification.md) covers bounded full-mode decision children, typed outputs, provider/credential failure and revocation closing an actual local HTTP connection. It proves local termination without live provider spending; provider quotas, accepted remote billing and complete external acceptance remain open.

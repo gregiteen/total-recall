@@ -35,9 +35,10 @@ export function isSurfaceCodeStale(file = SURFACE_SOURCE, loadedHash = LOADED_SU
   try { return sourceHash(file) !== loadedHash; } catch { return false; }
 }
 
-/** Scope dirs searched for composable commands, in dispatcher order (project, then global). */
+/** Composed scope order: selected project, exact-member groups, global. */
 export function commandDirsFor(skillsDir) {
-  const dirs = skillsDir ? commandScopeDirectories(path.dirname(path.dirname(skillsDir)), globalAgentDir) : [{ scope: 'global', dir: path.join(globalAgentDir, 'commands') }];
+  const dirs = skillsDir ? commandScopeDirectories(path.dirname(path.dirname(skillsDir)), globalAgentDir,
+    { projectAgentDir: path.dirname(skillsDir) }) : [{ scope: 'global', dir: path.join(globalAgentDir, 'commands') }];
   // Compiling the global brain itself: its commands are the global ones.
   if (dirs.length === 2 && path.resolve(dirs[0].dir) === path.resolve(dirs[1].dir)) dirs.shift();
   return dirs;

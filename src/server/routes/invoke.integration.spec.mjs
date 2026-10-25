@@ -9,6 +9,7 @@ import { buildLocalSearchIndex } from '../../core/fast-recall.mjs';
 import matter from '../../core/frontmatter.mjs';
 import { createInvokeRouter } from './invoke.mjs';
 import { ensureProjectId } from '../../core/project-id.mjs';
+import { globalAgentDir } from '../../core/config.mjs';
 
 /**
  * Independent-agent acceptance: actual auth-owner keys, actual loopback HTTP,
@@ -16,11 +17,14 @@ import { ensureProjectId } from '../../core/project-id.mjs';
  * operator credentials, external providers or serving release are involved.
  */
 describe('independent agent invoke round trip', () => {
-  let dir, server, origin, store, serverBrain, projectId, projectBrain;
+  let dir, server, origin, store, serverBrain, projectId, projectBrain, previousAgentDir;
   const audits = [];
   const restrictedScopes = ['invoke:restricted', 'ssss:read', 'brain:server'];
 
   beforeAll(async () => {
+    previousAgentDir = process.env.AGENT_DIR;
+    // Pin parent and real CLI children to the same disposable auth/command root.
+    process.env.AGENT_DIR = globalAgentDir;
     dir = fs.mkdtempSync(path.join(os.tmpdir(), 'invoke-independent-agent-'));
     serverBrain = path.join(dir, '.agent/skills/total-recall');
     const { createKeyStore } = await loadPluginModule('auth', 'access-keys');
@@ -52,6 +56,16 @@ describe('independent agent invoke round trip', () => {
     fs.writeFileSync(path.join(serverBrain, 'config/project-registry.json'), JSON.stringify([
       { path: projectRoot, brainDir: projectBrain, project_id: projectId },
     ]));
+    const commandRoot = path.join(globalAgentDir, 'commands');
+    const fixtureId = ensureProjectId(path.join(globalAgentDir, 'skills/total-recall')).project_id;
+    const groups = path.join(globalAgentDir, 'skills/total-recall/groups');
+    fs.mkdirSync(groups, { recursive: true });
+    fs.writeFileSync(path.join(groups, 'invoke-acceptance.md'), `---\nmembers: [${fixtureId}]\n---\n`);
+    fs.mkdirSync(path.join(commandRoot, 'groups/invoke-acceptance'), { recursive: true });
+    fs.writeFileSync(path.join(commandRoot, 'groups/invoke-acceptance/invoke-composed-proof.mjs'),
+      `// @description Disposable composed effect proof\nimport fs from 'node:fs';\nexport async function run(argv) { const args = argv.slice(3); fs.writeFileSync(args[0], JSON.stringify(args.slice(1))); console.log('composed-effect-recorded'); }\n`);
+    fs.writeFileSync(path.join(commandRoot, 'invoke-composed-fail.mjs'),
+      `export default async function run() { console.error('requested failure'); process.exitCode = 7; }\n`);
 
     const app = express().use(express.json()).use(createInvokeRouter({
       auth: auth.requireAuth, store, cwd: dir, serverBrain, registryBrain: serverBrain,
@@ -67,6 +81,8 @@ describe('independent agent invoke round trip', () => {
   afterAll(async () => {
     if (server) await new Promise((resolve, reject) => server.close(err => err ? reject(err) : resolve()));
     if (dir) fs.rmSync(dir, { recursive: true, force: true });
+    if (previousAgentDir === undefined) delete process.env.AGENT_DIR;
+    else process.env.AGENT_DIR = previousAgentDir;
   });
 
   async function invoke(key, operation, params = {}) {
@@ -102,6 +118,35 @@ describe('independent agent invoke round trip', () => {
     expect(response.body.result.exit_code).toBe(0);
     expect(response.body.result.stdout).toContain('total-recall recall');
     expect(response.body.result.stdout).toContain('Usage:');
+  });
+
+  it('discovers and executes a real group workflow with literal argv and denies restricted continuation', async () => {
+    const full = store.issueKey('composed-full', { scopes: ['invoke:full', 'config:read', 'sandbox:run'] });
+    const marker = path.join(dir, 'composed-effect.json');
+    const literal = 'two words; $(never-execute) `literal`';
+    const listed = await invoke(full, 'composable.list');
+    expect(listed.body.result.commands).toContainEqual(expect.objectContaining({ name: 'invoke-composed-proof', scope: 'group' }));
+    expect(fs.existsSync(marker)).toBe(false);
+    const response = await invoke(full, 'composable.run', { name: 'invoke-composed-proof', args: [marker, literal] });
+    expect(response.body).toMatchObject({ ok: true, result: { exit_code: 0 } });
+    expect(JSON.parse(fs.readFileSync(marker, 'utf8'))).toEqual([literal]);
+    expect(response.body.result.stdout).toContain('composed-effect-recorded');
+    fs.rmSync(marker);
+    const restricted = store.issueKey('composed-restricted', { scopes: ['invoke:restricted', '*'] });
+    expect((await invoke(restricted, 'composable.run', { name: 'invoke-composed-proof', args: [marker, 'denied'] })).status).toBe(403);
+    expect(fs.existsSync(marker)).toBe(false);
+    expect(JSON.stringify(audits)).not.toContain(literal);
+    store.revokeKey(full.id);
+    expect((await invoke(full, 'composable.run', { name: 'invoke-composed-proof', args: [marker, 'revoked'] })).status).toBe(401);
+    expect(fs.existsSync(marker)).toBe(false);
+  });
+
+  it('reports the actual composed child failure instead of success', async () => {
+    const full = store.issueKey('composed-fail', { scopes: ['invoke:full', 'sandbox:run'] });
+    const response = await invoke(full, 'composable.run', { name: 'invoke-composed-fail' });
+    expect(response.status).toBe(422);
+    expect(response.body).toMatchObject({ ok: false, error: { code: 'nonzero-exit' }, result: { exit_code: 7 } });
+    expect(response.body.result.stderr).toContain('requested failure');
   });
 
   it('creates and recalls a fact with real auth-owned restricted keys while denying read-only mutation', async () => {

@@ -10,6 +10,7 @@ vi.mock('../auth.mjs', () => ({ requireAuth: (req, _res, next) => next() }));
 const { createInvokeRouter, OPERATIONS } = await import('./invoke.mjs');
 const { buildLocalSearchIndex } = await import('../../core/fast-recall.mjs');
 const matter = (await import('../../core/frontmatter.mjs')).default;
+const { commandScopeDirectories } = await import('../../core/command-surface.mjs');
 
 let dir, keys, execute, audits, app, server;
 const full = ['invoke:full', '*'];
@@ -19,7 +20,8 @@ function makeApp(scopes = full, options = {}) {
   const store = { loadKeys: () => keys, keyHasScope: (k, s) => !k.revoked && (!k.expires_at || Date.parse(k.expires_at) > Date.now()) &&
     (!s || (!k.roleDenied && (k.scopes.includes('*') || k.scopes.includes(s)))) };
   const auth = (req, _res, next) => { req.auth = { type: 'pat', id: 'test-key' }; next(); };
-  app = express().use(express.json()).use(createInvokeRouter({ auth, store, execute, audit: event => audits.push(event), cwd: dir, serverBrain: dir, registryBrain: dir, ...options }));
+  app = express().use(express.json()).use(createInvokeRouter({ auth, store, execute, audit: event => audits.push(event), cwd: dir, serverBrain: dir, registryBrain: dir,
+    commandScopes: target => commandScopeDirectories(target, path.join(dir, 'global')), ...options }));
 }
 // Keep one listener per test, including tests that replace the injected app.
 // Rebinding an ephemeral listener for each request can trigger HTTP parse errors
