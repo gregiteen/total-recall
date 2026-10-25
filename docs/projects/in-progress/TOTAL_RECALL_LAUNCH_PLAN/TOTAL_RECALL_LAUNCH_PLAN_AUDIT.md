@@ -1,5 +1,16 @@
 # TOTAL_RECALL_LAUNCH_PLAN — Audit
 
+## DEV-API-03 confined mutation baseline
+
+**Audit Status**: Complete
+**Audited commit**: 182ee62
+
+Codex, Gregorys-Mac-mini.local, 2026-10-25 UTC: inspected the invoke policy/router, validated memory writer, SSSS kernel bridge, vault/cache imports and local search projection. Shared runtime readiness is true. The focused pre-change route suite is recorded in this batch's evidence. The existing A-006 remains open: restricted writes have no adapter. The normal remember path compiles executable plugin generators; argv filtering cannot confine it. Validated SSSS operations already support injected principals, so a trusted fact-only creator can reuse canonical validation without invoking compilation or a second key store.
+
+Current official Node filesystem and permission documentation was consulted (https://nodejs.org/api/fs.html and https://nodejs.org/api/permissions.html, retrieved 2026-10-25 UTC). Node permissions do not isolate malicious code. This batch executes only trusted package code with structured data, generated create-only paths, fixed descriptive fact metadata and no credential/provider/plugin resolution. Server-brain paths and derived/audit paths must reject symlinks before mutation. Host administrators who concurrently replace directories remain trusted; no hostile-host isolation claim is made.
+
+Decision: add a bounded dedicated child and shared memory-owner function, granting only memory creation through an explicit kernel principal. Only server-target facts are supported. Unknown fields, rule categories, caller paths/slugs, metadata/frontmatter injection and context-routing tags are denied. Rebuild the local projection from canonical memory without running surface generators; failed post-commit indexing must report committed state explicitly. All broader restricted adapters, provider budgets and launch acceptance remain in progress.
+
 ## DEV-API-02 formal audit baseline
 
 **Audit Status**: Complete

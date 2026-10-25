@@ -37,6 +37,7 @@ function printHelp() {
     --object <string>         SPO Object (default: brain)
     --related <list>          Comma-separated list of related slugs
     --expires <duration>       TTL for temporary rules (e.g. "7d", "2w", "30d", "6h", "3m")
+    --confined-fact            Create a descriptive fact with generated identity; refresh local search without executable generators
 
   Examples:
     npx total-recall remember invariant "Never run tsc directly." --importance 5 --priority absolute
@@ -84,6 +85,28 @@ export default async function remember(args) {
 
   if (!type || !bodyContent || type === '--help' || type === '-h') {
     printHelp();
+    return;
+  }
+
+  if (layerArgs.slice(2).includes('--confined-fact')) {
+    // Same memory owner as restricted invoke. Reject unsupported options rather
+    // than quietly discarding metadata that the caller expected to persist.
+    const params = { category: type, content: bodyContent };
+    for (let i = 2; i < layerArgs.length; i++) {
+      if (layerArgs[i] === '--confined-fact') continue;
+      if (!['--title', '--tags', '-t'].includes(layerArgs[i]) || !layerArgs[i + 1]) throw new Error('Unsupported confined fact option');
+      const option = layerArgs[i++], value = layerArgs[i];
+      if (option === '--title') params.title = value;
+      else params.tags = value.split(',');
+    }
+    const { createConfinedFact } = await import('../core/confined-memory.mjs');
+    try {
+      const result = await createConfinedFact(resolveBrainDir(explicitLayer), params);
+      console.log(JSON.stringify(result));
+    } catch (err) {
+      if (err.result) console.log(JSON.stringify(err.result));
+      throw err;
+    }
     return;
   }
 

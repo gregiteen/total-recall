@@ -1,6 +1,7 @@
 /** Optional developer API. Explicit grants precede every owner execution. */
 import { Router } from 'express';
 import path from 'node:path';
+import fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { requireAuth } from '../auth.mjs';
 import { loadKeys, keyHasScope } from '../keys.mjs';
@@ -15,6 +16,8 @@ import { invokeAuthority, authorizeInvoke, operationAllowed } from '../invoke-po
 import { INVOKE_LIMITS, InvokeError, executeInvokeChild, requireSuccessfulRun, invokeEnvironment, absoluteTarget } from '../invoke-execution.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../..');
+// Share across router instances in this server; do not race projection refreshes.
+const mutatingBrains = new Set();
 export const OPERATIONS = Object.freeze(Object.fromEntries(Object.entries({
   capabilities: { scope: null, family: 'introspection' },
   'cli.run': { scope: 'sandbox:run', family: 'cli' },
@@ -66,12 +69,17 @@ export function createInvokeRouter({ auth = requireAuth, store = { loadKeys, key
     if (typeof operation !== 'string' || !operation) return fail(res, 400, null, 'missing-operation', 'Body must include { operation, params }.');
     if (!Object.hasOwn(OPERATIONS, operation)) return fail(res, 404, operation, 'unknown-operation', 'Unknown operation.');
     const def = OPERATIONS[operation];
-    let authority, timer, controller, disconnected, counted = false, outcome = 'denied', target = null;
+    let authority, timer, controller, disconnected, counted = false, outcome = 'denied', target = null, mutationBrain, mutationResult;
     try {
       if (!params || typeof params !== 'object' || Array.isArray(params)) throw new InvokeError(400, 'invalid-params', 'params must be an object.');
       if (Buffer.byteLength(JSON.stringify(params)) > 16384) throw new InvokeError(413, 'input-limit', 'Invoke parameters exceed 16 KiB.');
       authority = invokeAuthority(req, store);
       authorizeInvoke(authority, operation, def.scope, params);
+      if (authority.mode === 'restricted' && operation === 'ssss.write') {
+        const brain = fs.realpathSync(serverBrain);
+        if (mutatingBrains.has(brain)) throw new InvokeError(429, 'brain-write-busy', 'A confined write is already active for this brain.');
+        mutatingBrains.add(brain); mutationBrain = brain;
+      }
       if (total >= limits.concurrency || (active.get(authority.id) || 0) >= limits.perKey) throw new InvokeError(429, 'concurrency-limit', 'Execution concurrency limit reached.');
       total++; active.set(authority.id, (active.get(authority.id) || 0) + 1); counted = true;
       target = authority.mode === 'restricted' ? 'server' : absoluteTarget(params.target, cwd);
@@ -97,6 +105,7 @@ export function createInvokeRouter({ auth = requireAuth, store = { loadKeys, key
       let result;
       if (operation === 'capabilities') result = capabilitiesFor(authority);
       else result = await HANDLERS[operation](params, context);
+      if (operation === 'ssss.write' && authority.mode === 'restricted') mutationResult = result;
       revalidate();
       if (controller.signal.aborted) throw new InvokeError(403, 'authority-ended', 'Caller authority ended during execution.');
       outcome = 'success';
@@ -109,12 +118,13 @@ export function createInvokeRouter({ auth = requireAuth, store = { loadKeys, key
       try { await recordAudit({ caller: authority?.id || req.auth?.id || 'unresolved', operation, target, outcome, latency_ms: Date.now() - started }); }
       catch {
         logger.error('invoke', 'Execution outcome audit unavailable', { operation, caller: authority?.id || 'unresolved' });
-        return fail(res, 503, operation, 'audit-unavailable', 'Execution audit could not be recorded.');
+        return fail(res, 503, operation, 'audit-unavailable', 'Execution audit could not be recorded.', mutationResult ? { result: mutationResult } : {});
       }
       return fail(res, err.status || 400, operation, outcome, err instanceof InvokeError ? err.message : 'Operation failed.',
-        { scope: def.scope, latency_ms: Date.now() - started, ...(err.result ? { result: err.result } : {}) });
+        { scope: def.scope, latency_ms: Date.now() - started, ...(err.result || mutationResult ? { result: err.result || mutationResult } : {}) });
     } finally {
       clearInterval(timer);
+      if (mutationBrain) mutatingBrains.delete(mutationBrain);
       if (disconnected) { req.removeListener('aborted', disconnected); res.removeListener('close', disconnected); }
       if (counted) { total--; const n = active.get(authority.id) - 1; if (n) active.set(authority.id, n); else active.delete(authority.id); }
     }
@@ -158,9 +168,12 @@ const HANDLERS = {
     if (typeof query !== 'string' || !query.trim() || query.startsWith('-')) throw new InvokeError(400, 'invalid-query', 'query must be nonempty text, not a CLI option.');
     if (category !== undefined && (typeof category !== 'string' || !/^[a-z][a-z-]{0,63}$/.test(category))) throw new InvokeError(400, 'invalid-category', 'Invalid category.');
     if (context.authority.mode === 'restricted') {
+      const brain = fs.realpathSync(context.serverBrain);
       const run = requireSuccessfulRun(await context.run({ entry: path.join(root, 'src/server/invoke-read-child.mjs'),
-        cwd: root, env: invokeEnvironment(false), timeoutMs, nodeArgs: ['--max-old-space-size=128'],
-        input: JSON.stringify({ brain: context.serverBrain, query, category, limit: Math.max(1, Math.min(20, Number(limit) || 5)) }) }));
+        cwd: root, env: invokeEnvironment(false), timeoutMs, nodeArgs: ['--max-old-space-size=128', '--permission',
+          `--allow-fs-read=${path.join(root, 'src')}`, `--allow-fs-read=${path.join(root, 'node_modules')}`,
+          `--allow-fs-read=${path.join(root, 'package.json')}`, `--allow-fs-read=${brain}`],
+        input: JSON.stringify({ brain, query, category, limit: Math.max(1, Math.min(20, Number(limit) || 5)) }) }));
       try { return JSON.parse(run.stdout); } catch { throw new InvokeError(502, 'invalid-owner-output', 'Retrieval returned invalid output.'); }
     }
     // Retrieval belongs to the owning CLI. It searches metadata and indexed body
@@ -192,7 +205,29 @@ const HANDLERS = {
     return { count: nodes.length, nodes };
   },
 
-  async 'ssss.write'({ category, title, content, tags, scope, timeoutMs }, context) {
+  async 'ssss.write'(params, context) {
+    const { category, title, content, tags, scope, timeoutMs } = params;
+    if (context.authority.mode === 'restricted') {
+      const brain = fs.realpathSync(context.serverBrain);
+      const run = await context.run({ entry: path.join(root, 'src/server/invoke-write-child.mjs'),
+        cwd: root, env: invokeEnvironment(false), timeoutMs, nodeArgs: ['--max-old-space-size=128', '--permission',
+          `--allow-fs-read=${path.join(root, 'src')}`, `--allow-fs-read=${path.join(root, 'node_modules')}`,
+          `--allow-fs-read=${path.join(root, 'package.json')}`, `--allow-fs-read=${brain}`,
+          `--allow-fs-write=${path.join(brain, 'memory-vault')}`,
+          `--allow-fs-write=${path.join(brain, 'memory-vault', '*')}`,
+          `--allow-fs-write=${path.join(brain, 'memory-derived')}`,
+          `--allow-fs-write=${path.join(brain, 'memory-derived', '*')}`],
+        input: JSON.stringify({ brain, params, caller: context.authority.id }) });
+      let result;
+      try { result = JSON.parse(run.stdout); } catch { /* interruption may precede output */ }
+      if (run.exit_code !== 0 || run.termination_reason || run.truncated) {
+        throw new InvokeError(run.termination_reason === 'timeout' ? 504 : run.termination_reason === 'authority-ended' ? 403 : 422,
+          run.termination_reason || 'mutation-failed', 'Fact creation did not complete; check committed/indexed status before retry.',
+          result || { committed: 'unknown', indexed: false });
+      }
+      if (!result?.committed || !result?.indexed) throw new InvokeError(502, 'invalid-owner-output', 'Mutation returned invalid output.', { committed: 'unknown', indexed: false });
+      return result;
+    }
     if (!content || typeof content !== 'string') throw new Error('ssss.write needs content.');
     // Canonical memory is written by its owning CLI, never reimplemented here.
     // `remember` runs the validated write path and recompiles the derived

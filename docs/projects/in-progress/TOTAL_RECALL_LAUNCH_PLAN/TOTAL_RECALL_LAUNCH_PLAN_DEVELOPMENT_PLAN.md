@@ -8,6 +8,8 @@
 
 ## Priority order
 
+DEV-API-03 current batch: implement fact-only server-brain creation through the shared validated memory owner; enforce exact input/target schemas, generated paths and create-only principal; avoid executable compilation; rebuild and verify local retrieval; test unknown-field/category/path/routing escalation, symlinks, lifecycle and truthful partial commit failures. Record actual HTTP write/read evidence and run Mini suites/gates before whole-tree publication. Generic restricted owner adapters and provider quotas remain subsequent unfinished work within this plan.
+
 October 24 reconciliation: the PRD scope correction and audit SCOPE-RECONCILE-01 govern this plan. Gro owns public CRM skills/gateway, integrated DSH delivery and optional seller-memory integration. No DSH bundle into TR or cloud-hosting prerequisite is added here. DEV-API-01 now resolves invoke disposition: retain the optional TR developer API and harden authority through dispatch. Historical evidence below is not fresh runtime certification.
 
 ### Next implementation batch — DEV-API-01

@@ -6,7 +6,7 @@ description: >-
   file before executing.
 repo_scoped: true
 repository_id: "total-recall-brain"
-generated_at: 2026-10-24T22:25:04.867Z
+generated_at: 2026-10-25T02:08:54.921Z
 generated_from: total-recall
 ---
 
@@ -18,7 +18,7 @@ generated_from: total-recall
 
 ## Stack
 
-- **Languages**: JavaScript (738 files), Markdown (258 files), TypeScript (130 files), CSS (12 files)
+- **Languages**: JavaScript (741 files), Markdown (258 files), TypeScript (130 files), CSS (12 files)
 - **Frameworks**: React, Express
 - **Tests**: Vitest
 - **Module system**: module
@@ -283,7 +283,7 @@ templates/
 - `GET /api/integrations/active`
 - `POST /api/integrations/connect`
 
-### invoke (6 endpoints)
+### invoke (7 endpoints)
 
 - `GET /v1/invoke/capabilities`
 - `POST /v1/invoke`
@@ -522,7 +522,7 @@ templates/
 
 ## Core Modules
 
-157 modules in `src/core/`:
+158 modules in `src/core/`:
 
 - **action-predictor** — exports: buildActionQuestions, shortlistActions, predictNextAction
 - **agent-manager** — exports: loadAgentState, saveAgentState, isProcessRunning, listAgents, buildRemoteSpawnCommand, spawnAgent, killAgent, getAgentLogs
@@ -547,6 +547,7 @@ templates/
 - **command-surface** — exports: commandScopeDirectories, describeCommandFile, run, listSurfaceCommands, buildCommandsSection, surfaceInputsHash
 - **conclusion-writer** — exports: validateDraftNode, runConclusionWriter
 - **config** — exports: surfaceDir, instructionsFilePath, detectProjectBrain, getActiveBrains, resolveBrainLayer
+- **confined-memory** — exports: validateConfinedFact, createConfinedFact
 - **conflict-detector** — exports: detectSemanticConflicts, scanVaultForConflicts, detectPatchConflict, computeFileHash, autoResolveConflict, applyAutoResolution, detectAndResolve, writeConflicts
 - **context-cache** — exports: loadSectionCache, saveSectionCache, computeSectionHash, getCachedSection, manageContextBudget
 - **context-compiler** — exports: compileContext, renderCapsule, capsuleResponse, previewContext

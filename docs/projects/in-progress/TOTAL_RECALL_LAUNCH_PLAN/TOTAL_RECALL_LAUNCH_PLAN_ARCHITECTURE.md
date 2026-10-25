@@ -1,5 +1,7 @@
 # TOTAL_RECALL_LAUNCH_PLAN — Architecture
 
+DEV-API-03 implemented mutation path: invoke shared-auth policy → fixed server brain and exact fact schema → credential-free bounded trusted child → memory-owner creator → validated SSSS operation with a memory:create principal → local search projection. No CLI bootstrap, surface compilation, plugin generator or paid provider is involved. Paths are generated and create-only; caller metadata cannot change category, modality, target or authority. Symlink checks cover canonical, audit and derived destinations. Post-commit index failure returns explicit committed state. The adapter trusts the host operator and package source; it does not run arbitrary caller code or claim OS sandboxing. The CLI shares this owner through `remember --confined-fact`; its ordinary bootstrap is not an API confinement boundary.
+
 > **Project Prefix**: `TOTAL_RECALL_LAUNCH_PLAN`
 > **Kanban State**: In Progress
 > **Author**: Claude (DeepSeek Harness)

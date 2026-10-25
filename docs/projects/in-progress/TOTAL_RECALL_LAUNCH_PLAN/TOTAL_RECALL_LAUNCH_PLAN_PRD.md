@@ -103,6 +103,8 @@ DEV-API-02 stages implementation with explicit auth-owned scopes: `invoke:full` 
 
 ## 4. Requirement reconciliation
 
+DEV-API-03 adds restricted `ssss.write` for creation of descriptive facts only, with `invoke:restricted`, `ssss:write` and `brain:server`. The server selects a fresh path; the caller cannot overwrite memory, edit instructions, select arbitrary projects or attach routing/authority metadata. Successful writes must be immediately searchable locally without plugin generators or credentials. A failure after canonical commit identifies that commit and index status so retry does not silently duplicate it. This is incremental API-2/API-3 acceptance, not completion of API-1–API-6.
+
 The conflicts the audit found, each with one decision. Losing requirements are superseded by name so no future agent implements them again.
 
 | Conflict | Decision | Superseded |

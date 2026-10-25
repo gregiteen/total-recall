@@ -44,12 +44,15 @@ Run this matrix against the server candidate when the developer API is delivered
 | --- | --- |
 | Explicit full developer key | Intentionally permitted administrative/CLI/plugin/composed operations work within its recorded target/credential grants; Gro seller restrictions are not applied |
 | Restricted key | Allowed command/arguments succeed on its authorized project/brain; foreign targets and scope-changing flags are denied |
+| Restricted fact creation | Writer creates a descriptive fact and a separate reader retrieves it; read-only keys, rule categories, arbitrary metadata, caller paths and routing tags are denied; partial/unknown commitment is reported truthfully |
 | Nested execution | CLI/plugin/composed children retain the caller's authority; unregistered command aliases and privilege escalation fail |
 | Lifecycle/delegation | Expired/revoked keys cannot start new/child work; delegated grants cannot exceed the issuer; running-work behavior matches the documented policy |
 | Resource and failure handling | Server timeout/concurrency/output/cost limits hold; exit failures, truncation and termination are accurate; audits contain no credentials |
 | Independent client and discovery | A second agent uses its own granted key, sees only executable capabilities and completes a real permitted round trip with denial controls |
 
 DEV-API-02 staged source evidence is recorded in [the verification artifact](evidence/DEV-API-02-source-verification.md): explicit full CLI, restricted retrieval, discovery, lifecycle/denial/resource cases, independent auth-owned-key HTTP and server-free memory pass. Unsupported restricted mutation/owners are denied. Provider quotas and the complete matrix remain pending; no deployed or complete-journey claim is made.
+
+DEV-API-03 adds [confined fact creation evidence](evidence/DEV-API-03-source-verification.md), using actual auth-owned restricted writer/reader keys over loopback HTTP, a generated create-only memory path, generator-free local indexing and a separate server-free CLI exercise through the shared owner. General restricted mutations/owner adapters and provider quotas remain unfinished. This source stage does not certify a published package, active endpoint or complete launch journey.
 
 ### General runtime failure checks
 

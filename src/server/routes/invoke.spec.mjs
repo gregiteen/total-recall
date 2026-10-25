@@ -20,7 +20,9 @@ function makeApp(scopes = full, options = {}) {
   const auth = (req, _res, next) => { req.auth = { type: 'pat', id: 'test-key' }; next(); };
   app = express().use(express.json()).use(createInvokeRouter({ auth, store, execute, audit: event => audits.push(event), cwd: dir, serverBrain: dir, ...options }));
 }
-const post = (operation, params = {}) => request(app).post('/v1/invoke').send({ operation, params });
+// Each Supertest request owns a short-lived listener; do not reuse its socket
+// after another request has closed that listener (Node's keep-alive default).
+const post = (operation, params = {}) => request(app).post('/v1/invoke').set('Connection', 'close').send({ operation, params });
 beforeEach(() => {
   dir = fs.mkdtempSync(path.join(os.tmpdir(), 'invoke-route-'));
   audits = [];
@@ -61,7 +63,7 @@ describe('invoke authority and discovery', () => {
     keys[0].scopes = ['invoke:restricted', 'ssss:read'];
     expect(Object.values((await post('capabilities')).body.result.operations).flat().map(o => o.operation)).toEqual(['capabilities']);
   });
-  it.each(['cli.run', 'ssss.write', 'composable.run', 'composable.list', 'decision.run', 'decision.predict'])('fails closed for restricted %s even with wildcard scope', async operation => {
+  it.each(['cli.run', 'composable.run', 'composable.list', 'decision.run', 'decision.predict'])('fails closed for restricted %s even with wildcard scope', async operation => {
     makeApp(['invoke:restricted', '*']);
     const res = await post(operation, { verb: 'auth secret get PRIVATE', name: 'brand-lint', content: 'x' });
     expect(res.status).toBe(403); expect(execute).not.toHaveBeenCalled();
@@ -141,6 +143,66 @@ describe('full developer dispatch', () => {
 });
 
 describe('lifecycle and real restricted read adapter', () => {
+  it('advertises and executes confined facts only when both write and brain grants exist', async () => {
+    makeApp(['invoke:restricted', 'ssss:write', 'brain:server']);
+    const caps = await post('capabilities');
+    expect(Object.values(caps.body.result.operations).flat().map(o => o.operation).sort()).toEqual(['capabilities', 'ssss.write']);
+    keys[0].scopes = ['invoke:restricted', 'ssss:write'];
+    expect((await post('ssss.write', { content: 'denied' })).status).toBe(403);
+    expect(execute).not.toHaveBeenCalled();
+  });
+  it.each([{ category: 'invariant' }, { target: '/foreign' }, { scope: 'global' }, { args: ['--global'] },
+    { tags: ['context:universal'] }, { slug: 'existing' }, { title: {} }, { timeoutMs: '200' }])('denies restricted fact escalation %j before starting a child', async extra => {
+    makeApp(['invoke:restricted', '*']);
+    expect((await post('ssss.write', { content: 'test', ...extra })).status).toBeGreaterThanOrEqual(400);
+    expect(execute).not.toHaveBeenCalled();
+  });
+  it('writes then reads in real children without loading installed plugin generators or secrets', async () => {
+    const { executeInvokeChild } = await import('../invoke-execution.mjs');
+    const marker = path.join(dir, 'generator-was-run');
+    const plugin = path.join(dir, 'plugins/hostile');
+    fs.mkdirSync(plugin, { recursive: true });
+    fs.writeFileSync(path.join(plugin, 'generator.mjs'), `import fs from 'node:fs'; fs.writeFileSync(${JSON.stringify(marker)}, 'executed');`);
+    makeApp([...read, 'ssss:write'], { execute: executeInvokeChild });
+    const written = await post('ssss.write', { content: 'confined glacier retrieval', title: 'Glacier', target: 'server' });
+    expect(written.body, JSON.stringify(written.body)).toMatchObject({ ok: true, result: { committed: true, indexed: true } });
+    const retrieved = await post('ssss.read', { query: 'glacier retrieval' });
+    expect(retrieved.body.result.nodes[0].slug).toBe(written.body.result.slug);
+    expect(fs.existsSync(marker)).toBe(false);
+    expect(fs.existsSync(path.join(dir, 'logs'))).toBe(false);
+    expect(JSON.stringify(audits)).not.toContain('confined glacier');
+  });
+  it('preserves truthful partial and unknown commit outcomes', async () => {
+    makeApp(['invoke:restricted', '*']);
+    execute.mockResolvedValue({ exit_code: 1, stdout: JSON.stringify({ committed: true, indexed: false, path: 'memory-vault/facts/generated.md' }), stderr: 'failed' });
+    expect((await post('ssss.write', { content: 'fact' })).body).toMatchObject({ ok: false, result: { committed: true, indexed: false } });
+    execute.mockResolvedValue({ exit_code: null, stdout: '', termination_reason: 'timeout' });
+    expect((await post('ssss.write', { content: 'fact' })).body).toMatchObject({ ok: false, result: { committed: 'unknown' }, error: { code: 'timeout' } });
+  });
+  it('preserves commit state if authority ends or outcome audit fails after the write', async () => {
+    const result = { committed: true, indexed: true, slug: 'fixture', path: 'memory-vault/facts/fixture.md' };
+    makeApp(['invoke:restricted', '*']);
+    execute.mockImplementation(async () => { keys[0].revoked = true; return { exit_code: 0, stdout: JSON.stringify(result) }; });
+    expect((await post('ssss.write', { content: 'fact' })).body).toMatchObject({ ok: false, error: { code: 'authority-ended' }, result });
+    makeApp(['invoke:restricted', '*'], { audit: event => { if (event.outcome !== 'authorized') throw new Error('offline'); } });
+    execute.mockResolvedValue({ exit_code: 0, stdout: JSON.stringify(result) });
+    expect((await post('ssss.write', { content: 'fact' })).body).toMatchObject({ ok: false, error: { code: 'audit-unavailable' }, result });
+  });
+  it('serializes confined writes across keys until the child exits and then releases the brain', async () => {
+    makeApp(['invoke:restricted', '*'], { auth: (req, _res, next) => {
+      req.auth = { type: 'pat', id: req.get('X-Key') || 'test-key' }; next();
+    } });
+    keys.push({ id: 'other-key', scopes: ['invoke:restricted', '*'], issued_by: 'local-operator' });
+    let release;
+    execute.mockImplementationOnce(() => new Promise(resolve => { release = resolve; }));
+    const running = post('ssss.write', { content: 'fact' }).then(r => r);
+    await vi.waitFor(() => expect(release).toBeTypeOf('function'));
+    expect((await post('ssss.write', { content: 'other fact' }).set('X-Key', 'other-key')).body.error.code).toBe('brain-write-busy');
+    release({ exit_code: 0, stdout: JSON.stringify({ committed: true, indexed: true }) });
+    expect((await running).body.ok).toBe(true);
+    execute.mockResolvedValue({ exit_code: 0, stdout: JSON.stringify({ committed: true, indexed: true }) });
+    expect((await post('ssss.write', { content: 'next fact' })).body.ok).toBe(true);
+  });
   it('rejects revoked, expired and absent keys', async () => {
     keys[0].revoked = true; expect((await post('capabilities')).status).toBe(403);
     keys[0].revoked = false; keys[0].expires_at = '2000-01-01'; expect((await post('capabilities')).status).toBe(403);
