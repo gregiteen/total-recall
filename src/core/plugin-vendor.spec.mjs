@@ -170,4 +170,32 @@ describe('vendoring a capability as a brick', () => {
     expect(run.trim()).toBe('4');
     expect(listBricks(root)[0].status).toBe('unchanged');
   });
+
+  it('keeps only the dependencies the capability declares', async () => {
+    const src = path.join(root, 'tr-plugin-net');
+    fs.mkdirSync(path.join(src, 'capability'), { recursive: true });
+    const write = (capability) => fs.writeFileSync(path.join(src, 'plugin.json'), JSON.stringify({ id: 'net', name: 'Net', version: '1.0.0', description: 'd', capability }));
+    fs.writeFileSync(path.join(src, 'capability', 'index.mjs'), 'export const x = 1;\n');
+    fs.writeFileSync(path.join(src, 'package.json'), '{"name":"net","version":"1.0.0","dependencies":{"express":"^5","undici":"^7"}}');
+
+    write({ entry: 'capability/index.mjs', dependencies: ['missing-pkg'] });
+    await expect(vendorPlugin('tr-plugin-net', undefined, { projectRoot: root })).rejects.toThrow(/does not depend on: missing-pkg/);
+    expect(fs.existsSync(path.join(root, 'bricks', 'net'))).toBe(false);
+
+    write({ entry: 'capability/index.mjs', dependencies: ['undici'] });
+    const result = await vendorPlugin('tr-plugin-net', undefined, { projectRoot: root });
+    expect(JSON.parse(fs.readFileSync(path.join(root, 'bricks', 'net', 'package.json'), 'utf8')).dependencies).toEqual({ undici: '^7' });
+    expect(result.dependencies).toEqual({ undici: '^7' });
+  });
+
+  it('drops every host dependency when the capability declares none', async () => {
+    const src = path.join(root, 'tr-plugin-solo');
+    fs.mkdirSync(path.join(src, 'capability'), { recursive: true });
+    fs.writeFileSync(path.join(src, 'plugin.json'), JSON.stringify({ id: 'solo', name: 'Solo', version: '1.0.0', description: 'd', capability: { entry: 'capability/index.mjs', dependencies: [] } }));
+    fs.writeFileSync(path.join(src, 'capability', 'index.mjs'), 'export const x = 1;\n');
+    fs.writeFileSync(path.join(src, 'package.json'), '{"name":"solo","version":"1.0.0","dependencies":{"express":"^5"}}');
+    const result = await vendorPlugin('tr-plugin-solo', undefined, { projectRoot: root });
+    expect(JSON.parse(fs.readFileSync(path.join(root, 'bricks', 'solo', 'package.json'), 'utf8')).dependencies).toBeUndefined();
+    expect(result.dependencies).toEqual({});
+  });
 });
