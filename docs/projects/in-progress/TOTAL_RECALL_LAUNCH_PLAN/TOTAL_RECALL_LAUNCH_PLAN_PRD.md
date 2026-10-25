@@ -1,5 +1,7 @@
 # TOTAL_RECALL_LAUNCH_PLAN — Product Requirements
 
+LR-1 follow-up: status, startup and daemon lifecycle share installation-aware process identity. Live foreign or unreadable owners remain conflict/unknown and block automatic starts; status names expected and resolved entry paths when available. Retain the legacy daemon string field and add structured observation. Source verification does not certify a serving release.
+
 DEV-API-06 acceptance: full developer composed discovery and execution share the CLI's selected brain and project/group/global precedence, including exact group membership. Discovery never imports command code. Actual disposable-key HTTP acceptance proves command effects, literal arguments and truthful failure; restricted composed execution remains denied. Plugin implementation belongs to the other active agent.
 
 DEV-API-05 acceptance: restricted memory may target `project:<uuid>` only with the effective auth-owned `brain:project-<uuid>` grant and existing read/write family grant. The target must remain registered, enabled, physically bound to that project and identity-matched. Resolve no caller paths or default project for a project-only key. Discovery lists only granted usable target IDs. Recheck the binding and issuer/role authority while work runs; removal, disablement or identity/path change stops continuation. Writes remain create-only descriptive facts with generator-free indexing and truthful commit state.

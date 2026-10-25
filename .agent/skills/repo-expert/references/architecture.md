@@ -6,7 +6,7 @@ description: >-
   file before executing.
 repo_scoped: true
 repository_id: "total-recall-brain"
-generated_at: 2026-10-25T03:46:26.758Z
+generated_at: 2026-10-25T04:12:55.100Z
 generated_from: total-recall
 ---
 
@@ -555,7 +555,7 @@ templates/
 - **context-policy** — exports: curatedRules, ruleAppliesToRepo, selectRules, assembleContext
 - **context-telemetry** — exports: ledgerPath, recordCapsule, readLedger, summariseLedger
 - **crons** — exports: runCrons
-- **daemon-control** — exports: readPid, getDaemonStatus, startDaemon, stopDaemon, ensureDaemonRunning
+- **daemon-control** — exports: readPid, getDaemonObservation, getDaemonStatus, startDaemon, stopDaemon, ensureDaemonRunning
 - **daemon-loop** — exports: writeInterrupt, acquirePidLock, reassertPidLock, releasePidLock
 - **default-plugins**
 - **device-io**
@@ -660,7 +660,7 @@ templates/
 - **ssss-host-extension** — exports: listHostOnlyTypes, listTypesProvidedByPackage, listCoreTypes, listMissingCoreSchemas, buildTotalRecallHostExtension, getTotalRecallHostExtension
 - **ssss-kernel-bridge** — exports: getKernelMode, inventorySummary, mapTrPrincipal, createTotalRecallRegistrySet, getTotalRecallEngine, isLowRiskEnvelope, isCoreRouteEnvelope, isProtocolPath
 - **ssss-operation-service** — exports: writeVfsDocument, patchVfsDocument, deleteVfsDocument, appendVfsEvent, listVfsEvents
-- **startup-health** — exports: runBounded, verifyListener, readProcessCwd, processIdentity, healthVerdict, appVerdict, fetchStartup, startupHealth
+- **startup-health** — exports: runBounded, verifyListener, readProcessCwd, processIdentity, observeDaemon, healthVerdict, appVerdict, fetchStartup
 - **steering** — exports: checkLayer1, checkLayer2, detectConflicts, quarantineConflict, resolveConflict
 - **surface** — exports: isSurfaceCodeStale, commandDirsFor, extractWikilinks, replaceFirstManagedInjectionBlock, heuristicCompact, readRuleBudgets, readContextBudget, legacyRuleContributions
 - **tailscale-cli**

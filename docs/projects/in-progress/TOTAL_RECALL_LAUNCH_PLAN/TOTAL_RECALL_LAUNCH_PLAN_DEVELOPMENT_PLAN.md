@@ -8,6 +8,8 @@
 
 ## Priority order
 
+LR-1 current follow-up: close the outstanding status/lifecycle identity mismatch using a shared observer, explicit conflict/unknown state and safe start refusal. Verify adversarial lock/entry cases, CLI presentation, full Mini suite and configured gates; record source evidence and push the whole tree. Other agents retain plugin ownership. API/provider/harness/launch work remains in progress.
+
 DEV-API-06 completed source stage: unified composed execution scope resolution with static group discovery and the selected-brain owner; exact memberships, shadow precedence, nested and `.agents` selection, and explicit root overrides are verified. Actual full-key HTTP composed effects/argv/failures and restricted denial pass. Final combined-source Mini suite2391 tests/374 files,111 focused tests and8 quality gates pass, actual exits0; source hashes match before/after. Evidence records concurrent runner preservation and publication. Plugin repositories remain assigned to the other active agent. Provider budgets, broader confined owners and launch acceptance remain in progress.
 
 DEV-API-05 current batch: add strict registry/toggle reads for authorization, bind restricted project UUID grants to verified canonical brains, share the existing read/fact adapters and mutation serialization, filter discovery, and cancel changed bindings. Verify two-project isolation, no implicit server access, scope/issuer denial, unsafe/mismatched/duplicate IDs, disabled/unregistered targets and running-work revocation. Keep existing CLI identity/brain/auth controls. Run focused/full Mini suites and configured gates, document source evidence and publish the whole tree.
@@ -58,7 +60,7 @@ Ordered by dependency, not by effort. LR-1 first because nothing is provable whi
 
 - [x] Resolve the recorded foreign-PID daemon lock conflict — tracker LR-1 and `evidence/LR-1-remediation.md`; original conflict retained in the audit.
 - [x] Resolve the recorded `server-process-unverified` cwd defect — tracker LR-1 and regression evidence; not a claim about every installed runtime.
-- [ ] Make `status` and `startup check` read the **same** authority for daemon state (R7)
+- [x] Make `status` and `startup check` read the **same** authority for daemon state (R7) — shared canonical observer and lifecycle refusal; [source evidence](evidence/LR-1-shared-daemon-identity.md).
 - [ ] Prove the surface actually written is the surface a harness reads, for both layers (R13) — inherits `SURFACE_COMPILATION_FIX`'s central defect and `TR_CORE_PLUGIN_SPLIT`'s `TR_CORE_PLUGIN_SPLIT_SURFACE_DIR_AUDIT.md`
 - [x] Add the recorded startup/surface regression coverage — tracker LR-1, 5 added cases; actual harness readback remains open above.
 - [x] Record the original `startup check --json` artifact, host and source — LR-1 remediation evidence. Repeat on the actual release candidate before delivery.

@@ -1,5 +1,14 @@
 # TOTAL_RECALL_LAUNCH_PLAN — Audit
 
+## LR-1 shared daemon identity follow-up
+
+**Audit Status**: Complete
+**Audited commit**: 813edca
+
+Codex, sanctioned Mac mini, October24 (2026-10-25 UTC): read complete daemon-control, startup-health and status implementations and tests. Baseline47 tests/4 files pass, actual exit0 (`/tmp/tr-lr1-baseline.log`);8 full-tier quality checks pass with0 findings. Shared runtime readiness is true. Official Node process documentation confirms signal0 tests existence rather than executable identity (https://nodejs.org/api/process.html). The existing fourteen-section audit remains applicable; this follow-up touches generic core lifecycle/status, tests and docs, with no plugin changes or deployment.
+
+Finding A-027 (P1-high, fix in this project): daemon-control accepts any command containing `core/daemon-loop.mjs` or `core/dream.mjs`, while startup-health resolves the entry against the process cwd. Missing identity is collapsed to dead, permitting another start. Startup's unresolved entry-tail fallback can certify a different nonexistent install. Share installation-aware observation, preserve conflict/unknown, refuse starts on uncertain/live foreign locks, and expose observed/expected entry paths in status. Verify same-install, second-install, missing/dead/malformed/unreadable locks and refusal without signals/spawn/unlink. State remains existing PID files; no new store or daemon. Broader readiness/harness/launch acceptance stays open.
+
 ## DEV-API-06 composed workflow baseline
 
 **Audit Status**: Complete
@@ -98,6 +107,7 @@ TR's optional developer API supports intentional full access alongside confined 
 | A-006 | Restricted mutations/owner adapters and provider quotas not complete | Open API-1–API-6 acceptance; no completed-launch or hardened-API claim |
 | A-007 | Root handoff publication conflicts with hygiene assertion | Preserve owner deliverable; assert private-state exclusion and npm exclusion |
 | A-026 | Group commands appear on surfaces but CLI/invoke omit their scope; invoke guesses the immediate `.agent` | DEV-API-06 shared selected-brain resolver and static scope projection; actual composed HTTP acceptance |
+| A-027 | P1-high: lifecycle substring checks and startup suffix fallback misidentify daemon installations and collapse uncertainty | LR-1 shared canonical observation, explicit conflict/unknown and lifecycle refusal; real child/CLI acceptance and source evidence |
 
 ### Impact on the requested change
 
