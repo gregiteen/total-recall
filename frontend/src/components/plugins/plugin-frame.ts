@@ -1,7 +1,21 @@
 const inlineJson = (value: unknown) => JSON.stringify(value).replace(/</g, '\\u003c')
 
+export interface PluginScreen { id: string; label: string }
+
+/** Bound untrusted screen metadata without deriving any screen from commands. */
+export function sanitizePluginScreens(value: unknown): PluginScreen[] {
+  if (!Array.isArray(value)) return []
+  const seen = new Set<string>()
+  return value.slice(0, 128).flatMap(item => {
+    if (!item || typeof item !== 'object' || typeof item.id !== 'string' || !/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/.test(item.id)
+      || typeof item.label !== 'string' || !item.label.trim() || item.label.length > 160 || /[\u0000-\u001f\u007f]/.test(item.label) || seen.has(item.id)) return []
+    seen.add(item.id)
+    return [{ id: item.id, label: item.label.trim() }]
+  })
+}
+
 /** Owner code runs in an opaque origin, with no dashboard DOM/storage or direct network. */
-export function pluginFrameDocument(source: string, tag: string, channel: string, theme: Record<string, string> = {}, pluginId = '', commandTimeouts: Record<string, number> = {}) {
+export function pluginFrameDocument(source: string, tag: string, channel: string, theme: Record<string, string> = {}, pluginId = '', commandTimeouts: Record<string, number> = {}, operations: readonly string[] = []) {
   return `<!doctype html><html><head>
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'nonce-${channel}' blob:; style-src 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com data:; img-src data: https:; connect-src 'none'; frame-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'">
 <meta name="referrer" content="no-referrer">
@@ -13,15 +27,27 @@ export function pluginFrameDocument(source: string, tag: string, channel: string
 const channel=${inlineJson(channel)};
 const pending=new Map();let sequence=0;
 const send=(type,extra={})=>parent.postMessage({channel,type,...extra},'*');
+let ownerScreens=[];
+const sanitizeScreens=${sanitizePluginScreens.toString()};
+function publishScreens(element){
+ ownerScreens=sanitizeScreens(element.screens);
+ send('screens',{screens:ownerScreens});
+ if(ownerScreens.some(screen=>screen.id===element.screen))host.screenChanged(element.screen);
+}
 window.addEventListener('contextmenu',event=>{event.preventDefault();send('contextmenu');});
 for(const [name,value] of Object.entries(${inlineJson(theme)}))document.documentElement.style.setProperty(name,value);
 window.addEventListener('message',event=>{
- if(event.source!==parent||event.data?.channel!==channel||event.data?.type!=='result')return;
+ if(event.source!==parent||event.data?.channel!==channel)return;
+ if(event.data.type==='show-screen'){
+  if(ownerScreens.some(screen=>screen.id===event.data.screen))window.dispatchEvent(new CustomEvent('plugin-show-screen',{detail:{pluginId:${inlineJson(pluginId)},screen:event.data.screen}}));
+  return;
+ }
+ if(event.data.type!=='result')return;
  const request=pending.get(event.data.requestId);if(!request)return;
  pending.delete(event.data.requestId);clearTimeout(request.timer);
  if(event.data.error)request.reject(new Error(event.data.error));else request.resolve(event.data.result);
 });
-const host=Object.freeze({pluginId:${inlineJson(pluginId)},run(subcommand,args=[],options={}){return new Promise((resolve,reject)=>{
+const host=Object.freeze({pluginId:${inlineJson(pluginId)},operations:Object.freeze(${inlineJson(operations)}),screenChanged(screen){if(ownerScreens.some(item=>item.id===screen))send('screen-changed',{screen});},run(subcommand,args=[],options={}){return new Promise((resolve,reject)=>{
  const requestId=String(++sequence);
  const declared=${inlineJson(commandTimeouts)}[subcommand];
  const timeout=Number.isInteger(declared)&&declared>=1&&declared<=600000?declared:30000;
@@ -34,6 +60,7 @@ try{
  const tag=${inlineJson(tag)};
  if(!customElements.get(tag))throw new Error('The plugin did not register its declared interface');
  const element=document.createElement(tag);element.host=host;document.body.append(element);
+ publishScreens(element);
  if(typeof element.load==='function'&&!element.hasAttribute('data-loaded')){try{element.load();}catch(_){}}
  if('view' in element||tag==='domains-console'||tag==='stripe-panel'){
   host.run('view').then(v=>{element.view=v;}).catch(()=>{

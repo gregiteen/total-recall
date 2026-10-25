@@ -71,13 +71,23 @@ export async function executePluginState(request) {
   }
   // A guard serializes state read/compare/commit across native worker processes.
   const lock = path.join(root, '.mutation-lock');
+  const guardTimeoutMs = request.guardTimeoutMs ?? 5000;
+  if (!Number.isInteger(guardTimeoutMs) || guardTimeoutMs < 1 || guardTimeoutMs > 5000) throw new Error('Invalid plugin guard timeout');
+  const deadline = performance.now() + guardTimeoutMs;
+  for (;;) {
   try {
     fs.mkdirSync(lock, { mode: 0o700 });
+    break;
   } catch (err) {
     // Distinguish a genuine concurrent mutation from an environment failure so
     // callers are not told the store is busy when it is actually inaccessible.
     if (err && err.code === 'EEXIST') {
-      throw new Error('Plugin state mutation is busy; another mutation holds the guard');
+      const stat = fs.lstatSync(lock, { throwIfNoEntry: false });
+      if (!stat) continue;
+      if (stat.isSymbolicLink() || !stat.isDirectory()) throw new Error('Unsafe plugin mutation guard');
+      if (performance.now() >= deadline) throw new Error('Plugin state mutation is busy; timed out waiting for the guard');
+      await new Promise(resolve => setTimeout(resolve, 20));
+      continue;
     }
     if (err && (err.code === 'EACCES' || err.code === 'EPERM' || err.code === 'EROFS')) {
       throw new Error(
@@ -86,6 +96,7 @@ export async function executePluginState(request) {
       );
     }
     throw new Error(`Plugin state mutation guard could not be created at ${lock}: ${err?.message || err}`);
+  }
   }
   try {
     const durableKeys = new FileIdempotencyStore(path.join(root, '.idempotency'));

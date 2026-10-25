@@ -219,6 +219,7 @@
   "runtime": {
     "modules": {
       "secrets-store": "src/secrets-store.mjs",
+      "host-secrets-store": "src/host-secrets-store.mjs",
       "secrets-gateway": "src/secrets-gateway.mjs",
       "secrets-keychain": "src/secrets-keychain.mjs",
       "secrets-env-diff": "src/secrets-env-diff.mjs",
