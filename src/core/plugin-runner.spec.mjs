@@ -30,6 +30,17 @@ describe('plugin-runner', () => {
     expect(JSON.parse(res.output.trim())).toEqual(['echo', 'status', '--json']);
   });
 
+  it('bounds server output at 256 KiB but gives a terminal call the full output', async () => {
+    const p = makePlugin(root, 'bulk', 'export async function run() { process.stdout.write("x".repeat(300 * 1024)); }');
+    const server = await runPluginCommand(p);
+    expect(server.truncated).toBe(true);
+    expect(server.stdout.length).toBe(256 * 1024);
+    const terminal = await runPluginCommand(p, { stdin: 'inherit' });
+    expect(terminal.truncated).toBe(false);
+    expect(terminal.stdout.length).toBe(300 * 1024);
+    await expect(runPluginCommand(p, { maxOutputBytes: 0 })).rejects.toThrow(/output limit/);
+  });
+
   it('isolates a plugin that calls process.exit', async () => {
     const p = makePlugin(root, 'exiter', 'export async function run() { console.log("bye"); process.exit(3); }');
     const res = await runPluginCommand(p, { cwd: root });
