@@ -6,7 +6,7 @@ vi.mock('./plugin-loader.mjs', async importOriginal => ({ ...await importOrigina
 vi.mock('./logger.mjs', () => ({ logger: { info() {}, warn() {}, debug() {} } }));
 vi.mock('./config.mjs', () => ({ brainDir: '/tmp/brain-update-test', ROOT: '/tmp/brain-update-test' }));
 vi.mock('./autopull-install.mjs', () => ({ installAutoPull: vi.fn() }));
-import { updateAllBrains, brainInstallOwner, brainUpdateLockPath } from './brain-updates.mjs';
+import { updateAllBrains, brainInstallOwner, brainUpdateLockPath, acquireBrainUpdateLock } from './brain-updates.mjs';
 import { parseArgs } from '../cli/update.mjs';
 
 describe('uniform brain updates', () => {
@@ -123,7 +123,7 @@ describe('uniform brain updates', () => {
     expect((await run([root], exec, { dryRun: false })).failed).toBe(1);
     installed(root, 'total-recall-brain', '3.35.0');
     fs.writeFileSync(brainUpdateLockPath(root), 'another owner');
-    expect((await run([root], exec, { dryRun: false })).failed).toBe(1);
+    expect((await run([root], exec, { dryRun: false, lockWaitMs: 0 })).failed).toBe(1);
     expect(fs.readFileSync(brainUpdateLockPath(root), 'utf8')).toBe('another owner');
     fs.unlinkSync(brainUpdateLockPath(root));
     expect(exec.mock.calls.every(([, args]) => args[0] === 'view')).toBe(true);
@@ -174,5 +174,43 @@ describe('uniform brain updates', () => {
     installed(gitDir, 'total-recall-brain', '3.39.1');
     const result = await run([path.join(tmp, 'repo2')], execWithInstall());
     expect(result.results.find(r => r.root === gitDir)).toBeFalsy();
+  });
+});
+
+describe('acquireBrainUpdateLock', () => {
+  let dir;
+  beforeEach(() => { dir = fs.mkdtempSync(path.join(os.tmpdir(), 'tr-update-lock-')); });
+  afterEach(() => { fs.rmSync(dir, { recursive: true, force: true }); });
+
+  it('reclaims a lock whose process is gone', () => {
+    const lock = path.join(dir, 'a.lock');
+    fs.writeFileSync(lock, '999999');
+    const fd = acquireBrainUpdateLock(lock, { isAlive: () => false, sleep: () => {} });
+    fs.closeSync(fd);
+    expect(fs.readFileSync(lock, 'utf8')).toBe(String(process.pid));
+  });
+
+  it('waits for a live holder and takes the lock once it is released', () => {
+    const lock = path.join(dir, 'b.lock');
+    fs.writeFileSync(lock, '4242');
+    let waits = 0;
+    const fd = acquireBrainUpdateLock(lock, { isAlive: () => true, sleep: () => { if (++waits === 3) fs.unlinkSync(lock); } });
+    fs.closeSync(fd);
+    expect(waits).toBe(3);
+    expect(fs.readFileSync(lock, 'utf8')).toBe(String(process.pid));
+  });
+
+  it('gives up with the holder named once the wait runs out', () => {
+    const lock = path.join(dir, 'c.lock');
+    fs.writeFileSync(lock, '4242');
+    expect(() => acquireBrainUpdateLock(lock, { waitMs: 0, isAlive: () => true, sleep: () => {} })).toThrow(/pid 4242/);
+  });
+
+  it('treats a fresh empty lock as being taken, not abandoned', () => {
+    const lock = path.join(dir, 'd.lock');
+    fs.writeFileSync(lock, '');
+    expect(() => acquireBrainUpdateLock(lock, { waitMs: 0, sleep: () => {} })).toThrow(/still holds/);
+    const old = new Date(Date.now() - 60000); fs.utimesSync(lock, old, old);
+    fs.closeSync(acquireBrainUpdateLock(lock, { waitMs: 0, sleep: () => {} }));
   });
 });

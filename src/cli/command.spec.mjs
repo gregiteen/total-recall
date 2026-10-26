@@ -26,7 +26,9 @@ describe('plugin command generation', () => {
   });
 
   afterEach(() => {
-    fs.rmSync(root, { recursive: true, force: true });
+    // The fixture command runs in the background, so its child can still be
+    // writing into root when cleanup starts (ENOTEMPTY); retry briefly.
+    fs.rmSync(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
   });
 
   it('generates a runnable command with help and structured JSON output', () => {

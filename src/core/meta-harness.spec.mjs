@@ -161,9 +161,11 @@ describe('Harness version currency and quota usage inspection', () => {
 
     const agy = reports.find((h) => h.id === 'agy');
     expect(agy).toBeDefined();
+    // Quota appears only when a real usage source produced it; otherwise it is
+    // honestly unknown ('—'). Signed in is not the same as having a usage feed.
     if (agy.available && agy.authed) {
-      expect(agy.rolling5hRemainingPct).toContain('%');
-      expect(agy.weeklyRemainingPct).toContain('%');
+      expect(agy.rolling5hRemainingPct).toMatch(/^(\d{1,3}(\.\d+)?%|—)$/);
+      expect(agy.weeklyRemainingPct).toMatch(/^(\d{1,3}(\.\d+)?%|—)$/);
     }
   });
 });
