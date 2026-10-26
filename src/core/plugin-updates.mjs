@@ -50,7 +50,7 @@ export async function checkPlugin(plugin, { gitHead = remoteGitHead, peerHash = 
       return { status: 'pinned', ref: source.ref };
     case 'bundled': {
       const shipped = bundled().find(p => p.id === id);
-      if (!shipped) return { status: 'failed', error: `Bundled plugin '${id}' is no longer shipped in this package` };
+      if (!shipped) return { status: 'failed', error: `Bundled plugin '${id}' is no longer shipped in this package; reinstall it from its git repository with: total-recall plugin install <git-url> --global --replace` };
       return hashPluginDir(shipped.dir).sha256 === plugin.installed_sha256 ? { status: 'current' } : { status: 'behind', install: id };
     }
     case 'git': {

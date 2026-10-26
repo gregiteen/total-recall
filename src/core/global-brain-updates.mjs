@@ -6,6 +6,24 @@ import {BRAIN_PACKAGES} from './brain-updates.mjs';
 import {comparePackageVersions} from './package-version.mjs';
 import {updateSourceBrainPackage} from './source-brain-updates.mjs';
 
+/**
+ * A global link that points at a source checkout of `name` under another
+ * directory name (the package was once published as `total-recall`). Missing it
+ * made the update `npm install -g` over the bin and replace the operator's
+ * source checkout with a registry copy.
+ */
+export function findLinkedSourceCheckout(root,name){
+  let entries=[];try{entries=fs.readdirSync(root,{withFileTypes:true});}catch{return null;}
+  for(const entry of entries){
+    if(!entry.isSymbolicLink())continue;
+    try{
+      const dir=fs.realpathSync(path.join(root,entry.name));
+      if(JSON.parse(fs.readFileSync(path.join(dir,'package.json'),'utf8')).name===name&&fs.existsSync(path.join(dir,'.git')))return dir;
+    }catch{}
+  }
+  return null;
+}
+
 export function updateGlobalBrainPackages({versions,exec=spawnSync,sourceUpdate=updateSourceBrainPackage}={}) {
   const prefix=exec('npm',['root','--global'],{encoding:'utf8',timeout:15000});
   if(prefix.status!==0)return {failed:1,results:[{status:'failed',error:'Cannot resolve global npm root'}]};
@@ -13,7 +31,9 @@ export function updateGlobalBrainPackages({versions,exec=spawnSync,sourceUpdate=
   const results=[];
   const install=[];
   for(const name of BRAIN_PACKAGES){
-    const directory=path.join(root,name),file=path.join(directory,'package.json');
+    let directory=path.join(root,name);
+    if(!fs.existsSync(directory))directory=findLinkedSourceCheckout(root,name)||directory;
+    const file=path.join(directory,'package.json');
     let installed;try{installed=JSON.parse(fs.readFileSync(file,'utf8')).version;}catch{}
     const row={package:name,installed:installed || null,latest:versions[name],status:'up_to_date'};results.push(row);
     if(installed===versions[name])continue;

@@ -22,6 +22,47 @@ const isLink = file => { try { return fs.lstatSync(file).isSymbolicLink(); } cat
 export const brainUpdateLockPath = owner => path.join(os.tmpdir(),
   `total-recall-update-${createHash('sha256').update(owner).digest('hex')}.lock`);
 
+const pause = ms => Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
+const alive = pid => { try { process.kill(pid, 0); return true; } catch (error) { return error.code === 'EPERM'; } };
+
+/**
+ * Take a per-owner update lock. The daemon's hourly `update --automatic` and a
+ * manual `update --all-brains` take the same locks, and a plain exclusive create
+ * failed the manual run outright with EEXIST. A lock whose process is gone is
+ * reclaimed; a live holder is waited for, up to `waitMs`.
+ */
+export function acquireBrainUpdateLock(lock, { waitMs = 600000, pollMs = 1000, isAlive = alive, sleep = pause } = {}) {
+  const deadline = Date.now() + waitMs;
+  for (;;) {
+    try {
+      const fd = fs.openSync(lock, 'wx', 0o600);
+      fs.writeFileSync(fd, String(process.pid));
+      return fd;
+    } catch (error) {
+      if (error.code !== 'EEXIST') throw error;
+    }
+    let holder, age;
+    try {
+      holder = Number.parseInt(fs.readFileSync(lock, 'utf8').trim(), 10);
+      age = Date.now() - fs.statSync(lock).mtimeMs;
+    } catch (error) {
+      if (error.code === 'ENOENT') continue; // released between the create and the read
+      throw error;
+    }
+    // A creator writes its pid right after the exclusive create; an empty lock
+    // younger than a few seconds is still being taken, not abandoned. Content
+    // that is not a pid names an unknown owner and is respected.
+    const content = holder ? 'pid' : fs.statSync(lock).size ? 'unknown' : 'empty';
+    const stale = content === 'pid' ? !isAlive(holder) : content === 'empty' && age > 5000;
+    if (stale) {
+      try { fs.unlinkSync(lock); } catch (error) { if (error.code !== 'ENOENT') throw error; }
+      continue;
+    }
+    if (Date.now() >= deadline) throw new Error(`Another update (${holder ? `pid ${holder}` : 'unknown owner'}) still holds ${lock}`);
+    sleep(pollMs);
+  }
+}
+
 export function installedBrainPackage(root, key) {
   try {
     const paths = createRequire(path.join(root, 'package.json')).resolve.paths(key) || [];
@@ -168,8 +209,7 @@ export async function updateAllBrains(opts = {}) {
       isLink(path.join(consumer.root, 'node_modules')) || consumer.deps.some(dep =>
         dep.version !== versions[dep.package] || !dep.file?.startsWith(path.join(group.owner, 'node_modules') + path.sep)));
     try {
-      lockFd = fs.openSync(lock, 'wx', 0o600);
-      fs.writeFileSync(lockFd, String(process.pid));
+      lockFd = acquireBrainUpdateLock(lock, opts.lockWaitMs === undefined ? {} : { waitMs: opts.lockWaitMs });
       for (const name of ['package-lock.json', 'npm-shrinkwrap.json', 'pnpm-lock.yaml']) {
         const file = path.join(group.owner, name);
         saved.set(file, fs.existsSync(file) ? fs.readFileSync(file, 'utf8') : null);

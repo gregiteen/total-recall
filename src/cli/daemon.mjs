@@ -218,7 +218,29 @@ export default async function daemon(args) {
 
   switch (subcommand) {
     case 'ensure': {
-      if(!useSystemd)throw new Error('Managed daemon ensure currently requires systemd on the daemon host');
+      if(useLaunchd){
+        // macOS: the launchd agent owns the daemon. Load it if needed, restart it
+        // on --restart (or start it when nothing runs), then verify the process
+        // launchd reports is the one holding the brain lock.
+        const label='com.totalrecall.daemon',target=`gui/${process.getuid()}/${label}`;
+        const launchdPid=()=>{const r=spawnSync('launchctl',['list',label],{encoding:'utf8'});const m=r.status===0&&/"PID"\s*=\s*(\d+)/.exec(r.stdout||'');return m?Number(m[1]):0;};
+        if(spawnSync('launchctl',['list',label],{stdio:'ignore'}).status!==0){
+          const boot=spawnSync('launchctl',['bootstrap',`gui/${process.getuid()}`,launchAgentPlist(label)],{encoding:'utf8'});
+          if(boot.status!==0)throw new Error(`Cannot load ${label}: ${(boot.stderr||'').trim()}`);
+        }
+        const owner=readPid(),managedPid=launchdPid();
+        if(owner && owner!==managedPid && !await stopDaemon())throw new Error('Cannot stop verified detached daemon');
+        if(args.includes('--restart') || !managedPid || (owner && owner!==managedPid)){
+          const kick=spawnSync('launchctl',['kickstart','-k',target],{encoding:'utf8'});
+          if(kick.status!==0)throw new Error(`launchctl kickstart failed: ${(kick.stderr||'').trim()}`);
+        }
+        await new Promise(resolve=>setTimeout(resolve,3000));
+        const pid=readPid(),current=launchdPid();
+        if(!pid || pid!==current)throw new Error('Managed daemon did not retain ownership of the brain lock');
+        console.log(JSON.stringify({ok:true,manager:'launchd',pid,enabled:true}));
+        break;
+      }
+      if(!useSystemd)throw new Error('Managed daemon ensure needs systemd or a launchd agent on the daemon host');
       // A detached worker can hold the same brain lock while systemd reports a
       // successful short-lived start. Stop that verified owner before takeover.
       const managed=spawnSync('systemctl',['show','total-recall-daemon','--property=MainPID','--value'],{encoding:'utf8'});
