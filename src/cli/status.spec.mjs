@@ -155,3 +155,20 @@ describe('status command', () => {
     expect(report.instructions.remote.sha256).toMatch(/^[a-f0-9]{64}$/);
   });
 });
+
+describe('serverBrainId', () => {
+  it('finds a project brain by its registered directory when brain.json names no layer', async () => {
+    const { serverBrainId } = await import('./status.mjs');
+    const os = await import('node:os');
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'tr-status-registry-'));
+    try {
+      const registry = path.join(dir, 'project-registry.json');
+      fs.writeFileSync(registry, JSON.stringify([{ name: 'gro-crm', brainDir: '/repos/gro-crm/.agent/skills/total-recall' }]));
+      expect(serverBrainId('/repos/gro-crm/.agent/skills/total-recall', { url: 'http://127.0.0.1:3000' }, registry)).toBe('project:gro-crm');
+      expect(serverBrainId('/home/.agent/skills/total-recall', { url: 'http://127.0.0.1:3000' }, registry)).toBeNull();
+      expect(serverBrainId('/anything', { layer: 'project', name: 'ssss' }, registry)).toBe('project:ssss');
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+});

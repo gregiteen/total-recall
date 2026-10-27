@@ -85,7 +85,14 @@ export function discoverBrainConsumers(roots, { onError } = {}) {
       let pkg;
       try { pkg = read(file); }
       catch (error) { if (onError) { onError(real, error); return; } throw error; }
-      const deps = sections.flatMap(section => Object.entries(pkg[section] || {})
+      // A plugin copied into a shared plugin folder is installed without its dev
+      // dependencies, on purpose: full dev trees there filled a disk. Counting its
+      // devDependencies made every such plugin a permanently failing consumer, and
+      // "fixing" it would mean installing exactly what must never be installed.
+      const sharedPluginCopy = fs.existsSync(path.join(real, 'plugin.json'))
+        && real.split(path.sep).join('/').includes('/skills/total-recall/plugins/');
+      const deps = sections.filter(section => !(sharedPluginCopy && section === 'devDependencies'))
+        .flatMap(section => Object.entries(pkg[section] || {})
         .filter(([key]) => BRAIN_PACKAGES.includes(canonical(key)) && canonical(key) !== pkg.name)
         .map(([key, declared]) => ({ section, key, package: canonical(key), declared,
           ...installedBrainPackage(real, key) })));

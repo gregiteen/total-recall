@@ -62,7 +62,11 @@ export async function runAutomaticBrainUpdates({brainDir,fleet=false,force=false
       const mesh=fleet && summary.versions?await meshUpdate({versions:summary.versions,version:summary.versions['total-recall-brain']}):{failed:0,results:[],scope:'local-only'};
       const changed=summary.updated>0 || plugins.updated>0 || global.results.some(row=>row.status==='updated') || sources.results.some(row=>row.status==='updated') || JSON.stringify(saved?.versions)!==JSON.stringify(summary.versions);
       const surfaces=await compile({brainDir,force:changed});
-      report={...summary,global,sources,plugins,mesh,surfaces,failed:(summary.failed || 0)+global.failed+sources.failed+plugins.failed+mesh.failed+(surfaces.ok?0:surfaces.results.filter(row=>row.status==='failed').length),checkedAt:now()};
+      // local_failed is this node's own maintenance. Peers judge a node by it, not by
+      // `failed`, which also counts the node's view of its peers: judging by that made
+      // every fleet pass mark every peer failed forever, each because the others had.
+      const local_failed=(summary.failed || 0)+global.failed+sources.failed+plugins.failed+(surfaces.ok?0:surfaces.results.filter(row=>row.status==='failed').length);
+      report={...summary,global,sources,plugins,mesh,surfaces,local_failed,failed:local_failed+mesh.failed,checkedAt:now()};
     }catch(error){report={failed:1,error:error.message,checkedAt:now(),results:[]};}
     const temporary=`${file}.${process.pid}.tmp`;fs.writeFileSync(temporary,JSON.stringify(report,null,2));fs.renameSync(temporary,file);
     return report;

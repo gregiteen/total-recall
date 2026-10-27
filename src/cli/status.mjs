@@ -21,7 +21,7 @@ import fs from 'node:fs';
 import crypto from 'node:crypto';
 import { loadQueue } from '../core/research-queue.mjs';
 
-import { totalRecallToken } from '../core/config.mjs';
+import { totalRecallToken, globalBrainDir } from '../core/config.mjs';
 import { resolveBrainDir, resolveSurfaceDir } from './agent-dir.mjs';
 
 function parseArgs(args) {
@@ -80,6 +80,24 @@ function projectionsStatus(clients, instructionsMtime) {
     }
     return { name, label: info.label, mode: info.mode, connectedAt: info.connectedAt, projectionPath: info.projectionPath, fresh };
   });
+}
+
+/**
+ * The brain id the server knows this brain by. Project brain.json files carry
+ * no layer/name, so the id comes from the global project registry. Without it
+ * every status run inside a project compared the project's INSTRUCTIONS.md with
+ * the server's GLOBAL copy and reported "In sync: no" for two healthy brains.
+ */
+export function serverBrainId(brainDir, brainConfig, registryPath = path.join(globalBrainDir, 'config', 'project-registry.json')) {
+  if (brainConfig?.layer === 'project' && brainConfig?.name) return `project:${brainConfig.name}`;
+  try {
+    const registry = JSON.parse(fs.readFileSync(registryPath, 'utf8'));
+    const own = path.resolve(brainDir);
+    const project = Array.isArray(registry) ? registry.find((p) => p?.brainDir && path.resolve(p.brainDir) === own) : null;
+    return project?.name ? `project:${project.name}` : null;
+  } catch {
+    return null;
+  }
 }
 
 function sha256(buf) {
@@ -199,10 +217,7 @@ export default async function statusCmd(args) {
 
   let remote = null;
   if (brainUrl) {
-    const brainId = brainConfig?.layer === 'project' && brainConfig?.name
-      ? `project:${brainConfig.name}`
-      : null;
-    remote = await probeBrain(brainUrl, token, brainId);
+    remote = await probeBrain(brainUrl, token, serverBrainId(brainDir, brainConfig));
   }
 
   const inSync = !!(localInstructions && remote?.instructions_sha256 &&
@@ -250,7 +265,7 @@ export default async function statusCmd(args) {
   // Load ongoing research agenda
   let ongoingResearch = [];
   try {
-    ongoingResearch = loadQueue().filter(item => item.status === 'in_progress' || item.status === 'pending');
+    ongoingResearch = loadQueue(brainDir).filter(item => item.status === 'in_progress' || item.status === 'pending');
     report.research = ongoingResearch.map(item => ({
       id: item.id,
       topic: item.topic,
@@ -284,7 +299,10 @@ export default async function statusCmd(args) {
     console.log(`  Remote INSTR.:    ${remote.instructions_bytes} bytes, sha=${remote.instructions_sha256.slice(0, 12)}…`);
   }
   console.log(`  In sync:          ${inSync ? 'yes' : 'no'}`);
-  console.log(`  Last sync:        ${report.last_sync || 'never'}`);
+  // Push sync only exists for remote deploys; a local server serves this brain
+  // directly, so "never" there read as a fault that was not one.
+  const pushSync = deployMode !== 'local' || report.last_sync || report.targets.length;
+  console.log(`  Last sync:        ${report.last_sync || (pushSync ? 'never' : 'not used (local deploy serves this brain directly)')}`);
   console.log(`  Sync targets:     ${report.targets.length ? report.targets.join(', ') : '(none)'}`);
 
   if (clientProjections.length) {

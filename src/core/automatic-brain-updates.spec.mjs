@@ -36,6 +36,14 @@ describe('daemon automatic package maintenance',()=>{
     expect((await runAutomaticBrainUpdates({brainDir,update,compile,now:()=>10000001})).reason).toBe('throttled');
     expect(update).toHaveBeenCalledTimes(1);
   });
+  it('keeps peer dispatch out of the node\'s own failure count',async()=>{
+    const update=vi.fn().mockResolvedValue({versions:{'total-recall-brain':'3.40.2'},failed:0,results:[]});
+    const compile=vi.fn().mockResolvedValue({ok:true,results:[]});
+    const meshUpdate=vi.fn().mockResolvedValue({failed:2,results:[{status:'dispatched'},{status:'dispatched'}]});
+    const report=await runAutomaticBrainUpdates({brainDir:brain(),fleet:true,update,compile,meshUpdate,now:()=>10000000});
+    expect(report.local_failed).toBe(0);
+    expect(report.failed).toBe(2);
+  });
   it('checks on boot and by elapsed time with no tasks, never overlaps and stops',async()=>{
     vi.useFakeTimers();
     let release;
