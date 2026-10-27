@@ -166,6 +166,20 @@ describe('uniform brain updates', () => {
     expect(row.status).toBe('would_update');
   });
 
+  it('ignores devDependencies of a plugin copied into a shared plugin folder', async () => {
+    // Shared installs omit dev dependencies on purpose, so a devDependency there
+    // can never be "installed" and must not count as a failing consumer.
+    const pluginRoot = path.join(tmp, 'repo3', '.agent', 'skills', 'total-recall', 'plugins', 'marketing');
+    manifest(pluginRoot, { name: 'tr-plugin-marketing', devDependencies: { 'total-recall-brain': '3.39.1' } });
+    fs.writeFileSync(path.join(pluginRoot, 'plugin.json'), JSON.stringify({ id: 'marketing' }));
+    const source = manifest(path.join(tmp, 'repo3', 'tr-plugin-marketing'), { name: 'tr-plugin-marketing', devDependencies: { 'total-recall-brain': '3.39.1' } });
+    fs.writeFileSync(path.join(source, 'plugin.json'), JSON.stringify({ id: 'marketing' }));
+    const result = await run([path.join(tmp, 'repo3')], execWithInstall());
+    expect(result.results.find(r => r.root === pluginRoot)).toBeFalsy();
+    // The plugin's own checkout still maintains its dev toolchain.
+    expect(result.results.find(r => r.root === source)).toBeTruthy();
+  });
+
   it('still skips other dot directories such as .git', async () => {
     // Only .agent is exempt; walking every dot directory would descend into
     // .git and cost far more than it finds.

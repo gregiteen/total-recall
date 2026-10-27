@@ -33,4 +33,19 @@ describe('automatic global and mesh package updates',()=>{
   expect(exec.mock.calls.find(([node,cmd])=>node==='old' && cmd.includes('nohup'))[1]).toContain('--local-only');
   expect(exec.mock.calls.some(([node])=>node==='phone' || node==='self' || node==='offline')).toBe(false);
  });
+ it('judges a peer by its own maintenance, not by its view of other peers',async()=>{
+  const nodes=[{ip:'fleet',online:true,access:{ssh_user:'alice'}},{ip:'legacy',online:true,access:{ssh_user:'alice'}},{ip:'broken',online:true,access:{ssh_user:'alice'}}];
+  const reports={
+   // A peer whose only failures are its own pending dispatches to us is current.
+   fleet:{failed:2,local_failed:0,mesh:{failed:2},checkedAt:1000,versions},
+   // Reports written before local_failed existed fall back to subtracting mesh.
+   legacy:{failed:1,mesh:{failed:1},checkedAt:1000,versions},
+   broken:{failed:5,local_failed:3,mesh:{failed:2},checkedAt:1000,versions},
+  };
+  const exec=vi.fn(async(node,command)=>command.includes('nohup')?{success:true}:{success:true,stdout:JSON.stringify({last:reports[node]})});
+  const report=await updateMeshBrainPackages({version:versions['total-recall-brain'],versions,listNodes:()=>nodes,exec,now:()=>2000});
+  expect(report.results.map(row=>row.status)).toEqual(['verified','verified','dispatched']);
+  expect(report.results[2].error).toContain('3 local maintenance failure');
+  expect(report.failed).toBe(1);
+ });
 });
