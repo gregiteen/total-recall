@@ -152,6 +152,13 @@ export function auditProjectPluginCopies(projectRoot, { sharedDir = globalPlugin
     row.sourceVersion = row.sourceDir ? version(row.sourceDir) : null;
     row.sharedVersion = row.sharedDir ? version(row.sharedDir) : null;
     row.edited = row.sourceDir ? !sameTree(copyDir, row.sourceDir) : null;
+    // A copy declaring an older release than the shared install cannot be a deliberate local edit —
+    // it predates the shared plugin. It is a leftover from the release that vendored the defaults into
+    // every brain, and because discovery prefers a brain's own copy it SHADOWS the shared install and
+    // breaks the repository: a stale auth manifest fails validation, so every total-recall command in
+    // that repo dies with "Required plugin auth is missing or invalid". Same staleness rule the updater
+    // already applies when it refreshes a vendored copy.
+    row.stale = Boolean(row.version && row.sharedVersion && comparePackageVersions(row.version, row.sharedVersion) < 0);
     copies.push(row);
   }
   return { copies, count: copies.length, sourceDir };

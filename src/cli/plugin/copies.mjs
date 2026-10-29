@@ -17,8 +17,9 @@ export function pluginCopyRows(projectRoot = process.cwd(), { sharedDir = global
     root: projectRoot,
     sharedDir,
     count: audit.count,
-    removable: audit.copies.filter(copy => copy.edited === false).map(copy => copy.id),
-    edited: audit.copies.filter(copy => copy.edited === true).map(copy => copy.id),
+    removable: audit.copies.filter(copy => copy.edited === false || copy.stale === true).map(copy => copy.id),
+    edited: audit.copies.filter(copy => copy.edited === true && copy.stale !== true).map(copy => copy.id),
+    stale: audit.copies.filter(copy => copy.stale === true).map(copy => copy.id),
     unverified: audit.copies.filter(copy => copy.edited === null).map(copy => copy.id),
     copies: audit.copies
   };
@@ -58,11 +59,13 @@ export async function manageProjectPluginCopies(args = []) {
     return;
   }
   for (const copy of report.copies) {
-    const verdict = copy.edited === false ? 'identical to the shared install' : copy.edited === true ? 'DIFFERS from the shared install' : 'no shared install to compare';
+    const verdict = copy.stale === true ? 'STALE — older than the shared install; it shadows the shared plugin and must be removed'
+      : copy.edited === false ? 'identical to the shared install'
+      : copy.edited === true ? 'DIFFERS from the shared install' : 'no shared install to compare';
     console.log(`  ${copy.id} v${copy.version || '?'} (shared: v${copy.sharedVersion || '—'}) — ${verdict}`);
   }
-  console.log(`\n  ${report.removable.length} removable, ${report.edited.length} edited, ${report.unverified.length} unverified`);
+  console.log(`\n  ${report.removable.length} removable (${report.stale.length} stale), ${report.edited.length} edited, ${report.unverified.length} unverified`);
   if (report.removal) console.log(`  Removed: ${report.removal.removed.join(', ') || 'none'}${report.removal.failed.length ? `; failed: ${report.removal.failed.map(row => row.id).join(', ')}` : ''}`);
-  else if (report.removable.length) console.log('  Re-run with --apply to remove the identical copies.');
+  else if (report.removable.length) console.log('  Re-run with --apply to remove the removable copies.');
   console.log();
 }
