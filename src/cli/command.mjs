@@ -374,6 +374,10 @@ export default async function commandCmd(rawArgs = []) {
     
     // Wrap code in an exported run/default function for composable CLI execution
     const fileContent = `// Auto-generated custom CLI command: ${name}
+// CONTRACT — your code is inserted as the BODY of run(argv):
+//   * \`argv\` and \`args\` are already in scope (args = argv minus the command name).
+//   * Use \`await import('node:module')\`. Do NOT write import/export statements, and do NOT
+//     redeclare \`args\` — either fails with "Identifier 'args' has already been declared".
 ${headerTags(description, risk)}export async function run(argv = []) {
   const args = Array.isArray(argv) ? argv.slice(3) : [];
   ${code}
@@ -414,6 +418,10 @@ export default async function (args = []) {
     const keptDescription = description ?? existingTag(commandPath, 'description');
     const keptRisk = risk ?? existingTag(commandPath, 'risk');
     const fileContent = `// Auto-generated custom CLI command: ${name}
+// CONTRACT — your code is inserted as the BODY of run(argv):
+//   * \`argv\` and \`args\` are already in scope (args = argv minus the command name).
+//   * Use \`await import('node:module')\`. Do NOT write import/export statements, and do NOT
+//     redeclare \`args\` — either fails with "Identifier 'args' has already been declared".
 ${headerTags(keptDescription, keptRisk)}export async function run(argv = []) {
   const args = Array.isArray(argv) ? argv.slice(3) : [];
   ${code}
