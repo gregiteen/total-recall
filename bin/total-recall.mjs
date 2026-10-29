@@ -108,10 +108,16 @@ ${pluginsSection}
 async function main() {
   const args = process.argv.slice(2);
   const command = args[0];
-  // These names must not reappear through generic API or composed routing.
+  // `secret`/`secrets` are not core commands — credentials belong to the auth
+  // plugin. They must never resolve through generic API or composed routing, so
+  // they are rewritten to the owning namespace rather than looked up. This used
+  // to exit 1 with an explanation, which dead-ended every caller: the documented
+  // form, the shipped skill references and four repositories all used
+  // `total-recall secret get <KEY>`, and each one silently received nothing.
+  // Rewriting keeps the single owner and removes the trap.
   if (command === 'secret' || command === 'secrets') {
-    console.error('Credential commands belong to the auth plugin. Use total-recall auth secret --help.');
-    process.exit(1);
+    process.argv = [process.argv[0], process.argv[1], 'auth', 'secret', ...args.slice(1)];
+    return main();
   }
 
   if (!command || command === '--help' || command === '-h') {
