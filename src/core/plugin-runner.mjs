@@ -56,7 +56,12 @@ export function runPluginCommand(plugin, options = {}) {
   if (!pluginExecutionEnabled(plugin, { projectRoot: cwd }) && !['status', 'health', 'jobs', '--help', '-h', 'help'].includes(operation)) {
     return Promise.reject(new Error(`Plugin ${plugin.id} is inactive; run total-recall plugin on ${plugin.id}`));
   }
-  const declaredTimeout = plugin?.manifest?.cli?.subcommands?.find(item => item.name === operation)?.timeout_ms;
+  // Manifests declare this as `timeoutMs`; the runner only read `timeout_ms`, so every declared
+  // timeout was ignored and each command fell back to DEFAULT_TIMEOUT_MS (30s). That killed work
+  // that legitimately takes longer — `mesh nodes` and `tr-transcribe transcribe` (model load) both
+  // died at 30s while their manifests asked for far more. Accept both spellings.
+  const declaration = plugin?.manifest?.cli?.subcommands?.find(item => item.name === operation);
+  const declaredTimeout = declaration?.timeout_ms ?? declaration?.timeoutMs;
   const timeoutMs = requestedTimeoutMs ?? declaredTimeout ?? DEFAULT_TIMEOUT_MS;
   if (!Number.isInteger(timeoutMs) || timeoutMs < 1 || timeoutMs > 600000) return Promise.reject(new Error('Plugin timeout must be 1..600000 ms'));
   const handlerRel = plugin?.manifest?.cli?.handler;

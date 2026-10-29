@@ -163,6 +163,28 @@ export async function compileRegisteredProjects({ brains = listLocalBrains(), co
 }
 
 export default async function cli(args) {
+  // `--help` must never execute the command. This parsed flags and went straight to a rebuild, so
+  // `total-recall compile --help` (and rebuild) threw away the derived indexes and recompiled every
+  // brain instead of printing usage.
+  if (args.includes('--help') || args.includes('-h')) {
+    console.log(`
+  total-recall compile | rebuild — SSSS projection rebuild
+
+  Discards the derived indexes and rebuilds them deterministically from the canonical vault,
+  then recompiles instruction surfaces.
+
+    total-recall compile [--check] [--force] [--all] [--global|--project]
+
+    --check     Report drift between the vault and derived indexes; change nothing.
+    --force     Rebuild even when nothing is stale.
+    --all       Recompile every registered project brain as well.
+    --global    Target the global brain (~/.agent).
+    --project   Target this repository's brain (<cwd>/.agent).
+
+  A global compile is what \`remember --global\` runs, because global rules land in every project.
+`);
+    process.exit(0);
+  }
   const { layer, remainingArgs } = parseLayerFlag(args);
   const options = {
     check: remainingArgs.includes('--check'),
