@@ -222,6 +222,27 @@ function headerTags(description, risk) {
   return (description ? `// @description ${one(description)}\n` : '') + (risk ? `// @risk ${risk}\n` : '');
 }
 
+/**
+ * Build a custom command's file from author-supplied source.
+ *
+ * The source may be a BODY for run(argv) or a complete module. Blindly wrapping it failed two ways:
+ * a module produced "Unexpected identifier 'fs'", and a body that declared its own `args` produced
+ * "Identifier 'args' has already been declared". Detect the shape instead of assuming it, and declare
+ * `args` only when the body does not. The default export delegates so the body is written once.
+ */
+function buildCommandFile(name, description, risk, code) {
+  const source = String(code ?? '');
+  const header = `// Auto-generated custom CLI command: ${name}\n${headerTags(description, risk)}`;
+  if (/^\s*(?:import|export)\s/m.test(source)) {
+    return `${header}// Supplied as a complete module; used as written.\n${source}\n`;
+  }
+  const declaresArgs = /(?:^|\n)\s*(?:const|let|var)\s+args\b/.test(source);
+  const argsLine = declaresArgs ? '' : 'const args = Array.isArray(argv) ? argv.slice(3) : [];\n';
+  return `${header}// Your source is the BODY of run(argv). \`argv\` is in scope${declaresArgs ? '' : ', and so is `args` (argv minus the command name)'}.\n`
+    + "// Use `await import('node:module')`; write no import/export statements here.\n"
+    + `export async function run(argv = []) {\n${argsLine}${source}\n}\nexport default function (argv = []) {\n  return run(argv);\n}\n`;
+}
+
 function existingTag(file, key) {
   try { return fs.readFileSync(file, 'utf8').match(new RegExp(`^// @${key} (.+)$`, 'm'))?.[1] || undefined; } catch { return undefined; }
 }
@@ -373,19 +394,7 @@ export default async function commandCmd(rawArgs = []) {
     }
     
     // Wrap code in an exported run/default function for composable CLI execution
-    const fileContent = `// Auto-generated custom CLI command: ${name}
-// CONTRACT — your code is inserted as the BODY of run(argv):
-//   * \`argv\` and \`args\` are already in scope (args = argv minus the command name).
-//   * Use \`await import('node:module')\`. Do NOT write import/export statements, and do NOT
-//     redeclare \`args\` — either fails with "Identifier 'args' has already been declared".
-${headerTags(description, risk)}export async function run(argv = []) {
-  const args = Array.isArray(argv) ? argv.slice(3) : [];
-  ${code}
-}
-export default async function (args = []) {
-  ${code}
-}
-`;
+    const fileContent = buildCommandFile(name, description, risk, code);
 
     fs.writeFileSync(commandPath, fileContent, 'utf8');
     console.log(`\x1b[32m✔ Successfully created custom command: \x1b[1mnpx total-recall ${name}\x1b[0m`);
@@ -417,19 +426,7 @@ export default async function (args = []) {
     // Keep the declared description/risk unless the update replaces them.
     const keptDescription = description ?? existingTag(commandPath, 'description');
     const keptRisk = risk ?? existingTag(commandPath, 'risk');
-    const fileContent = `// Auto-generated custom CLI command: ${name}
-// CONTRACT — your code is inserted as the BODY of run(argv):
-//   * \`argv\` and \`args\` are already in scope (args = argv minus the command name).
-//   * Use \`await import('node:module')\`. Do NOT write import/export statements, and do NOT
-//     redeclare \`args\` — either fails with "Identifier 'args' has already been declared".
-${headerTags(keptDescription, keptRisk)}export async function run(argv = []) {
-  const args = Array.isArray(argv) ? argv.slice(3) : [];
-  ${code}
-}
-export default async function (args = []) {
-  ${code}
-}
-`;
+    const fileContent = buildCommandFile(name, keptDescription, keptRisk, code);
 
     fs.writeFileSync(commandPath, fileContent, 'utf8');
     console.log(`\x1b[32m✔ Successfully updated custom command: \x1b[1m${name}\x1b[0m`);
