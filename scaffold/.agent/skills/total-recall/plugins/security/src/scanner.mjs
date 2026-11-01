@@ -5,8 +5,12 @@ import path from 'node:path';
 export function scanSource(targetPath) {
   const root = fs.realpathSync(path.resolve(targetPath));
   const findings = [];
-  const skipped = new Set(['node_modules', '.git', 'dist', 'coverage', 'memory-vault', '.cache', '.venv', '__pycache__']);
+  // Generated brain data (indexes, sessions, logs) is not source; scanning it
+  // only hit the size limit and aborted the whole scan.
+  const skipped = new Set(['node_modules', '.git', 'dist', 'coverage', 'memory-vault', 'memory-derived', 'sessions', '.cache', '.venv', '__pycache__']);
+  const MAX_FILES = 20000, MAX_BYTES = 2097152;
   let count = 0;
+  let limited = false;
   function visit(file) {
     const stat = fs.lstatSync(file);
     if (stat.isSymbolicLink()) {
@@ -14,11 +18,21 @@ export function scanSource(targetPath) {
       return;
     }
     if (stat.isDirectory()) {
-      for (const name of fs.readdirSync(file)) if (!skipped.has(name)) visit(path.join(file, name));
+      for (const name of fs.readdirSync(file)) { if (limited) return; if (!skipped.has(name)) visit(path.join(file, name)); }
       return;
     }
     if (!stat.isFile() || !/\.(?:[cm]?js|tsx?|py|sh|bash|ps1|json|env|ya?ml)$|(?:^|\/)\.env(?:\.|$)/.test(file)) return;
-    if (++count > 20000 || stat.size > 2097152) throw new Error('Scan coverage limit exceeded; narrow the target');
+    // Report incomplete coverage as a finding instead of aborting: an aborted
+    // scan returned nothing, which callers could not tell apart from a failure.
+    if (stat.size > MAX_BYTES) {
+      findings.push({ file: path.relative(root, file), line: 0, rule: 'oversized-file-unscanned', severity: 'HIGH', detail: `Larger than ${MAX_BYTES} bytes; not inspected, coverage incomplete` });
+      return;
+    }
+    if (++count > MAX_FILES) {
+      limited = true;
+      findings.push({ file: '.', line: 0, rule: 'coverage-limit-reached', severity: 'HIGH', detail: `Stopped after ${MAX_FILES} files; narrow the target, coverage incomplete` });
+      return;
+    }
     const testFile = /(?:^|\/)(?:test|tests|fixtures)(?:\/|$)|\.(?:test|spec)\./.test(file);
     fs.readFileSync(file, 'utf8').split('\n').forEach((line, index) => {
       const rules = [];

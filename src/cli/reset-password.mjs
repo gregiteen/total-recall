@@ -54,9 +54,10 @@ export default async function resetPassword(args) {
     console.log(`
   total-recall reset-password
 
-  Resets the dashboard admin password in ~/.agent/skills/total-recall/config/security.yml.
+  Resets the dashboard admin password in the encrypted auth store (the only place the server
+  reads it; any password_hash left in config/security.yml is ignored).
   Prompts for the new password; it is never taken as an argument.
-  Sets force_password_reset to true so you will be prompted to change it upon first login.
+  Existing sessions are invalidated. Setting the well-known default forces a change on first login.
 
   For automation, pipe it instead:  echo "\$NEW_PW" | total-recall reset-password
 `);

@@ -1,3 +1,4 @@
+import { maintainPortableSkills } from './portable-skills-maintenance.mjs';
 /** The existing TR daemon maintains both published brain packages, not only TR. */
 import fs from 'node:fs';
 import path from 'node:path';
@@ -35,7 +36,7 @@ export function startAutomaticBrainUpdates({brainDir,intervalMs=60*60*1000,run=r
   return {tick,stop(){stopped=true;clearInterval(timer);}};
 }
 
-export async function runAutomaticBrainUpdates({brainDir,fleet=false,force=false,skipThrottle=false,intervalMs=60*60*1000,update=updateAllBrains,compile=maintainCliSurfaces,globalUpdate=updateGlobalBrainPackages,meshUpdate=updateMeshBrainPackages,sourceUpdate=updateSourceBrainPackages,pluginUpdate=updateInstalledPlugins,now=Date.now}={}) {
+export async function runAutomaticBrainUpdates({brainDir,fleet=false,force=false,skipThrottle=false,intervalMs=60*60*1000,update=updateAllBrains,compile=maintainCliSurfaces,globalUpdate=updateGlobalBrainPackages,meshUpdate=updateMeshBrainPackages,sourceUpdate=updateSourceBrainPackages,pluginUpdate=updateInstalledPlugins,skillMaintenance=maintainPortableSkills,now=Date.now}={}) {
   if(!force && !isPackageAutoUpdateEnabled())return {skipped:true,reason:'disabled',results:[]};
   const file=path.join(brainDir,'memory-derived/automatic-brain-updates.json');
   let saved;try{saved=JSON.parse(fs.readFileSync(file,'utf8'));}catch{}
@@ -61,12 +62,13 @@ export async function runAutomaticBrainUpdates({brainDir,fleet=false,force=false
       const plugins=await pluginUpdate({roots:[path.resolve(brainDir,'../../..')]});
       const mesh=fleet && summary.versions?await meshUpdate({versions:summary.versions,version:summary.versions['total-recall-brain']}):{failed:0,results:[],scope:'local-only'};
       const changed=summary.updated>0 || plugins.updated>0 || global.results.some(row=>row.status==='updated') || sources.results.some(row=>row.status==='updated') || JSON.stringify(saved?.versions)!==JSON.stringify(summary.versions);
-      const surfaces=await compile({brainDir,force:changed});
+      const skills=await skillMaintenance({brainDir});
+      const surfaces=await compile({brainDir,force:changed || skills.updated > 0});
       // local_failed is this node's own maintenance. Peers judge a node by it, not by
       // `failed`, which also counts the node's view of its peers: judging by that made
       // every fleet pass mark every peer failed forever, each because the others had.
-      const local_failed=(summary.failed || 0)+global.failed+sources.failed+plugins.failed+(surfaces.ok?0:surfaces.results.filter(row=>row.status==='failed').length);
-      report={...summary,global,sources,plugins,mesh,surfaces,local_failed,failed:local_failed+mesh.failed,checkedAt:now()};
+      const local_failed=(summary.failed || 0)+global.failed+sources.failed+plugins.failed+(skills.failed || 0)+(surfaces.ok?0:surfaces.results.filter(row=>row.status==='failed').length);
+      report={...summary,global,sources,plugins,mesh,skills,surfaces,local_failed,failed:local_failed+mesh.failed,checkedAt:now()};
     }catch(error){report={failed:1,error:error.message,checkedAt:now(),results:[]};}
     const temporary=`${file}.${process.pid}.tmp`;fs.writeFileSync(temporary,JSON.stringify(report,null,2));fs.renameSync(temporary,file);
     return report;

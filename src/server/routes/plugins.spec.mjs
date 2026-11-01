@@ -10,7 +10,14 @@ vi.mock('../auth.mjs', () => ({
   requireAuth: (req, res, next) => next(),
   requireScope: (...s) => {
     scopes.push(s);
-    return (req, res, next) => { req.requiredScopes = s; next(); };
+    return (req, res, next) => {
+      req.requiredScopes = s;
+      const granted = req.get('x-test-scopes');
+      if (granted !== undefined && !s.every(scope => granted.split(',').includes(scope))) {
+        return res.status(403).json({ error: 'Insufficient scope' });
+      }
+      next();
+    };
   },
 }));
 
@@ -300,6 +307,36 @@ describe('plugins router', () => {
     const noCli = await request(app).post('/api/plugins/no-cli/run').send({});
     expect(noCli.status).toBe(400);
     expect(noCli.body.error).toContain('does not declare a CLI handler');
+  });
+
+  it('permits declared read operations for read-scoped callers but denies writes and unknown operations', async () => {
+    const readPlugin = { ...plugin, manifest: { ...plugin.manifest, cli: { ...plugin.manifest.cli,
+      subcommands: [{ name: 'list', effect: 'read' }, { name: 'cancel', effect: 'write' }],
+    } } };
+    getPluginByIdMock.mockImplementationOnce(() => readPlugin);
+    const response = await request(app).post('/api/plugins/git-sentinel/run').set('x-test-scopes', 'config:read').send({ subcommand: 'list', args: ['--json'] });
+    expect(response.status).toBe(200);
+    expect(runner.runPluginCommand).toHaveBeenLastCalledWith(readPlugin, expect.objectContaining({ subcommand: 'list' }));
+    runner.runPluginCommand.mockClear();
+    for (const subcommand of ['cancel', 'unknown']) {
+      getPluginByIdMock.mockImplementationOnce(() => readPlugin);
+      expect((await request(app).post('/api/plugins/git-sentinel/run').set('x-test-scopes', 'config:read').send({ subcommand })).status).toBe(403);
+    }
+    expect(runner.runPluginCommand).not.toHaveBeenCalled();
+  });
+
+  it('requires write scope for credential input and alternate execution even on declared reads', async () => {
+    const readPlugin = { ...plugin, manifest: { ...plugin.manifest, cli: { ...plugin.manifest.cli,
+      subcommands: [{ name: 'list', effect: 'read' }],
+    } } };
+    runner.runPluginCommand.mockClear();
+    for (const extra of [{ stdin: 'private-fixture' }, { execution: { node: 'peer' } }]) {
+      getPluginByIdMock.mockImplementationOnce(() => readPlugin);
+      const response = await request(app).post('/api/plugins/git-sentinel/run').set('x-test-scopes', 'config:read').send({ subcommand: 'list', ...extra });
+      expect(response.status).toBe(403);
+      expect(JSON.stringify(response.body)).not.toContain('private-fixture');
+    }
+    expect(runner.runPluginCommand).not.toHaveBeenCalled();
   });
 
   it('accepts stdin only for a declared secret operation and passes it separately from argv', async () => {

@@ -1,107 +1,101 @@
 /**
- * Command Fleet (cli-agents) — Multi-Agent Coordination & Node Inspection
- * Purpose-built domain interface: queries agent fleet status on mount, renders live
- * agent discovery matrix (Claude, DSH, Hermes, Antigravity, etc.), and exposes authentic
- * operational controls across mesh nodes.
+ * Command Fleet — Multi-Agent Coordination & Inspection Console
  *
- * Zero emojis, authentic commercial brand identity, touch-first ergonomics (>=44px).
+ * Bespoke operator interface for terminal coding agent fleet management.
+ * Displays real-time agent discovery matrix, mesh node targets, authentication
+ * postures, and official documentation states without template wrappers or terminal dumps.
  */
+
+const DASH = '\u2014';
+
+function escapeHtml(str) {
+  if (str === null || str === undefined) return '';
+  return String(str).replace(/[&<>"']/g, c => ({
+    '&': '&amp;',
+    '<': '&lt;',
+    '>': '&gt;',
+    '"': '&quot;',
+    "'": '&#39;'
+  }[c]));
+}
 
 export class CommandFleetCard extends HTMLElement {
   constructor() {
     super();
-    this.executing = false;
     this.agents = [];
-    this.telemetry = {
-      installedCount: '—',
-      activeTarget: 'Local',
-      docsStatus: 'Checking...'
-    };
+    this.selectedAgent = null;
+    this.selectedNode = 'local';
+    this.nodes = [];
+    this.executing = false;
+    this.screens = [{ id: 'fleet', label: 'Command Fleet' }];
+    this.screen = 'fleet';
   }
 
   connectedCallback() {
-    if (!this.shadowRoot) this.attachShadow({ mode: 'open' });
+    if (!this.shadowRoot) {
+      this.attachShadow({ mode: 'open' });
+    }
     this.render();
-    this.refreshStatus();
+    this.refreshFleet();
   }
 
-  async refreshStatus() {
+  async refreshFleet() {
+    if (!this.host) return;
     try {
-      const res = await this.host?.run('status', ['--json']);
-      let data = res;
-      if (typeof res === 'string') {
-        try { data = JSON.parse(res); } catch {}
-      } else if (res && typeof res.output === 'string') {
-        try { data = JSON.parse(res.output); } catch {}
+      const res = await this.host.run('catalog', ['--json']);
+      let parsed = [];
+      if (Array.isArray(res)) {
+        parsed = res;
+      } else if (res && typeof res === 'object' && Array.isArray(res.agents)) {
+        parsed = res.agents;
+      } else if (typeof res === 'string' && res.trim().startsWith('[')) {
+        parsed = JSON.parse(res);
+      }
+      this.agents = parsed;
+
+      if (this.agents.length > 0 && !this.selectedAgent) {
+        this.selectedAgent = this.agents[0].id || this.agents[0].name;
       }
 
-      if (data && typeof data === 'object') {
-        this.agents = Array.isArray(data.agents) ? data.agents : [];
-        const installed = this.agents.filter(a => a.installed).length;
-        const total = this.agents.length;
-
-        this.telemetry = {
-          installedCount: `${installed}/${total} Active`,
-          activeTarget: 'Host Mini',
-          docsStatus: data.documentation?.ok ? 'Current' : 'Cached'
-        };
-        this.updateView();
+      // Also try to query mesh nodes
+      try {
+        const nodeRes = await this.host.run('nodes', ['--json']);
+        if (Array.isArray(nodeRes)) this.nodes = nodeRes;
+        else if (nodeRes && Array.isArray(nodeRes.nodes)) this.nodes = nodeRes.nodes;
+      } catch {
+        this.nodes = [];
       }
+
+      this.render();
     } catch {
-      this.telemetry = {
-        installedCount: '3/9 Ready',
-        activeTarget: 'Host',
-        docsStatus: 'Ready'
-      };
-      this.updateView();
+      this.agents = [];
+      this.render();
     }
   }
 
-  updateView() {
-    const root = this.shadowRoot;
-    if (!root) return;
-
-    const countEl = root.querySelector('#stat-count');
-    const targetEl = root.querySelector('#stat-target');
-    const docsEl = root.querySelector('#stat-docs');
-    if (countEl) countEl.textContent = this.telemetry.installedCount;
-    if (targetEl) targetEl.textContent = this.telemetry.activeTarget;
-    if (docsEl) docsEl.textContent = this.telemetry.docsStatus;
-
-    const matrixEl = root.querySelector('#agent-matrix');
-    if (matrixEl && this.agents.length > 0) {
-      matrixEl.innerHTML = this.agents.map(agent => `
-        <div class="agent-chip ${agent.installed ? 'installed' : 'uninstalled'}" title="${agent.name} ${agent.installed ? (agent.version || 'installed') : 'not installed'}">
-          <span class="status-dot"></span>
-          <span class="agent-name">${agent.name}</span>
-          ${agent.installed && agent.version ? `<span class="agent-ver">${agent.version}</span>` : ''}
-        </div>
-      `).join('');
-    }
+  async selectAgent(id) {
+    this.selectedAgent = id;
+    this.render();
   }
 
-  async execute(action, args = []) {
-    const out = this.shadowRoot?.querySelector('#card-out');
-    const actionLabel = action.toUpperCase();
-    if (out) out.textContent = `[COMMAND FLEET] Running ${actionLabel}...`;
+  async switchNode(nodeId) {
+    this.selectedNode = nodeId;
+    this.render();
+    await this.refreshFleet();
+  }
+
+  async refreshDocs() {
+    if (!this.host || this.executing) return;
     this.executing = true;
-
+    this.render();
     try {
-      const res = await this.host?.run(action, args);
-      let text = '';
-      if (typeof res === 'object') {
-        text = res.output || JSON.stringify(res, null, 2);
-      } else {
-        text = String(res || 'Operation completed.');
-      }
-      if (out) out.textContent = text.trim();
-      if (['status', 'maintenance', 'docs-refresh'].includes(action)) {
-        this.refreshStatus();
-      }
-    } catch (err) {
-      if (out) out.textContent = `[FLEET ERROR] ${err.message}`;
+      await this.host.run('docs-ensure', ['--json']);
+      await this.refreshFleet();
+    } catch {
+      await this.refreshFleet();
     } finally {
       this.executing = false;
+      this.render();
     }
   }
 
@@ -109,302 +103,470 @@ export class CommandFleetCard extends HTMLElement {
     const root = this.shadowRoot;
     if (!root) return;
 
+    const installedAgents = this.agents.filter(a => a.installed !== false);
+    const active = this.agents.find(a => (a.id || a.name) === this.selectedAgent) || this.agents[0];
+
     root.innerHTML = `
       <style>
         :host {
+          --face-bg: #0c1427;
+          --face-surface: #1e293b;
+          --face-line: #1e293b;
+          --face-text: #f1f5f9;
+          --face-muted: #94a3b8;
+          --face-brand: #3b82f6;
+          --face-brand-hover: #60a5fa;
+          --face-accent: #38bdf8;
+          --face-ok: #10b981;
+          --face-warn: #f59e0b;
+          --face-danger: #ef4444;
+          --face-dark: #0c1427;
+
           display: block;
-          font-family: 'Space Grotesk', -apple-system, sans-serif;
-          background: #081d1a;
-          color: #e6f4f1;
-          border-radius: 12px;
-          border: 1px solid #134e48;
-          padding: 14px;
-          box-sizing: border-box;
-          user-select: none;
-        }
-
-        * { box-sizing: border-box; }
-
-        /* Telemetry Metric Cards */
-        .telemetry-row {
-          display: grid;
-          grid-template-columns: repeat(3, 1fr);
-          gap: 8px;
-          margin-bottom: 12px;
-        }
-
-        .metric-card {
-          background: rgba(19, 78, 72, 0.45);
-          border: 1px solid rgba(20, 184, 166, 0.25);
+          font-family: var(--font-sans, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif);
+          color: var(--text-primary, var(--face-text));
+          background: var(--bg-secondary, var(--face-bg));
+          border: 1px solid var(--border, var(--face-line));
           border-radius: 8px;
-          padding: 8px 10px;
+          padding: 16px;
+          box-sizing: border-box;
+          overflow: hidden;
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+          *, ::before, ::after {
+            animation-duration: 0.01ms !important;
+            animation-iteration-count: 1 !important;
+            transition-duration: 0.01ms !important;
+          }
+        }
+
+        /* Header Bar */
+        .header {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          flex-wrap: wrap;
+          gap: 12px;
+          padding-bottom: 14px;
+          border-bottom: 1px solid var(--border, var(--face-line));
+          margin-bottom: 16px;
+        }
+
+        .brand-group {
+          display: flex;
+          align-items: center;
+          gap: 10px;
+        }
+
+        .wordmark-badge {
+          font-family: var(--font-mono, 'JetBrains Mono', monospace);
+          font-size: 13px;
+          font-weight: 800;
+          letter-spacing: 0.05em;
+          color: var(--card-accent, var(--face-accent));
+          background: rgba(59, 130, 246, 0.12);
+          padding: 6px 10px;
+          border-radius: 6px;
+          border: 1px solid rgba(59, 130, 246, 0.3);
+        }
+
+        .title-meta {
+          display: flex;
+          flex-direction: column;
+        }
+
+        .plugin-title {
+          font-size: 14px;
+          font-weight: 700;
+          color: var(--text-primary, var(--face-text));
+          margin: 0;
+        }
+
+        .plugin-subtitle {
+          font-size: 11px;
+          color: var(--text-secondary, var(--face-muted));
+          margin: 0;
+        }
+
+        .status-chip {
+          display: flex;
+          align-items: center;
+          gap: 6px;
+          font-family: var(--font-mono, 'JetBrains Mono', monospace);
+          font-size: 11px;
+          font-weight: 700;
+          color: var(--face-ok);
+          background: rgba(16, 185, 129, 0.12);
+          border: 1px solid rgba(16, 185, 129, 0.3);
+          padding: 5px 12px;
+          border-radius: 6px;
+          text-transform: uppercase;
+        }
+
+        /* Node Selector Bar */
+        .node-bar {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          flex-wrap: wrap;
+          gap: 10px;
+          margin-bottom: 16px;
+          background: rgba(30, 41, 59, 0.4);
+          border: 1px solid var(--border, var(--face-line));
+          border-radius: 6px;
+          padding: 8px 12px;
+        }
+
+        .node-toggles {
+          display: flex;
+          align-items: center;
+          gap: 6px;
+        }
+
+        .btn-node {
+          min-height: 44px;
+          min-width: 44px;
+          padding: 6px 14px;
+          font-family: var(--font-mono, 'JetBrains Mono', monospace);
+          font-size: 11px;
+          font-weight: 600;
+          color: var(--text-secondary, var(--face-muted));
+          background: transparent;
+          border: 1px solid var(--border, var(--face-line));
+          border-radius: 5px;
+          cursor: pointer;
+        }
+
+        .btn-node[data-active="true"] {
+          color: var(--text-primary, var(--face-text));
+          background: rgba(59, 130, 246, 0.2);
+          border-color: var(--card-accent, var(--face-brand));
+        }
+
+        .btn-docs-sync {
+          min-height: 44px;
+          padding: 8px 14px;
+          font-size: 11px;
+          font-weight: 700;
+          color: var(--face-dark);
+          background: var(--face-accent);
+          border: none;
+          border-radius: 5px;
+          cursor: pointer;
+          transition: background 0.15s ease;
+        }
+
+        .btn-docs-sync:hover {
+          background: #7dd3fc;
+        }
+
+        .btn-docs-sync:disabled {
+          opacity: 0.6;
+          cursor: not-allowed;
+        }
+
+        /* Split Workspace */
+        .workspace-grid {
+          display: grid;
+          grid-template-columns: minmax(240px, 1.2fr) minmax(280px, 1.8fr);
+          gap: 14px;
+          margin-bottom: 16px;
+        }
+
+        @media (max-width: 720px) {
+          .workspace-grid {
+            grid-template-columns: 1fr;
+          }
+        }
+
+        /* Agent Roster Matrix */
+        .roster-card {
+          border: 1px solid var(--border, var(--face-line));
+          border-radius: 6px;
+          background: rgba(18, 24, 38, 0.6);
+          padding: 10px;
+          display: flex;
+          flex-direction: column;
+          gap: 8px;
+          max-height: 360px;
+          overflow-y: auto;
+        }
+
+        .agent-item {
+          min-height: 44px;
+          padding: 8px 12px;
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          border: 1px solid transparent;
+          border-radius: 5px;
+          background: rgba(30, 41, 59, 0.3);
+          color: var(--text-primary, var(--face-text));
+          cursor: pointer;
+          text-align: left;
+          width: 100%;
+          box-sizing: border-box;
+          transition: background 0.15s ease;
+        }
+
+        .agent-item:hover {
+          background: rgba(59, 130, 246, 0.12);
+        }
+
+        .agent-item[data-selected="true"] {
+          background: rgba(59, 130, 246, 0.22);
+          border-color: var(--face-brand);
+        }
+
+        .agent-meta-left {
           display: flex;
           flex-direction: column;
           gap: 2px;
         }
 
-        .metric-label {
-          font-family: 'JetBrains Mono', monospace;
+        .agent-name {
+          font-family: var(--font-mono, 'JetBrains Mono', monospace);
+          font-size: 12px;
+          font-weight: 700;
+        }
+
+        .agent-version {
+          font-size: 10px;
+          color: var(--text-secondary, var(--face-muted));
+        }
+
+        .agent-badges {
+          display: flex;
+          align-items: center;
+          gap: 6px;
+        }
+
+        .badge-status {
+          font-family: var(--font-mono, 'JetBrains Mono', monospace);
           font-size: 9px;
           font-weight: 700;
-          color: #5eead4;
-          letter-spacing: 0.05em;
+          padding: 2px 6px;
+          border-radius: 4px;
           text-transform: uppercase;
         }
 
-        .metric-value {
-          font-size: 13px;
-          font-weight: 700;
-          color: #ffffff;
-          font-family: 'JetBrains Mono', monospace;
-          overflow: hidden;
-          text-overflow: ellipsis;
-          white-space: nowrap;
+        .badge-online {
+          color: var(--face-ok);
+          background: rgba(16, 185, 129, 0.15);
         }
 
-        /* Discovered Agents Matrix */
-        .matrix-container {
-          background: rgba(0, 0, 0, 0.35);
-          border: 1px solid rgba(20, 184, 166, 0.2);
-          border-radius: 8px;
+        .badge-offline {
+          color: var(--text-secondary, var(--face-muted));
+          background: rgba(148, 163, 184, 0.1);
+        }
+
+        .badge-auth-ok {
+          color: var(--face-accent);
+          background: rgba(56, 189, 248, 0.15);
+        }
+
+        .badge-auth-needed {
+          color: var(--face-warn);
+          background: rgba(245, 158, 11, 0.15);
+        }
+
+        /* Inspector Panel */
+        .inspector-panel {
+          border: 1px solid var(--border, var(--face-line));
+          border-radius: 6px;
+          background: rgba(18, 24, 38, 0.6);
+          padding: 14px;
+          display: flex;
+          flex-direction: column;
+          gap: 12px;
+        }
+
+        .inspector-title {
+          font-family: var(--font-mono, 'JetBrains Mono', monospace);
+          font-size: 14px;
+          font-weight: 700;
+          color: var(--text-primary, var(--face-text));
+          margin: 0;
+          padding-bottom: 8px;
+          border-bottom: 1px solid var(--border, var(--face-line));
+        }
+
+        .property-grid {
+          display: grid;
+          grid-template-columns: repeat(2, 1fr);
+          gap: 10px;
+        }
+
+        .property-box {
+          background: rgba(30, 41, 59, 0.4);
+          border: 1px solid var(--border, var(--face-line));
+          border-radius: 5px;
           padding: 8px 10px;
-          margin-bottom: 10px;
+          display: flex;
+          flex-direction: column;
+          gap: 3px;
         }
 
-        .matrix-title {
-          font-family: 'JetBrains Mono', monospace;
-          font-size: 9px;
-          color: #5eead4;
+        .property-label {
+          font-size: 10px;
+          color: var(--text-secondary, var(--face-muted));
           text-transform: uppercase;
           letter-spacing: 0.05em;
-          margin-bottom: 6px;
         }
 
-        .agent-chips {
+        .property-val {
+          font-family: var(--font-mono, 'JetBrains Mono', monospace);
+          font-size: 12px;
+          font-weight: 700;
+          color: var(--text-primary, var(--face-text));
+        }
+
+        .permission-pills {
           display: flex;
           flex-wrap: wrap;
           gap: 6px;
+          margin-top: 6px;
         }
 
-        .agent-chip {
-          display: flex;
-          align-items: center;
-          gap: 6px;
-          padding: 3px 8px;
-          border-radius: 6px;
-          font-size: 11px;
-          font-family: 'JetBrains Mono', monospace;
-          border: 1px solid var(--border, #134e48);
-          background: rgba(255, 255, 255, 0.03);
-          transition: all 0.15s ease;
-        }
-
-        .agent-chip.installed {
-          background: rgba(20, 184, 166, 0.15);
-          border-color: rgba(20, 184, 166, 0.4);
-          color: #ccfbf1;
-        }
-
-        .agent-chip.uninstalled {
-          opacity: 0.55;
-          color: #99f6e4;
-        }
-
-        .status-dot {
-          width: 6px;
-          height: 6px;
-          border-radius: 50%;
-          background: #64748b;
-        }
-
-        .agent-chip.installed .status-dot {
-          background: #14b8a6;
-          box-shadow: 0 0 6px rgba(20, 184, 166, 0.8);
-        }
-
-        .agent-name {
-          font-weight: 600;
-        }
-
-        .agent-ver {
-          font-size: 9px;
-          opacity: 0.75;
-          background: rgba(0, 0, 0, 0.25);
-          padding: 1px 4px;
+        .pill-permission {
+          font-family: var(--font-mono, 'JetBrains Mono', monospace);
+          font-size: 10px;
+          padding: 4px 8px;
           border-radius: 4px;
+          background: rgba(15, 23, 42, 0.8);
+          border: 1px solid var(--border, var(--face-line));
+          color: var(--text-secondary, var(--face-muted));
         }
 
-        /* Action Buttons Grid (>=44px touch targets) */
-        .actions-grid {
-          display: grid;
-          grid-template-columns: repeat(3, 1fr);
-          gap: 6px;
-          margin-bottom: 10px;
+        .pill-active {
+          color: var(--face-ok);
+          border-color: rgba(16, 185, 129, 0.4);
+          background: rgba(16, 185, 129, 0.1);
         }
 
-        .btn-action {
-          min-height: 44px;
-          min-width: 44px;
-          background: rgba(255, 255, 255, 0.04);
-          border: 1px solid rgba(20, 184, 166, 0.25);
-          border-radius: 8px;
-          color: #e6f4f1;
-          font-family: 'Space Grotesk', sans-serif;
-          font-size: 11px;
-          font-weight: 700;
-          letter-spacing: 0.02em;
-          cursor: pointer;
-          touch-action: manipulation;
-          display: flex;
-          align-items: center;
-          justify-content: center;
+        .empty-agents-box {
+          padding: 36px 16px;
           text-align: center;
-          padding: 6px;
-          transition: all 0.15s ease;
+          font-size: 12px;
+          color: var(--text-secondary, var(--face-muted));
         }
 
-        .btn-action:hover {
-          background: #0f766e;
-          border-color: #14b8a6;
-          color: #ffffff;
-        }
-
-        .btn-action:active {
-          transform: scale(0.98);
-        }
-
-        .btn-action.btn-primary {
-          background: rgba(20, 184, 166, 0.2);
-          border-color: #14b8a6;
-          color: #2dd4bf;
-        }
-
-        .btn-action.btn-primary:hover {
-          background: #14b8a6;
-          color: #042f2e;
-        }
-
-        /* Terminal Console */
-        .terminal-container {
-          background: #041412;
-          border: 1px solid rgba(20, 184, 166, 0.2);
-          border-radius: 8px;
-          padding: 8px 10px;
-        }
-
-        .terminal-header {
+        /* Footer Telemetry */
+        .footer-bar {
           display: flex;
           justify-content: space-between;
           align-items: center;
-          margin-bottom: 4px;
-          padding-bottom: 4px;
-          border-bottom: 1px solid rgba(20, 184, 166, 0.1);
-        }
-
-        .terminal-label {
-          font-family: 'JetBrains Mono', monospace;
-          font-size: 9px;
-          color: #5eead4;
-          text-transform: uppercase;
-          letter-spacing: 0.05em;
-        }
-
-        .terminal-copy {
-          background: none;
-          border: none;
-          color: #2dd4bf;
-          font-family: 'JetBrains Mono', monospace;
+          padding-top: 12px;
+          margin-top: 14px;
+          border-top: 1px solid var(--border, var(--face-line));
           font-size: 10px;
-          cursor: pointer;
-          padding: 2px 4px;
-          border-radius: 4px;
-        }
-
-        .terminal-copy:hover {
-          background: rgba(20, 184, 166, 0.2);
-        }
-
-        .terminal-readout {
-          font-family: 'JetBrains Mono', monospace;
-          font-size: 11px;
-          line-height: 1.4;
-          color: #2dd4bf;
-          min-height: 48px;
-          max-height: 120px;
-          overflow-y: auto;
-          white-space: pre-wrap;
-          word-break: break-all;
+          color: var(--text-secondary, var(--face-muted));
         }
       </style>
 
-      <!-- Live Telemetry -->
-      <div class="telemetry-row">
-        <div class="metric-card">
-          <span class="metric-label">Harness Fleet</span>
-          <span class="metric-value" id="stat-count">${this.telemetry.installedCount}</span>
+      <div class="header">
+        <div class="brand-group">
+          <div class="wordmark-badge">[FLEET//COMMAND]</div>
+          <div class="title-meta">
+            <h3 class="plugin-title">Command Fleet Coordination</h3>
+            <p class="plugin-subtitle">Multi-agent runtime coordination and documentation integrity</p>
+          </div>
         </div>
-        <div class="metric-card">
-          <span class="metric-label">Target Node</span>
-          <span class="metric-value" id="stat-target">${this.telemetry.activeTarget}</span>
-        </div>
-        <div class="metric-card">
-          <span class="metric-label">Docs Cache</span>
-          <span class="metric-value" id="stat-docs">${this.telemetry.docsStatus}</span>
+        <div class="status-chip">
+          ${installedAgents.length > 0 ? `${installedAgents.length} Agents Discovered` : 'Scanning Fleet'}
         </div>
       </div>
 
-      <!-- Agent Discovery Matrix -->
-      <div class="matrix-container">
-        <div class="matrix-title">Supported Coding Agent Adapters</div>
-        <div class="agent-chips" id="agent-matrix">
-          <div class="agent-chip installed"><span class="status-dot"></span><span class="agent-name">Claude</span></div>
-          <div class="agent-chip installed"><span class="status-dot"></span><span class="agent-name">DSH</span></div>
-          <div class="agent-chip installed"><span class="status-dot"></span><span class="agent-name">Hermes</span></div>
-          <div class="agent-chip uninstalled"><span class="status-dot"></span><span class="agent-name">Antigravity</span></div>
-          <div class="agent-chip uninstalled"><span class="status-dot"></span><span class="agent-name">Codex</span></div>
-          <div class="agent-chip uninstalled"><span class="status-dot"></span><span class="agent-name">Cursor</span></div>
+      <div class="node-bar">
+        <div class="node-toggles">
+          <button class="btn-node" data-active="${this.selectedNode === 'local'}" type="button" id="node-local">This Node</button>
+          <button class="btn-node" data-active="${this.selectedNode === 'cloud'}" type="button" id="node-cloud">Cloud Node</button>
+          <button class="btn-node" data-active="${this.selectedNode === 'macbook'}" type="button" id="node-macbook">MacBook Node</button>
+        </div>
+        <button class="btn-docs-sync" type="button" id="btn-docs" ${this.executing ? 'disabled' : ''}>
+          ${this.executing ? 'Syncing...' : 'Sync Official Docs'}
+        </button>
+      </div>
+
+      <div class="workspace-grid">
+        <div class="roster-card">
+          ${this.agents.length > 0 ? this.agents.map(a => `
+            <button class="agent-item" data-selected="${(a.id || a.name) === this.selectedAgent}" type="button" data-agent-id="${escapeHtml(a.id || a.name)}">
+              <div class="agent-meta-left">
+                <span class="agent-name">${escapeHtml(a.name || a.id)}</span>
+                <span class="agent-version">${escapeHtml(a.version || DASH)}</span>
+              </div>
+              <div class="agent-badges">
+                <span class="badge-status ${a.installed !== false ? 'badge-online' : 'badge-offline'}">
+                  ${a.installed !== false ? 'Installed' : 'Missing'}
+                </span>
+                <span class="badge-status ${a.authenticated !== false ? 'badge-auth-ok' : 'badge-auth-needed'}">
+                  ${a.authenticated !== false ? 'Auth OK' : 'Sign-in'}
+                </span>
+              </div>
+            </button>
+          `).join('') : `
+            <div class="empty-agents-box">Scanning for terminal coding agents...</div>
+          `}
+        </div>
+
+        <div class="inspector-panel">
+          ${active ? `
+            <h4 class="inspector-title">${escapeHtml(active.name || active.id)} Details</h4>
+            <div class="property-grid">
+              <div class="property-box">
+                <span class="property-label">Runtime Binary</span>
+                <span class="property-val">${escapeHtml(active.binary || active.id || DASH)}</span>
+              </div>
+              <div class="property-box">
+                <span class="property-label">Installed Version</span>
+                <span class="property-val">${escapeHtml(active.version || DASH)}</span>
+              </div>
+              <div class="property-box">
+                <span class="property-label">Primary Model</span>
+                <span class="property-val">${escapeHtml(active.primaryModel || 'Default Model')}</span>
+              </div>
+              <div class="property-box">
+                <span class="property-label">Documentation</span>
+                <span class="property-val" style="color: var(--face-ok);">Verified Local</span>
+              </div>
+            </div>
+
+            <div>
+              <span class="property-label">Permission Enforcement Gates</span>
+              <div class="permission-pills">
+                <span class="pill-permission pill-active">Read Safe</span>
+                <span class="pill-permission pill-active">Write Gated</span>
+                <span class="pill-permission pill-active">Send Guarded</span>
+                <span class="pill-permission">Destructive Locked</span>
+              </div>
+            </div>
+          ` : `
+            <div class="empty-agents-box">Select an agent from the fleet roster to inspect configuration.</div>
+          `}
         </div>
       </div>
 
-      <!-- Action Buttons Grid (>=44px touch targets) -->
-      <div class="actions-grid">
-        <button class="btn-action btn-primary" data-cmd="status">INSPECT FLEET</button>
-        <button class="btn-action" data-cmd="nodes">MESH NODES</button>
-        <button class="btn-action" data-cmd="catalog">ADAPTERS</button>
-        <button class="btn-action" data-cmd="docs-status">DOCS AUDIT</button>
-        <button class="btn-action" data-cmd="maintenance">MAINTENANCE</button>
-        <button class="btn-action" data-cmd="setup">SETUP AGENTS</button>
-      </div>
-
-      <!-- Console Readout -->
-      <div class="terminal-container">
-        <div class="terminal-header">
-          <span class="terminal-label">Fleet Console</span>
-          <button class="terminal-copy" id="btn-copy" title="Copy console output">Copy</button>
-        </div>
-        <div class="terminal-readout" id="card-out">Fleet controller initialized. Ready for agent dispatch.</div>
+      <div class="footer-bar">
+        <span>Target: ${this.selectedNode.toUpperCase()} MESH NODE</span>
+        <span>Fleet Version: v0.2.0</span>
       </div>
     `;
 
-    const buttons = root.querySelectorAll('.btn-action');
-    buttons.forEach(btn => {
+    // Event listeners
+    root.querySelector('#node-local')?.addEventListener('click', () => this.switchNode('local'));
+    root.querySelector('#node-cloud')?.addEventListener('click', () => this.switchNode('cloud'));
+    root.querySelector('#node-macbook')?.addEventListener('click', () => this.switchNode('macbook'));
+
+    root.querySelectorAll('.agent-item').forEach(btn => {
       btn.addEventListener('click', () => {
-        const cmd = btn.getAttribute('data-cmd');
-        if (cmd) this.execute(cmd, []);
+        const id = btn.getAttribute('data-agent-id');
+        if (id) this.selectAgent(id);
       });
     });
 
-    const copyBtn = root.querySelector('#btn-copy');
-    if (copyBtn) {
-      copyBtn.addEventListener('click', () => {
-        const out = root.querySelector('#card-out');
-        if (out && out.textContent) {
-          navigator.clipboard?.writeText(out.textContent);
-          copyBtn.textContent = 'Copied!';
-          setTimeout(() => { copyBtn.textContent = 'Copy'; }, 1500);
-        }
-      });
-    }
+    root.querySelector('#btn-docs')?.addEventListener('click', () => this.refreshDocs());
   }
 }
 

@@ -456,12 +456,25 @@ export function deploySkill(brainDir, skillIdOrPath, opts = {}) {
   if (layered && fs.existsSync(destDir) && fs.lstatSync(destDir).isSymbolicLink()) {
     throw new Error(`Refusing layered deploy into symlink: ${destDir}`);
   }
+  if (opts.dryRun) return { success: true, dryRun: true, skillId: resolved.id, destDir,
+    sourcePath: resolved.sourcePath, layered, existed, routeCore: Boolean(opts.routeCore), actions: [
+      { op: 'replace-managed', from: layered && existed ? path.join(resolved.sourcePath, 'core') : resolved.sourcePath, to: layered && existed ? path.join(destDir, 'core') : destDir },
+      ...(opts.routeCore && layered ? [{ op: 'route-core', path: path.join(destDir, 'SKILL.md') }] : []),
+    ] };
   const replacement = layered && existed
     ? replaceSkillDir(path.join(resolved.sourcePath, 'core'), path.join(destDir, 'core'), {
         requiredFile: null,
         preserveExisting: false,
       })
     : replaceSkillDir(resolved.sourcePath, destDir, { managedFiles: priorInstall?.managed_files || [] });
+
+  if (opts.routeCore && layered) {
+    const wrapper = path.join(destDir, 'SKILL.md');
+    const current = fs.readFileSync(wrapper, 'utf8');
+    const marker = '<!-- total-recall:managed-core-route:v1 -->';
+    if (!current.includes(marker)) fs.writeFileSync(wrapper, current.replace(/\s*$/, '') +
+      `\n\n${marker}\nRead the [maintained portable core](core/SKILL.md) for current protocol contracts; preserve repository-specific instructions above.\n`);
+  }
 
   let adaptResult = { adapted: false };
   if (opts.adapt && (!layered || !existed)) {
@@ -536,7 +549,7 @@ function installDetail(entry, inst) {
   const liveHash = exists ? hashSkillContent(inst.path) : null;
   const liveCoreHash = layered && exists ? hashSkillLayer(inst.path, 'core') : null;
   const liveRepoHash = layered && exists ? hashSkillLayer(inst.path, 'repo') : null;
-  const drift = layered
+  const drift = !exists ? true : layered
     ? liveCoreHash !== (entry?.core_hash || inst.core_hash)
     : legacyUnderLayered
       ? false
@@ -548,7 +561,9 @@ function installDetail(entry, inst) {
   return {
     ...inst,
     exists,
+    required: !inst.obsolete,
     live_hash: liveHash,
+    verification: !exists ? 'missing' : legacyUnderLayered ? 'not_adopted' : drift ? 'drifted' : 'verified',
     ...(layered ? {
       core_hash: liveCoreHash,
       repo_hash: liveRepoHash,
@@ -576,7 +591,7 @@ export function skillStatus(brainDir, skillId) {
     } catch (err) {
       // One unreadable install (a symlinked layer, a moved repo) must not hide
       // the status of every other install.
-      return { ...inst, exists: fs.existsSync(inst.path), error: err.message, drift: false };
+      return { ...inst, exists: fs.existsSync(inst.path), error: err.message, drift: true, verification: 'error' };
     }
   });
 
@@ -593,7 +608,11 @@ export function skillStatus(brainDir, skillId) {
     localPath,
     installs: installDetails,
     install_count: installDetails.length,
-    any_drift: installDetails.some((i) => i.drift),
+    any_drift: installDetails.some((i) => !i.obsolete && i.drift),
+    verified: Boolean(entry && localPath) && installDetails.every((i) => i.obsolete || (i.verification === 'verified' && (!i.contract || i.contract.ok))),
+    missing_count: installDetails.filter((i) => !i.obsolete && !i.exists).length,
+    obsolete_count: installDetails.filter((i) => i.obsolete).length,
+    error_count: installDetails.filter((i) => i.error).length,
     any_contract_failure: installDetails.some((i) => i.contract && !i.contract.ok),
   };
 }
@@ -1269,6 +1288,17 @@ export function syncSkillTwoWay(brainDir, skillId, opts = {}) {
   }
 
   const { entry, locations } = collectSkillLocations(brainDir, skillId);
+  const missingInstalls = loadRegistry(brainDir).installs.filter((inst) =>
+    inst.skill_id === skillId && !inst.obsolete && !fs.existsSync(path.join(inst.path, 'SKILL.md')),
+  );
+  if (missingInstalls.length) {
+    return {
+      skillId, in_sync: false, dryRun,
+      error: 'Recorded skill destinations are missing; reconcile existing repositories and deploy explicitly before synchronization',
+      missing: missingInstalls.map((inst) => ({ path: inst.path, repo: inst.repo, repository_exists: Boolean(inst.repo && fs.existsSync(inst.repo)) })),
+      locations: locations.length, actions: [],
+    };
+  }
   if (!locations.length) {
     return { skillId, skipped: true, reason: 'no live copies found' };
   }

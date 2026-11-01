@@ -88,14 +88,6 @@ export default function LoginPage({ onAuthenticated }: Props) {
     }
   }
 
-  function handleGoogleLogin() {
-    if (providers?.google && !providers.google.configured) {
-      setError("Google OAuth2 is not configured. Provide GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET in the Auth Plugin.")
-      return
-    }
-    window.location.href = "/auth/google"
-  }
-
   useEffect(() => {
     inputRef.current?.focus()
   }, [needsReset, isFirstTime])
@@ -324,7 +316,7 @@ export default function LoginPage({ onAuthenticated }: Props) {
           </button>
         </form>
 
-        {(!needsReset && !isFirstTime && (providers?.passkey?.has_passkeys || providers?.google?.configured)) && (
+        {(!needsReset && !isFirstTime && providers?.passkey?.has_passkeys) && (
           <div style={{ display: "flex", flexDirection: "column", gap: 10, marginTop: -4 }}>
             <div style={{ display: "flex", alignItems: "center", gap: 12, margin: "6px 0" }}>
               <div style={{ flex: 1, height: 1, background: "var(--border)" }} />
@@ -374,38 +366,6 @@ export default function LoginPage({ onAuthenticated }: Props) {
                     Sign in with Passkey
                   </>
                 )}
-              </button>
-            )}
-
-            {providers?.google?.configured && (
-              <button
-                type="button"
-                id="btn-google-login"
-                onClick={handleGoogleLogin}
-                disabled={loading || passkeyLoading}
-                className="btn btn-secondary"
-                style={{
-                  width: "100%",
-                  minHeight: 44,
-                  justifyContent: "center",
-                  fontSize: 13.5,
-                  borderRadius: 12,
-                  display: "flex",
-                  alignItems: "center",
-                  gap: 8,
-                  background: "rgba(255, 255, 255, 0.05)",
-                  borderColor: "rgba(255, 255, 255, 0.15)",
-                  color: "var(--text-primary)",
-                  cursor: loading || passkeyLoading ? "not-allowed" : "pointer",
-                }}
-              >
-                <svg width="16" height="16" viewBox="0 0 24 24">
-                  <path fill="#4285F4" d="M23.745 12.27c0-.7-.06-1.4-.19-2.07H12v4.51h6.6c-.29 1.52-1.14 2.82-2.4 3.68v3.05h3.88c2.27-2.09 3.665-5.17 3.665-9.17z"/>
-                  <path fill="#34A853" d="M12 24c3.24 0 5.95-1.08 7.93-2.91l-3.88-3.05c-1.08.72-2.45 1.16-4.05 1.16-3.12 0-5.77-2.1-6.72-4.93H1.25v3.15C3.26 21.36 7.33 24 12 24z"/>
-                  <path fill="#FBBC05" d="M5.28 14.27c-.25-.72-.38-1.49-.38-2.27s.13-1.55.38-2.27V6.58H1.25C.45 8.18 0 9.99 0 12s.45 3.82 1.25 5.42l4.03-3.15z"/>
-                  <path fill="#EA4335" d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C17.95 1.19 15.24 0 12 0 7.33 0 3.26 2.64 1.25 6.58l4.03 3.15c.95-2.83 3.6-4.98 6.72-4.98z"/>
-                </svg>
-                Sign in with Google
               </button>
             )}
           </div>

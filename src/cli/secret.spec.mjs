@@ -5,10 +5,13 @@ describe('auth credential command ownership', () => {
   it('requires the auth command owner', async () => {
     expect((await loadPluginModule('auth', 'commands')).run).toBeTypeOf('function');
   });
-  it('rejects removed top-level credential aliases', () => {
+  it('routes credential aliases directly to the auth owner', () => {
     for (const command of ['secret', 'secrets']) {
       const result = spawnSync(process.execPath, ['bin/total-recall.mjs', command, '--help'], { encoding: 'utf8' });
-      expect(result.status).not.toBe(0);
+      expect(result.status).toBe(0);
+      expect(result.stdout).toContain('total-recall auth secret');
+      const invalid = spawnSync(process.execPath, ['bin/total-recall.mjs', command, 'not-a-secret-operation'], { encoding: 'utf8' });
+      expect(invalid.status).not.toBe(0);
     }
   });
 });

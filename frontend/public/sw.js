@@ -124,12 +124,15 @@ async function staleWhileRevalidate(request) {
 // ─── Cache-First ──────────────────────────────────────────────────────────────
 
 async function cacheFirst(request) {
-  const cached = await caches.match(request);
-  if (cached) return cached;
+  try {
+    const cached = await caches.match(request);
+    if (cached) return cached;
+  } catch {
+    // unreadable cache entry: fall through to the network
+  }
   const response = await fetch(request);
-  if (response && response.ok && response.status === 200) {
-    const cache = await caches.open(CACHE_NAME);
-    cache.put(request, response.clone()).catch(() => {});
+  if (response && response.ok && response.status === 200 && response.type === 'basic') {
+    caches.open(CACHE_NAME).then((cache) => cache.put(request, response.clone())).catch(() => {});
   }
   return response;
 }

@@ -307,15 +307,28 @@ router.patch("/api/plugins/:id/card-face", requireAuth, requireScope("config:wri
 /**
  * POST /api/plugins/:id/run  body: { subcommand?, args? }
  * Runs the plugin's CLI handler in a child process. Executing plugin code is a
- * write-level action.
+ * write-level action unless the installed manifest explicitly declares the
+ * exact operation read-only. Alternate execution and credential input remain
+ * write-level regardless of that declaration.
  */
-router.post("/api/plugins/:id/run", requireAuth, requireScope("config:write"), async (req, res) => {
+router.post("/api/plugins/:id/run", requireAuth, (req, res, next) => {
+  const { subcommand, args = [], stdin, execution } = req.body || {};
+  try {
+    const plugin = getPluginById(req.params.id, projectRoot());
+    const operation = plugin?.valid && plugin.manifest?.cli?.subcommands?.find(item => item.name === subcommand);
+    res.locals.executionPlugin = plugin;
+    const read = typeof subcommand === 'string' && Array.isArray(args) && args.every(arg => typeof arg === 'string') &&
+      operation?.effect === 'read' && stdin === undefined && !execution &&
+      !operation.args?.some(arg => arg.secret);
+    return requireScope(read ? 'config:read' : 'config:write')(req, res, next);
+  } catch (error) { badRequest(res, error.message); }
+}, async (req, res) => {
   try {
     const { subcommand = "", args = [], stdin, execution } = req.body || {};
     if (typeof subcommand !== "string" || !Array.isArray(args) || args.some((a) => typeof a !== "string")) {
       return badRequest(res, "subcommand must be a string and args an array of strings");
     }
-    const plugin = getPluginById(req.params.id, projectRoot());
+    const plugin = res.locals.executionPlugin;
     if (!plugin) return res.status(404).json({ success: false, error: `Plugin ${req.params.id} not found` });
     if (!plugin.valid) return badRequest(res, `Plugin ${plugin.id} has an invalid manifest: ${plugin.errors.join("; ")}`);
     if (!plugin.manifest?.cli?.handler) return badRequest(res, `Plugin ${plugin.id} does not declare a CLI handler`);
@@ -330,7 +343,7 @@ router.post("/api/plugins/:id/run", requireAuth, requireScope("config:write"), a
       return res.json({ success: result.ok, pluginId: plugin.id, ...result });
     }
 
-    const result = await runPluginCommand(plugin, { subcommand, args, ...(stdin !== undefined ? { stdinText: stdin } : {}), cwd: projectRoot(), secretsBrainDir: process.env.TR_SECRETS_BRAIN || globalBrainDir || BRAIN_DIR });
+    const result = await runPluginCommand(plugin, { subcommand, args, ...(stdin !== undefined ? { stdinText: stdin } : {}), cwd: projectRoot(), secretsBrainDir: process.env.TR_SECRETS_BRAIN || globalBrainDir || BRAIN_DIR, maxOutputBytes: 4 * 1024 * 1024 });
     res.json({ success: result.ok, pluginId: plugin.id, ...result });
   } catch (err) {
     badRequest(res, err.message);

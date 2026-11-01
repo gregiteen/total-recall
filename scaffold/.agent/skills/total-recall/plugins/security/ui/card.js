@@ -5,11 +5,31 @@ export class SecuritySecurityCard extends HTMLElement {
     root.innerHTML = `
       <style>
         :host {
+          --face-bg: #180d11;
+          --face-bg-subtle: #251017;
+          --face-bg-surface: #11070a;
+          --face-bg-table: #0d0508;
+          --face-bg-code: #0a0406;
+          --face-accent: #f43f5e;
+          --face-accent-hover: rgba(244, 63, 94, 0.22);
+          --face-accent-glow: rgba(244, 63, 94, 0.35);
+          --face-border-subtle: rgba(244, 63, 94, 0.28);
+          --face-border-faint: rgba(244, 63, 94, 0.2);
+          --face-border-cell: rgba(244, 63, 94, 0.15);
+          --face-border-alert: rgba(244, 63, 94, 0.25);
+          --face-text: #f1f5f9;
+          --face-text-heading: #fecdd3;
+          --face-text-muted: #fda4af;
+          --face-text-cell: #f8fafc;
+          --face-text-desc: #cbd5e1;
+          --face-danger: #fb7185;
+          --face-warning: #fca5a5;
+
           display: block;
           font-family: ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-          color: #f1f5f9;
-          background: #180d11;
-          border: 1px solid rgba(244, 63, 94, 0.35);
+          color: var(--text-primary, var(--face-text));
+          background: var(--face-bg);
+          border: 1px solid var(--border, var(--face-accent-glow));
           border-radius: 10px;
           padding: 18px;
           box-shadow: 0 10px 28px rgba(0, 0, 0, 0.45);
@@ -27,7 +47,7 @@ export class SecuritySecurityCard extends HTMLElement {
         .brand-icon {
           width: 32px;
           height: 38px;
-          color: #f43f5e;
+          color: var(--face-accent);
           flex-shrink: 0;
         }
 
@@ -43,12 +63,12 @@ export class SecuritySecurityCard extends HTMLElement {
           font-weight: 700;
           letter-spacing: 0.03em;
           text-transform: uppercase;
-          color: #fecdd3;
+          color: var(--face-text-heading);
         }
 
         p.desc {
           margin: 0 0 14px 0;
-          color: #fda4af;
+          color: var(--face-text-muted);
           font-size: 12px;
           line-height: 1.5;
         }
@@ -66,11 +86,11 @@ export class SecuritySecurityCard extends HTMLElement {
 
         button, input, select {
           min-height: 44px;
-          border: 1px solid rgba(244, 63, 94, 0.28);
+          border: 1px solid var(--face-border-subtle);
           border-radius: 6px;
           padding: 8px 12px;
-          background: #251017;
-          color: #f1f5f9;
+          background: var(--face-bg-subtle);
+          color: var(--face-text);
           font-size: 11px;
           font-weight: 600;
           letter-spacing: 0.02em;
@@ -84,8 +104,8 @@ export class SecuritySecurityCard extends HTMLElement {
         }
 
         button:hover {
-          background: rgba(244, 63, 94, 0.22);
-          border-color: #f43f5e;
+          background: var(--face-accent-hover);
+          border-color: var(--face-accent);
         }
 
         button:active {
@@ -101,17 +121,17 @@ export class SecuritySecurityCard extends HTMLElement {
           min-width: 0;
           flex: 1;
           font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-          background: #11070a;
+          background: var(--face-bg-surface);
         }
 
         input:focus, select:focus {
-          border-color: #f43f5e;
+          border-color: var(--face-accent);
           outline: none;
-          box-shadow: 0 0 0 1px rgba(244, 63, 94, 0.3);
+          box-shadow: 0 0 0 1px var(--face-accent-glow);
         }
 
         select {
-          background: #11070a;
+          background: var(--face-bg-surface);
           cursor: pointer;
         }
 
@@ -120,66 +140,66 @@ export class SecuritySecurityCard extends HTMLElement {
           font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
           font-size: 11px;
           font-weight: 700;
-          color: #fb7185;
-          background: #11070a;
+          color: var(--face-danger);
+          background: var(--face-bg-surface);
           padding: 6px 10px;
           border-radius: 4px;
-          border: 1px solid rgba(244, 63, 94, 0.2);
+          border: 1px solid var(--face-border-faint);
         }
 
         .scroll {
           overflow-x: auto;
           margin-bottom: 10px;
           border-radius: 6px;
-          border: 1px solid rgba(244, 63, 94, 0.2);
+          border: 1px solid var(--face-border-faint);
         }
 
         table {
           width: 100%;
           border-collapse: collapse;
           font-size: 11px;
-          background: #0d0508;
+          background: var(--face-bg-table);
         }
 
         th {
-          background: #251017;
-          color: #fecdd3;
+          background: var(--face-bg-subtle);
+          color: var(--face-text-heading);
           font-weight: 700;
           text-transform: uppercase;
           letter-spacing: 0.04em;
           padding: 8px 10px;
-          border-bottom: 1px solid rgba(244, 63, 94, 0.3);
+          border-bottom: 1px solid var(--face-border-subtle);
           text-align: left;
         }
 
         td {
           padding: 8px 10px;
           text-align: left;
-          border-bottom: 1px solid rgba(244, 63, 94, 0.15);
+          border-bottom: 1px solid var(--face-border-cell);
           vertical-align: top;
-          color: #f8fafc;
+          color: var(--face-text-cell);
         }
 
         td:first-child {
           font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
           font-weight: 600;
-          color: #fda4af;
+          color: var(--face-text-muted);
         }
 
         td:last-child {
           line-height: 1.45;
-          color: #cbd5e1;
+          color: var(--face-text-desc);
         }
 
         pre {
-          background: #0a0406;
-          border: 1px solid rgba(244, 63, 94, 0.2);
+          background: var(--face-bg-code);
+          border: 1px solid var(--face-border-faint);
           border-radius: 6px;
           padding: 8px 10px;
           font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
           font-size: 10.5px;
           line-height: 1.45;
-          color: #fb7185;
+          color: var(--face-danger);
           white-space: pre-wrap;
           overflow-wrap: anywhere;
           max-height: 160px;
@@ -188,8 +208,8 @@ export class SecuritySecurityCard extends HTMLElement {
         }
 
         #device-review {
-          background: #11070a;
-          border: 1px solid rgba(244, 63, 94, 0.25);
+          background: var(--face-bg-surface);
+          border: 1px solid var(--face-border-alert);
           border-radius: 6px;
           padding: 10px;
           margin-top: 10px;
@@ -198,7 +218,7 @@ export class SecuritySecurityCard extends HTMLElement {
         #device-review p {
           margin: 0 0 8px 0;
           font-size: 11px;
-          color: #fca5a5;
+          color: var(--face-warning);
         }
 
         #device-checks label {
@@ -209,8 +229,14 @@ export class SecuritySecurityCard extends HTMLElement {
         #device-checks label p {
           margin: 0 0 4px 0;
           font-size: 11px;
-          color: #fecdd3;
+          color: var(--face-text-heading);
           font-weight: 600;
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+          button, input, select {
+            transition: none !important;
+          }
         }
       </style>
 

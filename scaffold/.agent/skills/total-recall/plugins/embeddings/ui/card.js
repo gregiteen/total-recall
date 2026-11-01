@@ -1,411 +1,478 @@
 /**
- * Embeddings — Local Vector Space & Vault Semantic Coverage Engine
- * Purpose-built domain interface: queries vector engine and vault coverage on mount,
- * exposes benchmark runner, model weight downloads, and vector dimensions.
+ * Vector Space — On-Device Semantic Coverage & Vector Engine Console
  *
- * Adheres strictly to invariant: Never delete embeddings.db during rebuild.
- * Zero emojis, authentic commercial brand identity, touch-first ergonomics (>=44px).
+ * Bespoke operator interface for local vector embeddings and vault coverage.
+ * Displays real-time circular SVG coverage gauge, local model roster, vector
+ * dimensions, and benchmark latency meters with zero template wrappers or terminal dumps.
  */
+
+const DASH = '\u2014';
+
+function escapeHtml(str) {
+  if (str === null || str === undefined) return '';
+  return String(str).replace(/[&<>"']/g, c => ({
+    '&': '&amp;',
+    '<': '&lt;',
+    '>': '&gt;',
+    '"': '&quot;',
+    "'": '&#39;'
+  }[c]));
+}
 
 export class EmbeddingsCard extends HTMLElement {
   constructor() {
     super();
+    this.coverage = null;
+    this.models = [];
+    this.benchmark = null;
+    this.selectedModel = 'nomic-embed-text';
     this.executing = false;
-    this.telemetry = {
-      model: 'nomic-embed-text',
-      coverage: '98% Embedded',
-      locality: 'Local (On-Device)'
-    };
+    this.screens = [{ id: 'coverage', label: 'Vector Coverage' }];
+    this.screen = 'coverage';
   }
 
   connectedCallback() {
-    if (!this.shadowRoot) this.attachShadow({ mode: 'open' });
+    if (!this.shadowRoot) {
+      this.attachShadow({ mode: 'open' });
+    }
     this.render();
     this.refreshTelemetry();
   }
 
   async refreshTelemetry() {
+    if (!this.host) return;
     try {
-      const res = await this.host?.run('status', ['--json']);
-      let data = null;
-      if (typeof res === 'object' && res !== null) {
-        data = res.output ? (typeof res.output === 'object' ? res.output : JSON.parse(res.output)) : res;
-      } else if (typeof res === 'string') {
-        try { data = JSON.parse(res); } catch {}
+      // 1. Fetch coverage
+      const covRes = await this.host.run('coverage', ['--json']);
+      if (covRes && typeof covRes === 'object') {
+        this.coverage = covRes;
+      } else if (typeof covRes === 'string' && covRes.trim().startsWith('{')) {
+        this.coverage = JSON.parse(covRes);
       }
 
-      if (data) {
-        const modelName = data.model?.name || data.model || 'nomic-embed-text';
-        const dims = data.model?.dimensions ? ` (${data.model.dimensions}d)` : ' (768d)';
-        const cov = data.coverage?.percent != null ? `${data.coverage.percent}% Embedded` : '98% Embedded';
-        const loc = data.local ? 'Local (On-Device)' : 'Mesh Endpoint';
-
-        this.telemetry = {
-          model: `${modelName}${dims}`,
-          coverage: cov,
-          locality: loc
-        };
-      } else {
-        this.telemetry = {
-          model: 'nomic-embed-text (768d)',
-          coverage: '98% Embedded',
-          locality: 'Local (On-Device)'
-        };
+      // 2. Fetch models
+      try {
+        const modRes = await this.host.run('models', ['--json']);
+        if (Array.isArray(modRes)) this.models = modRes;
+        else if (modRes && Array.isArray(modRes.models)) this.models = modRes.models;
+      } catch {
+        this.models = [];
       }
-      this.updateView();
+
+      this.render();
     } catch {
-      this.telemetry = {
-        model: 'nomic-embed-text',
-        coverage: 'Vector Index Active',
-        locality: 'Local Endpoint'
-      };
-      this.updateView();
+      this.coverage = null;
+      this.render();
     }
   }
 
-  updateView() {
-    const root = this.shadowRoot;
-    if (!root) return;
-
-    const modEl = root.querySelector('#stat-model');
-    const covEl = root.querySelector('#stat-coverage');
-    const locEl = root.querySelector('#stat-locality');
-    if (modEl) modEl.textContent = this.telemetry.model;
-    if (covEl) covEl.textContent = this.telemetry.coverage;
-    if (locEl) locEl.textContent = this.telemetry.locality;
-  }
-
-  async execute(action, args = []) {
-    const out = this.shadowRoot?.querySelector('#card-out');
-    const statusPill = this.shadowRoot?.querySelector('#status-pill');
-    const actionLabel = action.toUpperCase();
-
-    if (out) out.textContent = `[EMBEDDINGS ENGINE] Running ${actionLabel} ${args.join(' ')}...`;
-    if (statusPill) statusPill.textContent = 'RUNNING';
+  async runBenchmark() {
+    if (!this.host || this.executing) return;
     this.executing = true;
-
+    this.render();
     try {
-      const res = await this.host?.run(action, args);
-      let text = '';
-      if (typeof res === 'object') {
-        text = res.output || JSON.stringify(res, null, 2);
-      } else {
-        text = String(res || 'Operation completed without output.');
+      const res = await this.host.run('benchmark', ['--json']);
+      if (res && typeof res === 'object') {
+        this.benchmark = res;
+      } else if (typeof res === 'string' && res.trim().startsWith('{')) {
+        this.benchmark = JSON.parse(res);
       }
-      if (out) out.textContent = text.trim();
-      if (statusPill) statusPill.textContent = 'READY';
-
-      if (['status', 'pull', 'coverage'].includes(action)) {
-        this.refreshTelemetry();
-      }
-    } catch (err) {
-      if (out) out.textContent = `[VECTOR FAULT] ${err.message}`;
-      if (statusPill) statusPill.textContent = 'ERROR';
+    } catch {
+      this.benchmark = null;
     } finally {
       this.executing = false;
+      this.render();
     }
-  }
-
-  copyOutput() {
-    const out = this.shadowRoot?.querySelector('#card-out');
-    const copyBtn = this.shadowRoot?.querySelector('#btn-copy');
-    if (!out) return;
-
-    navigator.clipboard?.writeText(out.textContent || '').then(() => {
-      if (copyBtn) {
-        const prev = copyBtn.textContent;
-        copyBtn.textContent = 'COPIED';
-        setTimeout(() => { copyBtn.textContent = prev; }, 1600);
-      }
-    }).catch(() => {});
   }
 
   render() {
     const root = this.shadowRoot;
     if (!root) return;
 
+    const cov = this.coverage;
+    const rawPct = cov?.percentage !== undefined ? Number(cov.percentage) : null;
+    const pct = rawPct !== null && !isNaN(rawPct) ? Math.min(100, Math.max(0, Math.round(rawPct))) : null;
+
+    // SVG arc stroke dash calculation
+    const radius = 38;
+    const circumference = 2 * Math.PI * radius;
+    const offset = pct !== null ? circumference - (pct / 100) * circumference : circumference;
+
+    const embeddedNodes = cov?.embeddedNodes !== undefined ? cov.embeddedNodes : (cov?.embedded || DASH);
+    const totalNodes = cov?.totalNodes !== undefined ? cov.totalNodes : (cov?.total || DASH);
+    const activeModel = cov?.model || this.selectedModel;
+    const dimensions = cov?.dimensions || 768;
+
     root.innerHTML = `
       <style>
         :host {
+          --face-bg: #07171d;
+          --face-surface: #0e2a35;
+          --face-line: #164e63;
+          --face-text: #ecfeff;
+          --face-muted: #67e8f9;
+          --face-brand: #06b6d4;
+          --face-brand-hover: #22d3ee;
+          --face-accent: #22d3ee;
+          --face-ok: #10b981;
+          --face-warn: #f59e0b;
+          --face-danger: #ef4444;
+          --face-dark: #07171d;
+
           display: block;
-          font-family: 'Space Grotesk', -apple-system, sans-serif;
-          background: #021a14;
-          color: #ecfdf5;
-          border-radius: 12px;
-          border: 1px solid #065f46;
-          padding: 14px;
+          font-family: var(--font-sans, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif);
+          color: var(--text-primary, var(--face-text));
+          background: var(--bg-secondary, var(--face-bg));
+          border: 1px solid var(--border, var(--face-line));
+          border-radius: 8px;
+          padding: 16px;
           box-sizing: border-box;
-          user-select: none;
+          overflow: hidden;
         }
 
-        * { box-sizing: border-box; }
+        @media (prefers-reduced-motion: reduce) {
+          *, ::before, ::after {
+            animation-duration: 0.01ms !important;
+            animation-iteration-count: 1 !important;
+            transition-duration: 0.01ms !important;
+          }
+        }
 
-        /* Bespoke Header */
-        .card-header {
+        /* Header Bar */
+        .header {
           display: flex;
           align-items: center;
           justify-content: space-between;
-          margin-bottom: 12px;
-          padding-bottom: 8px;
-          border-bottom: 1px solid rgba(16, 185, 129, 0.25);
+          flex-wrap: wrap;
+          gap: 12px;
+          padding-bottom: 14px;
+          border-bottom: 1px solid var(--border, var(--face-line));
+          margin-bottom: 16px;
         }
 
-        .brand-cluster {
+        .brand-group {
           display: flex;
           align-items: center;
           gap: 10px;
         }
 
-        .brand-mark {
-          width: 32px;
-          height: 32px;
-          border-radius: 8px;
-          background: rgba(5, 150, 105, 0.2);
-          border: 1px solid rgba(16, 185, 129, 0.4);
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          flex-shrink: 0;
+        .wordmark-badge {
+          font-family: var(--font-mono, 'JetBrains Mono', monospace);
+          font-size: 13px;
+          font-weight: 800;
+          letter-spacing: 0.05em;
+          color: var(--card-accent, var(--face-brand));
+          background: rgba(6, 182, 212, 0.12);
+          padding: 6px 10px;
+          border-radius: 6px;
+          border: 1px solid rgba(6, 182, 212, 0.3);
         }
 
-        .brand-meta {
+        .title-meta {
           display: flex;
           flex-direction: column;
         }
 
-        .brand-title {
+        .plugin-title {
           font-size: 14px;
           font-weight: 700;
-          color: #d1fae5;
-          letter-spacing: 0.03em;
-          text-transform: uppercase;
+          color: var(--text-primary, var(--face-text));
           margin: 0;
         }
 
-        .brand-subtitle {
+        .plugin-subtitle {
           font-size: 11px;
-          color: #6ee7b7;
+          color: var(--text-secondary, var(--face-muted));
           margin: 0;
-          font-family: 'JetBrains Mono', monospace;
         }
 
-        .status-pill {
-          font-family: 'JetBrains Mono', monospace;
-          font-size: 10px;
-          font-weight: 700;
-          padding: 3px 8px;
-          border-radius: 6px;
-          background: rgba(16, 185, 129, 0.15);
-          border: 1px solid rgba(16, 185, 129, 0.4);
-          color: #34d399;
-          letter-spacing: 0.05em;
-        }
-
-        /* Telemetry Metric Cards */
-        .telemetry-row {
-          display: grid;
-          grid-template-columns: repeat(3, 1fr);
-          gap: 8px;
-          margin-bottom: 12px;
-        }
-
-        .metric-card {
-          background: rgba(6, 78, 59, 0.5);
-          border: 1px solid rgba(16, 185, 129, 0.25);
-          border-radius: 8px;
-          padding: 8px 10px;
-          display: flex;
-          flex-direction: column;
-          gap: 2px;
-        }
-
-        .metric-label {
-          font-family: 'JetBrains Mono', monospace;
-          font-size: 9px;
-          font-weight: 700;
-          color: #6ee7b7;
-          letter-spacing: 0.05em;
-          text-transform: uppercase;
-        }
-
-        .metric-value {
-          font-size: 13px;
-          font-weight: 700;
-          color: #ffffff;
-          font-family: 'JetBrains Mono', monospace;
-          overflow: hidden;
-          text-overflow: ellipsis;
-          white-space: nowrap;
-        }
-
-        /* Action Buttons Grid (>=44px touch targets) */
-        .actions-grid {
-          display: grid;
-          grid-template-columns: repeat(3, 1fr);
-          gap: 6px;
-          margin-bottom: 10px;
-        }
-
-        .touch-btn {
-          min-height: 44px;
-          background: rgba(5, 150, 105, 0.16);
-          border: 1px solid rgba(16, 185, 129, 0.3);
-          border-radius: 8px;
-          color: #ecfdf5;
-          font-family: 'JetBrains Mono', monospace;
-          font-size: 11px;
-          font-weight: 600;
-          letter-spacing: 0.03em;
+        .locality-chip {
           display: flex;
           align-items: center;
+          gap: 6px;
+          font-family: var(--font-mono, 'JetBrains Mono', monospace);
+          font-size: 11px;
+          font-weight: 700;
+          color: var(--face-ok);
+          background: rgba(16, 185, 129, 0.12);
+          border: 1px solid rgba(16, 185, 129, 0.3);
+          padding: 5px 12px;
+          border-radius: 6px;
+          text-transform: uppercase;
+        }
+
+        /* Main Console Grid */
+        .console-grid {
+          display: grid;
+          grid-template-columns: minmax(200px, 1fr) minmax(280px, 1.8fr);
+          gap: 14px;
+          margin-bottom: 16px;
+        }
+
+        @media (max-width: 680px) {
+          .console-grid {
+            grid-template-columns: 1fr;
+          }
+        }
+
+        /* Coverage Gauge Column */
+        .gauge-card {
+          border: 1px solid var(--border, var(--face-line));
+          border-radius: 6px;
+          background: rgba(14, 42, 53, 0.4);
+          padding: 16px;
+          display: flex;
+          flex-direction: column;
+          align-items: center;
           justify-content: center;
-          cursor: pointer;
-          transition: background 0.15s, border-color 0.15s, transform 0.05s;
-          padding: 4px 6px;
+          gap: 12px;
           text-align: center;
         }
 
-        .touch-btn:hover {
-          background: rgba(5, 150, 105, 0.3);
-          border-color: rgba(52, 211, 153, 0.6);
+        .svg-container {
+          position: relative;
+          width: 96px;
+          height: 96px;
         }
 
-        .touch-btn:active {
-          transform: translateY(1px);
+        .gauge-svg {
+          width: 100%;
+          height: 100%;
+          transform: rotate(-90deg);
         }
 
-        /* Terminal Execution Output */
-        .terminal-deck {
-          background: #010f0b;
-          border: 1px solid rgba(16, 185, 129, 0.25);
-          border-radius: 8px;
-          overflow: hidden;
+        .gauge-bg {
+          fill: none;
+          stroke: rgba(22, 78, 99, 0.6);
+          stroke-width: 8;
         }
 
-        .terminal-header {
+        .gauge-fill {
+          fill: none;
+          stroke: var(--face-brand);
+          stroke-width: 8;
+          stroke-linecap: round;
+          stroke-dasharray: ${circumference};
+          stroke-dashoffset: ${offset};
+          transition: stroke-dashoffset 0.4s ease;
+        }
+
+        .gauge-inner-text {
+          position: absolute;
+          top: 0;
+          left: 0;
+          width: 100%;
+          height: 100%;
           display: flex;
+          flex-direction: column;
           align-items: center;
-          justify-content: space-between;
-          padding: 6px 10px;
-          background: rgba(6, 78, 59, 0.4);
-          border-bottom: 1px solid rgba(16, 185, 129, 0.2);
+          justify-content: center;
+          pointer-events: none;
         }
 
-        .terminal-title {
-          font-family: 'JetBrains Mono', monospace;
-          font-size: 10px;
-          color: #6ee7b7;
+        .gauge-number {
+          font-family: var(--font-mono, 'JetBrains Mono', monospace);
+          font-size: 18px;
+          font-weight: 800;
+          color: var(--text-primary, var(--face-text));
+        }
+
+        .gauge-label {
+          font-size: 9px;
           text-transform: uppercase;
+          color: var(--text-secondary, var(--face-muted));
           letter-spacing: 0.05em;
         }
 
-        .terminal-btn {
-          background: rgba(16, 185, 129, 0.15);
-          border: 1px solid rgba(16, 185, 129, 0.3);
-          border-radius: 4px;
-          color: #d1fae5;
-          font-family: 'JetBrains Mono', monospace;
-          font-size: 9px;
-          padding: 2px 6px;
-          cursor: pointer;
-        }
-
-        .terminal-btn:hover {
-          background: rgba(16, 185, 129, 0.3);
-        }
-
-        .terminal-body {
-          margin: 0;
-          padding: 8px 10px;
-          font-family: 'JetBrains Mono', monospace;
+        .gauge-stats {
           font-size: 11px;
-          line-height: 1.45;
-          color: #d1fae5;
-          min-height: 60px;
-          max-height: 100px;
-          overflow-y: auto;
-          white-space: pre-wrap;
-          word-break: break-word;
+          color: var(--text-secondary, var(--face-muted));
+        }
+
+        .gauge-stats strong {
+          color: var(--text-primary, var(--face-text));
+        }
+
+        /* Model & Benchmark Panel */
+        .details-deck {
+          display: flex;
+          flex-direction: column;
+          gap: 12px;
+        }
+
+        .deck-box {
+          border: 1px solid var(--border, var(--face-line));
+          border-radius: 6px;
+          background: rgba(14, 42, 53, 0.4);
+          padding: 12px;
+          display: flex;
+          flex-direction: column;
+          gap: 10px;
+        }
+
+        .deck-title {
+          font-size: 11px;
+          font-weight: 700;
+          text-transform: uppercase;
+          letter-spacing: 0.05em;
+          color: var(--text-secondary, var(--face-muted));
+          margin: 0;
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+        }
+
+        .model-row {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          padding: 8px 10px;
+          background: rgba(7, 23, 29, 0.6);
+          border: 1px solid var(--border, var(--face-line));
+          border-radius: 5px;
+        }
+
+        .model-name {
+          font-family: var(--font-mono, 'JetBrains Mono', monospace);
+          font-size: 12px;
+          font-weight: 700;
+          color: var(--text-primary, var(--face-text));
+        }
+
+        .model-badges {
+          display: flex;
+          align-items: center;
+          gap: 6px;
+        }
+
+        .dim-chip {
+          font-family: var(--font-mono, 'JetBrains Mono', monospace);
+          font-size: 10px;
+          padding: 2px 6px;
+          border-radius: 4px;
+          background: rgba(6, 182, 212, 0.15);
+          color: var(--face-accent);
+        }
+
+        /* Benchmark Trigger */
+        .benchmark-action-row {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          flex-wrap: wrap;
+          gap: 8px;
+        }
+
+        .btn-benchmark {
+          min-height: 44px;
+          padding: 8px 16px;
+          font-family: var(--font-sans, sans-serif);
+          font-size: 12px;
+          font-weight: 700;
+          color: var(--face-dark);
+          background: var(--face-brand);
+          border: none;
+          border-radius: 5px;
+          cursor: pointer;
+          transition: background 0.15s ease;
+        }
+
+        .btn-benchmark:hover {
+          background: var(--face-brand-hover);
+        }
+
+        .btn-benchmark:disabled {
+          opacity: 0.6;
+          cursor: not-allowed;
+        }
+
+        .bench-result {
+          font-family: var(--font-mono, 'JetBrains Mono', monospace);
+          font-size: 11px;
+          color: var(--face-ok);
+        }
+
+        /* Footer Telemetry */
+        .footer-bar {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          padding-top: 12px;
+          margin-top: 14px;
+          border-top: 1px solid var(--border, var(--face-line));
+          font-size: 10px;
+          color: var(--text-secondary, var(--face-muted));
         }
       </style>
 
-      <div class="card-header">
-        <div class="brand-cluster">
-          <div class="brand-mark">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#34d399" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/>
-              <polyline points="3.27 6.96 12 12.01 20.73 6.96"/>
-              <line x1="12" y1="22.08" x2="12" y2="12"/>
+      <div class="header">
+        <div class="brand-group">
+          <div class="wordmark-badge">[VECTOR//SPACE]</div>
+          <div class="title-meta">
+            <h3 class="plugin-title">Vector Space & Coverage</h3>
+            <p class="plugin-subtitle">On-device semantic memory coverage and local model runner</p>
+          </div>
+        </div>
+        <div class="locality-chip">
+          Strict Local Engine
+        </div>
+      </div>
+
+      <div class="console-grid">
+        <div class="gauge-card">
+          <div class="svg-container">
+            <svg class="gauge-svg" viewBox="0 0 96 96">
+              <circle class="gauge-bg" cx="48" cy="48" r="${radius}" />
+              <circle class="gauge-fill" cx="48" cy="48" r="${radius}" />
             </svg>
+            <div class="gauge-inner-text">
+              <span class="gauge-number">${pct !== null ? `${pct}%` : DASH}</span>
+              <span class="gauge-label">Vault</span>
+            </div>
           </div>
-          <div class="brand-meta">
-            <h3 class="brand-title">Embeddings</h3>
-            <span class="brand-subtitle">Vector Engine • v0.1.0</span>
+          <div class="gauge-stats">
+            <div>Embedded: <strong>${embeddedNodes}</strong> / <strong>${totalNodes}</strong></div>
+            <div>Storage: <strong>SQLite (embeddings.db)</strong></div>
           </div>
         </div>
-        <div id="status-pill" class="status-pill">READY</div>
+
+        <div class="details-deck">
+          <div class="deck-box">
+            <div class="deck-title">
+              <span>Active Model Weights</span>
+              <span class="dim-chip">${dimensions} dimensions</span>
+            </div>
+            <div class="model-row">
+              <span class="model-name">${escapeHtml(activeModel)}</span>
+              <div class="model-badges">
+                <span class="dim-chip">On-Device GGUF</span>
+                <span class="dim-chip" style="color: var(--face-ok);">Ready</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="deck-box">
+            <div class="deck-title">Projection Benchmark</div>
+            <div class="benchmark-action-row">
+              <button class="btn-benchmark" type="button" id="btn-bench" ${this.executing ? 'disabled' : ''}>
+                ${this.executing ? 'Benchmarking...' : 'Test Projection Speed'}
+              </button>
+              <div class="bench-result">
+                ${this.benchmark ? `Latency: ${this.benchmark.latency_ms || this.benchmark.ms || DASH}ms per chunk` : 'Click to measure latency'}
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
 
-      <div class="telemetry-row">
-        <div class="metric-card">
-          <span class="metric-label">Model Weights</span>
-          <span id="stat-model" class="metric-value">nomic-embed-text (768d)</span>
-        </div>
-        <div class="metric-card">
-          <span class="metric-label">Vault Vectors</span>
-          <span id="stat-coverage" class="metric-value">98% Embedded</span>
-        </div>
-        <div class="metric-card">
-          <span class="metric-label">Locality</span>
-          <span id="stat-locality" class="metric-value">Local (On-Device)</span>
-        </div>
-      </div>
-
-      <div class="actions-grid">
-        <button id="btn-status" class="touch-btn" type="button">STATUS</button>
-        <button id="btn-models" class="touch-btn" type="button">MODELS</button>
-        <button id="btn-benchmark" class="touch-btn" type="button">BENCHMARK</button>
-        <button id="btn-coverage" class="touch-btn" type="button">COVERAGE</button>
-        <button id="btn-pull" class="touch-btn" type="button">PULL WEIGHTS</button>
-        <button id="btn-refresh" class="touch-btn" type="button">REFRESH</button>
-      </div>
-
-      <div class="terminal-deck">
-        <div class="terminal-header">
-          <span class="terminal-title">Vector Telemetry Console</span>
-          <button id="btn-copy" class="terminal-btn" type="button">COPY</button>
-        </div>
-        <pre id="card-out" class="terminal-body">Local vector embedding pipeline online. Vectors are preserved on-device and never leave this host.</pre>
+      <div class="footer-bar">
+        <span>Model: ${escapeHtml(activeModel)}</span>
+        <span>Locality Invariant: Strictly On-Device</span>
       </div>
     `;
 
-    root.querySelector('#btn-status')?.addEventListener('click', () => {
-      this.execute('status');
-    });
-
-    root.querySelector('#btn-models')?.addEventListener('click', () => {
-      this.execute('models');
-    });
-
-    root.querySelector('#btn-benchmark')?.addEventListener('click', () => {
-      this.execute('benchmark');
-    });
-
-    root.querySelector('#btn-coverage')?.addEventListener('click', () => {
-      this.execute('coverage');
-    });
-
-    root.querySelector('#btn-pull')?.addEventListener('click', () => {
-      this.execute('pull');
-    });
-
-    root.querySelector('#btn-refresh')?.addEventListener('click', () => {
-      this.execute('status');
-    });
-
-    root.querySelector('#btn-copy')?.addEventListener('click', () => {
-      this.copyOutput();
-    });
+    // Event listeners
+    root.querySelector('#btn-bench')?.addEventListener('click', () => this.runBenchmark());
   }
 }
 

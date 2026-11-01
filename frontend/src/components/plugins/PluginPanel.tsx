@@ -20,7 +20,8 @@ export function pluginElements(plugin: PluginInfo): PluginElement[] {
 /** Loads owner code; no plugin identities or provider behavior belong here. */
 export function PluginPanel({ plugin, elementId, readOnly = false }: { plugin: PluginInfo; elementId?: string; readOnly?: boolean }) {
   const elements = pluginElements(plugin).filter(element => element.kind !== 'settings' && (!elementId || element.id === elementId))
-  const [selected, setSelected] = useState(elements[0]?.id || '')
+  const cardElement = elements.find(item => item.kind === 'card')
+  const [selected, setSelected] = useState(elementId || cardElement?.id || elements[0]?.id || '')
   const [error, setError] = useState('')
   const frame = useRef<HTMLIFrameElement>(null)
   const [document, setDocument] = useState('')
@@ -67,7 +68,7 @@ export function PluginPanel({ plugin, elementId, readOnly = false }: { plugin: P
       if (data.type !== 'run') return
       const target = event.source as Window
       const reply = (result?: unknown, error?: string) => { if (!disposed) target.postMessage({ channel, type: 'result', requestId: data.requestId, result, error }, '*') }
-      if (!allowedFrameCommand(data, allowed, secretCommands) || active >= 4) { reply(undefined, 'Operation is not available'); return }
+      if (!allowedFrameCommand(data, allowed, secretCommands) || active >= 12) { reply(undefined, 'Operation is not available'); return }
       active++
       window.dispatchEvent(new CustomEvent('plugin-command-activity', { detail: { pluginId: plugin.id, requestId: data.requestId, command: data.subcommand, running: true } }))
       try {
@@ -106,8 +107,11 @@ export function PluginPanel({ plugin, elementId, readOnly = false }: { plugin: P
     return dispose
   }, [plugin.id, selected, plugin.sha256, elementId, readOnly])
 
+  const currentElement = elements.find(item => item.id === selected) || elements[0]
+  const showNav = elements.length > 1 && currentElement?.kind !== 'card'
+
   return <section>
-    {elements.length > 1 && <nav style={{ display: 'flex', gap: 8 }}>
+    {showNav && <nav style={{ display: 'flex', gap: 8 }}>
       {elements.map(element => <button key={element.id} className="btn btn-sm" onClick={() => setSelected(element.id)} aria-pressed={selected === element.id}>{element.description || element.id}</button>)}
     </nav>}
     {error && <div role="alert" className="alert alert-error">{error}</div>}

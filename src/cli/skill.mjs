@@ -82,6 +82,8 @@ function printHelp() {
   deploy options:
     --repo <path>         Target repository root (default: cwd)
     --adapt               Rewrite description with openwiki + package.json stack signals
+    --route-core          Link preserved wrapper to a layered portable core
+    --dry-run             Report deployment actions without writes
     --force               Replace existing destination
 
   discover / sync options (any user repos — no hardcoded paths):
@@ -527,7 +529,10 @@ export default async function skillCli(args) {
         agentSkillsDir: skillsDir,
         adapt,
         force,
+        routeCore: remainingArgs.includes('--route-core'),
+        dryRun: remainingArgs.includes('--dry-run'),
       });
+      if (result.dryRun) { console.log(JSON.stringify(result, null, 2)); return; }
       console.log(`\n  ✅ Deployed: ${result.skillId}`);
       console.log(`     → ${result.destDir}`);
       console.log(`     hash=${result.install.content_hash} adapted=${result.adapt.adapted}`);
@@ -560,8 +565,9 @@ export default async function skillCli(args) {
     }
     try {
       const st = skillStatus(brainDir, skillId);
+      if (remainingArgs.includes('--json')) { console.log(JSON.stringify(st, null, 2)); if (!st.verified) process.exitCode = 1; return; }
       console.log(`\n  Skill: ${skillId}`);
-      console.log(`  Registered: ${st.registered}`);
+      console.log(`  Registered: ${st.registered}  verified=${st.verified}  missing=${st.missing_count}  errors=${st.error_count}`);
       if (st.entry) {
         console.log(`  Version: ${st.entry.version}  hash=${st.entry.content_hash}`);
         console.log(`  Source: ${st.entry.source_path || st.entry.source}`);
@@ -584,7 +590,7 @@ export default async function skillCli(args) {
         }
       }
       console.log('');
-      if (st.any_contract_failure) process.exitCode = 1;
+      if (!st.verified || st.any_contract_failure) process.exitCode = 1;
     } catch (err) {
       console.error(`❌ ${err.message}`);
       process.exit(1);

@@ -22,7 +22,6 @@ import {
 import { renderMarkdown } from "../components/MarkdownUtils"
 import { PluginPanel, pluginElements } from "../components/plugins/PluginPanel"
 import { PluginSettings } from "../components/plugins/PluginSettings"
-import { CardEngine } from "../components/plugins/card/CardEngine"
 
 interface PluginsPageProps {
   activeBrainId?: string | null
@@ -76,8 +75,8 @@ const AGENT_RECIPE_PROMPT = `You are my coding agent. Author a bespoke Total Rec
    - Real interactive controls executing plugin subcommands via host.run(subcommand, args)
 
 4. Distribution:
-   - Private: keep in .agent/skills/total-recall/plugins/<id>
-   - Store: publish via total-recall deploy-store <id>`
+   - Private: keep in .agent/plugins/<id>
+   - Mesh: share peer-to-peer via total-recall plugin share <id>`
 
 function resolvePluginBranding(p: { id: string; branding?: { icon?: string | null; color?: string | null; badge?: string | null } }) {
   const custom = p.branding || {}
@@ -499,7 +498,7 @@ export default function PluginsPage({ activeBrainId }: PluginsPageProps) {
       setWorkspaceActiveIds(next)
       try { localStorage.setItem("tr_workspace_plugins", JSON.stringify([...next])) } catch {}
       await setPluginActivation(p.id, false)
-      setAlert({ type: "success", message: `Moved ${p.name} from workspace to Plugin Store` })
+      setAlert({ type: "success", message: `Deactivated card for ${p.name}` })
       await loadLocal()
     } catch (err: any) {
       setAlert({ type: "error", message: err?.message || `Could not deactivate ${p.name}` })
@@ -772,7 +771,7 @@ export default function PluginsPage({ activeBrainId }: PluginsPageProps) {
       <div style={{ display: "flex", justifyContent: "space-between", gap: "12px", flexWrap: "wrap", marginBottom: "20px" }}>
         <div role="tablist" style={{ display: "flex", gap: "8px" }}>
           {tabButton("installed", "My Cards", myCards.length)}
-          {tabButton("bundled", "Plugin Store (Bundled)", filteredStoreCatalog.length)}
+          {tabButton("bundled", "Plugin Catalog", filteredStoreCatalog.length)}
           {tabButton("mesh", "On the mesh")}
         </div>
         <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
@@ -795,7 +794,7 @@ export default function PluginsPage({ activeBrainId }: PluginsPageProps) {
                 </div>
                 <div style={muted}>
                   {viewMode === "workspace"
-                    ? "Core runtime foundation and activated repository cards. Optional tools live in the Plugin Store."
+                    ? "Core runtime foundation and activated repository cards. Standalone tools live in the Plugin Catalog."
                     : "All plugin packages installed on this host."}
                 </div>
               </div>
@@ -839,7 +838,7 @@ export default function PluginsPage({ activeBrainId }: PluginsPageProps) {
                       onTouchEnd={cancelLongPress}
                       style={{ display: "flex", flexDirection: "column", gap: "8px", minWidth: 0 }}
                     >
-                      <CardEngine plugin={p} />
+                      <PluginPanel plugin={p} />
                       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "0 4px", fontSize: "11px", color: "var(--text-tertiary)", flexWrap: "wrap", gap: "6px" }}>
                         <div style={{ display: "flex", gap: "6px", alignItems: "center", flexWrap: "wrap" }}>
                           <span className="badge">{p.scope}</span>

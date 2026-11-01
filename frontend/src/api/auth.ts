@@ -75,7 +75,6 @@ export async function logout(): Promise<void> {
 export interface AuthProvidersResponse {
   password: { configured: boolean }
   passkey: { enabled: boolean; has_passkeys: boolean; count: number }
-  google: { configured: boolean; client_id: string | null }
 }
 
 export async function getAuthProviders(): Promise<AuthProvidersResponse> {
@@ -85,13 +84,11 @@ export async function getAuthProviders(): Promise<AuthProvidersResponse> {
     return {
       password: { configured: true },
       passkey: { enabled: false, has_passkeys: false, count: 0 },
-      google: { configured: false, client_id: null },
     }
   } catch {
     return {
       password: { configured: true },
       passkey: { enabled: false, has_passkeys: false, count: 0 },
-      google: { configured: false, client_id: null },
     }
   }
 }

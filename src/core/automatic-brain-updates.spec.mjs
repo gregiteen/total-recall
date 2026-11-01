@@ -66,4 +66,15 @@ describe('daemon automatic package maintenance',()=>{
     expect(onError).toHaveBeenCalledWith('npm failed');
     maintenance.stop();
   });
+  it('counts portable skill verification failures in local maintenance',async()=>{
+    const update=vi.fn().mockResolvedValue({versions:{'total-recall-brain':'3.40.2'},failed:0,results:[]});
+    const compile=vi.fn().mockResolvedValue({ok:true,results:[]});
+    const skillMaintenance=vi.fn().mockResolvedValue({apply:true,failed:2,results:[{status:'missing'}]});
+    const brainDir=brain();
+    const report=await runAutomaticBrainUpdates({brainDir,update,compile,skillMaintenance,now:()=>10000000});
+    expect(skillMaintenance).toHaveBeenCalledWith({brainDir});
+    expect(report.local_failed).toBe(2);
+    expect(automaticUpdateStatus(brainDir).last.skills.results[0].status).toBe('missing');
+  });
+
 });

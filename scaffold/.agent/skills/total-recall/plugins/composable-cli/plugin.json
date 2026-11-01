@@ -12,13 +12,7 @@
     "badge": "Pipeline Forge",
     "font": "space-grotesk"
   },
-  "secrets": [
-    {
-      "key": "COMPOSABLE_CLI_AUTH_TOKEN",
-      "description": "Optional token for distributed command runners",
-      "required": false
-    }
-  ],
+  "secrets": [],
   "cli": {
     "command": "composable-cli",
     "handler": "./cli.mjs",

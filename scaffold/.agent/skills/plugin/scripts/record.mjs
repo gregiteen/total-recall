@@ -47,7 +47,9 @@ function walk(dir, out = [], base = root) {
 /* ── manifest ────────────────────────────────────────────────────────────── */
 
 let manifest = null;
-if (want('--manifest')) {
+// Every selected section depends on manifest facts. Section filtering must not
+// skip prerequisite loading and then report a vacuous successful check run.
+{
   const file = path.join(root, 'plugin.json');
   if (!fs.existsSync(file)) {
     record('manifest', 'FAIL', 'plugin.json exists', 'no plugin.json in ' + root);
@@ -62,7 +64,7 @@ if (want('--manifest')) {
 }
 
 // Validate with the real contract when this skill is inside a Total Recall checkout.
-if (manifest) {
+if (manifest && want('--manifest')) {
   const loaderPath = path.resolve(import.meta.dirname, '../../../../src/core/plugin-loader.mjs');
   if (fs.existsSync(loaderPath)) {
     try {
@@ -82,7 +84,8 @@ if (manifest) {
 
   // Card declaration
   const elements = manifest.ui?.elements || [];
-  const faces = elements.filter((e) => e && (e.kind === 'card' || e.kind === 'panel'));
+  // One face (kind 'card') plus any number of screens (kind 'panel'); a panel is never the face.
+  const faces = elements.filter((e) => e && e.kind === 'card');
   if (manifest.card_layout !== undefined) {
     record('manifest', 'FAIL', 'no template', "'card_layout' is declared; a face is bespoke owner code");
   } else {

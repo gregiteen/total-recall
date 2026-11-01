@@ -829,4 +829,48 @@ describe('skills-registry', () => {
     // Normal skill should NOT be in the repo_scoped-skipped list
     expect(skipped.some((r) => r.skillId === 'normal-skill')).toBe(false);
   });
+  it('fails verification for missing recorded installs and refuses live-only sync success', () => {
+    const source = writeSkill(path.join(workspace, 'catalog'), 'missing-install');
+    registerSkill(brain, source);
+    const repo = path.join(workspace, 'present-repo');
+    deploySkill(brain, 'missing-install', { repo });
+    const target = path.join(repo, '.agent/skills/missing-install');
+    fs.rmSync(target, { recursive: true });
+    const status = skillStatus(brain, 'missing-install');
+    expect(status).toMatchObject({ verified: false, any_drift: true, missing_count: 1 });
+    expect(status.installs[0].verification).toBe('missing');
+    const report = syncSkillTwoWay(brain, 'missing-install', { dryRun: true });
+    expect(report).toMatchObject({ in_sync: false, actions: [] });
+    expect(report.missing[0]).toMatchObject({ path: target, repository_exists: true });
+    expect(fs.existsSync(target)).toBe(false);
+  });
+
+  it('does not certify an unregistered or missing-source skill', () => {
+    expect(skillStatus(brain, 'absent').verified).toBe(false);
+    const source = writeSkill(path.join(workspace, 'catalog'), 'lost-source');
+    registerSkill(brain, source);
+    fs.rmSync(source, { recursive: true });
+    expect(skillStatus(brain, 'lost-source').verified).toBe(false);
+  });
+
+  it('dry-runs layered deployment and explicitly routes without overwriting authored wrapper', () => {
+    const source = writeSkill(path.join(workspace, 'catalog'), 'portable');
+    fs.mkdirSync(path.join(source, 'core'));
+    fs.writeFileSync(path.join(source, 'core/SKILL.md'), '# Current portable core\n');
+    registerSkill(brain, source);
+    const repo = path.join(workspace, 'target');
+    const local = writeSkill(path.join(repo, '.agent/skills'), 'portable');
+    const original = fs.readFileSync(path.join(local, 'SKILL.md'), 'utf8');
+    const dry = deploySkill(brain, 'portable', { repo, routeCore: true, dryRun: true });
+    expect(dry.dryRun).toBe(true);
+    expect(fs.existsSync(path.join(local, 'core'))).toBe(false);
+    expect(fs.readFileSync(path.join(local, 'SKILL.md'), 'utf8')).toBe(original);
+    deploySkill(brain, 'portable', { repo, routeCore: true });
+    deploySkill(brain, 'portable', { repo, routeCore: true });
+    const wrapper = fs.readFileSync(path.join(local, 'SKILL.md'), 'utf8');
+    expect(wrapper.startsWith(original.trimEnd())).toBe(true);
+    expect(wrapper.match(/total-recall:managed-core-route:v1/g)).toHaveLength(1);
+    expect(skillStatus(brain, 'portable').verified).toBe(true);
+  });
+
 });

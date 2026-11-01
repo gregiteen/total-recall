@@ -907,7 +907,13 @@ export async function run(argv = []) {
   }
   if (IMPLEMENTED[sub]) {
     try { return await IMPLEMENTED[sub](args.slice(1)); }
-    catch { console.log(JSON.stringify({ status: 'failed', operation: sub, error: 'Security operation failed; verify arguments, owning plugin availability and authorization. No success was established.' })); process.exitCode = 1; return; }
+    catch (error) {
+      // Say what failed. The generic text hid every cause, including a scan that
+      // simply hit its coverage limit. Messages are paths and limits, never matched content.
+      console.log(JSON.stringify({ status: 'failed', operation: sub, error: `Security operation failed: ${String(error?.message || error).slice(0, 300)}. No success was established.` }));
+      process.exitCode = 1;
+      return;
+    }
   }
   console.error(`Security: "${sub}" is not implemented.`);
   process.exitCode = 2;

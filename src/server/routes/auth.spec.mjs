@@ -10,6 +10,7 @@ vi.mock('../auth.mjs', () => ({
   requireScope: () => (_req, _res, next) => next(),
   authRateLimiter: () => (_req, _res, next) => next(),
   isLocalRequest: () => state.local,
+  loginRequired: () => state.configured,
   loadSecurityConfig: () => ({}),
   dashboardAuthState: () => ({ configured: state.configured }),
   signSessionToken: () => 'fixture-session',
@@ -94,9 +95,9 @@ describe('GET /auth/status', () => {
 
   it('reports whether a password has been set', async () => {
     const unset = await request(app()).get('/auth/status');
-    expect(unset.body).toEqual({ configured: false });
+    expect(unset.body).toEqual({ configured: false, login_required: false });
     state.configured = true;
     const set = await request(app()).get('/auth/status');
-    expect(set.body).toEqual({ configured: true });
+    expect(set.body).toEqual({ configured: true, login_required: true });
   });
 });

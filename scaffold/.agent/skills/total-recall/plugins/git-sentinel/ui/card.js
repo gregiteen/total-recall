@@ -410,14 +410,26 @@ export class GitSentinelCard extends HTMLElement {
           --face-ok: #047857;
           --face-warn: #b45309;
           --face-danger: #b91c1c;
+          --face-text-default: #111827;
+          --face-muted-default: #6b7280;
+          --face-line-default: #e5e7eb;
+          --face-surface-default: #f9fafb;
+          --face-accent-default: #b45309;
+          --face-dark-ok: #34d399;
+          --face-dark-warn: #fbbf24;
+          --face-dark-danger: #f87171;
+          --face-dark-text: #e8eaf0;
+          --face-dark-muted: #a2a8b8;
+          --face-dark-line: #2a3040;
+          --face-dark-surface: #171a23;
           --face-radius: 6px;
           --face-motion: 140ms ease-out;
           --face-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
-          --face-text: var(--text-primary, #111827);
-          --face-muted: var(--text-secondary, #6b7280);
-          --face-line: var(--border, #e5e7eb);
-          --face-surface: var(--bg-secondary, #f9fafb);
-          --face-accent: var(--card-color, #b45309);
+          --face-text: var(--text-primary, var(--face-text-default));
+          --face-muted: var(--text-secondary, var(--face-muted-default));
+          --face-line: var(--border, var(--face-line-default));
+          --face-surface: var(--bg-secondary, var(--face-surface-default));
+          --face-accent: var(--card-color, var(--face-accent-default));
           font-family: 'Space Grotesk', var(--font-sans, system-ui, sans-serif);
           color: var(--face-text);
         }
@@ -425,25 +437,25 @@ export class GitSentinelCard extends HTMLElement {
            verdict line, so they are retuned whenever the host is dark. */
         @media (prefers-color-scheme: dark) {
           :host {
-            --face-ok: #34d399;
-            --face-warn: #fbbf24;
-            --face-danger: #f87171;
-            --face-text: var(--text-primary, #e8eaf0);
-            --face-muted: var(--text-secondary, #a2a8b8);
-            --face-line: var(--border, #2a3040);
-            --face-surface: var(--bg-secondary, #171a23);
+            --face-ok: var(--face-dark-ok);
+            --face-warn: var(--face-dark-warn);
+            --face-danger: var(--face-dark-danger);
+            --face-text: var(--text-primary, var(--face-dark-text));
+            --face-muted: var(--text-secondary, var(--face-dark-muted));
+            --face-line: var(--border, var(--face-dark-line));
+            --face-surface: var(--bg-secondary, var(--face-dark-surface));
           }
         }
         :host-context([data-theme="dark"]),
         :host-context(.theme-dark),
         :host-context(.dark) {
-          --face-ok: #34d399;
-          --face-warn: #fbbf24;
-          --face-danger: #f87171;
-          --face-text: var(--text-primary, #e8eaf0);
-          --face-muted: var(--text-secondary, #a2a8b8);
-          --face-line: var(--border, #2a3040);
-          --face-surface: var(--bg-secondary, #171a23);
+          --face-ok: var(--face-dark-ok);
+          --face-warn: var(--face-dark-warn);
+          --face-danger: var(--face-dark-danger);
+          --face-text: var(--text-primary, var(--face-dark-text));
+          --face-muted: var(--text-secondary, var(--face-dark-muted));
+          --face-line: var(--border, var(--face-dark-line));
+          --face-surface: var(--bg-secondary, var(--face-dark-surface));
         }
         * { box-sizing: border-box; }
         .top { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 12px; }
