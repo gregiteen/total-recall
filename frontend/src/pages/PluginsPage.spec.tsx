@@ -88,12 +88,11 @@ describe('PluginsPage', () => {
     expect(frame.tagName).toBe('IFRAME');
     expect(frame.getAttribute('sandbox')).toBe('allow-scripts');
 
-    // Commands are reachable through the drawer's Commands screen, not derived
+    // Commands are reachable through the drawer's Run CLI screen, not derived
     // onto the card itself.
     fireEvent.click(screen.getByRole('button', { name: /settings & usage/i }));
-    fireEvent.click(await screen.findByRole('tab', { name: /commands/i }));
-    expect(await screen.findByText('total-recall git-sentinel audit --json')).toBeInTheDocument();
-    expect(screen.getByText('Try')).toBeInTheDocument();
+    fireEvent.click(await screen.findByRole('tab', { name: /run cli/i }));
+    expect(await screen.findByRole('option', { name: 'audit' })).toBeInTheDocument();
 
     expect(calls.some(call => call.url.endsWith('/api/plugins/git-sentinel/run'))).toBe(false);
   });
@@ -111,7 +110,7 @@ describe('PluginsPage', () => {
   it('installs a bundled plugin', async () => {
     renderPage();
     await screen.findByText('from mac-mini');
-    fireEvent.click(screen.getByRole('tab', { name: /Bundled/ }));
+    fireEvent.click(screen.getByRole('tab', { name: /Plugin Catalog/ }));
     fireEvent.click(await screen.findByRole('button', { name: 'Install' }));
     await waitFor(() => expect(calls.some(c => c.url.endsWith('/api/plugins/install'))).toBe(true));
     const body = JSON.parse(String(calls.find(c => c.url.endsWith('/api/plugins/install'))!.init!.body));
@@ -135,7 +134,7 @@ describe('PluginsPage', () => {
   it('filters by use case', async () => {
     renderPage();
     await screen.findByText('from mac-mini');
-    fireEvent.click(screen.getByRole('tab', { name: /Bundled/ }));
+    fireEvent.click(screen.getByRole('tab', { name: /Plugin Catalog/ }));
     fireEvent.change(screen.getByLabelText('Filter by use case'), { target: { value: 'operations' } });
     expect(screen.getByText('System Monitor')).toBeInTheDocument();
     expect(screen.queryByText('Repository state')).not.toBeInTheDocument();

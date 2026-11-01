@@ -13,7 +13,8 @@ const pluginRouter = createAuthRouter({ auth, logger, BRAIN_DIR });
  */
 export const authRouter = express.Router();
 authRouter.use('/auth/google', (_req, res) => res.status(404).json({ error: 'Google sign-in is not available in Total Recall' }));
-authRouter.get('/auth/providers', (req, res, next) => {
+authRouter.use('/auth/providers', (req, res, next) => {
+  if (req.method !== 'GET') return next();
   const json = res.json.bind(res);
   res.json = (body) => {
     if (body && typeof body === 'object') delete body.google;
@@ -21,7 +22,8 @@ authRouter.get('/auth/providers', (req, res, next) => {
   };
   next();
 });
-authRouter.get('/auth/status', (req, res, next) => {
+authRouter.use('/auth/status', (req, res, next) => {
+  if (req.method !== 'GET') return next();
   const json = res.json.bind(res);
   res.json = (body) => json({ ...body, login_required: auth.loginRequired() });
   next();

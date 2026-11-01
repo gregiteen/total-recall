@@ -847,6 +847,14 @@ export default function PluginsPage({ activeBrainId }: PluginsPageProps) {
                           {!p.valid && <span className="badge badge-error">invalid manifest</span>}
                           {p.modified_since_install && <span className="badge badge-warning">changed since install</span>}
                         </div>
+                        <button
+                          type="button"
+                          className="btn btn-ghost btn-xs"
+                          onClick={() => openDetail(p, "details")}
+                          style={{ fontSize: "11px", color: "var(--text-secondary)" }}
+                        >
+                          Settings &amp; usage
+                        </button>
                         {!DEFAULT_CORE_PLUGINS.has(p.id) && (
                           <button
                             type="button"

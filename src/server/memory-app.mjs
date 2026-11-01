@@ -4,7 +4,7 @@ import cors from 'cors';
 import cookieParser from 'cookie-parser';
 import fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { requireHttps, corsOptions, apiRateLimiter, requireAuthOrLocal } from './auth.mjs';
+import { requireHttps, corsOptions, apiRateLimiter, requireAuthOrLocal, enforceLogin } from './auth.mjs';
 import { memoryRouter } from './routes/memory.mjs';
 import { authRouter } from './routes/auth.mjs';
 import { keysRouter } from './routes/keys.mjs';
@@ -17,6 +17,7 @@ import { getNodes } from '../core/vault-cache.mjs';
 const { version } = JSON.parse(fs.readFileSync(fileURLToPath(new URL('../../package.json', import.meta.url)), 'utf8'));
 
 export function createMemoryApp() {
+  enforceLogin();
   const app = express();
   app.disable('x-powered-by');
   app.set('trust proxy', 'loopback');

@@ -11,6 +11,13 @@ export const { loadSecurityConfig, apiRateLimiter, authRateLimiter, sandboxRateL
 
 const hostName = (value) => String(value || '').replace(/^https?:\/\//, '').replace(/[/?#].*$/, '').replace(/:\d+$/, '').replace(/^\[(.*)\]$/, '$1');
 
+let alwaysRequired = false;
+
+/** Headless hosts (the memory-only runtime) never offer the open-local mode. */
+export function enforceLogin() {
+  alwaysRequired = true;
+}
+
 /**
  * Dashboard login is optional for a local install. It is required when
  * `dashboard.require_login` is true, or, when unset, once a dashboard password
@@ -20,6 +27,7 @@ const hostName = (value) => String(value || '').replace(/^https?:\/\//, '').repl
  * (mesh, tunnel, remote) still authenticate normally.
  */
 export function loginRequired() {
+  if (alwaysRequired) return true;
   const configured = loadSecurityConfig().dashboard?.require_login;
   return typeof configured === 'boolean' ? configured : dashboardAuthState().configured;
 }

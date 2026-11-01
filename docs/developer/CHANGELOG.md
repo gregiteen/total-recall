@@ -1,3 +1,22 @@
+## 3.41.3 — 2026-10-31
+
+- Dashboard login is optional for a local install. `dashboard.require_login`
+  in `security.yml` turns it off; when unset, login is required only once a
+  dashboard password exists. With login off, only a genuinely local request
+  (loopback socket, loopback `Host`, no foreign `Origin`, no Bearer token) skips
+  it, so mesh, tunnel and remote clients still authenticate. The memory-only
+  runtime always requires authentication. `/auth/status` reports
+  `login_required`.
+- Total Recall no longer offers Google sign-in. `/auth/google*` returns 404,
+  provider discovery omits Google and the login page drops the button. The
+  auth plugin still serves Google for apps that use it.
+- The service worker's cache-first handler no longer turns a cache or fetch
+  error into a failed page load, and caches only same-origin responses.
+- `total-recall reset-password` help names the encrypted auth store, which is
+  the only place the server reads the dashboard password.
+- Plugin cards render each plugin's own face again, with a "Settings & usage"
+  control that opens the detail drawer; the store tab is now "Plugin Catalog".
+
 ## 3.41.2 — 2026-10-25
 
 - Bundle auth 1.2.3. `auth secret remote deploy` and `export-env` now replace
