@@ -139,8 +139,15 @@ export async function compileContext({
   return result;
 }
 
+/**
+ * Second line of every text capsule, so output that is truncated or piped through
+ * `head` still carries the rule (the rule once sat at line 544 of the output and
+ * an agent that cut the output at 80 lines never saw it).
+ */
+export const PREFLIGHT_NOTICE = 'PREFLIGHT: before any other tool call, read this whole capsule (never pipe or truncate it), then run: total-recall tr-preflight --ack --task "<task>" --action read,edit,test';
+
 export function renderCapsule(result, format = 'json') {
-  return format === 'text' ? `ready:${result.ready} tokens:${result.stats.total_tokens} version:${result.stats.version}\n${result.context}` : JSON.stringify(result);
+  return format === 'text' ? `ready:${result.ready} tokens:${result.stats.total_tokens} version:${result.stats.version}\n${PREFLIGHT_NOTICE}\n${result.context}` : JSON.stringify(result);
 }
 
 /** Budget the actual wire representation, including metadata, escaping and status. */

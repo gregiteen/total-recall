@@ -22,6 +22,8 @@ export const CLI_COMMANDS = {
   edit:     'edit.mjs',
   recall:   'recall.mjs',
   context:  'context.mjs',
+  preflight: 'preflight.mjs',
+  'tr-preflight': 'preflight.mjs',
   'context-stats': 'context-stats.mjs',
   rules:    'rules.mjs',
   search:   'recall.mjs',

@@ -67,6 +67,7 @@ async function printHelp() {
     remember / forget / edit   Write-path memory (SSSS vault)
     recall              Read-path hybrid search
     context "<task>"    Required-rule capsule to read before acting (require ready:true)
+    preflight <cmd>     ack | check | gate: the receipt every harness hook enforces (alias: tr-preflight)
     auth secret <cmd>   Credentials (the only secrets path): list|get|set|rotate|remote deploy|diff-env|export-env
     compile             Rebuild instruction surfaces
     dream               Memory consolidation cycle
@@ -137,8 +138,16 @@ async function main() {
     'compile', 'rebuild', 'dream', 'proposals', 'proposal', 'task',
     'daemon', 'skill', 'plugin', 'plugins',
     'harness', 'agent', 'agents', 'brain', 'status',
-    'doctor', 'brief', 'startup', 'init', 'connect', 'new'
+    'doctor', 'brief', 'startup', 'init', 'connect', 'new', 'preflight', 'tr-preflight'
   ]);
+
+  // Consulting Total Recall is what the repository-sweep policy looks for. Never fatal.
+  if (['recall', 'context', 'help'].includes(command)) {
+    try {
+      const { touchConsult, findRoot } = await import('../src/core/preflight-receipt.mjs');
+      touchConsult(findRoot());
+    } catch { /* the stamp is advisory */ }
+  }
 
   // Check installed plugins first for any non-core commands (e.g. deploy, phone, text)
   if (!CORE_BUILTINS.has(command)) {

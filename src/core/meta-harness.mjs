@@ -49,15 +49,6 @@ export const HARNESS_SPECS = {
     execType: 'subcommand',
     description: 'Autonomous program synthesis and sandbox execution.'
   },
-  gemini: {
-    id: 'gemini',
-    name: 'Google Gemini CLI',
-    binary: 'gemini',
-    category: 'fast_utility',
-    defaultFlags: ['--sandbox=false', '--yolo', '-o', 'json'],
-    execType: 'flag_last',
-    description: 'High-speed utility completions and tool chaining.'
-  },
   ollama: {
     id: 'ollama',
     name: 'Ollama Local LLM',
@@ -245,14 +236,6 @@ export async function detectHarnessesWithAuth({ readSecret = readStoreSecret } =
       } else if (fs.existsSync(path.join(os.homedir(), '.grok'))) {
         h.authed = true;
         h.authRoute = 'cached-xai-auth';
-      }
-    } else if (h.id === 'gemini') {
-      if (process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY) {
-        h.authed = true;
-        h.authRoute = 'env-api-key';
-      } else if (fs.existsSync(path.join(os.homedir(), '.gemini'))) {
-        h.authed = true;
-        h.authRoute = 'cached-google-signin';
       }
     } else if (h.id === 'hermes') {
       if (process.env.HERMES_API_KEY) {
@@ -471,6 +454,9 @@ export function getInstalledHarnessVersion(harnessId) {
       const m = (res.stdout || '').match(/(\d+\.\d+\.\d+)/);
       if (m) return m[1];
     } else if (harnessId === 'codex') {
+      const res = spawnSync('codex', ['--version'], { timeout: 1500, encoding: 'utf8' });
+      const m = (res.stdout || '').match(/(\d+\.\d+\.\d+)/);
+      if (m) return m[1];
       const candidatePaths = [
         path.join(os.homedir(), '.nvm/versions/node/v24.12.0/lib/node_modules/@openai/codex/package.json'),
         '/usr/local/lib/node_modules/@openai/codex/package.json',
@@ -495,10 +481,6 @@ export function getInstalledHarnessVersion(harnessId) {
     } else if (harnessId === 'ollama') {
       const res = spawnSync('ollama', ['--version'], { timeout: 1500, encoding: 'utf8' });
       const m = (res.stdout || res.stderr || '').match(/(\d+\.\d+\.\d+)/);
-      if (m) return m[1];
-    } else if (harnessId === 'gemini') {
-      const res = spawnSync('gemini', ['--version'], { timeout: 800, encoding: 'utf8' });
-      const m = (res.stdout || '').match(/(\d+\.\d+\.\d+)/);
       if (m) return m[1];
     } else if (harnessId === 'hermes') {
       const res = spawnSync('hermes', ['--version'], { timeout: 1500, encoding: 'utf8' });
@@ -550,19 +532,24 @@ export async function getLatestHarnessVersion(harnessId, installedVersion = 'unk
         if (d.version) latest = d.version;
       }
     } else if (harnessId === 'agy') {
-      latest = '1.3.1';
+      try {
+        const res = spawnSync('agy', ['changelog'], { timeout: 2000, encoding: 'utf8' });
+        const m = (res.stdout || '').match(/^(\d+\.\d+\.\d+):/m);
+        if (m) latest = m[1];
+        else latest = installedVersion !== 'unknown' ? installedVersion : '1.4.12';
+      } catch {
+        latest = installedVersion !== 'unknown' ? installedVersion : '1.4.12';
+      }
     } else if (harnessId === 'grok') {
-      latest = '0.2.118';
+      latest = installedVersion !== 'unknown' ? installedVersion : '0.2.118';
     } else if (harnessId === 'ollama') {
-      latest = '0.24.0';
-    } else if (harnessId === 'gemini') {
-      latest = '0.3.0';
+      latest = installedVersion !== 'unknown' ? installedVersion : 'unknown';
     } else if (harnessId === 'hermes') {
-      latest = '0.1.0';
+      latest = installedVersion !== 'unknown' ? installedVersion : 'unknown';
     } else if (harnessId === 'dsh') {
-      latest = '1.1.1';
+      latest = installedVersion !== 'unknown' ? installedVersion : 'unknown';
     } else if (harnessId === 'openclaw') {
-      latest = '2026.4.10';
+      latest = installedVersion !== 'unknown' ? installedVersion : 'unknown';
     }
   } catch {}
 
@@ -676,15 +663,6 @@ export async function queryHarnessUsage() {
           plan = 'Grok Build Tier';
         }
         if (!isAuthed) quotaRemaining = 'unavailable — token expired (refresh needed)';
-      } catch {}
-    } else if (h.id === 'gemini') {
-      try {
-        const accPath = path.join(os.homedir(), '.gemini', 'google_accounts.json');
-        if (fs.existsSync(accPath)) {
-          const acc = JSON.parse(fs.readFileSync(accPath, 'utf8'));
-          if (acc.active) identity = acc.active;
-        }
-        plan = 'Google AI API / Subscription';
       } catch {}
     } else if (h.id === 'ollama') {
       identity = 'Local Machine';

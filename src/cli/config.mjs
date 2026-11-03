@@ -17,6 +17,9 @@ const KEY_MAP = {
   'public_health': { file: 'security', path: 'network.public_health', type: 'boolean' },
   'allowed_origins': { file: 'security', path: 'network.allowed_origins', type: 'array' },
 
+  // How long a `total-recall preflight ack` receipt stays fresh. Recorded in the receipt when it is written.
+  'preflight_max_age_minutes': { file: 'preflight', path: 'preflight.max_age_minutes', type: 'number' },
+
   'daily_cap_usd': { file: 'budget', path: 'budget.daily_cap_usd', type: 'number' },
   'weekly_cap_usd': { file: 'budget', path: 'budget.weekly_cap_usd', type: 'number' },
   'budget_enabled': { file: 'budget', path: 'budget.enabled', type: 'boolean' },

@@ -48,6 +48,16 @@ describe('context CLI', () => {
     expect(output).not.toContain('manual');
     expect(Number(output.match(/tokens:(\d+)/)[1])).toBe(Math.ceil((output.length + 1) / 4));
   });
+  it('puts the preflight rule on the second line, ahead of every rule body, and counts it', async () => {
+    const log = vi.spyOn(console, 'log').mockImplementation(() => {});
+    await context(['deployment', '--action', 'read']);
+    const lines = log.mock.calls.at(-1)[0].split('\n');
+    expect(lines[0]).toMatch(/^ready:true tokens:\d+ version:/);
+    expect(lines[1]).toMatch(/^PREFLIGHT: .*never pipe or truncate it.*total-recall tr-preflight --ack/);
+    expect(lines.slice(2).join('\n')).toContain('Preserve records.');
+    // A reader that keeps only the first 3 lines still gets the rule.
+    expect(lines.slice(0, 3).join('\n')).toContain('tr-preflight --ack');
+  });
   it('accepts boolean flags without consuming the following option and preserves overflow', async () => {
     const log = vi.spyOn(console, 'log').mockImplementation(() => {});
     await context(['deployment', '--knowledge', '--format', 'json', '--debug', '--action', 'read', '--budget', '2']);

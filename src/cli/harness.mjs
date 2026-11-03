@@ -21,7 +21,6 @@ Available Harness IDs:
   claude                    Claude Code CLI (Deep codebase refactoring & Unix execution)
   codex                     OpenAI Codex CLI (Program synthesis & sandbox execution)
   grok                      xAI Grok Build CLI (Autonomous coding, inspection, shell execution)
-  gemini                    Google Gemini CLI (Fast utilities & completion chaining)
   ollama                    Ollama Local LLM (Local neural reasoning, zero API cost)
   hermes                    Hermes Agent Runtime (Autonomous supervisor & messaging gateway)
   dsh                       DeepSeek Harness DSH (High-throughput reasoning engine)

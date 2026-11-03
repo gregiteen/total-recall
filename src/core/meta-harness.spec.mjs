@@ -18,7 +18,6 @@ describe('Meta Harness & Multi-Agent Manager', () => {
     expect(HARNESS_SPECS).toHaveProperty('agy');
     expect(HARNESS_SPECS).toHaveProperty('claude');
     expect(HARNESS_SPECS).toHaveProperty('codex');
-    expect(HARNESS_SPECS).toHaveProperty('gemini');
     expect(HARNESS_SPECS).toHaveProperty('ollama');
     expect(HARNESS_SPECS).toHaveProperty('grok');
     expect(HARNESS_SPECS).toHaveProperty('hermes');
@@ -28,7 +27,6 @@ describe('Meta Harness & Multi-Agent Manager', () => {
     expect(HARNESS_SPECS.agy.defaultFlags).toContain('-p');
     expect(HARNESS_SPECS.claude.defaultFlags).toContain('--permission-mode');
     expect(HARNESS_SPECS.codex.defaultFlags).toContain('exec');
-    expect(HARNESS_SPECS.gemini.defaultFlags).toContain('--sandbox=false');
     expect(HARNESS_SPECS.ollama.defaultFlags).toContain('run');
     expect(HARNESS_SPECS.grok.defaultFlags).toContain('-p');
     expect(HARNESS_SPECS.hermes.defaultFlags).toContain('-p');
@@ -39,7 +37,7 @@ describe('Meta Harness & Multi-Agent Manager', () => {
   it('detects available harnesses without crashing', () => {
     const detected = detectHarnesses();
     expect(Array.isArray(detected)).toBe(true);
-    expect(detected.length).toBe(9);
+    expect(detected.length).toBe(8);
     for (const h of detected) {
       expect(h).toHaveProperty('id');
       expect(h).toHaveProperty('name');
@@ -79,7 +77,7 @@ describe('harness tool selection', () => {
 
   it('refuses a tool selection on a harness that cannot honour it', () => {
     expect(() => buildHarnessArgs(HARNESS_SPECS.codex, { tools: 'none' })).toThrow(/does not support choosing its tool set/);
-    expect(() => buildHarnessArgs(HARNESS_SPECS.gemini, { settingSources: 'local' })).toThrow(/setting-sources/);
+    expect(() => buildHarnessArgs(HARNESS_SPECS.codex, { settingSources: 'local' })).toThrow(/setting-sources/);
     expect(buildHarnessArgs(HARNESS_SPECS.codex)).toEqual(HARNESS_SPECS.codex.defaultFlags);
   });
 
@@ -141,7 +139,7 @@ describe('Harness version currency and quota usage inspection', () => {
   it('queries harness usage and returns 5h and weekly quota percentages', async () => {
     const reports = await queryHarnessUsage();
     expect(Array.isArray(reports)).toBe(true);
-    expect(reports.length).toBe(9);
+    expect(reports.length).toBe(8);
 
     for (const r of reports) {
       expect(r).toHaveProperty('id');
