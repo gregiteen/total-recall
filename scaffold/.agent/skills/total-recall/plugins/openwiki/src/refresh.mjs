@@ -21,7 +21,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { spawnSync } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import { loadOpenWikiConfig } from './config.mjs';
 
 const PLUGIN_ROOT = fileURLToPath(new URL('..', import.meta.url));
@@ -304,6 +304,115 @@ export function refreshProject(project, {
   }
 
   const after = staleness(project.root, { git: run });
+  const exitCode = result.error ? (result.error.code || 1) : result.status;
+  const advanced = after.generatedAt !== before.generatedAt || (uninitialized && hasWiki(project.root));
+  const wrote = pagesWritten(before, after) || (uninitialized && hasWiki(project.root) ? 1 : 0);
+
+  const outcome = after.generatedStatus === 'interrupted' || stillGenerating(project.root)
+    ? 'partial'
+    : (advanced ? (uninitialized ? 'initialized' : 'refreshed') : 'unchanged');
+
+  if (exitCode !== 0 && !wrote) {
+    return { ...project, action: 'failed', reason: result.error?.message || `exit ${exitCode}`, exitCode, ...after };
+  }
+  if (!advanced && !wrote) {
+    return { ...project, action: 'failed', reason: `command exited ${exitCode} and no page changed`, exitCode, ...after };
+  }
+  if (outcome === 'partial') {
+    return {
+      ...project,
+      action: 'partial',
+      reason: `${wrote} page(s) rewritten, but the run did not finish (the generator was cut off); it resumes on the next refresh`,
+      exitCode,
+      from: before.generatedAt,
+      to: after.generatedAt,
+      via,
+      ...after,
+    };
+  }
+  if (exitCode !== 0) {
+    return { ...project, action: 'failed', reason: result.error?.message || `exit ${exitCode}`, exitCode, ...after };
+  }
+  return { ...project, action: uninitialized ? 'initialized' : 'refreshed', from: before.generatedAt, to: after.generatedAt, durationMs: Date.now() - startedAt, via, ...after };
+}
+
+export async function refreshProjectAsync(project, {
+  key, model = null, provider = null, binary = null, binaryArgs = [], timeoutMs = 30 * 60 * 1000, now = Date.now(), targetVersion = null, pluginRoot = PLUGIN_ROOT,
+} = {}) {
+  const before = staleness(project.root, { git: spawnSync });
+  const uninitialized = !hasWiki(project.root);
+  let command = binary, args = binaryArgs, via = binary ? 'explicit' : null;
+  if (!command) {
+    const resolved = resolveGenerator({ run: spawnSync, targetVersion, pluginRoot });
+    if (!resolved.command) {
+      return { ...project, action: 'failed', reason: 'no openwiki generator available (no local .bin, no PATH entry, no npx)', ...before };
+    }
+    ({ command, args, via } = resolved);
+  }
+
+  const config = typeof loadOpenWikiConfig === 'function' ? loadOpenWikiConfig() : { model: 'deepseek/deepseek-v4.1-flash', provider: 'openrouter' };
+  const selectedModel = model || config.model;
+  const selectedProvider = provider || config.provider;
+
+  const modeFlag = uninitialized ? '--init' : '--update';
+  const cmdArgs = [...args, modeFlag, '-p'];
+  if (selectedModel) {
+    cmdArgs.push('--modelId', selectedModel);
+  }
+
+  if (uninitialized) {
+    const runFile = path.join(project.root, 'openwiki', '.run.json');
+    if (fs.existsSync(runFile)) {
+      try { fs.unlinkSync(runFile); } catch {}
+    }
+  }
+
+  const childEnv = { ...process.env };
+  if (selectedProvider === 'google') {
+    childEnv.GOOGLE_API_KEY = key;
+    childEnv.GEMINI_API_KEY = key;
+    childEnv.OPENWIKI_PROVIDER = 'gemini';
+    delete childEnv.OPENAI_API_KEY;
+    delete childEnv.OPENROUTER_API_KEY;
+  } else {
+    childEnv.OPENROUTER_API_KEY = key;
+    childEnv.OPENWIKI_PROVIDER = 'openrouter';
+    if (config.max_tokens) {
+      childEnv.OPENWIKI_OPENROUTER_MAX_TOKENS = String(config.max_tokens);
+      childEnv.OPENWIKI_MAX_OUTPUT_TOKENS = String(config.max_tokens);
+    }
+    delete childEnv.OPENAI_API_KEY;
+  }
+
+  const startedAt = now;
+  const result = await new Promise((resolve) => {
+    const proc = spawn(command, cmdArgs, {
+      cwd: project.root,
+      env: childEnv,
+      stdio: ['ignore', 'pipe', 'pipe'],
+      timeout: timeoutMs,
+    });
+    let stdout = '', stderr = '';
+    proc.stdout?.on('data', (d) => { stdout += d; });
+    proc.stderr?.on('data', (d) => { stderr += d; });
+    proc.on('error', (err) => resolve({ error: err, status: 1, stdout, stderr }));
+    proc.on('close', (status) => resolve({ status: status ?? 0, stdout, stderr }));
+  });
+
+  // OpenWiki generator may drop GitHub workflow files; our system strictly forbids GitHub Actions.
+  const workflowDir = path.join(project.root, '.github', 'workflows');
+  const workflowFile = path.join(workflowDir, 'openwiki-update.yml');
+  if (fs.existsSync(workflowFile)) {
+    try { fs.unlinkSync(workflowFile); } catch {}
+  }
+  if (fs.existsSync(workflowDir)) {
+    try {
+      const remaining = fs.readdirSync(workflowDir);
+      if (remaining.length === 0) fs.rmdirSync(workflowDir);
+    } catch {}
+  }
+
+  const after = staleness(project.root, { git: spawnSync });
   const exitCode = result.error ? (result.error.code || 1) : result.status;
   const advanced = after.generatedAt !== before.generatedAt || (uninitialized && hasWiki(project.root));
   const wrote = pagesWritten(before, after) || (uninitialized && hasWiki(project.root) ? 1 : 0);

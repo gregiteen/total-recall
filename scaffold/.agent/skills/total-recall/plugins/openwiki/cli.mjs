@@ -6,7 +6,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { runBootstrapCommand } from './src/bootstrap.mjs';
-import { describeRetention, hasWiki, isDue, readProjects, refreshProject, resolveKey, staleness } from './src/refresh.mjs';
+import { describeRetention, hasWiki, isDue, readProjects, refreshProject, refreshProjectAsync, resolveKey, staleness } from './src/refresh.mjs';
 import { announceNewVersion, checkUpstreamStatus, propagateUpdates, readUpstreamState } from './src/upstream-watcher.mjs';
 import { loadOpenWikiConfig, setOpenWikiConfigValue, resetOpenWikiConfig, resolveConfigPath, ALLOWED_CONFIG_KEYS, ALLOWED_PROVIDERS } from './src/config.mjs';
 
@@ -81,24 +81,28 @@ async function refreshCommand(args) {
       process.exitCode = 1;
       return;
     }
-    const RUNNER_BUDGET_MS = 600000;
-    const REPORT_RESERVE_MS = 45000;
-    const deadline = Date.now() + RUNNER_BUDGET_MS - REPORT_RESERVE_MS;
-    let skippedForBudget = 0;
-    for (const entry of due) {
-      const remaining = deadline - Date.now();
-      if (remaining < 60000) { skippedForBudget += 1; continue; }
-      const result = refreshProject(
-        { name: entry.name, root: entry.root },
-        { key, model: config.model, provider: config.provider, timeoutMs: Math.min(remaining, config.timeout_ms) }
-      );
-      const index = reports.findIndex((r) => r.root === entry.root);
-      reports[index] = { ...reports[index], ...result, credential: from };
-      if (Date.now() >= deadline) { skippedForBudget += 1; }
-    }
-    if (skippedForBudget > 0) {
-      payloadBudgetNote = `${skippedForBudget} project(s) left due: one regeneration can consume this command's 600 s runner budget; run again to continue.`;
-    }
+    const concurrencyArg = args.find((a) => a.startsWith('--concurrency='));
+    const concurrencyIndex = args.indexOf('--concurrency');
+    const concurrency = Math.max(1, parseInt(
+      concurrencyArg ? concurrencyArg.slice('--concurrency='.length) : (concurrencyIndex >= 0 ? args[concurrencyIndex + 1] : '6'),
+      10
+    ) || 6);
+
+    let queueIndex = 0;
+    const worker = async () => {
+      while (queueIndex < due.length) {
+        const entry = due[queueIndex++];
+        const result = await refreshProjectAsync(
+          { name: entry.name, root: entry.root },
+          { key, model: config.model, provider: config.provider, timeoutMs: config.timeout_ms }
+        );
+        const index = reports.findIndex((r) => r.root === entry.root);
+        reports[index] = { ...reports[index], ...result, credential: from };
+      }
+    };
+
+    const workers = Array.from({ length: Math.min(concurrency, due.length) }, () => worker());
+    await Promise.all(workers);
   }
 
   const failed = reports.filter((r) => r.action === 'failed');
