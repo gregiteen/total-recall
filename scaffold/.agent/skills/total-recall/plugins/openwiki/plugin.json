@@ -2,9 +2,16 @@
   "$schema": "https://github.com/gregiteen/total-recall/blob/main/metadata.plugin.schema.json",
   "id": "openwiki",
   "name": "OpenWiki",
-  "version": "0.1.2",
+  "version": "0.1.7",
   "description": "Multi-repo knowledge graph and documentation wiki engine for Total Recall.",
   "license": "MIT",
+  "tasks": [
+    {
+      "intent": "Watch upstream OpenWiki repository and announce/propagate updates",
+      "schedule": "0 */4 * * *",
+      "command": "watch"
+    }
+  ],
   "branding": {
     "name": "OpenWiki",
     "color": "#b45309",
@@ -70,18 +77,64 @@
       {
         "name": "status",
         "description": "Show which OpenWiki subcommands are implemented",
-        "effect": "read"
+        "effect": "read",
+        "output": "json",
+        "args": [
+          {
+            "name": "json",
+            "flag": "--json",
+            "label": "JSON output",
+            "type": "boolean"
+          }
+        ]
       },
       {
         "name": "hubs",
         "description": "List indexed OpenWiki hubs and page counts",
-        "effect": "read"
+        "effect": "read",
+        "output": "json",
+        "args": [
+          {
+            "name": "json",
+            "flag": "--json",
+            "label": "JSON output",
+            "type": "boolean"
+          }
+        ]
       },
       {
         "name": "ingest",
         "description": "Ingest markdown documentation into the semantic knowledge graph",
         "timeout_ms": 600000,
-        "effect": "write"
+        "effect": "write",
+        "output": "json",
+        "args": [
+          {
+            "name": "path",
+            "label": "OpenWiki path",
+            "type": "string",
+            "required": true,
+            "positional": true
+          },
+          {
+            "name": "dryRun",
+            "flag": "--dry-run",
+            "label": "Preview without writing",
+            "type": "boolean"
+          },
+          {
+            "name": "global",
+            "flag": "--global",
+            "label": "Target global brain",
+            "type": "boolean"
+          },
+          {
+            "name": "project",
+            "flag": "--project",
+            "label": "Target project brain",
+            "type": "boolean"
+          }
+        ]
       },
       {
         "name": "bootstrap",
@@ -119,7 +172,114 @@
       {
         "name": "probe",
         "description": "Run HTTP 200 health verification probe",
-        "effect": "read"
+        "effect": "read",
+        "output": "json",
+        "args": [
+          {
+            "name": "json",
+            "flag": "--json",
+            "label": "JSON output",
+            "type": "boolean"
+          }
+        ]
+      },
+      {
+        "name": "refresh",
+        "description": "Report which registered projects' generated OpenWiki pages are stale; --apply regenerates them (openwiki/ only)",
+        "timeout_ms": 600000,
+        "effect": "write",
+        "output": "json",
+        "args": [
+          {
+            "name": "repo",
+            "flag": "--repo",
+            "label": "Target repository",
+            "type": "string"
+          },
+          {
+            "name": "apply",
+            "flag": "--apply",
+            "label": "Regenerate stale pages",
+            "type": "boolean"
+          },
+          {
+            "name": "force",
+            "flag": "--force",
+            "label": "Force regeneration",
+            "type": "boolean"
+          },
+          {
+            "name": "json",
+            "flag": "--json",
+            "label": "JSON output",
+            "type": "boolean"
+          }
+        ]
+      },
+      {
+        "name": "watch",
+        "description": "Watch upstream OpenWiki repository, announce new releases, and trigger propagation",
+        "effect": "write",
+        "output": "json",
+        "args": [
+          {
+            "name": "checkOnly",
+            "flag": "--check-only",
+            "label": "Check without announcing or propagating",
+            "type": "boolean"
+          },
+          {
+            "name": "announce",
+            "flag": "--announce",
+            "label": "Dispatch operator announcement",
+            "type": "boolean"
+          },
+          {
+            "name": "propagate",
+            "flag": "--propagate",
+            "label": "Execute fleet propagation",
+            "type": "boolean"
+          },
+          {
+            "name": "json",
+            "flag": "--json",
+            "label": "JSON output",
+            "type": "boolean"
+          }
+        ]
+      },
+      {
+        "name": "propagate",
+        "description": "Propagate updated OpenWiki generator across registered user repositories",
+        "effect": "write",
+        "output": "json",
+        "timeout_ms": 600000,
+        "args": [
+          {
+            "name": "repo",
+            "flag": "--repo",
+            "label": "Target repository",
+            "type": "string"
+          },
+          {
+            "name": "force",
+            "flag": "--force",
+            "label": "Force regeneration",
+            "type": "boolean"
+          },
+          {
+            "name": "dryRun",
+            "flag": "--dry-run",
+            "label": "Preview without writing",
+            "type": "boolean"
+          },
+          {
+            "name": "json",
+            "flag": "--json",
+            "label": "JSON output",
+            "type": "boolean"
+          }
+        ]
       }
     ]
   },
@@ -160,6 +320,20 @@
       "google-oauth2"
     ],
     "session_verification": true
+  },
+  "capability": {
+    "entry": "capability/index.mjs",
+    "description": "Standalone documentation hub discovery, wiki page auditing, and knowledge structure bootstrapping",
+    "dependencies": [],
+    "exports": [
+      "discoverWikiHubs",
+      "parseWikiHub",
+      "inspectWikiStaleness",
+      "bootstrapWikiPages",
+      "compareSemanticVersions",
+      "createPropagationPlan",
+      "formatPropagationReceipt"
+    ]
   },
   "status": {
     "command": "status",

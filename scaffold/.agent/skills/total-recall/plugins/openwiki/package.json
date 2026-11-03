@@ -1,10 +1,11 @@
 {
   "name": "tr-plugin-openwiki",
-  "version": "0.1.2",
+  "version": "0.1.7",
   "type": "module",
   "description": "Multi-repo knowledge graph and documentation wiki engine for Total Recall",
   "scripts": {
-    "test": "node --test test/*.test.mjs"
+    "test": "node --test test/*.test.mjs",
+    "ssss": "ssss"
   },
   "license": "MIT",
   "files": [
@@ -14,6 +15,10 @@
     "LICENSE",
     "ui/",
     "src/",
+    "capability/",
     "templates/"
-  ]
+  ],
+  "dependencies": {
+    "@gregiteen/ssss-cli": "0.14.3"
+  }
 }

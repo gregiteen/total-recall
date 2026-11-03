@@ -26,6 +26,24 @@ const FETCH_TIMEOUT_MS = 8_000;
 
 /* ---------- leader side ---------- */
 
+/**
+ * A grant key `repo:<name>` stands for every secret whose `repos` metadata names that
+ * repository, so a machine is given the keys its repositories use rather than a list of
+ * names or `*`. Resolved on each request, so rebinding a key takes effect on the next sync.
+ */
+export function expandRepoGrants(policy, rows) {
+  const byRepo = new Map();
+  for (const row of rows || []) for (const repo of row.repos || []) {
+    if (!byRepo.has(repo)) byRepo.set(repo, []);
+    byRepo.get(repo).push(row.key);
+  }
+  const grants = (policy?.grants || []).map((grant) => ({
+    ...grant,
+    keys: (grant.keys || []).flatMap((key) => (String(key).startsWith('repo:') ? (byRepo.get(String(key).slice(5)) || []) : [key])),
+  }));
+  return { ...policy, grants };
+}
+
 function audit(brainDir, event) {
   try {
     appendAudit(brainDir, event);

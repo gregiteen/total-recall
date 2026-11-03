@@ -26,7 +26,8 @@ import {
 } from '../secrets-store.mjs';
 import { logger } from '../logger.mjs';
 import { getMeshSyncAuthorization, requireMeshSyncAuth } from '../mesh-auth.mjs';
-import { createMeshIdentityMiddleware, createMeshListHandler, createMeshSecretHandler } from '../mesh-secrets.mjs';
+import { createMeshIdentityMiddleware, createMeshListHandler, createMeshSecretHandler, expandRepoGrants } from '../mesh-secrets.mjs';
+import { loadPolicy } from '../mesh-identity.mjs';
 import { throttledFetch } from '../throttled-fetch.mjs';
 import { listProviders, getProvider } from '../provider-catalog.mjs';
 import {
@@ -90,15 +91,17 @@ router.get('/api/secrets/checksum', requireMeshSyncAuth, async (req, res) => {
 // Mesh-identity secrets: the caller is the enrolled machine, not a shared
 // token. Each node gets only the keys its grant allows; see mesh-secrets.mjs.
 const requireMeshIdentity = createMeshIdentityMiddleware();
+const meshPolicyFor = async (brainDir) => expandRepoGrants(await loadPolicy(brainDir), await listSecretsMeta(brainDir));
 router.get(
   '/api/secrets/mesh',
   requireMeshIdentity,
   createMeshListHandler({
     brainDir: BRAIN_DIR,
+    policyFor: meshPolicyFor,
     keysFor: async () => (await listSecretsMeta(BRAIN_DIR)).map((entry) => entry.key),
   }),
 );
-router.get('/api/secrets/mesh/:key', requireMeshIdentity, createMeshSecretHandler({ brainDir: BRAIN_DIR }));
+router.get('/api/secrets/mesh/:key', requireMeshIdentity, createMeshSecretHandler({ brainDir: BRAIN_DIR, policyFor: meshPolicyFor }));
 
 router.get('/api/secrets/list', requireAuth, requireScope('keys:read', 'config:read'), async (req, res) => {
   try {

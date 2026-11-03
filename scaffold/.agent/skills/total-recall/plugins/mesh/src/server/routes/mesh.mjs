@@ -172,9 +172,14 @@ router.post('/api/mesh/access', requireAuth, requireScope('config:write'), async
     const result = await setMeshNodeAccess(target, patch, { vaultRoot: meshVaultRoot() });
     if (!result.written) {
       const notFound = result.reason === 'node-not-found';
-      res.status(notFound ? 404 : 500).json({
+      const ambiguous = result.reason === 'node-ambiguous';
+      res.status(notFound ? 404 : ambiguous ? 409 : 500).json({
         success: false,
-        message: notFound ? `No mesh node matches "${target}".` : 'The vault write was rejected.',
+        message: notFound
+          ? `No mesh node matches "${target}".`
+          : ambiguous
+            ? result.error
+            : 'The vault write was rejected.',
         reason: result.reason || null,
       });
       return;

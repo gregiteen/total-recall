@@ -22,8 +22,5 @@
   },
   "dependencies": {
     "@gregiteen/ssss-cli": "0.14.3"
-  },
-  "devDependencies": {
-    "total-recall-brain": "3.41.3"
   }
 }

@@ -26,9 +26,10 @@ import {
   buildMeshSshPolicy,
 } from '../core/headscale-client.mjs';
 import {
-  findMeshNode,
+  isSelfNode,
   listEnrichedMeshNodes,
   meshVaultRoot,
+  resolveMeshNode,
   setMeshNodeAccess,
 } from '../core/mesh.mjs';
 import {
@@ -51,6 +52,9 @@ function printHelp() {
     nodes                  List mesh nodes and how to reach each one
     ssh <node> [cmd…]      Open a session using the node's recorded access
     exec <node> <cmd…>     Execute a command on a node non-interactively (--json)
+    leader [--json]        Show the elected leader and its server port
+    leader pin <ip> [--port <n>]
+                           Pin the leader node and the port its server answers on
     access <node>          Show resolved access for a node
     access <node> --user <u> [--port <n>] [--host <h>] [--identity <path>]
                            Record how to reach a node
@@ -368,22 +372,19 @@ export default async function meshCli(argv = []) {
         return;
       }
 
-      // Try enriched nodes first, then fall back to the Headscale registry
-      // for givenName matches (the friendly name shown in `mesh nodes`).
-      let node = findMeshNode(target, vaultRoot);
-      if (!node) {
-        let registry = null;
-        try {
-          const data = await headscaleFetch(
-            '/api/v1/node', {}, brainDir,
-          );
-          registry = data?.nodes || [];
-        } catch {}
-        node = findMeshNode(target, vaultRoot, registry);
+      let node;
+      try {
+        node = await resolveMeshNode(target, { vaultRoot, brainDir });
+      } catch (err) {
+        fail(err.message, 'Run `total-recall mesh nodes` to list them.');
+        return;
       }
 
-      if (!node) {
-        fail(`No mesh node matches "${target}".`, 'Run `total-recall mesh nodes` to list them.');
+      if (isSelfNode(node)) {
+        fail(
+          `"${node.hostname}" is this machine — the mesh never tunnels a node into itself.`,
+          'Run the command locally; `mesh ssh`/`mesh exec` address peers.',
+        );
         return;
       }
 
@@ -416,7 +417,7 @@ export default async function meshCli(argv = []) {
 
       try {
         const { execMeshCommand } = await import('../core/mesh.mjs');
-        const res = await execMeshCommand(target, cmd, { vaultRoot });
+        const res = await execMeshCommand(target, cmd, { vaultRoot, brainDir });
         if (jsonMode) {
           console.log(JSON.stringify(res, null, 2));
         } else {
@@ -446,14 +447,21 @@ export default async function meshCli(argv = []) {
       if (target === 'discover') {
         const { discoverNodeAccess } = await import('../core/mesh-discover.mjs');
         const wanted = args.find((a) => !a.startsWith('-'));
-        const targets = wanted
-          ? [findMeshNode(wanted, vaultRoot)].filter(Boolean)
-          : listEnrichedMeshNodes(vaultRoot).filter(
-              (n) => !n.self && n.ip && n.online !== false && !n.access?.verified_at,
-            );
+        let targets;
+        if (wanted) {
+          try {
+            targets = [await resolveMeshNode(wanted, { vaultRoot, brainDir })];
+          } catch (err) {
+            fail(err.message, 'Run `total-recall mesh nodes` to list them.');
+            return;
+          }
+        } else {
+          targets = listEnrichedMeshNodes(vaultRoot).filter(
+            (n) => !n.self && n.ip && n.online !== false && !n.access?.verified_at,
+          );
+        }
         if (!targets.length) {
-          console.log(wanted ? `No mesh node matches "${wanted}".` : 'Every online node already has a verified login.');
-          if (wanted) process.exitCode = 1;
+          console.log('Every online node already has a verified login.');
           return;
         }
         let missing = 0;
@@ -545,9 +553,11 @@ export default async function meshCli(argv = []) {
       const identity = readOption('--identity');
 
       if (!user && !port && !host && !identity) {
-        const node = findMeshNode(target, vaultRoot);
-        if (!node) {
-          fail(`No mesh node matches "${target}".`);
+        let node;
+        try {
+          node = await resolveMeshNode(target, { vaultRoot, brainDir });
+        } catch (err) {
+          fail(err.message, 'Run `total-recall mesh nodes` to list them.');
           return;
         }
         console.log(JSON.stringify(resolveNodeAccess(node), null, 2));
@@ -560,13 +570,12 @@ export default async function meshCli(argv = []) {
       if (host) patch.ssh_host = host;
       if (identity) patch.identity_file = identity;
 
-      const result = await setMeshNodeAccess(target, patch, { vaultRoot });
+      const result = await setMeshNodeAccess(target, patch, { vaultRoot, brainDir });
       if (!result.written) {
+        const unresolved = result.reason === 'node-not-found' || result.reason === 'node-ambiguous';
         fail(
-          `Could not record access for "${target}".`,
-          result.reason === 'node-not-found'
-            ? 'Run `total-recall mesh nodes` to see known nodes.'
-            : 'The vault write was rejected.',
+          unresolved ? result.error : `Could not record access for "${target}".`,
+          unresolved ? 'Run `total-recall mesh nodes` to see known nodes.' : 'The vault write was rejected.',
         );
         return;
       }
@@ -591,7 +600,19 @@ export default async function meshCli(argv = []) {
     }
 
     if (command === 'leader') {
-      const { getLeaderInfo, isLeader } = await import('../core/leader-election.mjs');
+      const { getLeaderInfo, isLeader, setLeaderPin } = await import('../core/leader-election.mjs');
+      if (args[0] === 'pin') {
+        const ip = args[1];
+        const portIndex = args.indexOf('--port');
+        const port = portIndex >= 0 ? args[portIndex + 1] : undefined;
+        if (!ip || ip.startsWith('-')) {
+          fail('Usage: total-recall mesh leader pin <mesh-ip> [--port <leader server port>]');
+          return;
+        }
+        const pinned = setLeaderPin({ ip, port });
+        console.log(`Leader pinned to ${pinned.leaderIp}${pinned.leaderPort ? `:${pinned.leaderPort}` : ''} in ${pinned.file}`);
+        return;
+      }
       const leaderInfo = await getLeaderInfo();
       const thisIsLeader = await isLeader();
       if (args.includes('--json')) {
@@ -602,7 +623,7 @@ export default async function meshCli(argv = []) {
         console.log('No leader elected (no mesh nodes online).');
         return;
       }
-      console.log(`👑 Current Cluster Leader: ${leaderInfo.hostname} (${leaderInfo.ip})`);
+      console.log(`👑 Current Cluster Leader: ${leaderInfo.hostname} (${leaderInfo.ip}${leaderInfo.port ? `:${leaderInfo.port}` : ''})`);
       console.log(`   Strategy: ${leaderInfo.strategy}`);
       console.log(`   Local node: ${thisIsLeader ? 'LEADER (this node runs cluster workloads)' : 'FOLLOWER'}`);
       return;
@@ -611,18 +632,20 @@ export default async function meshCli(argv = []) {
     if (command === 'ping' || command === 'latency') {
       const target = args.find((a) => !a.startsWith('-'));
       const isJson = args.includes('--json');
-      const { getMeshPeers, findMeshNode } = await import('../core/mesh.mjs');
+      const { getMeshPeers } = await import('../core/mesh.mjs');
       const { throttledFetch } = await import('../core/throttled-fetch.mjs');
 
       const port = Number(process.env.TR_SERVER_PORT || process.env.PORT || 3000);
 
       if (target) {
-        const node = findMeshNode(target, vaultRoot);
-        if (!node) {
-          fail(`No mesh node matches "${target}".`);
+        let node;
+        try {
+          node = await resolveMeshNode(target, { vaultRoot, brainDir });
+        } catch (err) {
+          fail(err.message, 'Run `total-recall mesh nodes` to list them.');
           return;
         }
-        if (node.self) {
+        if (isSelfNode(node)) {
           if (isJson) {
             console.log(JSON.stringify({ node: node.hostname, ip: node.ip, latency_ms: 0, self: true, reachable: true }, null, 2));
           } else {

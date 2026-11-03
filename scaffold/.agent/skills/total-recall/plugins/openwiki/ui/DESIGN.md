@@ -1,32 +1,45 @@
-# DESIGN.md — Brain Dump
+# DESIGN.md — OpenWiki Knowledge Graph
+
+Documentation hub discovery, semantic knowledge graph visualization, and repository memory ingestion console.
 
 ```yaml
 tokens:
-  brand-name: "Brain Dump"
+  brand-name: "OpenWiki"
   wordmark: "[BRAIN//DUMP]"
-  color-primary: "#3b82f6"
+  badge: "Knowledge Graph"
+  color-primary: "#b45309"
+  color-primary-hover: "#d97706"
   color-background: "#0f172a"
   color-surface: "#1e293b"
-  color-accent: "#facc15"
-  color-ok: "#10b981"
-  color-warn: "#f59e0b"
-  color-danger: "#ef4444"
+  color-surface-subtle: "#334155"
+  color-border: "#475569"
   color-text: "#f8fafc"
-  color-muted: "#94a3b8"
-  color-line: "#334155"
-  badge: "Knowledge Graph"
-  font-mono: "'JetBrains Mono', 'Fira Code', monospace"
+  color-text-muted: "#94a3b8"
+  color-accent: "#f59e0b"
+  color-success: "#10b981"
+  color-danger: "#ef4444"
+  font-mono: "'JetBrains Mono', 'Fira Code', ui-monospace, monospace"
+  font-sans: "system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif"
   border-radius: "8px"
+  min-touch-target: "44px"
 ```
 
-## Brand & Typographic Wordmark
-- **Name**: Brain Dump
-- **Wordmark Logo**: `[BRAIN//DUMP]` (custom vector typographic badge, no generic emojis)
-- **Palette**: Primary `#3b82f6`, Surface `#0f172a`, Secondary Surface `#1e293b`, Accent `#facc15`, Line `#334155`, Text `#f8fafc`.
-- **States**: Verified Knowledge `#10b981`, Warning `#f59e0b`, Danger `#ef4444`.
+## 1. Brand Identity & Visual Language
 
-## Interface Architecture
-1. **Header**: Custom vector wordmark, knowledge graph badge, active hub count.
-2. **Hub Tree Matrix**: Grid of verified documentation files (`openwiki/*.md`), rendering title, path, file size in bytes, and line count.
-3. **Structured Ingestion Deck**: Interactive controls for cross-repo documentation ingest with target path input, dry-run toggle, and run button.
-4. **Bootstrap & Inspection Deck**: One-click bootstrap trigger and execution receipts without terminal stdout dumps.
+- **Entity**: OpenWiki Documentation & Knowledge Graph Engine
+- **Typographic Badge**: `[BRAIN//DUMP]`
+- **Color System**: Deep slate foundation with amber gold illumination
+- **Typography**: Clean monospace badges paired with legible system sans-serif headers
+
+## 2. Card Architecture & Views
+
+1. **Header Bar**: Displays the typographic mark, hub counter, and operational state indicator.
+2. **Hub Roster Deck (`hub-list`)**: Displays discovered Markdown documentation hubs, line counts, and storage metrics.
+3. **Ingestion Controller (`ingest-deck`)**: Provides direct path configuration, preview dry-run toggles, and execution controls.
+4. **Execution Summary Deck**: Displays structured result telemetry, scanned file counts, and error descriptions without raw terminal dumps.
+
+## 3. Ergonomics & Accessibility
+
+- **Touch Ergonomics**: All interactive buttons, inputs, and toggles declare minimum 44px heights.
+- **Motion Restraint**: Media query `@media (prefers-reduced-motion: reduce)` disables all animations and transitions.
+- **Host Token Binding**: Binds directly to `--text-primary` and `--border` dashboard custom properties.

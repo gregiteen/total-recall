@@ -1,35 +1,23 @@
 /**
- * Brain Dump — Multi-Repo Knowledge Graph & Documentation Console
+ * OpenWiki — Knowledge Graph & Multi-Repo Documentation Wiki
+ * Bespoke Card Face: Deep Slate & Knowledge Amber Interface.
  *
- * Bespoke operator interface for cross-repository documentation and knowledge graphs.
- * Displays real-time hub trees, file metrics, structured ingestion controllers,
- * and bootstrap verification without template wrappers or terminal dumps.
+ * Exposes live hub discovery, markdown file inspection, upstream release surveillance,
+ * and structured fleet propagation controls. Operates without mock data or boilerplate sinks.
  */
-
-const DASH = '\u2014';
-
-function escapeHtml(str) {
-  if (str === null || str === undefined) return '';
-  return String(str).replace(/[&<>"']/g, c => ({
-    '&': '&amp;',
-    '<': '&lt;',
-    '>': '&gt;',
-    '"': '&quot;',
-    "'": '&#39;'
-  }[c]));
-}
 
 export class OpenWikiCard extends HTMLElement {
   constructor() {
     super();
     this.hubs = [];
-    this.totalLines = 0;
-    this.executing = false;
+    this.loading = false;
+    this.statusText = 'READY';
     this.targetPath = 'openwiki';
-    this.dryRun = true;
-    this.lastResult = null;
-    this.screens = [{ id: 'knowledge', label: 'Knowledge Hubs' }];
-    this.screen = 'knowledge';
+    this.dryRun = false;
+    this.executionResult = null;
+    this.errorMessage = null;
+    this.lastRefreshedAt = null;
+    this.upstream = null;
   }
 
   connectedCallback() {
@@ -40,495 +28,608 @@ export class OpenWikiCard extends HTMLElement {
     this.refreshHubs();
   }
 
+  disconnectedCallback() {
+    // Clean state lifecycle teardown
+  }
+
   async refreshHubs() {
-    if (!this.host) return;
+    this.loading = true;
+    this.errorMessage = null;
+    this.render();
+
     try {
-      const res = await this.host.run('status', ['--json']);
-      let parsed = [];
-      if (res && typeof res === 'object') {
-        if (Array.isArray(res.hubs)) {
-          parsed = res.hubs;
-          this.totalLines = res.total_lines || 0;
-        } else if (Array.isArray(res)) {
-          parsed = res;
+      if (this.host && typeof this.host.run === 'function') {
+        const res = await this.host.run('hubs', ['--json']);
+        if (res && Array.isArray(res.hubs)) {
+          this.hubs = res.hubs;
+          this.statusText = 'SYNCHRONIZED';
+        } else {
+          this.hubs = [];
+          this.statusText = 'UNINDEXED';
         }
-      } else if (typeof res === 'string' && res.trim().startsWith('{')) {
-        const json = JSON.parse(res);
-        parsed = Array.isArray(json.hubs) ? json.hubs : [];
-        this.totalLines = json.total_lines || 0;
+
+        try {
+          const statusRes = await this.host.run('status', ['--json']);
+          if (statusRes?.upstream) {
+            this.upstream = statusRes.upstream;
+          }
+        } catch {
+          // Upstream metadata optional
+        }
+      } else {
+        this.statusText = 'DISCONNECTED';
       }
-
-      this.hubs = parsed;
-      this.render();
-    } catch {
+      this.lastRefreshedAt = new Date().toLocaleTimeString();
+    } catch (err) {
+      this.statusText = 'ERROR';
+      this.errorMessage = err.message || 'Hub synchronization failure';
       this.hubs = [];
+    } finally {
+      this.loading = false;
       this.render();
     }
   }
 
-  async runIngest() {
-    if (!this.host || this.executing) return;
-    this.executing = true;
-    this.lastResult = null;
+  async executeIngest() {
+    if (this.loading) return;
+    this.loading = true;
+    this.executionResult = null;
+    this.errorMessage = null;
     this.render();
 
-    try {
-      const args = [this.targetPath || 'openwiki'];
-      if (this.dryRun) args.push('--dry-run');
-      args.push('--json');
+    const args = [this.targetPath || 'openwiki'];
+    if (this.dryRun) args.push('--dry-run');
 
-      const res = await this.host.run('ingest', args);
-      this.lastResult = {
-        ok: true,
-        message: this.dryRun ? 'Dry-run preview completed' : 'Ingestion completed successfully',
-        data: res
-      };
-      await this.refreshHubs();
+    try {
+      if (this.host && typeof this.host.run === 'function') {
+        const res = await this.host.run('ingest', args);
+        this.executionResult = {
+          action: 'ingest',
+          target: this.targetPath,
+          dryRun: this.dryRun,
+          details: res && typeof res === 'object' ? res : { message: String(res || 'Completed') },
+          timestamp: new Date().toLocaleTimeString()
+        };
+      } else {
+        throw new Error('Host execution context unavailable');
+      }
     } catch (err) {
-      this.lastResult = {
-        ok: false,
-        message: err instanceof Error ? err.message : 'Ingestion failed'
-      };
+      this.errorMessage = err.message || 'Ingestion cycle failure';
     } finally {
-      this.executing = false;
-      this.render();
+      this.loading = false;
+      this.refreshHubs();
     }
   }
 
-  async runBootstrap() {
-    if (!this.host || this.executing) return;
-    this.executing = true;
-    this.lastResult = null;
+  async executeBootstrap() {
+    if (this.loading) return;
+    this.loading = true;
+    this.executionResult = null;
+    this.errorMessage = null;
     this.render();
 
     try {
-      const res = await this.host.run('bootstrap', ['--json']);
-      this.lastResult = {
-        ok: true,
-        message: 'OpenWiki skeleton bootstrapped',
-        data: res
-      };
-      await this.refreshHubs();
+      if (this.host && typeof this.host.run === 'function') {
+        const res = await this.host.run('bootstrap', ['--brain', '.', '--json']);
+        this.executionResult = {
+          action: 'bootstrap',
+          details: res && typeof res === 'object' ? res : { message: String(res || 'Completed') },
+          timestamp: new Date().toLocaleTimeString()
+        };
+      } else {
+        throw new Error('Host execution context unavailable');
+      }
     } catch (err) {
-      this.lastResult = {
-        ok: false,
-        message: err instanceof Error ? err.message : 'Bootstrap failed'
-      };
+      this.errorMessage = err.message || 'Bootstrap procedure failure';
     } finally {
-      this.executing = false;
-      this.render();
+      this.loading = false;
+      this.refreshHubs();
+    }
+  }
+
+  async executeWatch() {
+    if (this.loading) return;
+    this.loading = true;
+    this.executionResult = null;
+    this.errorMessage = null;
+    this.render();
+
+    try {
+      if (this.host && typeof this.host.run === 'function') {
+        const res = await this.host.run('watch', ['--json']);
+        this.executionResult = {
+          action: 'watch',
+          details: res && typeof res === 'object' ? res : { message: String(res || 'Completed') },
+          timestamp: new Date().toLocaleTimeString()
+        };
+        if (res?.status) {
+          this.upstream = {
+            recordedVersion: res.status.currentVersion,
+            latestVersion: res.status.latestVersion
+          };
+        }
+      } else {
+        throw new Error('Host execution context unavailable');
+      }
+    } catch (err) {
+      this.errorMessage = err.message || 'Upstream surveillance failure';
+    } finally {
+      this.loading = false;
+      this.refreshHubs();
+    }
+  }
+
+  async executePropagate() {
+    if (this.loading) return;
+    this.loading = true;
+    this.executionResult = null;
+    this.errorMessage = null;
+    this.render();
+
+    try {
+      if (this.host && typeof this.host.run === 'function') {
+        const res = await this.host.run('propagate', ['--json']);
+        this.executionResult = {
+          action: 'propagate',
+          details: res && typeof res === 'object' ? res : { message: String(res || 'Completed') },
+          timestamp: new Date().toLocaleTimeString()
+        };
+      } else {
+        throw new Error('Host execution context unavailable');
+      }
+    } catch (err) {
+      this.errorMessage = err.message || 'Fleet propagation failure';
+    } finally {
+      this.loading = false;
+      this.refreshHubs();
     }
   }
 
   render() {
-    const root = this.shadowRoot;
-    if (!root) return;
+    if (!this.shadowRoot) return;
 
-    root.innerHTML = `
+    const countText = this.hubs.length ? `${this.hubs.length} Hubs` : '—';
+    const totalLines = this.hubs.reduce((acc, h) => acc + (h.lines || 0), 0);
+    const linesText = this.hubs.length ? `${totalLines.toLocaleString()} Lines` : '—';
+    const upstreamText = this.upstream?.latestVersion ? `v${this.upstream.latestVersion}` : 'Tracking';
+
+    this.shadowRoot.innerHTML = `
       <style>
         :host {
+          display: block;
+          box-sizing: border-box;
           --face-bg: #0f172a;
           --face-surface: #1e293b;
-          --face-line: #334155;
+          --face-surface-subtle: #334155;
+          --face-border: #475569;
           --face-text: #f8fafc;
-          --face-muted: #94a3b8;
-          --face-brand: #3b82f6;
-          --face-brand-hover: #60a5fa;
-          --face-accent: #facc15;
+          --face-text-muted: #94a3b8;
+          --face-accent: #f59e0b;
+          --face-accent-hover: #d97706;
           --face-ok: #10b981;
-          --face-warn: #f59e0b;
           --face-danger: #ef4444;
-          --face-dark: #0f172a;
-
-          display: block;
-          font-family: var(--font-sans, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif);
+          background: var(--face-bg);
           color: var(--text-primary, var(--face-text));
-          background: var(--bg-secondary, var(--face-bg));
-          border: 1px solid var(--border, var(--face-line));
+          border: 1px solid var(--border, var(--face-border));
           border-radius: 8px;
           padding: 16px;
-          box-sizing: border-box;
-          overflow: hidden;
+          font-family: system-ui, -apple-system, sans-serif;
         }
 
-        @media (prefers-reduced-motion: reduce) {
-          *, ::before, ::after {
-            animation-duration: 0.01ms !important;
-            animation-iteration-count: 1 !important;
-            transition-duration: 0.01ms !important;
-          }
+        *, *::before, *::after {
+          box-sizing: inherit;
         }
 
-        /* Header Bar */
-        .header {
+        .header-bar {
           display: flex;
           align-items: center;
           justify-content: space-between;
-          flex-wrap: wrap;
           gap: 12px;
-          padding-bottom: 14px;
-          border-bottom: 1px solid var(--border, var(--face-line));
           margin-bottom: 16px;
+          border-bottom: 1px solid var(--border, var(--face-border));
+          padding-bottom: 12px;
         }
 
-        .brand-group {
+        .brand-cluster {
           display: flex;
           align-items: center;
-          gap: 10px;
+          gap: 8px;
         }
 
         .wordmark-badge {
-          font-family: var(--font-mono, 'JetBrains Mono', monospace);
-          font-size: 13px;
-          font-weight: 800;
-          letter-spacing: 0.05em;
-          color: var(--card-accent, var(--face-accent));
-          background: rgba(250, 204, 21, 0.12);
-          padding: 6px 10px;
-          border-radius: 6px;
-          border: 1px solid rgba(250, 204, 21, 0.3);
-        }
-
-        .title-meta {
-          display: flex;
-          flex-direction: column;
-        }
-
-        .plugin-title {
-          font-size: 14px;
-          font-weight: 700;
-          color: var(--text-primary, var(--face-text));
-          margin: 0;
-        }
-
-        .plugin-subtitle {
-          font-size: 11px;
-          color: var(--text-secondary, var(--face-muted));
-          margin: 0;
-        }
-
-        .hub-count-chip {
-          display: flex;
+          display: inline-flex;
           align-items: center;
-          gap: 6px;
-          font-family: var(--font-mono, 'JetBrains Mono', monospace);
-          font-size: 11px;
+          font-family: ui-monospace, monospace;
+          font-size: 13px;
           font-weight: 700;
+          letter-spacing: 0.05em;
           color: var(--face-accent);
-          background: rgba(250, 204, 21, 0.12);
-          border: 1px solid rgba(250, 204, 21, 0.3);
-          padding: 5px 12px;
-          border-radius: 6px;
-          text-transform: uppercase;
+          background: var(--face-surface-subtle);
+          padding: 4px 8px;
+          border-radius: 4px;
         }
 
-        /* Split Layout */
-        .workspace-split {
+        .system-title {
+          font-size: 14px;
+          font-weight: 600;
+          color: var(--text-primary, var(--face-text));
+        }
+
+        .status-pill {
+          display: inline-flex;
+          align-items: center;
+          padding: 4px 10px;
+          border-radius: 12px;
+          font-size: 11px;
+          font-weight: 700;
+          letter-spacing: 0.04em;
+          text-transform: uppercase;
+          background: var(--face-surface-subtle);
+          color: var(--face-text-muted);
+          border: 1px solid var(--border, var(--face-border));
+        }
+
+        .status-pill.ok {
+          color: var(--face-ok);
+          border-color: var(--face-ok);
+        }
+
+        .status-pill.danger {
+          color: var(--face-danger);
+          border-color: var(--face-danger);
+        }
+
+        .stats-grid {
           display: grid;
-          grid-template-columns: minmax(260px, 1.4fr) minmax(240px, 1fr);
-          gap: 14px;
+          grid-template-columns: repeat(3, 1fr);
+          gap: 8px;
           margin-bottom: 16px;
         }
 
-        @media (max-width: 700px) {
-          .workspace-split {
-            grid-template-columns: 1fr;
-          }
-        }
-
-        /* Hub Tree Matrix */
-        .hub-panel {
-          border: 1px solid var(--border, var(--face-line));
+        .stat-card {
+          background: var(--face-surface);
+          border: 1px solid var(--border, var(--face-border));
           border-radius: 6px;
-          background: rgba(30, 41, 59, 0.4);
-          padding: 12px;
-          display: flex;
-          flex-direction: column;
-          gap: 10px;
+          padding: 10px;
         }
 
-        .panel-title {
+        .stat-label {
           font-size: 11px;
+          text-transform: uppercase;
+          letter-spacing: 0.04em;
+          color: var(--face-text-muted);
+          margin-bottom: 4px;
+        }
+
+        .stat-value {
+          font-size: 16px;
+          font-weight: 700;
+          color: var(--text-primary, var(--face-text));
+          font-family: ui-monospace, monospace;
+        }
+
+        .section-header {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          margin-bottom: 8px;
+        }
+
+        .section-title {
+          font-size: 12px;
           font-weight: 700;
           text-transform: uppercase;
           letter-spacing: 0.05em;
-          color: var(--text-secondary, var(--face-muted));
-          margin: 0;
+          color: var(--face-accent);
         }
 
         .hub-list {
           display: flex;
           flex-direction: column;
           gap: 6px;
-          max-height: 280px;
+          margin-bottom: 16px;
+          max-height: 180px;
           overflow-y: auto;
         }
 
         .hub-item {
-          padding: 10px 12px;
-          background: rgba(15, 23, 42, 0.6);
-          border: 1px solid var(--border, var(--face-line));
-          border-radius: 5px;
           display: flex;
           align-items: center;
           justify-content: space-between;
-          gap: 10px;
-        }
-
-        .hub-main {
-          display: flex;
-          flex-direction: column;
-          gap: 2px;
+          background: var(--face-surface);
+          border: 1px solid var(--border, var(--face-border));
+          border-radius: 6px;
+          padding: 8px 12px;
+          font-size: 13px;
         }
 
         .hub-title {
-          font-family: var(--font-mono, 'JetBrains Mono', monospace);
-          font-size: 12px;
-          font-weight: 700;
+          font-weight: 600;
           color: var(--text-primary, var(--face-text));
         }
 
-        .hub-path {
-          font-size: 10px;
-          color: var(--text-secondary, var(--face-muted));
+        .hub-meta {
+          font-family: ui-monospace, monospace;
+          font-size: 11px;
+          color: var(--face-text-muted);
         }
 
-        .hub-metrics {
+        .empty-state {
           display: flex;
           align-items: center;
-          gap: 6px;
-          font-family: var(--font-mono, 'JetBrains Mono', monospace);
-          font-size: 10px;
-          color: var(--face-accent);
-        }
-
-        /* Ingest Deck Column */
-        .ingest-deck {
-          display: flex;
-          flex-direction: column;
-          gap: 10px;
-        }
-
-        .form-card {
-          border: 1px solid var(--border, var(--face-line));
+          justify-content: center;
+          padding: 24px;
+          color: var(--face-text-muted);
+          background: var(--face-surface);
+          border: 1px dashed var(--border, var(--face-border));
           border-radius: 6px;
-          background: rgba(30, 41, 59, 0.4);
+          font-size: 13px;
+        }
+
+        .ingest-deck {
+          background: var(--face-surface);
+          border: 1px solid var(--border, var(--face-border));
+          border-radius: 6px;
           padding: 12px;
+          margin-bottom: 16px;
+        }
+
+        .input-group {
           display: flex;
-          flex-direction: column;
-          gap: 10px;
+          gap: 8px;
+          margin-bottom: 12px;
         }
 
-        .input-row {
-          display: flex;
-          flex-direction: column;
-          gap: 4px;
-        }
-
-        .input-label {
-          font-size: 10px;
-          text-transform: uppercase;
-          color: var(--text-secondary, var(--face-muted));
-          letter-spacing: 0.05em;
-        }
-
-        .text-input {
+        .path-input {
+          flex: 1;
           min-height: 44px;
+          background: var(--face-surface-subtle);
+          border: 1px solid var(--border, var(--face-border));
+          border-radius: 6px;
           padding: 8px 12px;
-          font-family: var(--font-mono, 'JetBrains Mono', monospace);
-          font-size: 12px;
           color: var(--text-primary, var(--face-text));
-          background: rgba(15, 23, 42, 0.8);
-          border: 1px solid var(--border, var(--face-line));
-          border-radius: 5px;
-          box-sizing: border-box;
-          width: 100%;
+          font-family: ui-monospace, monospace;
+          font-size: 13px;
         }
 
-        .text-input:focus {
+        .path-input:focus {
           outline: none;
-          border-color: var(--card-accent, var(--face-brand));
+          border-color: var(--face-accent);
         }
 
-        .toggle-row {
-          display: flex;
+        .toggle-label {
+          display: inline-flex;
           align-items: center;
           gap: 8px;
-          font-size: 11px;
-          color: var(--text-secondary, var(--face-muted));
-          cursor: pointer;
-        }
-
-        .toggle-check {
-          min-height: 20px;
-          min-width: 20px;
-          cursor: pointer;
-        }
-
-        .btn-action-primary {
           min-height: 44px;
-          padding: 8px 16px;
-          font-family: var(--font-sans, sans-serif);
-          font-size: 12px;
-          font-weight: 700;
-          color: var(--face-dark);
-          background: var(--face-accent);
-          border: none;
-          border-radius: 5px;
+          font-size: 13px;
+          color: var(--text-primary, var(--face-text));
           cursor: pointer;
-          transition: background 0.15s ease;
+          user-select: none;
+          padding: 0 4px;
         }
 
-        .btn-action-primary:hover {
-          background: #fde047;
+        .button-group {
+          display: grid;
+          grid-template-columns: repeat(2, 1fr);
+          gap: 8px;
         }
 
-        .btn-action-primary:disabled {
-          opacity: 0.6;
+        .btn {
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          min-height: 44px;
+          padding: 0 12px;
+          font-size: 12px;
+          font-weight: 600;
+          border-radius: 6px;
+          border: 1px solid transparent;
+          cursor: pointer;
+          transition: background-color 0.15s ease, border-color 0.15s ease;
+          text-align: center;
+        }
+
+        .btn-primary {
+          background: var(--face-accent);
+          color: var(--face-bg);
+        }
+
+        .btn-primary:hover:not(:disabled) {
+          background: var(--face-accent-hover);
+        }
+
+        .btn-secondary {
+          background: var(--face-surface-subtle);
+          border-color: var(--border, var(--face-border));
+          color: var(--text-primary, var(--face-text));
+        }
+
+        .btn-secondary:hover:not(:disabled) {
+          border-color: var(--face-accent);
+        }
+
+        .btn:disabled {
+          opacity: 0.5;
           cursor: not-allowed;
         }
 
-        .btn-action-secondary {
-          min-height: 44px;
-          padding: 8px 16px;
-          font-family: var(--font-sans, sans-serif);
+        .result-deck {
+          background: var(--face-surface-subtle);
+          border: 1px solid var(--border, var(--face-border));
+          border-radius: 6px;
+          padding: 12px;
+          font-family: ui-monospace, monospace;
           font-size: 12px;
-          font-weight: 700;
           color: var(--text-primary, var(--face-text));
-          background: transparent;
-          border: 1px solid var(--border, var(--face-line));
-          border-radius: 5px;
-          cursor: pointer;
-          transition: background 0.15s ease;
         }
 
-        .btn-action-secondary:hover {
-          background: rgba(255, 255, 255, 0.05);
+        .result-title {
+          font-weight: 600;
+          color: var(--face-accent);
+          margin-bottom: 6px;
         }
 
-        .feedback-banner {
-          padding: 8px 12px;
-          border-radius: 5px;
-          font-family: var(--font-mono, 'JetBrains Mono', monospace);
-          font-size: 11px;
-        }
-
-        .feedback-ok {
-          background: rgba(16, 185, 129, 0.15);
-          border: 1px solid rgba(16, 185, 129, 0.4);
-          color: var(--face-ok);
-        }
-
-        .feedback-fail {
-          background: rgba(239, 68, 68, 0.15);
-          border: 1px solid rgba(239, 68, 68, 0.4);
+        .error-deck {
+          background: var(--face-surface);
+          border: 1px solid var(--face-danger);
+          border-radius: 6px;
+          padding: 12px;
           color: var(--face-danger);
-        }
-
-        .empty-hubs {
-          padding: 32px 16px;
-          text-align: center;
           font-size: 12px;
-          color: var(--text-secondary, var(--face-muted));
+          margin-bottom: 12px;
         }
 
-        /* Footer Telemetry */
-        .footer-bar {
-          display: flex;
-          justify-content: space-between;
-          align-items: center;
-          padding-top: 12px;
-          margin-top: 14px;
-          border-top: 1px solid var(--border, var(--face-line));
-          font-size: 10px;
-          color: var(--text-secondary, var(--face-muted));
+        @media (prefers-reduced-motion: reduce) {
+          *, *::before, *::after {
+            animation-duration: 0.01ms !important;
+            animation-iteration-count: 1 !important;
+            transition-duration: 0.01ms !important;
+            scroll-behavior: auto !important;
+          }
         }
       </style>
 
-      <div class="header">
-        <div class="brand-group">
-          <div class="wordmark-badge">[BRAIN//DUMP]</div>
-          <div class="title-meta">
-            <h3 class="plugin-title">OpenWiki Knowledge Graph</h3>
-            <p class="plugin-subtitle">Multi-repository documentation and knowledge ingestion engine</p>
-          </div>
+      <div class="header-bar">
+        <div class="brand-cluster">
+          <span class="wordmark-badge">[BRAIN//DUMP]</span>
+          <span class="system-title">Knowledge Graph Engine</span>
         </div>
-        <div class="hub-count-chip">
-          ${this.hubs.length > 0 ? `${this.hubs.length} Hubs Indexed` : 'No Hubs'}
+        <span class="status-pill ${this.statusText === 'SYNCHRONIZED' ? 'ok' : this.statusText === 'ERROR' ? 'danger' : ''}">
+          ${this.statusText}
+        </span>
+      </div>
+
+      <div class="stats-grid">
+        <div class="stat-card">
+          <div class="stat-label">Discovered Hubs</div>
+          <div class="stat-value">${countText}</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Documentation Lines</div>
+          <div class="stat-value">${linesText}</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Upstream Generator</div>
+          <div class="stat-value">${upstreamText}</div>
         </div>
       </div>
 
-      <div class="workspace-split">
-        <div class="hub-panel">
-          <h4 class="panel-title">Verified Documentation Hubs</h4>
-          <div class="hub-list">
-            ${this.hubs.length > 0 ? this.hubs.map(h => `
-              <div class="hub-item">
-                <div class="hub-main">
-                  <span class="hub-title">${escapeHtml(h.title || h.path)}</span>
-                  <span class="hub-path">${escapeHtml(h.path)}</span>
-                </div>
-                <div class="hub-metrics">
-                  <span>${h.lines !== undefined ? `${h.lines} lines` : DASH}</span>
-                </div>
-              </div>
-            `).join('') : `
-              <div class="empty-hubs">No markdown documentation hubs indexed yet. Click Bootstrap below to initialize.</div>
-            `}
+      ${this.errorMessage ? `
+        <div class="error-deck">
+          ${this.errorMessage}
+        </div>
+      ` : ''}
+
+      <div class="section-header">
+        <span class="section-title">Knowledge Hubs</span>
+        <button id="btn-refresh" class="btn btn-secondary" style="min-height: 32px; padding: 0 10px; font-size: 11px;" ${this.loading ? 'disabled' : ''}>
+          Sync
+        </button>
+      </div>
+
+      <div class="hub-list">
+        ${this.hubs.length === 0 ? `
+          <div class="empty-state">No documentation hubs indexed in ${this.targetPath}</div>
+        ` : this.hubs.map(h => `
+          <div class="hub-item">
+            <span class="hub-title">${h.title}</span>
+            <span class="hub-meta">${h.lines} lines · ${h.path}</span>
           </div>
+        `).join('')}
+      </div>
+
+      <div class="ingest-deck">
+        <div class="input-group">
+          <input
+            id="target-path-input"
+            class="path-input"
+            type="text"
+            value="${this.targetPath}"
+            placeholder="Directory path (openwiki)"
+            aria-label="Target documentation path"
+          />
+          <label class="toggle-label">
+            <input
+              id="dry-run-checkbox"
+              type="checkbox"
+              ${this.dryRun ? 'checked' : ''}
+            />
+            Dry Run
+          </label>
         </div>
 
-        <div class="ingest-deck">
-          <div class="form-card">
-            <h4 class="panel-title">Knowledge Ingest</h4>
-            <div class="input-row">
-              <span class="input-label">Target Hub Path</span>
-              <input class="text-input" type="text" id="input-path" placeholder="openwiki" />
-            </div>
-            <label class="toggle-row">
-              <input class="toggle-check" type="checkbox" id="check-dryrun" ${this.dryRun ? 'checked' : ''} />
-              <span>Dry Run (Preview changes without writing)</span>
-            </label>
-            <button class="btn-action-primary" type="button" id="btn-ingest" ${this.executing ? 'disabled' : ''}>
-              ${this.executing ? 'Processing...' : 'Run Ingestion'}
-            </button>
-            <button class="btn-action-secondary" type="button" id="btn-bootstrap" ${this.executing ? 'disabled' : ''}>
-              Bootstrap OpenWiki Skeleton
-            </button>
-          </div>
-
-          ${this.lastResult ? `
-            <div class="feedback-banner ${this.lastResult.ok ? 'feedback-ok' : 'feedback-fail'}">
-              ${escapeHtml(this.lastResult.message)}
-            </div>
-          ` : ''}
+        <div class="button-group">
+          <button id="btn-ingest" class="btn btn-primary" ${this.loading ? 'disabled' : ''}>
+            ${this.loading ? 'Processing…' : 'Ingest Documentation'}
+          </button>
+          <button id="btn-bootstrap" class="btn btn-secondary" ${this.loading ? 'disabled' : ''}>
+            Bootstrap Wiki
+          </button>
+          <button id="btn-watch" class="btn btn-secondary" ${this.loading ? 'disabled' : ''}>
+            Check Upstream
+          </button>
+          <button id="btn-propagate" class="btn btn-secondary" ${this.loading ? 'disabled' : ''}>
+            Propagate Fleet
+          </button>
         </div>
       </div>
 
-      <div class="footer-bar">
-        <span>Engine: OpenWiki v0.1.2</span>
-        <span>Storage: Markdown + SSSS Projections</span>
-      </div>
+      ${this.executionResult ? `
+        <div class="result-deck">
+          <div class="result-title">Execution Receipt (${this.executionResult.timestamp})</div>
+          <div>Action: ${this.executionResult.action}</div>
+          <div>Target: ${this.executionResult.target || 'project'}</div>
+          <div>Result: ${JSON.stringify(this.executionResult.details)}</div>
+        </div>
+      ` : ''}
     `;
 
-    // Event listeners
-    const pathInput = root.querySelector('#input-path');
+    this.bindEvents();
+  }
+
+  bindEvents() {
+    const shadow = this.shadowRoot;
+    if (!shadow) return;
+
+    const pathInput = shadow.querySelector('#target-path-input');
     if (pathInput) {
-      pathInput.value = this.targetPath;
-      pathInput.addEventListener('input', e => {
-        this.targetPath = e.target.value;
+      pathInput.addEventListener('input', (e) => {
+        this.targetPath = e.target.value.trim();
       });
     }
 
-    const dryRunCheck = root.querySelector('#check-dryrun');
-    if (dryRunCheck) {
-      dryRunCheck.addEventListener('change', e => {
+    const dryRunCheckbox = shadow.querySelector('#dry-run-checkbox');
+    if (dryRunCheckbox) {
+      dryRunCheckbox.addEventListener('change', (e) => {
         this.dryRun = e.target.checked;
       });
     }
 
-    root.querySelector('#btn-ingest')?.addEventListener('click', () => this.runIngest());
-    root.querySelector('#btn-bootstrap')?.addEventListener('click', () => this.runBootstrap());
+    const btnIngest = shadow.querySelector('#btn-ingest');
+    if (btnIngest) {
+      btnIngest.addEventListener('click', () => this.executeIngest());
+    }
+
+    const btnBootstrap = shadow.querySelector('#btn-bootstrap');
+    if (btnBootstrap) {
+      btnBootstrap.addEventListener('click', () => this.executeBootstrap());
+    }
+
+    const btnRefresh = shadow.querySelector('#btn-refresh');
+    if (btnRefresh) {
+      btnRefresh.addEventListener('click', () => this.refreshHubs());
+    }
+
+    const btnWatch = shadow.querySelector('#btn-watch');
+    if (btnWatch) {
+      btnWatch.addEventListener('click', () => this.executeWatch());
+    }
+
+    const btnPropagate = shadow.querySelector('#btn-propagate');
+    if (btnPropagate) {
+      btnPropagate.addEventListener('click', () => this.executePropagate());
+    }
   }
 }
 

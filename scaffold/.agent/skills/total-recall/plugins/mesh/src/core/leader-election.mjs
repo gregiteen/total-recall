@@ -60,6 +60,58 @@ export function leaderPin(brain = brainDir) {
   }
 }
 
+function validPort(value) {
+  const port = Number(value);
+  return Number.isInteger(port) && port > 0 && port <= 65535 ? port : null;
+}
+
+/**
+ * Port the pinned leader's Total Recall server answers on.
+ *
+ * Followers used to reach the leader on their OWN configured port, which only
+ * works when every node happens to use the same one. The droplet serves on 3900
+ * while devices default to 3000, so every follower's secrets sync failed with a
+ * bare "fetch failed" once a minute, forever. The pin names the port alongside
+ * the IP (`TR_LEADER_PORT`, or `leaderPort` in config/leader.json).
+ */
+export function leaderPort(brain = brainDir) {
+  const raw = String(process.env.TR_LEADER_PORT || '').trim();
+  if (raw) return validPort(raw);
+  try {
+    const file = path.join(brain, 'config', 'leader.json');
+    if (!fs.existsSync(file)) return null;
+    return validPort(JSON.parse(fs.readFileSync(file, 'utf8'))?.leaderPort);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Record the operator pin in <brain>/config/leader.json, keeping any note.
+ * The env vars still win when the supervisor sets them.
+ */
+export function setLeaderPin({ ip, port } = {}, brain = brainDir) {
+  const octets = String(ip || '').split('.').map(Number);
+  if (octets.length !== 4 || octets.some((part) => !Number.isInteger(part) || part < 0 || part > 255)) {
+    throw new Error(`Leader pin needs a mesh IPv4 address, got "${ip}"`);
+  }
+  if (port !== undefined && port !== null && !validPort(port)) throw new Error(`Invalid leader port "${port}"`);
+  const file = path.join(brain, 'config', 'leader.json');
+  let current = {};
+  try { current = JSON.parse(fs.readFileSync(file, 'utf8')) || {}; } catch {}
+  const next = { ...current, leaderIp: String(ip).trim(), updated_at: new Date().toISOString() };
+  if (port !== undefined && port !== null) next.leaderPort = validPort(port);
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  const temporary = `${file}.${process.pid}.tmp`;
+  fs.writeFileSync(temporary, `${JSON.stringify(next, null, 2)}\n`);
+  fs.renameSync(temporary, file);
+  return { file, ...next };
+}
+
+function withPort(info, port) {
+  return port ? { ...info, port } : info;
+}
+
 function compareNodes(a, b) {
   const ipOrder = String(a.ip || '').localeCompare(String(b.ip || ''), undefined, { numeric: true });
   return ipOrder || String(a.hostname || '').localeCompare(String(b.hostname || ''));
@@ -77,11 +129,14 @@ export async function getLeaderInfo() {
   if (pin) {
     const pinned = nodes.find((node) => node.ip === pin);
     if (!pinned) return null;
-    return { hostname: pinned.hostname, ip: pinned.ip, strategy: 'pinned-mesh-ip' };
+    return withPort(
+      { hostname: pinned.hostname, ip: pinned.ip, strategy: 'pinned-mesh-ip' },
+      leaderPort() || validPort(pinned.brain_port),
+    );
   }
 
   const leader = [...nodes].sort(compareNodes)[0];
-  return { hostname: leader.hostname, ip: leader.ip, strategy: 'lowest-mesh-ip' };
+  return withPort({ hostname: leader.hostname, ip: leader.ip, strategy: 'lowest-mesh-ip' }, validPort(leader.brain_port));
 }
 
 /**

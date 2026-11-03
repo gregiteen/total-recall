@@ -10,7 +10,7 @@
     "validate": "ssss conformance --engine"
   },
   "dependencies": {
-    "@gregiteen/ssss-cli": "0.12.1"
+    "@gregiteen/ssss-cli": "0.14.3"
   },
   "license": "MIT",
   "files": [

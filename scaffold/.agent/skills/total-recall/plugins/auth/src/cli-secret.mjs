@@ -51,6 +51,7 @@ import {
   enqueueRotationDueTasks,
   getBrowserRotateAssist,
 } from './secrets-rotate.mjs';
+import { findAmbientPasswordExports, removeAmbientPasswordExports, carrierPassword } from './secrets-carriers.mjs';
 import {
   loadRemoteTargets,
   addRemoteTarget,
@@ -200,6 +201,7 @@ function printHelp() {
     generate <key>        Generate a random secret for outside integrations
     get <key> [--json]    Read selected-store value (audited); JSON reports found/value
     list                  List keys + metadata only (no values)
+    prune                 Read-only report: unbound, errored and duplicate keys
     rotate <key>          Replace value and mark rotated. Prompts for the value;
                            --stdin reads fd0, --from-clipboard reads the OS
                            clipboard (use the browser you are already signed
@@ -286,6 +288,9 @@ function printHelp() {
     --headscale-url <https-url>
     rotation-due          List keys overdue for rotation
       --enqueue           Create daemon tasks + browser-use prompts for each due key
+    carriers              Find shell profiles and /etc files that export the master
+                           password to every process; --remove-ambient deletes them
+                           once an owner-only carrier holds the same password.
     fingerprint           Identify a credential without printing it: length, type
                            prefix, fingerprint and the store keys holding the same
                            value. --from-clipboard | --stdin; --expect-prefix <p>
@@ -642,6 +647,9 @@ function parseArgs(args) {
         break;
       case '--stdin':
         out.stdin = true;
+        break;
+      case '--remove-ambient':
+        out.removeAmbient = true;
         break;
       case '--app':
         out.app = args[++i];
@@ -1045,6 +1053,18 @@ export default async function secretCli(argv) {
       return;
     }
 
+    if (opts.command === 'prune') {
+      const { pruneCandidates, pruneSummary } = await import('./secrets-prune.mjs');
+      const rows = (await listSecretsMeta(brainDir)).filter((r) => r.set);
+      const candidates = pruneCandidates(rows);
+      const sum = pruneSummary(rows, candidates);
+      console.log(`\n  prune report (read-only): ${sum.candidates} of ${sum.total} keys worth a look`);
+      console.log(`     unbound=${sum.unbound}  error=${sum.errored}  duplicated=${sum.duplicated}\n`);
+      for (const c of candidates) console.log(`  • ${c.key.padEnd(38)} ${c.provider || '-'}  [${c.reasons.join('; ')}]`);
+      console.log('\n  Nothing was deleted. Remove a key with: auth secret delete <key>\n');
+      return;
+    }
+
     if (opts.command === 'shared' || opts.command === 'shared-values' || opts.command === 'duplicates') {
       const shared = await getSharedValueHealth(brainDir);
       console.log(`\n  ${shared.healthy ? '✅' : '❌'} ${shared.message}`);
@@ -1206,6 +1226,34 @@ export default async function secretCli(argv) {
         }
       }
       console.log('');
+      return;
+    }
+
+    if (opts.command === 'carriers') {
+      // Files that make the master password ambient (shell profiles, /etc/environment).
+      // Reports files and line numbers only; --remove-ambient deletes those exports once an
+      // owner-only carrier is verified to hold the same password.
+      if (opts.removeAmbient) {
+        const r = removeAmbientPasswordExports();
+        if (opts.json) console.log(JSON.stringify(r, null, 2));
+        else {
+          console.log(`\n  ${r.removed.length ? '✅ Removed ambient master-password exports' : 'No ambient master-password exports found'}`);
+          for (const row of r.removed) console.log(`     ${row.file}: line ${row.lines.join(', ')}`);
+          console.log('');
+        }
+        return;
+      }
+      const found = findAmbientPasswordExports();
+      const carried = Boolean(carrierPassword());
+      if (opts.json) console.log(JSON.stringify({ ambient: found, owner_only_carrier: carried }, null, 2));
+      else {
+        console.log(`\n  Owner-only carrier holds the master password: ${carried ? 'yes' : 'NO'}`);
+        if (!found.length) console.log('  No ambient exports in shell profiles or /etc');
+        for (const row of found) console.log(`  ❌ ${row.file}: line ${row.lines.join(', ')} exports it to every process started there`);
+        if (found.length) console.log('     Remove with: total-recall auth secret carriers --remove-ambient');
+        console.log('');
+      }
+      if (found.length) process.exitCode = 1;
       return;
     }
 

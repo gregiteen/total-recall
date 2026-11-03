@@ -5,7 +5,8 @@
   "description": "Standalone security suite for Total Recall: static analysis, file and permission hardening schemes, AES-256-GCM encryption tools, and egress audit controls",
   "scripts": {
     "test": "node --test test/*.test.mjs",
-    "build:ui": "node scripts/build-ui.mjs"
+    "build:ui": "node scripts/build-ui.mjs",
+    "ssss": "ssss"
   },
   "license": "MIT",
   "files": [
@@ -21,5 +22,8 @@
   ],
   "publishConfig": {
     "access": "public"
+  },
+  "dependencies": {
+    "@gregiteen/ssss-cli": "0.14.3"
   }
 }

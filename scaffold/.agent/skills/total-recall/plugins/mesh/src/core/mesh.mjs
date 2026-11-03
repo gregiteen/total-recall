@@ -86,7 +86,13 @@ export function meshNodeKey(hostname) {
 function normalizeNode(node, self = false) {
   return {
     hostname: normalizeHostname(node?.DNSName) || node?.HostName || null,
+    // The name the machine reports for itself, which is what the control
+    // server lists it under. It differs from the DNS name whenever the node was
+    // renamed (a droplet listed as `portfolio-site` answers as `cloud.mesh…`),
+    // and it is not unique, so it is an identity to match, never a key.
+    os_hostname: node?.HostName || null,
     ip: node?.TailscaleIPs?.[0] || null,
+    ips: Array.isArray(node?.TailscaleIPs) ? node.TailscaleIPs : [],
     online: !!node?.Online,
     self,
     os: node?.OS || null,
@@ -226,7 +232,9 @@ function enrichPeerWithEntity(peer, ent, extra = {}) {
         : [];
   return {
     hostname: peer.hostname,
+    os_hostname: peer.os_hostname || null,
     ip: peer.ip || ent?.ip || null,
+    ips: Array.isArray(peer.ips) && peer.ips.length ? peer.ips : [peer.ip || ent?.ip].filter(Boolean),
     lan_ip: peer.lan_ip || ent?.lan_ip || null,
     brain_port: ent?.brain_port || null,
     online: !!peer.online,
@@ -308,45 +316,176 @@ function findEntityForSelf(self, vaultRoot) {
   return entityForPeer(self, entities, otherHosts);
 }
 
-/** Find an enriched node (live + vault) by hostname, registry name, or address. */
-export function findMeshNode(nameOrAddress, vaultRoot = meshVaultRoot(), registry = null) {
+const isAddressLike = (value) => value.includes(':') || /^\d{1,3}(\.\d{1,3}){3}$/.test(value);
+const cleanName = (value) => String(value).trim().replace(/\.$/, '').toLowerCase();
+
+function meshNodeError(code, message) {
+  const err = new Error(message);
+  err.code = code;
+  return err;
+}
+
+/** A control-server entry no live peer or entity accounts for. */
+function registryOnlyNode(entry) {
+  const addresses = (entry.ipAddresses || []).map(String);
+  const name = entry.givenName || entry.name || null;
+  return {
+    hostname: name,
+    os_hostname: entry.name || null,
+    ip: addresses[0] || null,
+    ips: addresses,
+    lan_ip: null,
+    online: entry.online === true,
+    self: false,
+    title: name,
+    has_entity: false,
+    vault_only: false,
+    registry_only: true,
+    registry_id: entry.id == null ? null : String(entry.id),
+    access: null,
+  };
+}
+
+/**
+ * Every node reference can be resolved against, each with the identities an
+ * operator might type: what the local daemon reports (DNS name, the machine's
+ * own hostname, every address), what the vault records (title, LAN address),
+ * and what the control server lists (`name`, `givenName`, `id`).
+ *
+ * Registry entries join a node by a shared address. An entry nothing claims
+ * becomes a node of its own, so a machine only the control server knows about
+ * still resolves; it carries no access, which callers report as such.
+ */
+function meshNodeCandidates(nodes = [], registry = null) {
+  const entries = Array.isArray(registry) ? registry : [];
+  const claimed = new Set();
+  const identities = (node, entry) => {
+    const names = [node.hostname, node.os_hostname, node.title, entry?.name, entry?.givenName].filter(Boolean);
+    return {
+      addresses: new Set(
+        [node.ip, node.lan_ip, ...(node.ips || []), ...(entry?.ipAddresses || [])]
+          .filter(Boolean)
+          .map((v) => String(v).toLowerCase()),
+      ),
+      names: new Set(names.map(cleanName)),
+      keys: new Set(names.map(meshNodeKey).filter(Boolean)),
+      id: entry?.id == null || entry.id === '' ? null : String(entry.id),
+    };
+  };
+
+  const candidates = nodes.map((node) => {
+    const own = new Set([node.ip, ...(node.ips || [])].filter(Boolean).map(String));
+    const index = entries.findIndex(
+      (e, i) => !claimed.has(i) && (e.ipAddresses || []).some((ip) => own.has(String(ip))),
+    );
+    if (index !== -1) claimed.add(index);
+    return { node, ids: identities(node, index === -1 ? null : entries[index]) };
+  });
+  entries.forEach((entry, i) => {
+    if (claimed.has(i)) return;
+    const node = registryOnlyNode(entry);
+    candidates.push({ node, ids: identities(node, entry) });
+  });
+  return candidates;
+}
+
+/**
+ * Resolve a node reference against every identity `mesh nodes` can print.
+ *
+ * Precedence, first tier with a match wins: exact address, exact whole name,
+ * first-label key (never for an address, whose first label is shared by every
+ * node on the range), then the control server's node id.
+ *
+ * A machine's own hostname is not unique (two phones both report `localhost`),
+ * so a reference that matches two machines in the deciding tier is refused
+ * rather than resolved to whichever came first: `exec` would otherwise run on
+ * the wrong host. A vault-only record that shares a match with a live or
+ * registered node is set aside first — Headscale reassigns a freed address, so
+ * a stale record at that address describes the machine that held it before.
+ *
+ * Pure: callers supply the nodes and, optionally, the registry.
+ *
+ * @returns {object|null} the matching node; throws MESH_NODE_AMBIGUOUS
+ */
+export function matchMeshNode(nameOrAddress, nodes = [], registry = null) {
   const wanted = String(nameOrAddress || '').trim();
   if (!wanted) return null;
-  const key = meshNodeKey(wanted);
-  const nodes = listEnrichedMeshNodes(vaultRoot);
+  const lower = wanted.toLowerCase();
+  const exact = cleanName(wanted);
+  const key = isAddressLike(wanted) ? '' : meshNodeKey(wanted);
+  const candidates = meshNodeCandidates(nodes, registry);
 
-  // 1. Match by Tailscale IP or LAN IP
-  let found = nodes.find((n) => String(n.ip) === wanted || String(n.lan_ip) === wanted);
-  if (found) return found;
+  const tiers = [
+    (ids) => ids.addresses.has(lower),
+    (ids) => ids.names.has(exact),
+    (ids) => !!key && ids.keys.has(key),
+    (ids) => ids.id === wanted,
+  ];
 
-  // 2. Match by key derived from enriched hostname (Tailscale DNSName first part)
-  found = nodes.find((n) => meshNodeKey(n.hostname) === key);
-  if (found) return found;
-
-  // 3. Match by entity title
-  found = nodes.find((n) => n.title && meshNodeKey(n.title) === key);
-  if (found) return found;
-
-  // 4. When a registry (Headscale API) is available, match by givenName or name
-  if (registry && Array.isArray(registry)) {
-    const entry = registry.find(
-      (r) => (r.givenName && meshNodeKey(r.givenName) === key) ||
-            (r.name && meshNodeKey(r.name) === key)
-    );
-    if (entry) {
-      const addresses = entry.ipAddresses || [];
-      found = addresses.map((ip) => nodes.find((n) => String(n.ip) === String(ip))).find(Boolean);
-      if (found) return found;
-      // Return a synthetic node from registry details
-      return {
-        hostname: entry.givenName || entry.name || wanted,
-        ip: addresses[0] || null,
-        title: entry.givenName || entry.name || '',
-      };
+  for (const matches of tiers) {
+    const hits = candidates.filter((c) => matches(c.ids));
+    if (!hits.length) continue;
+    const current = hits.filter((c) => !c.node.vault_only);
+    const pool = current.length ? current : hits;
+    if (pool.length > 1) {
+      const names = pool.map((c) => `${c.node.hostname || '?'} (${c.node.ip || 'no address'})`);
+      throw meshNodeError(
+        'MESH_NODE_AMBIGUOUS',
+        `"${wanted}" matches more than one mesh node: ${names.join(', ')}. Use its address or full name.`,
+      );
     }
+    return pool[0].node;
   }
-
   return null;
+}
+
+/** Find an enriched node (live + vault, plus `registry` when given) synchronously. */
+export function findMeshNode(nameOrAddress, vaultRoot = meshVaultRoot(), registry = null) {
+  return matchMeshNode(nameOrAddress, listEnrichedMeshNodes(vaultRoot), registry);
+}
+
+async function fetchMeshRegistry(brainDir) {
+  const { headscaleFetch } = await import('./headscale-client.mjs');
+  const data = await headscaleFetch('/api/v1/node', {}, brainDir);
+  return Array.isArray(data?.nodes) ? data.nodes : [];
+}
+
+/**
+ * The one resolver every command that takes a node goes through.
+ *
+ * Local discovery and the vault answer first, so a name this machine already
+ * knows never needs the control-server credential. Only on a miss is the
+ * control server asked — that is where registry-only names and node ids live.
+ * When it cannot be asked, the not-found error says why, so a locked secrets
+ * store is never reported as a machine that does not exist.
+ *
+ * @param {string} nameOrAddress
+ * @param {{vaultRoot?: string, brainDir?: string, nodes?: object[], fetchRegistry?: Function}} [options]
+ * @returns {Promise<object>} the node; throws MESH_NODE_NOT_FOUND or MESH_NODE_AMBIGUOUS
+ */
+export async function resolveMeshNode(nameOrAddress, options = {}) {
+  const wanted = String(nameOrAddress || '').trim();
+  if (!wanted) throw meshNodeError('MESH_NODE_NOT_FOUND', 'A mesh node name or address is required.');
+  const nodes = options.nodes || listEnrichedMeshNodes(options.vaultRoot || meshVaultRoot());
+
+  const local = matchMeshNode(wanted, nodes);
+  if (local) return local;
+
+  let registry = null;
+  let registryError = null;
+  try {
+    registry = await (options.fetchRegistry || fetchMeshRegistry)(options.brainDir);
+  } catch (err) {
+    registryError = err;
+  }
+  const found = registry ? matchMeshNode(wanted, nodes, registry) : null;
+  if (found) return found;
+
+  throw meshNodeError(
+    'MESH_NODE_NOT_FOUND',
+    `No mesh node matches "${wanted}".` +
+      (registryError ? ` The control server could not be asked: ${registryError.message}` : ''),
+  );
 }
 
 /**
@@ -358,8 +497,14 @@ export function findMeshNode(nameOrAddress, vaultRoot = meshVaultRoot(), registr
  */
 export async function setMeshNodeAccess(nameOrAddress, accessPatch, options = {}) {
   const vaultRoot = options.vaultRoot || meshVaultRoot();
-  const node = findMeshNode(nameOrAddress, vaultRoot);
-  if (!node) return { written: false, reason: 'node-not-found' };
+  let node;
+  try {
+    node = await resolveMeshNode(nameOrAddress, { vaultRoot, brainDir: options.brainDir });
+  } catch (err) {
+    if (err.code === 'MESH_NODE_NOT_FOUND') return { written: false, reason: 'node-not-found', error: err.message };
+    if (err.code === 'MESH_NODE_AMBIGUOUS') return { written: false, reason: 'node-ambiguous', error: err.message };
+    throw err;
+  }
 
   const entities = listMeshNodeEntities(vaultRoot);
   const otherHosts = new Set(
@@ -679,11 +824,50 @@ export async function patchOwnMeshNode(options = {}) {
  * @param {boolean} [options.loginShell=true]
  * @returns {Promise<{ node: string, hostname: string, ip: string, exitCode: number, success: boolean, stdout: string, stderr: string }>}
  */
+/**
+ * Is `node` the machine running this command?
+ *
+ * Every host reaches itself through its own sshd, so `mesh ssh`/`mesh exec`
+ * aimed at self is a misconfiguration, not a remote call: it burns an auth
+ * round-trip, fails under `BatchMode` when this host holds no key for its own
+ * account, and hides the real intent (work that belongs to the local machine).
+ *
+ * Identity comes only from what the local daemon and registry report: the
+ * `self` flag, an exact address, or a whole hostname under any of its MagicDNS
+ * forms. Short labels are compared for HOSTNAMES ONLY — applied to an address
+ * they would compare the first octet, which every node on a shared range has
+ * in common, and match unrelated peers. Never key on a device name, a tailnet
+ * domain or an address range.
+ */
+export function isSelfNode(node, selfOverride) {
+  if (!node) return false;
+  if (node.self) return true;
+  const self = selfOverride === undefined ? getMeshSelf() : selfOverride;
+  if (!self) return false;
+
+  const isAddress = (value) => value.includes(':') || /^\d{1,3}(\.\d{1,3}){3}$/.test(value);
+  const clean = (v) => String(v || '').replace(/\.$/, '').toLowerCase();
+  const selfValues = [self.hostname, self.ip, self.name].filter(Boolean).map(clean);
+  const selfAddresses = new Set(selfValues.filter(isAddress));
+  const selfNames = new Set(selfValues.filter((v) => !isAddress(v)));
+  const selfLabels = new Set([...selfNames].map((v) => v.split('.')[0]));
+
+  return [node.hostname, node.ip, node.name].filter(Boolean).map(clean).some((candidate) => {
+    if (selfAddresses.has(candidate)) return true;
+    if (selfNames.has(candidate)) return true;
+    // A hostname may arrive fully qualified or bare; an address may not.
+    return !isAddress(candidate) && selfLabels.has(candidate.split('.')[0]);
+  });
+}
+
 export async function execMeshCommand(target, command, options = {}) {
   const { vaultRoot = meshVaultRoot(), timeoutMs = 60_000, loginShell = true } = options;
-  const node = findMeshNode(target, vaultRoot);
-  if (!node) {
-    throw new Error(`No mesh node matches "${target}".`);
+  const node = await resolveMeshNode(target, { vaultRoot, brainDir: options.brainDir });
+  if (isSelfNode(node)) {
+    throw new Error(
+      `"${node.hostname}" is this machine, and the mesh never tunnels a node into itself. `
+      + 'Run the command locally; the mesh CLI addresses peers.',
+    );
   }
   const resolved = resolveNodeAccess(node);
   if (!resolved.complete) {
