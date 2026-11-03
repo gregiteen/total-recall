@@ -84,20 +84,36 @@ async function refreshCommand(args) {
     const concurrencyArg = args.find((a) => a.startsWith('--concurrency='));
     const concurrencyIndex = args.indexOf('--concurrency');
     const concurrency = Math.max(1, parseInt(
-      concurrencyArg ? concurrencyArg.slice('--concurrency='.length) : (concurrencyIndex >= 0 ? args[concurrencyIndex + 1] : '6'),
+      concurrencyArg ? concurrencyArg.slice('--concurrency='.length) : (concurrencyIndex >= 0 ? args[concurrencyIndex + 1] : '8'),
       10
-    ) || 6);
+    ) || 8);
+
+    if (!json) {
+      console.log(`OpenWiki refresh (apply): dispatching ${due.length} projects with concurrency ${concurrency}`);
+    }
 
     let queueIndex = 0;
+    let completedCount = 0;
     const worker = async () => {
       while (queueIndex < due.length) {
-        const entry = due[queueIndex++];
+        const itemIndex = queueIndex++;
+        const entry = due[itemIndex];
+        const mode = entry.uninitialized ? 'init' : 'update';
+        if (!json) {
+          console.log(`[${itemIndex + 1}/${due.length}] ▶ ${entry.name.padEnd(28)} starting ${mode}...`);
+        }
         const result = await refreshProjectAsync(
           { name: entry.name, root: entry.root },
           { key, model: config.model, provider: config.provider, timeoutMs: config.timeout_ms }
         );
+        completedCount++;
         const index = reports.findIndex((r) => r.root === entry.root);
         reports[index] = { ...reports[index], ...result, credential: from };
+        if (!json) {
+          const duration = Math.round((Date.now() - (result.startedAt || Date.now())) / 1000);
+          const icon = result.action === 'failed' ? '✖' : '✔';
+          console.log(`[${completedCount}/${due.length}] ${icon} ${entry.name.padEnd(28)} ${result.action} (${duration}s)${result.reason ? ` — ${result.reason}` : ''}`);
+        }
       }
     };
 
