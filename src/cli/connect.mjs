@@ -151,17 +151,7 @@ export const CLIENTS = {
     label: 'Antigravity',
     mode: 'symlink',
     target: '.agents/rules/AGENTS.md',
-    // Antigravity reads workspace skills from .agents/skills and exposes
-    // native /name invocation; Gemini TOML commands are a separate surface.
-    skillsProjection: { scope: 'project', dir: path.join('.agents', 'skills') }
-  },
-  gemini: {
-    label: 'Gemini',
-    mode: 'symlink',
-    target: '.agents/rules/GEMINI.md',
-    writeSlashCommands: true,
-    // Gemini CLI activates workspace skills from .agents/skills via /skills;
-    // explicit /name commands require separate .gemini/commands/*.toml files.
+    // Antigravity reads workspace skills from .agents/skills and exposes native /name invocation
     skillsProjection: { scope: 'project', dir: path.join('.agents', 'skills') }
   },
   aider: {
@@ -233,7 +223,6 @@ function printHelp() {
     claude-code
     codex
     antigravity
-    gemini
     grok
     replit
     lovable
@@ -643,100 +632,17 @@ $ARGUMENTS`
   return written;
 }
 
-function writeGeminiSlashCommands(opts) {
-  const globalDir = path.join(os.homedir(), '.gemini', 'commands');
-  const localDir = path.join(process.cwd(), '.gemini', 'commands');
-
-  fs.mkdirSync(globalDir, { recursive: true });
-  fs.mkdirSync(localDir, { recursive: true });
-
-  const base = (opts.brain || 'http://127.0.0.1:3000').replace(/\/$/, '');
-  const token = '<YOUR_PAT_TOKEN>';
-
-  const commands = {
-    'memory.toml': {
-      description: 'Search or manage Total Recall memory',
-      prompt: `You are Antigravity, an AI assistant with the Total Recall SSSS v2 memory vault.
-Search the semantic memory vault or fetch nodes using the following query:
-{{args}}
-
-Instructions:
-Perform a POST request to \`${base}/api/memory/search/semantic\` with the body \`{"query": "{{args}}", "top_k": 5}\` and Authorization: Bearer ${token}.`
-    },
-    'brain.toml': {
-      description: 'Show Total Recall brain status and health',
-      prompt: `Show the health, loaded model status, and statistics of the local Total Recall Total Recall System brain.
-
-Instructions:
-Query the health of the local brain by sending a GET request to \`${base}/health\` with Authorization: Bearer ${token}.`
-    },
-    'vault.toml': {
-      description: 'Compile or inspect the Total Recall SSSS memory vault',
-      prompt: `Compile, rebuild, or inspect the Structured Semantic Syntax System (SSSS) memory vault.
-
-Instructions:
-1. If the argument is "compile", send a POST request to \`${base}/api/vault/compile\` with Authorization: Bearer ${token} or run \`npx total-recall compile\`.
-2. If the argument is "nodes", send a GET request to \`${base}/api/memory\` with Authorization: Bearer ${token}.
-3. Summarize the changes and verify rule propagation across the workspace.`
-    },
-    'ssss.toml': {
-      description: 'Explore SSSS cognitive graph, backlinks, and network statistics',
-      prompt: `You are Antigravity, an AI assistant with the Total Recall SSSS v2 memory vault.
-Explore the SSSS cognitive graph, backlinks, and network topology using the query:
-{{args}}
-
-Instructions:
-1. Parse the arguments.
-2. If "stats", run \`npx total-recall map --relations\` to retrieve and summarize cognitive graph metrics, Highly Connected Hubs, and unlinked Orphans.
-3. If "map <slug>", print the inbound backlinks and outbound relations for the specified memory node slug using \`npx total-recall map --relations\`.
-4. If "compile", send a POST request to \`${base}/api/vault/compile\` with Authorization: Bearer ${token} or run \`npx total-recall compile\`.
-5. If "help", explain the SSSS v2 specification, categories (invariants, preferences, anti-patterns, patterns, decisions, concepts, facts, lore) and the bidirectional backlink structure.`
-    },
-    'recall.toml': {
-      description: 'Ask Total Recall brain a question or run a specialized agent task',
-      prompt: `Send a direct conversational query or task instruction to the Total Recall local brain.
-Query: {{args}}
-
-Instructions:
-1. Query the memory vault for relevant context by sending a POST request to \`${base}/api/memory/search/semantic\` with the body \`{"query": "{{args}}", "top_k": 5}\` and Authorization: Bearer ${token}.
-2. Address the user's inquiry thoroughly, referencing active memory nodes where applicable.`
-    }
-  };
-
-  const written = [];
-  for (const [filename, cmd] of Object.entries(commands)) {
-    const tomlContent = `description = "${cmd.description}"\nprompt = """\n${cmd.prompt}\n"""\n`;
-
-    // Write global command
-    const globalPath = path.join(globalDir, filename);
-    const globalExisted = fs.existsSync(globalPath);
-    if (!globalExisted || opts.force) {
-      fs.writeFileSync(globalPath, tomlContent, 'utf8');
-      written.push({ file: `global/${filename}`, action: globalExisted ? 'updated' : 'created' });
-    } else {
-      written.push({ file: `global/${filename}`, action: 'exists' });
-    }
-
-    // Write local command
-    const localPath = path.join(localDir, filename);
-    const localExisted = fs.existsSync(localPath);
-    if (!localExisted || opts.force) {
-      fs.writeFileSync(localPath, tomlContent, 'utf8');
-      written.push({ file: `local/${filename}`, action: localExisted ? 'updated' : 'created' });
-    } else {
-      written.push({ file: `local/${filename}`, action: 'exists' });
-    }
-  }
-
-  return written;
-}
-
 
 export default async function connect(args) {
   const opts = parseArgs(args);
   if (opts.help || !opts.client) {
     printHelp();
     return;
+  }
+
+  if (opts.client === 'gemini') {
+    console.error("Gemini CLI was deprecated by Google; Antigravity (agy) is the official Google agent harness. Run 'total-recall connect antigravity' instead.");
+    process.exit(1);
   }
 
   const preset = CLIENTS[opts.client];
@@ -967,22 +873,12 @@ export default async function connect(args) {
 
   // Write slash commands
   if (preset.writeSlashCommands) {
-    if (opts.client === 'gemini') {
-      const slashResults = writeGeminiSlashCommands(opts);
-      result.slash_commands = slashResults;
-      const created = slashResults.filter(r => r.action !== 'exists');
-      if (created.length > 0) {
-        result.notes.push(`  Slash commands written to ~/.gemini/commands/ and .gemini/commands/:\n` +
-          created.map(r => `    ${r.file} (${r.action})`).join('\n'));
-      }
-    } else {
-      const slashResults = writeClaudeCodeSlashCommands(opts);
-      result.slash_commands = slashResults;
-      const created = slashResults.filter(r => r.action !== 'exists');
-      if (created.length > 0) {
-        result.notes.push(`  Slash commands written to ~/.claude/commands/:\n` +
-          created.map(r => `    /${r.file.replace('.md', '')} (${r.action})`).join('\n'));
-      }
+    const slashResults = writeClaudeCodeSlashCommands(opts);
+    result.slash_commands = slashResults;
+    const created = slashResults.filter(r => r.action !== 'exists');
+    if (created.length > 0) {
+      result.notes.push(`  Slash commands written to ~/.claude/commands/:\n` +
+        created.map(r => `    /${r.file.replace('.md', '')} (${r.action})`).join('\n'));
     }
   }
 

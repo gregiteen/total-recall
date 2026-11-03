@@ -1,0 +1,36 @@
+node_modules/
+.agent/
+.agents/
+.env*
+*.log
+coverage/
+dist/
+reports/
+.DS_Store
+INSTRUCTIONS.md
+AGENTS.md
+CLAUDE.md
+GEMINI.md
+
+# Total Recall secrets projections
+.env
+.env.local
+.env.*.local
+
+# Total Recall brain state (machine-local: holds a live PAT)
+.agent/skills/total-recall/config/brain.json
+.agent/skills/total-recall/config/brain.json.bak-*
+.agent/skills/total-recall/config/keys.jsonl
+.agent/skills/total-recall/config/secrets.enc
+.agent/skills/total-recall/config/secrets.enc.bak-*
+.agent/skills/total-recall/config/leader.json
+.agent/skills/total-recall/*.pid
+
+# Total Recall generated skill projections (symlinks into this repo brain)
+.agents/skills/
+.claude/skills/
+.hermes/skills/
+
+# Hermes reads memories only from ~/.hermes/memories (its own notes store);
+# it gets Total Recall rules from AGENTS.md. Nothing here is read.
+.hermes/memories/

@@ -1,0 +1,29 @@
+{
+  "name": "tr-plugin-meta-harness",
+  "version": "0.3.0",
+  "description": "Total Recall Meta Harness plugin",
+  "type": "module",
+  "scripts": {
+    "test": "node --test test/*.test.mjs",
+    "ssss": "ssss"
+  },
+  "files": [
+    "cli.mjs",
+    "plugin.json",
+    "README.md",
+    "src/",
+    "!src/**/*.spec.mjs",
+    "ui/",
+    "capability/",
+    "skills/"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "dependencies": {
+    "@gregiteen/ssss-cli": "0.14.3"
+  },
+  "devDependencies": {
+    "total-recall-brain": "3.41.3"
+  }
+}

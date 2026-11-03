@@ -289,6 +289,17 @@ export async function createPlugin(args = []) {
         { name: "status", description: `Show which ${pluginName} subcommands are implemented`, effect: "read", output: "json" }
       ]
     };
+    if (apiKeys.length) {
+      manifest.cli.subcommands.push({
+        name: "token",
+        description: `Manage ${pluginName} API credentials in the secrets store`,
+        effect: "write",
+        args: [
+          { name: "action", positional: true, type: "choice", options: ["status", "set"], label: "Action" },
+          { name: "value", secret: true, type: "string", label: "Secret value passed over stdin" }
+        ]
+      });
+    }
     // The card contract reads the plugin's real state through a declared read
     // command; a scaffold without this shows no live status.
     manifest.status = { command: "status", refresh_seconds: 60 };
@@ -433,6 +444,10 @@ export default generateContext;
     fs.writeFileSync(path.join(pluginDir, "generator.mjs"), generatorContent, "utf8");
   }
 
+  manifest.capability = {
+    entry: "capability/index.mjs",
+    exports: ["getCapabilityStatus"]
+  };
 
   const validation = validatePluginManifest(manifest);
   if (!validation.valid) {
@@ -490,13 +505,51 @@ export default generateContext;
     private: true,
     type: 'module',
     description: pluginDesc,
-    scripts: { test: 'node --test test/*.test.mjs' },
-    devDependencies: { 'total-recall-brain': '^3.35.0' },
+    scripts: {
+      test: 'node --test test/*.test.mjs',
+      ssss: 'ssss',
+      export: 'ssss export vault --profile sale --out dist/bundle.ucw.json',
+      validate: 'ssss conformance --engine'
+    },
+    dependencies: {
+      '@gregiteen/ssss-cli': '0.14.3'
+    },
+    devDependencies: {
+      'total-recall-brain': '3.41.3'
+    },
     license: 'MIT'
   }, null, 2) + '\n', 'utf8');
-  fs.writeFileSync(path.join(pluginDir, '.gitignore'), 'node_modules/\n.env*\n.agent/skills/total-recall/\ndist/\nreports/\n.DS_Store\nINSTRUCTIONS.md\nAGENTS.md\nGEMINI.md\n', 'utf8');
+  fs.writeFileSync(path.join(pluginDir, '.gitignore'), 'node_modules/\n.env*\n.agent/skills/total-recall/\ndist/\nreports/\n.DS_Store\nINSTRUCTIONS.md\nAGENTS.md\n', 'utf8');
   fs.writeFileSync(path.join(pluginDir, 'LICENSE'), mitLicense(holder), 'utf8');
+
+  // Capability brick
+  fs.mkdirSync(path.join(pluginDir, 'capability'), { recursive: true });
+  fs.writeFileSync(path.join(pluginDir, 'capability', 'index.mjs'), `/**
+ * Portable capability brick for ${pluginName}.
+ * Zero host dependencies; pure portable JavaScript.
+ */
+export async function getCapabilityStatus() {
+  return { ready: true, initialized: true };
+}
+`, 'utf8');
+  fs.writeFileSync(path.join(pluginDir, 'capability', 'BRICK.md'), `# ${pluginName} — Capability Brick
+
+Portable core capability for ${pluginName}.
+
+## Exported Functions
+- \`getCapabilityStatus()\`: Returns capability readiness and initialization status.
+`, 'utf8');
+
   fs.mkdirSync(path.join(pluginDir, 'test'), { recursive: true });
+  fs.writeFileSync(path.join(pluginDir, 'test', 'capability.test.mjs'), `import test from 'node:test';
+import assert from 'node:assert/strict';
+import { getCapabilityStatus } from '../capability/index.mjs';
+
+test('capability brick loads and exports status', async () => {
+  const status = await getCapabilityStatus();
+  assert.equal(status.ready, true);
+});
+`, 'utf8');
   fs.writeFileSync(path.join(pluginDir, 'test', 'manifest.test.mjs'), `import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';

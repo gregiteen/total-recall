@@ -103,6 +103,51 @@ describe('CLI Plugin Manager', () => {
       expect(manifest.tasks).toBeUndefined();
       expect(fs.existsSync(path.join(pluginDir, 'cli.mjs'))).toBe(true);
       expect(fs.existsSync(path.join(pluginDir, 'generator.mjs'))).toBe(true);
+      expect(fs.existsSync(path.join(pluginDir, 'capability', 'index.mjs'))).toBe(true);
+      expect(fs.existsSync(path.join(pluginDir, 'capability', 'BRICK.md'))).toBe(true);
+    } finally {
+      cwdSpy.mockRestore();
+      fs.rmSync(tmpParent, { recursive: true, force: true });
+    }
+  });
+
+  it('monetizes, publishes to the store, and manages licenses', async () => {
+    const tmpParent = fs.mkdtempSync(path.join(os.tmpdir(), 'tr-test-plugin-mon-'));
+    const tmpDir = path.join(tmpParent, 'project');
+    fs.mkdirSync(tmpDir, { recursive: true });
+    const cwdSpy = vi.spyOn(process, 'cwd').mockReturnValue(tmpDir);
+
+    try {
+      await run(['plugin', 'create', 'mon-plugin', '--name', 'Monetized Plugin', '--with-cli']);
+      const pluginDir = path.join(tmpDir, '.agent', 'skills', 'total-recall', 'plugins', 'mon-plugin');
+      const manifestPath = path.join(pluginDir, 'plugin.json');
+      expect(fs.existsSync(manifestPath)).toBe(true);
+
+      // 1. Monetize plugin
+      await run(['plugin', 'monetize', 'mon-plugin', '--model', 'subscription', '--price-cents', '2500', '--currency', 'usd', '--period', 'monthly', '--json']);
+      const updatedManifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
+      expect(updatedManifest.monetization).toBeDefined();
+      expect(updatedManifest.monetization.model).toBe('subscription');
+      expect(updatedManifest.monetization.price_cents).toBe(2500);
+      expect(updatedManifest.monetization.period).toBe('monthly');
+      expect(updatedManifest.monetization.license_key_secret).toBe('MON_PLUGIN_LICENSE_KEY');
+
+      // 2. Publish to Store
+      await run(['plugin', 'publish', 'mon-plugin', '--json']);
+      const publishedManifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
+      expect(publishedManifest.id).toBe('mon-plugin');
+
+      // 3. License checkout and verify
+      consoleLogSpy.mockClear();
+      await run(['plugin', 'license', 'mon-plugin', 'checkout', '--json']);
+      expect(consoleLogSpy).toHaveBeenCalled();
+
+      // Verify without key -> exits code 1
+      const exitCodeBefore = process.exitCode;
+      process.exitCode = 0;
+      await run(['plugin', 'license', 'mon-plugin', 'verify', '--json']);
+      expect(process.exitCode).toBe(1);
+      process.exitCode = exitCodeBefore;
     } finally {
       cwdSpy.mockRestore();
       fs.rmSync(tmpParent, { recursive: true, force: true });

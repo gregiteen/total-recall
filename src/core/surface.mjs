@@ -500,6 +500,30 @@ async function writeShim(shimPath, skillsDir, nodes = [], { vaultDir, derivedDir
   const fullContent = prependDirectives(`${mdcHeader}${baseline}`, rulesBlock);
 
   try {
+    const normShim = path.normalize(shimPath);
+    // Antigravity rules deduplication: .agents/rules/AGENTS.md should be a relative
+    // symlink to ../../AGENTS.md so Antigravity resolves realpath and loads it once.
+    if (normShim.endsWith(path.normalize('.agents/rules/AGENTS.md'))) {
+      if (!fs.existsSync(shimDir)) {
+        fs.mkdirSync(shimDir, { recursive: true });
+      }
+      const relTarget = path.join('..', '..', 'AGENTS.md');
+      try {
+        const stat = fs.lstatSync(shimPath, { throwIfNoEntry: false });
+        if (stat) {
+          if (!stat.isSymbolicLink() || fs.readlinkSync(shimPath) !== relTarget) {
+            fs.unlinkSync(shimPath);
+            fs.symlinkSync(relTarget, shimPath);
+          }
+        } else {
+          fs.symlinkSync(relTarget, shimPath);
+        }
+        return true;
+      } catch {
+        // Fall through to regular write if symlink cannot be created
+      }
+    }
+
     const stat = fs.lstatSync(shimPath, { throwIfNoEntry: false });
     if (stat) {
       if (stat.isSymbolicLink()) {
@@ -552,7 +576,6 @@ const CLIENT_SHIMS = {
   roo:                ['.roo/rules/total-recall.md', '.clinerules/total-recall.md'],
   'roo-code':         ['.roo/rules/total-recall.md', '.clinerules/total-recall.md'],
   antigravity:        ['AGENTS.md', '.agents/rules/AGENTS.md'],
-  gemini:             ['GEMINI.md', '.agents/rules/GEMINI.md'],
   codex:              ['AGENTS.md'],
   grok:               ['AGENTS.md'],
   replit:             ['replit.md'],
@@ -646,6 +669,20 @@ async function compilePointers(instructionsFile, skillsDir, nodes = [], { vaultD
   // (rebuild.mjs: `<agentDir>/INSTRUCTIONS.md` with skillsDir `<agentDir>/skills`;
   // plugin-store.mjs likewise), so the peel was never correct for either.
   const baseDir = agentDir;
+
+  // Eradicate deprecated Gemini shims so they do not consume context budgets or inject obsolete rules
+  const deprecatedGeminiPaths = [
+    path.join(baseDir, 'GEMINI.md'),
+    path.join(baseDir, '.agent', 'GEMINI.md'),
+    path.join(baseDir, '.agents', 'rules', 'GEMINI.md')
+  ];
+  for (const depPath of deprecatedGeminiPaths) {
+    try {
+      if (fs.existsSync(depPath)) {
+        fs.unlinkSync(depPath);
+      }
+    } catch {}
+  }
 
   // Determine which client shims to write.
   // `baseDir/.agent/skills/...` only holds for a PROJECT brain. For the global

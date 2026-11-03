@@ -5,7 +5,7 @@ import { listAvailable, listPeers, searchPlugins } from './search.mjs';
 import { createPlugin } from './create.mjs';
 import { vendorPlugin, listProjectBricks } from './vendor.mjs';
 import { manageProjectPluginCopies } from './copies.mjs';
-import { managePluginLicense } from './monetization.mjs';
+import { managePluginLicense, monetizePlugin, publishPluginToStore } from './monetization.mjs';
 import { getPlugin, getPluginMonetization, globalPluginsDir, projectPluginsDir } from '../../core/plugin-loader.mjs';
 import { describePlugin, pruneReplacementArchives, replacementArchiveDir } from '../../core/plugin-store.mjs';
 import { buildPluginCatalog } from '../../core/plugin-catalog.mjs';
@@ -55,8 +55,10 @@ Commands:
                             in 'update --automatic')
    share <id>                Offer an installed plugin by direct link and mesh
   unshare <id>              Stop offering it
+  publish <id>              Publish plugin to the Store and lock release (--no-lock)
+  monetize <id>             Configure plugin pricing, period, and payout recipient
   remove <id>               Uninstall (--global for the machine-wide copy)
-  license <id> [cmd]        Check or activate plugin license (status, activate, verify)
+  license <id> [cmd]        Check or activate plugin license (status, activate, checkout, verify)
   info <id>                 Manifest, provenance, hash and task history
   vendor <source> [dir]     Add a plugin to this project as a brick (default bricks/<id>); the
                             project then owns the code. <source>: bundled id, git URL or path.
@@ -244,7 +246,17 @@ export async function run(argv = []) {
     return;
   }
 
-  if (command === 'license' || command === 'lic' || command === 'monetize') {
+  if (command === 'publish' || command === 'deploy-store') {
+    await publishPluginToStore(rest);
+    return;
+  }
+
+  if (command === 'monetize') {
+    await monetizePlugin(rest);
+    return;
+  }
+
+  if (command === 'license' || command === 'lic') {
     await managePluginLicense(rest);
     return;
   }

@@ -162,10 +162,8 @@ export function loadRuntimeConfig(_configPath) {
       const checkPaths = [
         instructionsFilePath(),
         path.join(surfaceDir(), 'AGENTS.md'),
-        path.join(surfaceDir(), 'GEMINI.md'),
         path.join(agentDir, 'INSTRUCTIONS.md'),
         path.join(agentDir, 'AGENTS.md'),
-        path.join(agentDir, 'GEMINI.md'),
         path.join(path.dirname(agentDir), 'INSTRUCTIONS.md'),
         path.join(path.dirname(agentDir), 'AGENTS.md'),
         path.join(process.cwd(), 'INSTRUCTIONS.md'),
@@ -173,7 +171,6 @@ export function loadRuntimeConfig(_configPath) {
         path.join(process.cwd(), 'Claude.md'),
         // legacy mistaken brainDir locations (kept as last resort)
         path.join(brainDir, 'INSTRUCTIONS.md'),
-        path.join(brainDir, 'GEMINI.md'),
         path.join(brainDir, 'AGENTS.md'),
       ];
       for (const p of checkPaths) {
