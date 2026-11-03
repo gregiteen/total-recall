@@ -20,7 +20,11 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
+import { loadOpenWikiConfig } from './config.mjs';
+
+const PLUGIN_ROOT = fileURLToPath(new URL('..', import.meta.url));
 
 /** Registry written by the core when a project is registered. */
 const RETENTION_NOTE = 'pages are a projection, not canonical memory';
@@ -125,10 +129,14 @@ export function staleness(root, { git = spawnSync } = {}) {
  * the only symptom. Try the owning namespace, then the bare form for older
  * CLIs, and report failure rather than refreshing without a key.
  */
-export function resolveKey({ keys = ['OPENROUTER_API_KEY', 'JSN_OPENROUTER_API_KEY'], run = spawnSync, env = process.env } = {}) {
-  if (env.OPENROUTER_API_KEY) return { key: env.OPENROUTER_API_KEY, from: 'environment' };
+export function resolveKey({ provider = null, keys = null, run = spawnSync } = {}) {
+  const activeProvider = provider || (typeof loadOpenWikiConfig === 'function' ? loadOpenWikiConfig().provider : 'openrouter');
+  const candidateKeys = keys || (activeProvider === 'google'
+    ? ['GOOGLE_API_KEY', 'GEMINI_API_KEY']
+    : ['OPENROUTER_API_KEY', 'JSN_OPENROUTER_API_KEY']);
+
   for (const form of [['auth', 'secret', 'get'], ['secret', 'get']]) {
-    for (const name of keys) {
+    for (const name of candidateKeys) {
       const result = run('total-recall', [...form, name], { encoding: 'utf8', timeout: 90_000 });
       if (result.error || result.status !== 0) continue;
       const value = String(result.stdout || '').trim().split('\n').pop()?.trim();
@@ -160,9 +168,17 @@ export function resolveKey({ keys = ['OPENROUTER_API_KEY', 'JSN_OPENROUTER_API_K
  * cache, so use that before going to the network, and only reach for `--yes`
  * when nothing cached exists.
  */
-export function resolveGenerator({ run = spawnSync, env = process.env, home = os.homedir(), targetVersion = null } = {}) {
-  const local = path.join(process.cwd(), 'node_modules', '.bin', 'openwiki');
-  if (fs.existsSync(local)) return { command: local, args: [], via: 'local node_modules/.bin' };
+export function resolveGenerator({ pluginRoot = null, run = spawnSync, env = process.env, home = os.homedir(), targetVersion = null } = {}) {
+  const root = pluginRoot !== null ? pluginRoot : PLUGIN_ROOT;
+  if (root) {
+    const candidate = path.join(root, 'node_modules', '.bin', 'openwiki');
+    if (fs.existsSync(candidate)) return { command: candidate, args: [], via: 'plugin local node_modules/.bin' };
+  }
+
+  if (pluginRoot === null) {
+    const local = path.join(process.cwd(), 'node_modules', '.bin', 'openwiki');
+    if (fs.existsSync(local)) return { command: local, args: [], via: 'local node_modules/.bin' };
+  }
 
   const onPath = run('which', ['openwiki'], { encoding: 'utf8' });
   if (!onPath.error && onPath.status === 0) {
@@ -217,42 +233,83 @@ export function stillGenerating(root) {
 }
 
 export function refreshProject(project, {
-  key, binary = null, binaryArgs = [], timeoutMs = 30 * 60 * 1000, run = spawnSync, now = Date.now(), targetVersion = null,
+  key, model = null, provider = null, binary = null, binaryArgs = [], timeoutMs = 30 * 60 * 1000, run = spawnSync, now = Date.now(), targetVersion = null, pluginRoot = PLUGIN_ROOT,
 } = {}) {
   const before = staleness(project.root, { git: run });
-  if (!hasWiki(project.root)) return { ...project, action: 'skipped', reason: 'no generated openwiki/ pages', ...before };
+  const uninitialized = !hasWiki(project.root);
 
   let command = binary, args = binaryArgs, via = binary ? 'explicit' : null;
   if (!command) {
-    const resolved = resolveGenerator({ run, targetVersion });
+    const resolved = resolveGenerator({ run, targetVersion, pluginRoot });
     if (!resolved.command) {
       return { ...project, action: 'failed', reason: 'no openwiki generator available (no local .bin, no PATH entry, no npx)', ...before };
     }
     ({ command, args, via } = resolved);
   }
 
+  const config = typeof loadOpenWikiConfig === 'function' ? loadOpenWikiConfig() : { model: 'deepseek/deepseek-v4.1-flash', provider: 'openrouter' };
+  const selectedModel = model || config.model;
+  const selectedProvider = provider || config.provider;
+
+  const modeFlag = uninitialized ? '--init' : '--update';
+  const cmdArgs = [...args, modeFlag, '-p'];
+  if (selectedModel) {
+    cmdArgs.push('--modelId', selectedModel);
+  }
+
+  if (uninitialized) {
+    const runFile = path.join(project.root, 'openwiki', '.run.json');
+    if (fs.existsSync(runFile)) {
+      try { fs.unlinkSync(runFile); } catch {}
+    }
+  }
+
+  const childEnv = { ...process.env };
+  if (selectedProvider === 'google') {
+    childEnv.GOOGLE_API_KEY = key;
+    childEnv.GEMINI_API_KEY = key;
+    childEnv.OPENWIKI_PROVIDER = 'gemini';
+    delete childEnv.OPENAI_API_KEY;
+    delete childEnv.OPENROUTER_API_KEY;
+  } else {
+    childEnv.OPENROUTER_API_KEY = key;
+    childEnv.OPENWIKI_PROVIDER = 'openrouter';
+    if (config.max_tokens) {
+      childEnv.OPENWIKI_OPENROUTER_MAX_TOKENS = String(config.max_tokens);
+    }
+    delete childEnv.OPENAI_API_KEY;
+  }
+
   const startedAt = now;
-  const result = run(command, [...args, '--update', '-p'], {
+  const result = run(command, cmdArgs, {
     cwd: project.root,
-    env: { ...process.env, OPENROUTER_API_KEY: key },
+    env: childEnv,
     stdio: ['ignore', 'pipe', 'pipe'],
     encoding: 'utf8',
     timeout: timeoutMs,
   });
+
+  // OpenWiki generator may drop GitHub workflow files; our system strictly forbids GitHub Actions.
+  const workflowDir = path.join(project.root, '.github', 'workflows');
+  const workflowFile = path.join(workflowDir, 'openwiki-update.yml');
+  if (fs.existsSync(workflowFile)) {
+    try { fs.unlinkSync(workflowFile); } catch {}
+  }
+  if (fs.existsSync(workflowDir)) {
+    try {
+      const remaining = fs.readdirSync(workflowDir);
+      if (remaining.length === 0) fs.rmdirSync(workflowDir);
+    } catch {}
+  }
+
   const after = staleness(project.root, { git: run });
   const exitCode = result.error ? (result.error.code || 1) : result.status;
-  const advanced = after.generatedAt !== before.generatedAt;
-  const wrote = pagesWritten(before, after);
+  const advanced = after.generatedAt !== before.generatedAt || (uninitialized && hasWiki(project.root));
+  const wrote = pagesWritten(before, after) || (uninitialized && hasWiki(project.root) ? 1 : 0);
 
-  // Read the run's own state. openwiki writes the marker as it ENTERS
-  // generation, so a marker that advanced proves pages were started, not
-  // finished; every run cut off by the runner's 600 s cap left
-  // status:"interrupted" while still rewriting real pages. Judge on what
-  // changed, and say plainly when a refresh is partially applied rather than
-  // reporting a kill as a failure or an incomplete run as success.
   const outcome = after.generatedStatus === 'interrupted' || stillGenerating(project.root)
     ? 'partial'
-    : (advanced ? 'refreshed' : 'unchanged');
+    : (advanced ? (uninitialized ? 'initialized' : 'refreshed') : 'unchanged');
 
   if (exitCode !== 0 && !wrote) {
     return { ...project, action: 'failed', reason: result.error?.message || `exit ${exitCode}`, exitCode, ...after };
@@ -275,12 +332,15 @@ export function refreshProject(project, {
   if (exitCode !== 0) {
     return { ...project, action: 'failed', reason: result.error?.message || `exit ${exitCode}`, exitCode, ...after };
   }
-  return { ...project, action: 'refreshed', from: before.generatedAt, to: after.generatedAt, durationMs: Date.now() - startedAt, via, ...after };
+  return { ...project, action: uninitialized ? 'initialized' : 'refreshed', from: before.generatedAt, to: after.generatedAt, durationMs: Date.now() - startedAt, via, ...after };
 }
 
 /** Is a refresh due for this project under the configured interval? */
 export function isDue(project, { lockMs = DEFAULT_LOCK_MS, now = Date.now(), git = spawnSync } = {}) {
   const state = staleness(project.root, { git });
+  if (!hasWiki(project.root)) {
+    return { due: true, uninitialized: true, reason: 'uninitialized (missing openwiki/ pages)', ...state };
+  }
   if (!state.stale) return { due: false, ...state };
   if (state.generatedAt) {
     const at = Date.parse(state.generatedAt);

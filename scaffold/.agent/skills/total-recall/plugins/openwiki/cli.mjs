@@ -8,6 +8,7 @@ import path from "node:path";
 import { runBootstrapCommand } from './src/bootstrap.mjs';
 import { describeRetention, hasWiki, isDue, readProjects, refreshProject, resolveKey, staleness } from './src/refresh.mjs';
 import { announceNewVersion, checkUpstreamStatus, propagateUpdates, readUpstreamState } from './src/upstream-watcher.mjs';
+import { loadOpenWikiConfig, setOpenWikiConfigValue, resetOpenWikiConfig, resolveConfigPath, ALLOWED_CONFIG_KEYS, ALLOWED_PROVIDERS } from './src/config.mjs';
 
 /**
  * Regenerate the generated pages of every registered project that carries them.
@@ -46,10 +47,6 @@ async function refreshCommand(args) {
 
   const reports = [];
   for (const project of projects) {
-    if (!hasWiki(project.root)) {
-      reports.push({ ...project, action: 'skipped', reason: 'no generated openwiki/ pages' });
-      continue;
-    }
     let state;
     try {
       state = force ? { due: true, ...staleness(project.root) } : isDue(project);
@@ -61,15 +58,24 @@ async function refreshCommand(args) {
       reports.push({ ...project, action: 'current', generatedAt: state.generatedAt, commitsSince: state.commitsSince });
       continue;
     }
-    reports.push({ ...project, action: 'due', generatedAt: state.generatedAt, commitsSince: state.commitsSince });
+    reports.push({
+      ...project,
+      action: 'due',
+      uninitialized: Boolean(state.uninitialized),
+      generatedAt: state.generatedAt,
+      commitsSince: state.commitsSince,
+      reason: state.reason
+    });
   }
 
   const due = reports.filter((r) => r.action === 'due');
   let payloadBudgetNote = null;
   if (apply && due.length) {
-    const { key, from } = resolveKey();
+    const config = loadOpenWikiConfig();
+    const { key, from } = resolveKey({ provider: config.provider });
     if (!key) {
-      const error = 'no model credential from the auth store (tried auth secret get and secret get)';
+      const keyName = config.provider === 'google' ? 'GOOGLE_API_KEY' : 'OPENROUTER_API_KEY';
+      const error = `No model credential for provider '${config.provider}'. Save via: total-recall auth secret set ${keyName} --stdin`;
       if (json) console.log(JSON.stringify({ ok: false, error, reports }));
       else console.error(`OpenWiki refresh: ${error}`);
       process.exitCode = 1;
@@ -82,7 +88,10 @@ async function refreshCommand(args) {
     for (const entry of due) {
       const remaining = deadline - Date.now();
       if (remaining < 60000) { skippedForBudget += 1; continue; }
-      const result = refreshProject({ name: entry.name, root: entry.root }, { key, timeoutMs: remaining });
+      const result = refreshProject(
+        { name: entry.name, root: entry.root },
+        { key, model: config.model, provider: config.provider, timeoutMs: Math.min(remaining, config.timeout_ms) }
+      );
       const index = reports.findIndex((r) => r.root === entry.root);
       reports[index] = { ...reports[index], ...result, credential: from };
       if (Date.now() >= deadline) { skippedForBudget += 1; }
@@ -100,9 +109,10 @@ async function refreshCommand(args) {
     note: payloadBudgetNote,
     counts: {
       registered: projects.length,
-      withPages: reports.filter((r) => r.action !== 'skipped').length,
+      withPages: reports.filter((r) => r.action !== 'skipped' && !r.uninitialized).length,
       due: due.length,
-      refreshed: reports.filter((r) => r.action === 'refreshed').length,
+      uninitialized: reports.filter((r) => r.uninitialized).length,
+      refreshed: reports.filter((r) => r.action === 'refreshed' || r.action === 'initialized').length,
       failed: failed.length,
       current: reports.filter((r) => r.action === 'current').length,
     },
@@ -110,11 +120,11 @@ async function refreshCommand(args) {
   };
   if (json) console.log(JSON.stringify(payload, null, 2));
   else {
-    console.log(`OpenWiki refresh (${apply ? 'apply' : 'report'}): ${payload.counts.registered} registered, ${payload.counts.withPages} with pages, ${payload.counts.due} due`);
+    console.log(`OpenWiki refresh (${apply ? 'apply' : 'report'}): ${payload.counts.registered} registered, ${payload.counts.due} due (${payload.counts.uninitialized} uninitialized)`);
     for (const r of reports) {
       if (r.action === 'current') continue;
-      const age = r.generatedAt ? `generated ${r.generatedAt.slice(0, 10)}` : 'never generated';
-      console.log(`  ${r.action.padEnd(9)} ${r.name.padEnd(28)} ${age}${Number.isFinite(r.commitsSince) ? `, ${r.commitsSince} commits since` : ''}${r.reason ? ` — ${r.reason}` : ''}`);
+      const age = r.uninitialized ? 'uninitialized' : (r.generatedAt ? `generated ${r.generatedAt.slice(0, 10)}` : 'never generated');
+      console.log(`  ${r.action.padEnd(9)} ${r.name.padEnd(28)} ${age}${Number.isFinite(r.commitsSince) && r.commitsSince !== Infinity ? `, ${r.commitsSince} commits since` : ''}${r.reason ? ` — ${r.reason}` : ''}`);
     }
     if (payloadBudgetNote) console.log(payloadBudgetNote);
     if (!apply && due.length) console.log('Re-run with --apply to regenerate. Pages are a projection; vault content is never touched.');
@@ -279,6 +289,75 @@ async function propagateCommand(args) {
   if (!result.ok) process.exitCode = 1;
 }
 
+/**
+ * Configure OpenWiki generation parameters and cheap model routing.
+ */
+async function configCommand(args) {
+  const json = args.includes('--json');
+  const cleanArgs = args.filter((a) => a !== '--json');
+  const verb = cleanArgs[0] || 'show';
+
+  try {
+    if (verb === 'show') {
+      const config = loadOpenWikiConfig();
+      const configPath = resolveConfigPath();
+      const payload = { ok: true, path: configPath, config };
+      if (json) console.log(JSON.stringify(payload, null, 2));
+      else {
+        console.log(`\nOpenWiki Configuration (${configPath}):`);
+        console.log(`  Provider        : ${config.provider}`);
+        console.log(`  Model           : ${config.model}`);
+        console.log(`  Fallback Model  : ${config.fallback_model}`);
+        console.log(`  Max Tokens      : ${config.max_tokens}`);
+        console.log(`  Timeout (ms)    : ${config.timeout_ms}\n`);
+      }
+      return;
+    }
+
+    if (verb === 'get') {
+      const key = cleanArgs[1];
+      if (!key) {
+        throw new Error('Key argument required: openwiki config get <key>');
+      }
+      if (!ALLOWED_CONFIG_KEYS.includes(key)) {
+        throw new Error(`Unknown configuration key '${key}'. Allowed: ${ALLOWED_CONFIG_KEYS.join(', ')}`);
+      }
+      const config = loadOpenWikiConfig();
+      const value = config[key];
+      if (json) console.log(JSON.stringify({ ok: true, key, value }));
+      else console.log(value);
+      return;
+    }
+
+    if (verb === 'set') {
+      const key = cleanArgs[1];
+      const value = cleanArgs[2];
+      if (!key || value === undefined) {
+        throw new Error('Key and value required: openwiki config set <key> <value>');
+      }
+      const updated = setOpenWikiConfigValue(key, value);
+      const payload = { ok: true, key, value: updated[key], config: updated };
+      if (json) console.log(JSON.stringify(payload, null, 2));
+      else console.log(`OpenWiki configuration updated: ${key} = ${updated[key]}`);
+      return;
+    }
+
+    if (verb === 'reset') {
+      const reset = resetOpenWikiConfig();
+      const payload = { ok: true, message: 'Configuration reset to defaults', config: reset };
+      if (json) console.log(JSON.stringify(payload, null, 2));
+      else console.log('OpenWiki configuration reset to defaults');
+      return;
+    }
+
+    throw new Error(`Unknown config action '${verb}'. Supported verbs: show, get, set, reset`);
+  } catch (err) {
+    if (json) console.log(JSON.stringify({ ok: false, error: err.message }));
+    else console.error(`OpenWiki config error: ${err.message}`);
+    process.exitCode = 1;
+  }
+}
+
 const IMPLEMENTED = {};
 IMPLEMENTED.probe = probeCommand;
 IMPLEMENTED.hubs = hubsCommand;
@@ -287,6 +366,7 @@ IMPLEMENTED.bootstrap = runBootstrapCommand;
 IMPLEMENTED.refresh = refreshCommand;
 IMPLEMENTED.watch = watchCommand;
 IMPLEMENTED.propagate = propagateCommand;
+IMPLEMENTED.config = configCommand;
 
 export async function run(argv = process.argv) {
   let rawArgs = Array.isArray(argv) && argv.length > 0 ? [...argv] : process.argv.slice(2);
@@ -339,6 +419,8 @@ export async function run(argv = process.argv) {
     refresh [--repo <name>] [--apply] [--force] [--json]
                               Report which registered projects' generated pages are stale;
                               --apply regenerates stale pages (writes openwiki/ only)
+    config [show|get <key>|set <key> <value>|reset] [--json]
+                              Configure generator provider, model, tokens, and timeout
     watch [--check-only] [--announce] [--propagate] [--json]
                               Watch upstream OpenWiki repository and announce new versions
     propagate [--repo <name>] [--force] [--dry-run] [--json]

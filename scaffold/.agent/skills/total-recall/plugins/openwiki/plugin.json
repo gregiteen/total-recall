@@ -18,6 +18,18 @@
     "badge": "Knowledge Graph",
     "font": "newsreader"
   },
+  "secrets": [
+    {
+      "key": "OPENROUTER_API_KEY",
+      "description": "Platform OpenRouter API key for cheap model documentation generation",
+      "required": false
+    },
+    {
+      "key": "GOOGLE_API_KEY",
+      "description": "Platform Google Gemini API key for direct Gemini model documentation generation",
+      "required": false
+    }
+  ],
   "card_face": {
     "headline": "OpenWiki Control Deck",
     "quick_actions": [
@@ -272,6 +284,38 @@
             "flag": "--dry-run",
             "label": "Preview without writing",
             "type": "boolean"
+          },
+          {
+            "name": "json",
+            "flag": "--json",
+            "label": "JSON output",
+            "type": "boolean"
+          }
+        ]
+      },
+      {
+        "name": "config",
+        "description": "Configure OpenWiki generator model routing, token bounds, and timeout",
+        "effect": "write",
+        "output": "json",
+        "args": [
+          {
+            "name": "action",
+            "label": "Action verb (show, get, set, reset)",
+            "type": "string",
+            "positional": true
+          },
+          {
+            "name": "key",
+            "label": "Configuration key",
+            "type": "string",
+            "positional": true
+          },
+          {
+            "name": "value",
+            "label": "Configuration value",
+            "type": "string",
+            "positional": true
           },
           {
             "name": "json",

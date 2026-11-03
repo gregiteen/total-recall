@@ -7,8 +7,22 @@
  */
 
 export class OpenWikiCard extends HTMLElement {
+  static get screens() {
+    return [
+      { id: 'hubs', label: 'Hubs' },
+      { id: 'config', label: 'Configuration' },
+      { id: 'refresh', label: 'Fleet Refresh' },
+      { id: 'upstream', label: 'Upstream Watcher' }
+    ];
+  }
+
+  get screens() {
+    return OpenWikiCard.screens;
+  }
+
   constructor() {
     super();
+    this.activeScreen = 'hubs';
     this.hubs = [];
     this.loading = false;
     this.statusText = 'READY';
@@ -18,18 +32,110 @@ export class OpenWikiCard extends HTMLElement {
     this.errorMessage = null;
     this.lastRefreshedAt = null;
     this.upstream = null;
+    this.config = {
+      provider: 'openrouter',
+      model: 'deepseek/deepseek-v4.1-flash',
+      fallback_model: 'qwen/qwen-2.5-coder-32b-instruct',
+      max_tokens: 4096,
+      timeout_ms: 300000
+    };
+    this.refreshReports = [];
+    this.refreshCounts = null;
+    this._boundOnScreenChange = this.handleExternalScreenChange.bind(this);
   }
 
   connectedCallback() {
     if (!this.shadowRoot) {
       this.attachShadow({ mode: 'open' });
     }
+    this.addEventListener('tr:screen-change', this._boundOnScreenChange);
+    this.addEventListener('plugin-show-screen', this._boundOnScreenChange);
     this.render();
     this.refreshHubs();
+    this.loadConfig();
   }
 
   disconnectedCallback() {
-    // Clean state lifecycle teardown
+    this.removeEventListener('tr:screen-change', this._boundOnScreenChange);
+    this.removeEventListener('plugin-show-screen', this._boundOnScreenChange);
+  }
+
+  handleExternalScreenChange(event) {
+    const screenId = event.detail?.screen || event.detail?.screenId || event.detail?.id;
+    if (screenId && OpenWikiCard.screens.some((s) => s.id === screenId)) {
+      this.setScreen(screenId);
+    }
+  }
+
+  setScreen(id) {
+    if (this.activeScreen === id) return;
+    this.activeScreen = id;
+    this.errorMessage = null;
+    this.render();
+    if (typeof this.host?.screenChanged === 'function') {
+      try {
+        this.host.screenChanged({ screen: id });
+      } catch {
+        // Host screenChanged callback optional
+      }
+    }
+    if (id === 'refresh' && (!this.refreshReports || this.refreshReports.length === 0)) {
+      this.loadRefreshReport();
+    } else if (id === 'config') {
+      this.loadConfig();
+    }
+  }
+
+  async loadConfig() {
+    try {
+      if (this.host && typeof this.host.run === 'function') {
+        const res = await this.host.run('config', ['show', '--json']);
+        if (res?.config) {
+          this.config = res.config;
+          this.render();
+        }
+      }
+    } catch {
+      // Retain active config defaults if host call fails
+    }
+  }
+
+  async setConfigValue(key, value) {
+    this.loading = true;
+    this.errorMessage = null;
+    this.render();
+    try {
+      if (this.host && typeof this.host.run === 'function') {
+        const res = await this.host.run('config', ['set', key, String(value), '--json']);
+        if (res?.config) {
+          this.config = res.config;
+        }
+      }
+    } catch (err) {
+      this.errorMessage = err.message || `Failed to update ${key}`;
+    } finally {
+      this.loading = false;
+      this.render();
+    }
+  }
+
+  async resetConfig() {
+    this.loading = true;
+    this.errorMessage = null;
+    this.render();
+    try {
+      if (this.host && typeof this.host.run === 'function') {
+        const res = await this.host.run('config', ['reset', '--json']);
+        if (res?.config) {
+          this.config = res.config;
+        }
+      }
+    } catch (err) {
+      this.errorMessage = err.message || 'Failed to reset configuration';
+    } finally {
+      this.loading = false;
+      this.render();
+    }
   }
 
   async refreshHubs() {
@@ -64,6 +170,57 @@ export class OpenWikiCard extends HTMLElement {
       this.statusText = 'ERROR';
       this.errorMessage = err.message || 'Hub synchronization failure';
       this.hubs = [];
+    } finally {
+      this.loading = false;
+      this.render();
+    }
+  }
+
+  async loadRefreshReport() {
+    this.loading = true;
+    this.errorMessage = null;
+    this.render();
+    try {
+      if (this.host && typeof this.host.run === 'function') {
+        const res = await this.host.run('refresh', ['--json']);
+        if (res) {
+          this.refreshReports = Array.isArray(res.reports) ? res.reports : [];
+          this.refreshCounts = res.counts || null;
+        }
+      }
+    } catch (err) {
+      this.errorMessage = err.message || 'Fleet status check failure';
+    } finally {
+      this.loading = false;
+      this.render();
+    }
+  }
+
+  async executeFleetRefresh() {
+    if (this.loading) return;
+    this.loading = true;
+    this.executionResult = null;
+    this.errorMessage = null;
+    this.render();
+
+    try {
+      if (this.host && typeof this.host.run === 'function') {
+        const res = await this.host.run('refresh', ['--apply', '--json']);
+        this.executionResult = {
+          action: 'fleet-refresh',
+          target: 'all-registered-projects',
+          details: res && typeof res === 'object' ? res : { message: String(res || 'Completed') },
+          timestamp: new Date().toLocaleTimeString()
+        };
+        if (res?.reports) {
+          this.refreshReports = res.reports;
+          this.refreshCounts = res.counts;
+        }
+      } else {
+        throw new Error('Host execution context unavailable');
+      }
+    } catch (err) {
+      this.errorMessage = err.message || 'Fleet refresh execution failure';
     } finally {
       this.loading = false;
       this.render();
@@ -225,7 +382,7 @@ export class OpenWikiCard extends HTMLElement {
           align-items: center;
           justify-content: space-between;
           gap: 12px;
-          margin-bottom: 16px;
+          margin-bottom: 12px;
           border-bottom: 1px solid var(--border, var(--face-border));
           padding-bottom: 12px;
         }
@@ -277,6 +434,42 @@ export class OpenWikiCard extends HTMLElement {
         .status-pill.danger {
           color: var(--face-danger);
           border-color: var(--face-danger);
+        }
+
+        .screen-tabs {
+          display: flex;
+          gap: 6px;
+          margin-bottom: 16px;
+          border-bottom: 1px solid var(--border, var(--face-border));
+          padding-bottom: 8px;
+          overflow-x: auto;
+        }
+
+        .screen-tab-btn {
+          min-height: 36px;
+          padding: 0 12px;
+          font-size: 12px;
+          font-weight: 600;
+          border-radius: 6px;
+          border: 1px solid transparent;
+          background: transparent;
+          color: var(--face-text-muted);
+          cursor: pointer;
+          transition: all 0.15s ease;
+          display: inline-flex;
+          align-items: center;
+          white-space: nowrap;
+        }
+
+        .screen-tab-btn:hover {
+          color: var(--face-text);
+          background: var(--face-surface-subtle);
+        }
+
+        .screen-tab-btn.active {
+          color: var(--face-accent);
+          background: var(--face-surface);
+          border-color: var(--face-accent);
         }
 
         .stats-grid {
@@ -374,14 +567,46 @@ export class OpenWikiCard extends HTMLElement {
           margin-bottom: 16px;
         }
 
+        .config-deck {
+          background: var(--face-surface);
+          border: 1px solid var(--border, var(--face-border));
+          border-radius: 6px;
+          padding: 14px;
+          margin-bottom: 16px;
+        }
+
+        .config-grid {
+          display: grid;
+          grid-template-columns: 1fr 1fr;
+          gap: 12px;
+          margin-bottom: 14px;
+        }
+
+        .field-group {
+          display: flex;
+          flex-direction: column;
+          gap: 4px;
+        }
+
+        .field-group.full-width {
+          grid-column: 1 / -1;
+        }
+
+        .field-label {
+          font-size: 11px;
+          font-weight: 700;
+          text-transform: uppercase;
+          letter-spacing: 0.04em;
+          color: var(--face-text-muted);
+        }
+
         .input-group {
           display: flex;
           gap: 8px;
           margin-bottom: 12px;
         }
 
-        .path-input {
-          flex: 1;
+        .path-input, .text-input, .select-input {
           min-height: 44px;
           background: var(--face-surface-subtle);
           border: 1px solid var(--border, var(--face-border));
@@ -390,11 +615,50 @@ export class OpenWikiCard extends HTMLElement {
           color: var(--text-primary, var(--face-text));
           font-family: ui-monospace, monospace;
           font-size: 13px;
+          width: 100%;
         }
 
-        .path-input:focus {
+        .path-input:focus, .text-input:focus, .select-input:focus {
           outline: none;
           border-color: var(--face-accent);
+        }
+
+        .presets-bar {
+          display: flex;
+          gap: 6px;
+          flex-wrap: wrap;
+          margin-bottom: 14px;
+        }
+
+        .preset-chip {
+          min-height: 32px;
+          padding: 4px 10px;
+          background: var(--face-surface-subtle);
+          border: 1px solid var(--border, var(--face-border));
+          border-radius: 16px;
+          font-size: 11px;
+          font-family: ui-monospace, monospace;
+          color: var(--face-text);
+          cursor: pointer;
+          transition: all 0.15s ease;
+        }
+
+        .preset-chip:hover {
+          border-color: var(--face-accent);
+          color: var(--face-accent);
+        }
+
+        .auth-notice-card {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          background: #022c22;
+          border: 1px solid var(--face-ok);
+          border-radius: 6px;
+          padding: 10px 14px;
+          margin-bottom: 14px;
+          font-size: 12px;
+          color: #a7f3d0;
         }
 
         .toggle-label {
@@ -462,6 +726,7 @@ export class OpenWikiCard extends HTMLElement {
           font-family: ui-monospace, monospace;
           font-size: 12px;
           color: var(--text-primary, var(--face-text));
+          margin-top: 12px;
         }
 
         .result-title {
@@ -478,6 +743,32 @@ export class OpenWikiCard extends HTMLElement {
           color: var(--face-danger);
           font-size: 12px;
           margin-bottom: 12px;
+        }
+
+        .repo-status-badge {
+          display: inline-flex;
+          align-items: center;
+          padding: 2px 6px;
+          border-radius: 4px;
+          font-size: 10px;
+          font-weight: 700;
+          letter-spacing: 0.04em;
+          text-transform: uppercase;
+        }
+
+        .repo-status-badge.current {
+          background: #064e3b;
+          color: #6ee7b7;
+        }
+
+        .repo-status-badge.due {
+          background: #78350f;
+          color: #fde68a;
+        }
+
+        .repo-status-badge.uninit {
+          background: #831843;
+          color: #fbcfe8;
         }
 
         @media (prefers-reduced-motion: reduce) {
@@ -500,6 +791,17 @@ export class OpenWikiCard extends HTMLElement {
         </span>
       </div>
 
+      <nav class="screen-tabs" aria-label="OpenWiki navigation screens">
+        ${OpenWikiCard.screens.map((screen) => `
+          <button
+            class="screen-tab-btn ${this.activeScreen === screen.id ? 'active' : ''}"
+            data-screen="${screen.id}"
+          >
+            ${screen.label}
+          </button>
+        `).join('')}
+      </nav>
+
       <div class="stats-grid">
         <div class="stat-card">
           <div class="stat-label">Discovered Hubs</div>
@@ -510,8 +812,10 @@ export class OpenWikiCard extends HTMLElement {
           <div class="stat-value">${linesText}</div>
         </div>
         <div class="stat-card">
-          <div class="stat-label">Upstream Generator</div>
-          <div class="stat-value">${upstreamText}</div>
+          <div class="stat-label">Active Model Routing</div>
+          <div class="stat-value" style="font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" title="${this.config.model}">
+            ${this.config.model.split('/').pop() || this.config.model}
+          </div>
         </div>
       </div>
 
@@ -521,6 +825,36 @@ export class OpenWikiCard extends HTMLElement {
         </div>
       ` : ''}
 
+      ${this.renderActiveScreen()}
+
+      ${this.executionResult ? `
+        <div class="result-deck">
+          <div class="result-title">Execution Receipt (${this.executionResult.timestamp})</div>
+          <div>Action: ${this.executionResult.action}</div>
+          <div>Target: ${this.executionResult.target || 'project'}</div>
+          <div>Result: ${JSON.stringify(this.executionResult.details)}</div>
+        </div>
+      ` : ''}
+    `;
+
+    this.bindEvents();
+  }
+
+  renderActiveScreen() {
+    if (this.activeScreen === 'config') {
+      return this.renderConfigScreen();
+    }
+    if (this.activeScreen === 'refresh') {
+      return this.renderRefreshScreen();
+    }
+    if (this.activeScreen === 'upstream') {
+      return this.renderUpstreamScreen();
+    }
+    return this.renderHubsScreen();
+  }
+
+  renderHubsScreen() {
+    return `
       <div class="section-header">
         <span class="section-title">Knowledge Hubs</span>
         <button id="btn-refresh" class="btn btn-secondary" style="min-height: 32px; padding: 0 10px; font-size: 11px;" ${this.loading ? 'disabled' : ''}>
@@ -531,7 +865,7 @@ export class OpenWikiCard extends HTMLElement {
       <div class="hub-list">
         ${this.hubs.length === 0 ? `
           <div class="empty-state">No documentation hubs indexed in ${this.targetPath}</div>
-        ` : this.hubs.map(h => `
+        ` : this.hubs.map((h) => `
           <div class="hub-item">
             <span class="hub-title">${h.title}</span>
             <span class="hub-meta">${h.lines} lines · ${h.path}</span>
@@ -566,31 +900,177 @@ export class OpenWikiCard extends HTMLElement {
           <button id="btn-bootstrap" class="btn btn-secondary" ${this.loading ? 'disabled' : ''}>
             Bootstrap Wiki
           </button>
-          <button id="btn-watch" class="btn btn-secondary" ${this.loading ? 'disabled' : ''}>
-            Check Upstream
+        </div>
+      </div>
+    `;
+  }
+
+  renderConfigScreen() {
+    return `
+      <div class="config-deck">
+        <div class="section-header">
+          <span class="section-title">Documentation Model & Provider Routing</span>
+        </div>
+
+        <div class="auth-notice-card">
+          <span>✓ Model credentials routed via Total Recall Auth store (<code>total-recall auth secret</code>)</span>
+          <span style="font-family: ui-monospace, monospace; font-size: 10px;">AUTH_PLUGIN: ACTIVE</span>
+        </div>
+
+        <div class="field-label" style="margin-bottom: 6px;">Recommended Model Presets:</div>
+        <div class="presets-bar">
+          <button class="preset-chip" data-provider="openrouter" data-model="deepseek/deepseek-v4.1-flash" data-fallback="qwen/qwen-2.5-coder-32b-instruct">
+            DeepSeek V4.1 Flash ($0.025/1M)
           </button>
-          <button id="btn-propagate" class="btn btn-secondary" ${this.loading ? 'disabled' : ''}>
-            Propagate Fleet
+          <button class="preset-chip" data-provider="openrouter" data-model="qwen/qwen-2.5-coder-32b-instruct" data-fallback="deepseek/deepseek-v4.1-flash">
+            Qwen 2.5 Coder 32B ($0.06/1M)
+          </button>
+          <button class="preset-chip" data-provider="google" data-model="gemini-2.5-flash-lite" data-fallback="gemini-2.5-flash">
+            Gemini 2.5 Flash-Lite ($0.075/1M)
+          </button>
+        </div>
+
+        <div class="config-grid">
+          <div class="field-group">
+            <label class="field-label" for="cfg-provider">Provider</label>
+            <select id="cfg-provider" class="select-input">
+              <option value="openrouter" ${this.config.provider === 'openrouter' ? 'selected' : ''}>OpenRouter (Multi-Model Hub)</option>
+              <option value="google" ${this.config.provider === 'google' ? 'selected' : ''}>Google (Gemini Direct)</option>
+              <option value="custom" ${this.config.provider === 'custom' ? 'selected' : ''}>Custom Provider</option>
+            </select>
+          </div>
+
+          <div class="field-group">
+            <label class="field-label" for="cfg-model">Primary Model Identifier</label>
+            <input id="cfg-model" class="text-input" type="text" value="${this.config.model}" placeholder="e.g. deepseek/deepseek-v4.1-flash" />
+          </div>
+
+          <div class="field-group">
+            <label class="field-label" for="cfg-fallback">Fallback Model Identifier</label>
+            <input id="cfg-fallback" class="text-input" type="text" value="${this.config.fallback_model}" placeholder="e.g. qwen/qwen-2.5-coder-32b-instruct" />
+          </div>
+
+          <div class="field-group">
+            <label class="field-label" for="cfg-tokens">Max Output Tokens</label>
+            <input id="cfg-tokens" class="text-input" type="number" value="${this.config.max_tokens}" min="512" max="131072" />
+          </div>
+
+          <div class="field-group full-width">
+            <label class="field-label" for="cfg-timeout">Timeout (milliseconds)</label>
+            <input id="cfg-timeout" class="text-input" type="number" value="${this.config.timeout_ms}" min="30000" max="1800000" />
+          </div>
+        </div>
+
+        <div class="button-group">
+          <button id="btn-save-config" class="btn btn-primary" ${this.loading ? 'disabled' : ''}>
+            Save Configuration
+          </button>
+          <button id="btn-reset-config" class="btn btn-secondary" ${this.loading ? 'disabled' : ''}>
+            Reset to Defaults
           </button>
         </div>
       </div>
-
-      ${this.executionResult ? `
-        <div class="result-deck">
-          <div class="result-title">Execution Receipt (${this.executionResult.timestamp})</div>
-          <div>Action: ${this.executionResult.action}</div>
-          <div>Target: ${this.executionResult.target || 'project'}</div>
-          <div>Result: ${JSON.stringify(this.executionResult.details)}</div>
-        </div>
-      ` : ''}
     `;
+  }
 
-    this.bindEvents();
+  renderRefreshScreen() {
+    const dueCount = this.refreshCounts?.due ?? this.refreshReports.filter((r) => r.action === 'due').length;
+    const uninitCount = this.refreshCounts?.uninitialized ?? this.refreshReports.filter((r) => r.uninitialized).length;
+
+    return `
+      <div class="ingest-deck">
+        <div class="section-header">
+          <span class="section-title">Fleet Documentation Governance</span>
+          <button id="btn-sync-refresh" class="btn btn-secondary" style="min-height: 32px; padding: 0 10px; font-size: 11px;" ${this.loading ? 'disabled' : ''}>
+            Check Fleet
+          </button>
+        </div>
+
+        <div style="font-size: 12px; color: var(--face-text-muted); margin-bottom: 12px;">
+          Registered Projects: <strong>${this.refreshReports.length}</strong> · Due for Update: <strong>${dueCount}</strong> · Uninitialized: <strong>${uninitCount}</strong>
+        </div>
+
+        <div class="hub-list" style="max-height: 240px;">
+          ${this.refreshReports.length === 0 ? `
+            <div class="empty-state">No fleet report loaded. Click Check Fleet to inspect registered repositories.</div>
+          ` : this.refreshReports.map((r) => {
+            let badgeClass = 'current';
+            let badgeText = 'CURRENT';
+            if (r.uninitialized) {
+              badgeClass = 'uninit';
+              badgeText = 'MISSING WIKI';
+            } else if (r.action === 'due') {
+              badgeClass = 'due';
+              badgeText = 'DUE';
+            }
+            return `
+              <div class="hub-item">
+                <div>
+                  <span class="hub-title">${r.name}</span>
+                  <div class="hub-meta">${r.generatedAt ? `Generated ${r.generatedAt.slice(0, 10)}` : 'Never generated'} · ${r.commitsSince ? `${r.commitsSince} commits behind` : 'Up to date'}</div>
+                </div>
+                <span class="repo-status-badge ${badgeClass}">${badgeText}</span>
+              </div>
+            `;
+          }).join('')}
+        </div>
+
+        <div style="margin-top: 12px;">
+          <button id="btn-fleet-refresh-apply" class="btn btn-primary" style="width: 100%;" ${this.loading ? 'disabled' : ''}>
+            ${this.loading ? 'Executing Fleet Refresh…' : `Regenerate Stale & Initialize Missing Wikis (${dueCount} due)`}
+          </button>
+        </div>
+      </div>
+    `;
+  }
+
+  renderUpstreamScreen() {
+    const currentVer = this.upstream?.recordedVersion || '0.7.2';
+    const latestVer = this.upstream?.latestVersion || '0.7.3';
+
+    return `
+      <div class="ingest-deck">
+        <div class="section-header">
+          <span class="section-title">Upstream Package Surveillance</span>
+        </div>
+
+        <div class="stats-grid" style="margin-bottom: 14px;">
+          <div class="stat-card">
+            <div class="stat-label">Recorded Version</div>
+            <div class="stat-value">v${currentVer}</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-label">Latest Registry</div>
+            <div class="stat-value">v${latestVer}</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-label">Watcher Status</div>
+            <div class="stat-value" style="color: var(--face-ok);">MONITORING</div>
+          </div>
+        </div>
+
+        <div class="button-group">
+          <button id="btn-watch" class="btn btn-secondary" ${this.loading ? 'disabled' : ''}>
+            Check Upstream Registry
+          </button>
+          <button id="btn-propagate" class="btn btn-primary" ${this.loading ? 'disabled' : ''}>
+            Propagate Latest Generator
+          </button>
+        </div>
+      </div>
+    `;
   }
 
   bindEvents() {
     const shadow = this.shadowRoot;
     if (!shadow) return;
+
+    shadow.querySelectorAll('.screen-tab-btn').forEach((tab) => {
+      tab.addEventListener('click', () => {
+        const targetScreen = tab.getAttribute('data-screen');
+        if (targetScreen) this.setScreen(targetScreen);
+      });
+    });
 
     const pathInput = shadow.querySelector('#target-path-input');
     if (pathInput) {
@@ -621,6 +1101,16 @@ export class OpenWikiCard extends HTMLElement {
       btnRefresh.addEventListener('click', () => this.refreshHubs());
     }
 
+    const btnSyncRefresh = shadow.querySelector('#btn-sync-refresh');
+    if (btnSyncRefresh) {
+      btnSyncRefresh.addEventListener('click', () => this.loadRefreshReport());
+    }
+
+    const btnFleetApply = shadow.querySelector('#btn-fleet-refresh-apply');
+    if (btnFleetApply) {
+      btnFleetApply.addEventListener('click', () => this.executeFleetRefresh());
+    }
+
     const btnWatch = shadow.querySelector('#btn-watch');
     if (btnWatch) {
       btnWatch.addEventListener('click', () => this.executeWatch());
@@ -629,6 +1119,39 @@ export class OpenWikiCard extends HTMLElement {
     const btnPropagate = shadow.querySelector('#btn-propagate');
     if (btnPropagate) {
       btnPropagate.addEventListener('click', () => this.executePropagate());
+    }
+
+    shadow.querySelectorAll('.preset-chip').forEach((chip) => {
+      chip.addEventListener('click', async () => {
+        const p = chip.getAttribute('data-provider');
+        const m = chip.getAttribute('data-model');
+        const f = chip.getAttribute('data-fallback');
+        if (p) await this.setConfigValue('provider', p);
+        if (m) await this.setConfigValue('model', m);
+        if (f) await this.setConfigValue('fallback_model', f);
+      });
+    });
+
+    const btnSaveConfig = shadow.querySelector('#btn-save-config');
+    if (btnSaveConfig) {
+      btnSaveConfig.addEventListener('click', async () => {
+        const provider = shadow.querySelector('#cfg-provider')?.value;
+        const model = shadow.querySelector('#cfg-model')?.value;
+        const fallback = shadow.querySelector('#cfg-fallback')?.value;
+        const tokens = shadow.querySelector('#cfg-tokens')?.value;
+        const timeout = shadow.querySelector('#cfg-timeout')?.value;
+
+        if (provider) await this.setConfigValue('provider', provider);
+        if (model) await this.setConfigValue('model', model);
+        if (fallback) await this.setConfigValue('fallback_model', fallback);
+        if (tokens) await this.setConfigValue('max_tokens', tokens);
+        if (timeout) await this.setConfigValue('timeout_ms', timeout);
+      });
+    }
+
+    const btnResetConfig = shadow.querySelector('#btn-reset-config');
+    if (btnResetConfig) {
+      btnResetConfig.addEventListener('click', () => this.resetConfig());
     }
   }
 }
