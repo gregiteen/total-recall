@@ -260,6 +260,20 @@ async function watchCommand(args) {
  * Propagate updated generator across registered repositories.
  */
 async function propagateCommand(args) {
+  if (args.includes('--help') || args.includes('-h')) {
+    console.log(`
+  Usage:
+    total-recall openwiki propagate [options]
+
+  Options:
+    --repo <name>    Limit propagation to a specific repository
+    --force          Force regeneration even if not due
+    --dry-run        Preview propagation actions without writing
+    --json           Output result as JSON
+    --help, -h       Show this help
+`);
+    return;
+  }
   const json = args.includes('--json');
   const force = args.includes('--force');
   const dryRun = args.includes('--dry-run');

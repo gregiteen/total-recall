@@ -13,7 +13,12 @@ export function preparePluginDependencies(pluginDir) {
     if (name === host.name) source = PACKAGE_ROOT;
     else {
       const alias = Object.entries(host.dependencies || {}).find(([, spec]) => typeof spec === 'string' && spec.startsWith(`npm:${name}@`))?.[0];
-      source = path.dirname(require.resolve(alias || name));
+      const targetPkg = alias || name;
+      try {
+        source = path.dirname(require.resolve(targetPkg));
+      } catch {
+        source = path.dirname(require.resolve(`${targetPkg}/package.json`));
+      }
       while (true) {
         const file = path.join(source, 'package.json');
         if (fs.existsSync(file) && JSON.parse(fs.readFileSync(file, 'utf8')).name === name) break;

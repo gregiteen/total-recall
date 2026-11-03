@@ -276,6 +276,7 @@ export function refreshProject(project, {
     childEnv.OPENWIKI_PROVIDER = 'openrouter';
     if (config.max_tokens) {
       childEnv.OPENWIKI_OPENROUTER_MAX_TOKENS = String(config.max_tokens);
+      childEnv.OPENWIKI_MAX_OUTPUT_TOKENS = String(config.max_tokens);
     }
     delete childEnv.OPENAI_API_KEY;
   }
