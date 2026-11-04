@@ -8,6 +8,7 @@ export function sanitizePluginScreens(value: unknown): PluginScreen[] {
   const seen = new Set<string>()
   return value.slice(0, 128).flatMap(item => {
     if (!item || typeof item !== 'object' || typeof item.id !== 'string' || !/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/.test(item.id)
+      // eslint-disable-next-line no-control-regex -- rejects labels that contain control characters
       || typeof item.label !== 'string' || !item.label.trim() || item.label.length > 160 || /[\u0000-\u001f\u007f]/.test(item.label) || seen.has(item.id)) return []
     seen.add(item.id)
     return [{ id: item.id, label: item.label.trim() }]

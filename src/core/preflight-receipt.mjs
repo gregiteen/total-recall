@@ -98,7 +98,7 @@ export function acknowledge({ root, task = '', actions = 'read,edit,test', maxAg
   const context = run(['context', task || '(no task given)', '--action', actions], root);
   if (!/ready:true/.test(context.out)) {
     return { ok: false, problems: ['total-recall context did not return ready:true',
-      context.code === 2 ? 'exit 2: capsule overflow; raise --budget or curate applicability, then retry' : `context exit=${context.code ?? '?'}`] };
+      context.code === 2 ? 'exit 2: capsule overflow; the budget cannot hold every rule even compacted, so retry with the required_budget it reports' : `context exit=${context.code ?? '?'}`] };
   }
   const version = (context.out.match(/version:([0-9a-f]+)/) || [])[1] || null;
   const rules = run(['rules', 'verify'], root);

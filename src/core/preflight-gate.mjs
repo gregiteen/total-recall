@@ -6,7 +6,7 @@
  * Rules, in order:
  *   1. Tools that only display or discover (`meta`, `ui`) are always open.
  *   2. Reads of skill files are open: reading them is how the preflight is earned.
- *   3. A single plain Total Recall preflight, context, recall or help command is
+ *   3. A single plain Total Recall preflight, context, compact, recall or help command is
  *      open, so the gate can always be satisfied or repaired. Chaining, piping,
  *      substitution and redirects are not plain, so the exemption cannot carry
  *      other work and a capsule cannot be truncated through a pipe.
@@ -21,7 +21,7 @@ export const TOOL_CLASSES = ['shell', 'read', 'write', 'search', 'web', 'mcp', '
 export const SWEEP_CONSULT_MS = 15 * 60 * 1000;
 
 const SKILL_PATH = /\/\.(agent|claude)\/skills\//;
-const SATISFYING = /^(cd\s+\S+\s*&&\s*)?(npx\s+)?(total-recall|node\s+\S*bin\/total-recall\.mjs)\s+(tr-preflight|preflight|context|recall|help|--help)(\s+[^;&|`<>$\n]*)?$/;
+const SATISFYING = /^(cd\s+\S+\s*&&\s*)?(npx\s+)?(total-recall|node\s+\S*bin\/total-recall\.mjs)\s+(tr-preflight|preflight|context|compact|recall|help|--help)(\s+[^;&|`<>$\n]*)?$/;
 
 /** True when the whole command is one plain Total Recall invocation that satisfies or repairs the gate. */
 export function isSatisfyingCommand(command) {

@@ -21,18 +21,24 @@ const GATE_MATCHER = 'Bash|RemoteTrigger|CronCreate|mcp__scheduled-tasks__.*|mcp
 
 const SKILL_COMMAND = 'f="$CLAUDE_PROJECT_DIR/.agent/skills/total-recall/SKILL.md"; [ -f "$f" ] || f="$HOME/.agent/skills/total-recall/SKILL.md"; if [ -f "$f" ]; then echo "MANDATORY CONTEXT: the Total Recall skill ($f), loaded by a SessionStart hook. Follow it; use the total-recall CLI as documented here."; cat "$f"; fi';
 
+export const PREFLIGHT_GATE_COMMAND = 'total-recall preflight gate --harness claude';
+export const PREFLIGHT_REMIND_COMMAND = 'total-recall preflight remind';
+export const STOPGAP_FILE = 'total-recall-preflight.mjs';
+
 const hasCommand = (entries, needle) => (entries || []).some((e) => (e.hooks || []).some((h) => String(h.command || h.statusMessage || '').includes(needle)));
 
 /**
  * @param {{ home?: string, dryRun?: boolean }} [opts]
- * @returns {{ gate: string, settings: string, added: string[] }}
+ * @returns {{ gate: string, settings: string, added: string[], removed: string[] }}
  */
 export function installClaudeCodeHooks(opts = {}) {
   const home = opts.home || os.homedir();
   const claudeDir = path.join(home, '.claude');
   const hookPath = path.join(claudeDir, 'hooks', GATE_FILE);
+  const stopgapPath = path.join(claudeDir, 'hooks', STOPGAP_FILE);
   const settingsPath = path.join(claudeDir, 'settings.json');
   const added = [];
+  const removed = [];
 
   const template = fs.readFileSync(GATE_TEMPLATE, 'utf8');
   const current = fs.existsSync(hookPath) ? fs.readFileSync(hookPath, 'utf8') : null;
@@ -46,6 +52,28 @@ export function installClaudeCodeHooks(opts = {}) {
     }
   }
   const hooks = settings.hooks || (settings.hooks = {});
+
+  // Clean up 2026-11-02 stopgap entries from settings and filesystem (ENFORCE-R14)
+  for (const event of ['PreToolUse', 'UserPromptSubmit', 'SessionStart', 'PostToolUse']) {
+    if (Array.isArray(hooks[event])) {
+      const beforeLen = hooks[event].length;
+      hooks[event] = hooks[event].filter(entry => {
+        const sub = entry.hooks || [];
+        return !sub.some(h => String(h.command || '').includes(STOPGAP_FILE));
+      });
+      if (hooks[event].length < beforeLen) {
+        removed.push(`stopgap ${event} hook`);
+      }
+    }
+  }
+
+  if (!opts.dryRun && fs.existsSync(stopgapPath)) {
+    try {
+      fs.unlinkSync(stopgapPath);
+      removed.push('stopgap hook script');
+    } catch { /* ignore */ }
+  }
+
   const gateCommand = `node "$HOME/.claude/hooks/${GATE_FILE}"`;
   if (!hasCommand(hooks.SessionStart, SKILL_MARK) && !hasCommand(hooks.SessionStart, 'total-recall/SKILL.md')) {
     (hooks.SessionStart ||= []).push({ hooks: [{ type: 'command', command: SKILL_COMMAND, timeout: 10, statusMessage: SKILL_MARK }] });
@@ -60,11 +88,21 @@ export function installClaudeCodeHooks(opts = {}) {
     added.push('PostToolUse recorder');
   }
 
-  if (!opts.dryRun && added.length) {
+  // Managed preflight enforcement hooks (ENFORCE-R1, ENFORCE-R2, ENFORCE-R14)
+  if (!hasCommand(hooks.PreToolUse, 'preflight gate --harness claude')) {
+    (hooks.PreToolUse ||= []).push({ matcher: '*', hooks: [{ type: 'command', command: PREFLIGHT_GATE_COMMAND, timeout: 5 }] });
+    added.push('managed PreToolUse preflight gate');
+  }
+  if (!hasCommand(hooks.UserPromptSubmit, 'preflight remind')) {
+    (hooks.UserPromptSubmit ||= []).push({ hooks: [{ type: 'command', command: PREFLIGHT_REMIND_COMMAND, timeout: 5 }] });
+    added.push('managed UserPromptSubmit preflight reminder');
+  }
+
+  if (!opts.dryRun && (added.length || removed.length)) {
     fs.mkdirSync(path.dirname(hookPath), { recursive: true });
     if (current !== template) fs.writeFileSync(hookPath, template, { mode: 0o755 });
     if (fs.existsSync(settingsPath)) fs.copyFileSync(settingsPath, `${settingsPath}.bak-total-recall`);
     fs.writeFileSync(settingsPath, `${JSON.stringify(settings, null, 2)}\n`);
   }
-  return { gate: hookPath, settings: settingsPath, added };
+  return { gate: hookPath, settings: settingsPath, added, removed };
 }

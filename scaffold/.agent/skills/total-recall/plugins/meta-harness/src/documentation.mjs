@@ -14,6 +14,14 @@ export const DOC_SOURCES = [
   { id: 'muse', index: 'https://dev.meta.ai/docs/muse-code', prefix: 'https://dev.meta.ai/docs/muse-code' },
   { id: 'pi', repo: 'badlogic/pi-mono', branch: 'main', directories: ['packages/coding-agent/docs/'], index: 'https://raw.githubusercontent.com/badlogic/pi-mono/main/packages/coding-agent/README.md' },
   { id: 'hermes', repo: 'NousResearch/hermes-agent', branch: 'main', directories: ['website/docs/'], index: 'https://raw.githubusercontent.com/NousResearch/hermes-agent/main/website/docs/reference/cli-commands.md' },
+  { id: 'devin', index: 'https://docs.devin.ai/llms.txt', prefix: 'https://docs.devin.ai/', catalog:true },
+  { id: 'windsurf', index: 'https://docs.windsurf.com/llms.txt', prefix: 'https://docs.windsurf.com/', catalog:true },
+  { id: 'cline', index: 'https://docs.cline.bot/llms.txt', prefix: 'https://docs.cline.bot/', catalog:true },
+  { id: 'openclaw', index: 'https://docs.openclaw.ai/llms.txt', prefix: 'https://docs.openclaw.ai/', catalog:true },
+  { id: 'aider', index: 'https://aider.chat/docs/', prefix: 'https://aider.chat/docs/' },
+  { id: 'replit', index: 'https://docs.replit.com/llms.txt', prefix: 'https://docs.replit.com/', catalog:true },
+  { id: 'lovable', index: 'https://docs.lovable.dev/llms.txt', prefix: 'https://docs.lovable.dev/', catalog:true },
+  { id: 'ollama', index: 'https://docs.ollama.com/llms.txt', prefix: 'https://docs.ollama.com/', catalog:true },
 ];
 const hash = value => crypto.createHash('sha256').update(value).digest('hex');
 const TTL = 24 * 60 * 60 * 1000;
@@ -39,7 +47,7 @@ export function documentationStatus({ directory = documentationDirectory(), agen
   return { ok:agents.every(row=>row.fresh), directory, agents };
 }
 async function download(url, fetchImpl) {
-  const allowed = new Set(['code.claude.com','claude.com','platform.claude.com','docs.anthropic.com','anthropic.com','developers.openai.com','openai.com','help.openai.com','learn.chatgpt.com','chatgpt.com','antigravity.google','cursor.com','docs.x.ai','dev.meta.ai','raw.githubusercontent.com','api.github.com']);
+  const allowed = new Set(['code.claude.com','claude.com','platform.claude.com','docs.anthropic.com','anthropic.com','developers.openai.com','openai.com','help.openai.com','learn.chatgpt.com','chatgpt.com','antigravity.google','cursor.com','docs.x.ai','dev.meta.ai','docs.devin.ai','docs.windsurf.com','windsurf.com','docs.cline.bot','docs.openclaw.ai','aider.chat','docs.replit.com','docs.lovable.dev','docs.ollama.com','raw.githubusercontent.com','api.github.com']);
   let target = new URL(url);
   for(let redirects=0;redirects<5;redirects++) {
     if(target.protocol!=='https:' || target.username || target.password || !allowed.has(target.hostname)) throw new Error(`Unapproved official documentation origin: ${target.hostname}`);
@@ -63,15 +71,16 @@ function links(text,base,prefix) {
   for(const match of text.matchAll(/\]\(([^\s)]+)(?:\s+[^)]*)?\)/g)){try{values.push(new URL(match[1],base).href);}catch{}}
   for(const match of text.matchAll(/href=["']([^"']+)["']/g)) {try{values.push(new URL(match[1],base).href);}catch{}}
   return [...new Set(values.map(value=>{try{const url=new URL(value);url.hash='';url.search='';url.pathname=url.pathname.replace(/\/{2,}/g,'/').replace(/\/$/,'') || '/';return url.href;}catch{return '';}}))]
-    .filter(url=>url.startsWith(prefix) && !/\.(png|jpg|jpeg|svg|gif|css|js|woff2?|ico|pdf)$/i.test(url));
+    .filter(url=>url.startsWith(prefix) && !/%3[CE]|[<>"'`\s]/i.test(url) && !/\.(png|jpg|jpeg|svg|gif|css|js|woff2?|ico|pdf|json|ya?ml|xml|zip|gz|tgz|lock)$/i.test(url));
 }
 export async function refreshDocumentation({ directory = documentationDirectory(), agent, fetchImpl = fetch, now = () => new Date(), maxPages = 1500 } = {}) {
   const sources=agent?DOC_SOURCES.filter(source=>source.id===agent):DOC_SOURCES;
   if(!sources.length)throw new Error('Unknown documentation adapter');
   const reports=[];
   for(const source of sources) {
-    const previous=metadata(directory,source.id), pages=[], queue=[source.index], seen=new Set(), queued=new Set(queue), errors=[];
-    const enqueue=url=>{if(!queued.has(url)){queued.add(url);queue.push(url);}};
+    const previous=metadata(directory,source.id), pages=[], queue=[source.index], seen=new Set(), queued=new Set(queue), errors=[], discovered=new Set(), skipped=[];
+    // `found` marks a link taken from HTML navigation. The vendor's catalog, the index and the repository tree are authoritative; a link found by scraping is not.
+    const enqueue=(url,found=false)=>{if(!queued.has(url)){queued.add(url);queue.push(url);if(found)discovered.add(url);}};
     try {
       if(source.repo) {
         const tree=JSON.parse(await download(`https://api.github.com/repos/${source.repo}/git/trees/${source.branch}?recursive=1`,fetchImpl));
@@ -85,25 +94,33 @@ export async function refreshDocumentation({ directory = documentationDirectory(
         if(seen.size>maxPages)throw new Error('Official documentation exceeds configured page budget');
         const downloads=await Promise.allSettled(batch.map(async url=>({url,text:await download(url,fetchImpl)})));
         for(let index=0;index<downloads.length;index++) {
-          const result=downloads[index];if(result.status==='rejected'){errors.push({url:batch[index],error:result.reason.message});continue;}
+          const result=downloads[index];
+          if(result.status==='rejected'){
+            const message=result.reason.message;
+            // A scraped link that is gone (404 or 410) is a stale or illustrative link, such as a placeholder in a code sample. It is reported as skipped and does not fail the refresh. Anything else, and anything the vendor itself lists, stays a failure.
+            if(discovered.has(batch[index]) && /HTTP (404|410)\b/.test(message)){skipped.push({url:batch[index],error:message});continue;}
+            // A page that redirects off the approved origins (for example a trust-center portal) is an external link, not documentation. It is never followed, and it is reported. The index itself redirecting away still fails the refresh.
+            if(batch[index]!==source.index && /^Unapproved official documentation origin/.test(message)){skipped.push({url:batch[index],error:message});continue;}
+            errors.push({url:batch[index],error:message});continue;
+          }
           const {url,text}=result.value;
           const sha256=hash(text),file=`${hash(url)}-${sha256}.txt`;
           atomic(path.join(directory,source.id,file),text);
           pages.push({url,file,sha256,bytes:Buffer.byteLength(text)});
           // A published llms index is the authoritative documentation catalog.
           // HTML navigation also contains unrelated and obsolete marketing links.
-          if(source.prefix && (!source.catalog || url.endsWith('llms.txt')))for(const link of links(text,url,source.prefix))enqueue(link);
+          if(source.prefix && (!source.catalog || url.endsWith('llms.txt')))for(const link of links(text,url,source.prefix))enqueue(link,!url.endsWith('llms.txt'));
         }
       }
       const checkedAt=now().toISOString();
       if(errors.length){
         const error=`${errors.length} official document(s) failed: ${errors[0].error}`;
         const preserved=previous?.complete?previous:{id:source.id,complete:false,pages};
-        atomic(path.join(directory,source.id,'index.json'),JSON.stringify({...preserved,lastAttempt:checkedAt,error,failedCount:errors.length,failures:errors},null,2));
-        reports.push({id:source.id,ok:false,error,pages:preserved.pages?.length || 0,downloadedPages:pages.length,failedCount:errors.length,failures:errors});continue;
+        atomic(path.join(directory,source.id,'index.json'),JSON.stringify({...preserved,lastAttempt:checkedAt,error,failedCount:errors.length,failures:errors,...(skipped.length?{skipped}:{})},null,2));
+        reports.push({id:source.id,ok:false,error,pages:preserved.pages?.length || 0,downloadedPages:pages.length,failedCount:errors.length,failures:errors,...(skipped.length?{skippedCount:skipped.length,skipped}:{})});continue;
       }
-      atomic(path.join(directory,source.id,'index.json'),JSON.stringify({id:source.id,complete:true,checkedAt,lastAttempt:checkedAt,pages},null,2));
-      reports.push({id:source.id,ok:true,pages:pages.length});
+      atomic(path.join(directory,source.id,'index.json'),JSON.stringify({id:source.id,complete:true,checkedAt,lastAttempt:checkedAt,pages,...(skipped.length?{skipped}:{})},null,2));
+      reports.push({id:source.id,ok:true,pages:pages.length,...(skipped.length?{skippedCount:skipped.length,skipped}:{})});
     } catch(error) {
       atomic(path.join(directory,source.id,'index.json'),JSON.stringify({...previous,id:source.id,lastAttempt:now().toISOString(),error:error.message},null,2));
       reports.push({id:source.id,ok:false,error:error.message,pages:previous?.pages?.length || 0});
@@ -142,9 +159,12 @@ export function readDocumentation({agent,url,directory=documentationDirectory()}
 export function searchDocumentation({agent,query,directory=documentationDirectory()}) {
   if(typeof query!=='string' || !query.trim())throw new Error('Documentation query required');
   const sources=agent?DOC_SOURCES.filter(source=>source.id===agent):DOC_SOURCES;
-  const matches=[];
+  const matches=[],phrase=query.trim().toLowerCase(),terms=phrase.split(/\s+/).filter(Boolean);
   for(const source of sources)for(const page of metadata(directory,source.id)?.pages || []) {
-    const doc=readDocumentation({agent:source.id,url:page.url,directory});const index=doc.content.toLowerCase().indexOf(query.toLowerCase());
+    const doc=readDocumentation({agent:source.id,url:page.url,directory});const text=doc.content.toLowerCase();
+    // The exact phrase wins. Otherwise a page matches when it contains every term, in any order, so a query of two words is not limited to pages where they happen to be adjacent.
+    let index=text.indexOf(phrase);
+    if(index<0 && terms.length>1 && terms.every(term=>text.includes(term)))index=Math.min(...terms.map(term=>text.indexOf(term)));
     if(index>=0)matches.push({agent:source.id,url:page.url,excerpt:doc.content.slice(Math.max(0,index-120),index+600)});
     if(matches.length>=30)return {matches,truncated:true};
   }

@@ -1,6 +1,14 @@
 import { describe, it, expect } from 'vitest';
 import { decide, isRepoSweep, isSatisfyingCommand, SWEEP_CONSULT_MS, TOOL_CLASSES } from './preflight-gate.mjs';
 
+describe('compact in the gate', () => {
+  it('is open when plain and closed when chained or piped', () => {
+    expect(isSatisfyingCommand('total-recall compact "task" --budget 2000')).toBe(true);
+    expect(isSatisfyingCommand('total-recall compact "task" | head')).toBe(false);
+    expect(isSatisfyingCommand('total-recall compact "task" ; rm -rf x')).toBe(false);
+  });
+});
+
 const noReceipt = { check: () => ({ ok: false, problems: ['no preflight receipt for this repository'] }) };
 const fresh = (extra = {}) => ({ check: () => ({ ok: true, problems: [] }), ...extra });
 

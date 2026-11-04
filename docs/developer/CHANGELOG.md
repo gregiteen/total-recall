@@ -1,3 +1,23 @@
+## 3.41.6 — 2026-11-04
+
+- `context` compacts automatically when the required rules exceed the budget, and
+  `compact "<task>" --expand <slug>` reads a referenced rule. Every listed rule
+  still applies. Inline capsules stay near 28 KB, under the size harnesses save
+  to a file instead of showing.
+- New `release` command: `plan`, `publish`, `propagate`, `verify` and `all`.
+  Verification rereads the registry and each consumer's resolved package.
+- Plugin commands no longer lose output past 64 KiB in a pipe. `process.exit()`
+  dropped queued writes on macOS with exit status 0, which cut
+  `auth secret list --json` off in a pipe. `exitAfterFlush` drains first.
+- `forget <slug> --help` no longer deletes the node.
+- Durable invoke writes (`invoke-durability`), and the OpenWiki engine with its
+  search, graph, lint, generate and token modules.
+- `minimatch` is pinned to 11.x (GHSA-g3hv-75wg-m249, development dependencies
+  only), and the root lockfile was regenerated, so dependencies move to current
+  in-range versions. The frontend lint error in `plugin-frame.ts` is resolved.
+- Note: 3.41.5 reached npm from an uncommitted tree. This release commits that
+  source; the published 3.41.5 differed only by the pipe fix.
+
 ## 3.41.3 — 2026-10-31
 
 - Dashboard login is optional for a local install. `dashboard.require_login`

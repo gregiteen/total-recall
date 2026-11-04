@@ -427,7 +427,7 @@ Inspect all core capabilities, installed plugins, and commands.
 
 2. RUN TOTAL RECALL CONTEXT BEFORE ACTING:
 \`total-recall context "task description" --action <actions>\`
-Read the complete returned capsule and require ready:true. Unknown rule applicability is conservatively required. If it exits 2, stop: the required set exceeds its budget; inspect overflow and explicitly raise the budget or curate applicability before action.
+Read the returned capsule and require ready:true. Rules of unknown applicability are required. Over budget it compacts; every listed rule still applies: expand one with \`total-recall compact "task" --expand <slug>\` before relying on it. If it exits 2, retry with the required_budget it reports.
 
 Total Recall is the agent's working memory, toolset, and single source of truth across all decisions. Refresh at every changed task, action or project, and after a memory/skill edit. Do not infer applicability from semantic similarity. CLI retrieval is local and works without the server. Skills have compact entrypoints; load only relevant references. Canonical vault writes use the validated CLI.
 

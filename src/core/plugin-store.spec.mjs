@@ -65,7 +65,7 @@ describe('plugin-store', () => {
       expect(fs.existsSync(path.join(projectPluginsDir(projA), id, 'plugin.json'))).toBe(true);
     }
     expect(listAvailableBundled(projA).every(p => p.installed)).toBe(true);
-  });
+  }, 60_000); // Installs every bundled plugin; about 20 s on the Mini, more under load.
 
   it('writes a plugin_record and an installed event through the Core Contract', async () => {
     const res = await installPlugin('git-sentinel', { projectRoot: projA });

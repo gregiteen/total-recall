@@ -88,7 +88,7 @@ function normalizeNode(node, self = false) {
     hostname: normalizeHostname(node?.DNSName) || node?.HostName || null,
     // The name the machine reports for itself, which is what the control
     // server lists it under. It differs from the DNS name whenever the node was
-    // renamed (a droplet listed as `portfolio-site` answers as `cloud.mesh…`),
+    // renamed (a host listed as `web-1` answers as `cloud.mesh…`),
     // and it is not unique, so it is an identity to match, never a key.
     os_hostname: node?.HostName || null,
     ip: node?.TailscaleIPs?.[0] || null,

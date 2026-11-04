@@ -76,6 +76,15 @@ async function ack(args) {
   console.log(`  receipt: ${result.file}`);
 }
 
+async function loadGateAdapters() {
+  let adapters;
+  try { adapters = await (await import('../core/plugin-runtime.mjs')).loadPluginModule('meta-harness', 'gate-adapters'); } catch { adapters = null; }
+  if (!adapters) {
+    try { adapters = await (await import('../core/plugin-runtime.mjs')).loadPluginModule('cli-agents', 'gate-adapters'); } catch { adapters = null; }
+  }
+  return adapters;
+}
+
 /**
  * Hook entry. It starts at exit 2 and only an explicit allow clears it, so any
  * failure, including one nobody anticipated, denies: most harnesses let the
@@ -91,11 +100,7 @@ async function gate(args) {
     if (!call || typeof call !== 'object' || Array.isArray(call)) return deny('gate-error', 'TR-PREFLIGHT gate input must be a JSON object.');
     const harness = flag(args, '--harness');
     if (harness) {
-      let adapters;
-      try { adapters = await (await import('../core/plugin-runtime.mjs')).loadPluginModule('meta-harness', 'gate-adapters'); } catch { adapters = null; }
-      if (!adapters) {
-        try { adapters = await (await import('../core/plugin-runtime.mjs')).loadPluginModule('cli-agents', 'gate-adapters'); } catch { adapters = null; }
-      }
+      const adapters = await loadGateAdapters();
       const adapter = adapters?.get?.(harness);
       if (!adapter) return deny('gate-error', `No gate adapter for harness "${harness}": adapters are owned by the meta-harness plugin and it does not provide one. The gate fails closed.`);
       const out = await adapter.run({ stdin: call, decideWith: evaluate });
@@ -108,6 +113,82 @@ async function gate(args) {
     if (answer.decision === 'allow') process.exitCode = 0;
   } catch (err) {
     deny('gate-error', `TR-PREFLIGHT gate error: ${err.message}. The gate fails closed.`);
+  }
+}
+
+async function install(args) {
+  const harness = flag(args, '--harness') || 'claude';
+  const dryRun = args.includes('--dry-run');
+  const adapters = await loadGateAdapters();
+  if (!adapters) {
+    console.error('✖ Gate adapters are owned by the meta-harness (cli-agents) plugin and are not available.');
+    process.exitCode = 1;
+    return;
+  }
+  try {
+    const res = adapters.install(harness, { dryRun });
+    if (args.includes('--json')) {
+      console.log(JSON.stringify({ ok: true, harness, ...res }));
+    } else {
+      console.log(`✔ Installed preflight gate for ${harness}`);
+      if (res.added?.length) console.log(`  added: ${res.added.join(', ')}`);
+      if (res.removed?.length) console.log(`  removed: ${res.removed.join(', ')}`);
+      console.log(`  settings: ${res.settings}`);
+    }
+  } catch (err) {
+    console.error(`✖ Failed to install preflight gate for ${harness}: ${err.message}`);
+    process.exitCode = 1;
+  }
+}
+
+async function verify(args) {
+  const harness = flag(args, '--harness') || 'claude';
+  const adapters = await loadGateAdapters();
+  if (!adapters) {
+    console.error('✖ Gate adapters are owned by the meta-harness (cli-agents) plugin and are not available.');
+    process.exitCode = 1;
+    return;
+  }
+  try {
+    const res = adapters.verify(harness);
+    const ok = Boolean(res.installed && res.exercised);
+    if (args.includes('--json')) {
+      console.log(JSON.stringify({ ok, harness, ...res }));
+    } else {
+      if (ok) {
+        console.log(`✔ Preflight gate for ${harness} is verified (${res.level || 'enforced'})`);
+      } else {
+        console.error(`✖ Preflight gate for ${harness} verification failed`);
+        if (!res.installed) console.error('  hook is not installed in harness configuration');
+        if (!res.exercised) console.error('  synthetic deny exercise failed');
+      }
+    }
+    if (!ok) process.exitCode = 1;
+  } catch (err) {
+    console.error(`✖ Failed to verify preflight gate for ${harness}: ${err.message}`);
+    process.exitCode = 1;
+  }
+}
+
+async function report(args) {
+  const adapters = await loadGateAdapters();
+  if (!adapters) {
+    console.error('✖ Gate adapters are owned by the meta-harness (cli-agents) plugin and are not available.');
+    process.exitCode = 1;
+    return;
+  }
+  const all = adapters.list();
+  const results = all.map(a => ({
+    id: a.id,
+    level: a.level,
+    verification: adapters.verify(a.id)
+  }));
+  if (args.includes('--json')) {
+    console.log(JSON.stringify({ adapters: results }));
+  } else {
+    for (const r of results) {
+      console.log(`- ${r.id}: ${r.level} (installed: ${r.verification.installed}, exercised: ${r.verification.exercised})`);
+    }
   }
 }
 
@@ -151,11 +232,9 @@ export default async function preflight(args = []) {
   if (first === '--check' || first === 'check') return check(args);
   if (first === 'gate') return gate(args.slice(1));
   if (first === 'remind') return remind(args);
-  if (['install', 'verify', 'report'].includes(first)) {
-    console.error(`preflight ${first}: harness adapters are owned by the meta-harness (cli-agents) plugin and are not installed yet (ENFORCE-01 EN-03 onward).`);
-    process.exitCode = 1;
-    return;
-  }
+  if (first === 'install') return install(args.slice(1));
+  if (first === 'verify') return verify(args.slice(1));
+  if (first === 'report') return report(args.slice(1));
   console.error(`Unknown preflight command: ${first}\n\n${USAGE}`);
   process.exitCode = 1;
 }

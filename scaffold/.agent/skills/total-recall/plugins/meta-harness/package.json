@@ -21,6 +21,9 @@
     "access": "public"
   },
   "dependencies": {
-    "@gregiteen/ssss-cli": "0.14.3"
+    "@gregiteen/ssss-cli": "0.14.4"
+  },
+  "overrides": {
+    "@ssss/cli": "npm:@gregiteen/ssss-cli@0.14.4"
   }
 }

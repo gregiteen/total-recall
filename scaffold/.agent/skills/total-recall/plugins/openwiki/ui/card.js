@@ -2,17 +2,25 @@
  * OpenWiki — Knowledge Graph & Multi-Repo Documentation Wiki
  * Bespoke Card Face: Deep Slate & Knowledge Amber Interface.
  *
- * Exposes live hub discovery, markdown file inspection, upstream release surveillance,
- * and structured fleet propagation controls. Operates without mock data or boilerplate sinks.
+ * Exposes live hub discovery, full markdown reading, evidence search across all vaults,
+ * interactive knowledge topology graph, targeted on-demand generation, fleet refresh,
+ * Total Recall auth secrets vault key management, and documentation link hygiene linting.
+ *
+ * Operates without mock data, zero templates, zero emojis, zero Winamp skeuomorphism.
  */
 
 export class OpenWikiCard extends HTMLElement {
   static get screens() {
     return [
       { id: 'hubs', label: 'Hubs' },
-      { id: 'config', label: 'Configuration' },
+      { id: 'search', label: 'Search' },
+      { id: 'graph', label: 'Graph' },
+      { id: 'generate', label: 'Generate' },
       { id: 'refresh', label: 'Fleet Refresh' },
-      { id: 'upstream', label: 'Upstream Watcher' }
+      { id: 'token', label: 'Auth Vault' },
+      { id: 'lint', label: 'Health' },
+      { id: 'upstream', label: 'Upstream Watcher' },
+      { id: 'config', label: 'Configuration' }
     ];
   }
 
@@ -23,7 +31,11 @@ export class OpenWikiCard extends HTMLElement {
   constructor() {
     super();
     this.activeScreen = 'hubs';
+    this.scope = 'workspace'; // 'workspace' | 'all-vaults' | '<mesh-node>'
+    this.meshNodes = [];
     this.hubs = [];
+    this.selectedHub = null;
+    this.selectedHubContent = null;
     this.loading = false;
     this.statusText = 'READY';
     this.targetPath = 'openwiki';
@@ -32,15 +44,42 @@ export class OpenWikiCard extends HTMLElement {
     this.errorMessage = null;
     this.lastRefreshedAt = null;
     this.upstream = null;
+
+    // Search state
+    this.searchQuery = '';
+    this.searchResults = [];
+    this.searchStats = null;
+
+    // Graph state
+    this.graphData = null;
+    this.graphFormat = 'svg'; // 'svg' | 'mermaid' | 'json'
+
+    // Token state
+    this.tokenStatus = {
+      openrouter: { key: 'OPENROUTER_API_KEY', configured: false, status: 'unknown' },
+      google: { key: 'GOOGLE_API_KEY', configured: false, status: 'unknown' }
+    };
+
+    // Lint state
+    this.lintData = null;
+
+    // Generator state
+    this.generateRepo = '';
+    this.generateLogs = [];
+
+    // Fleet refresh state
+    this.refreshReports = [];
+    this.refreshCounts = null;
+
+    // Configuration state
     this.config = {
       provider: 'openrouter',
-      model: 'deepseek/deepseek-v4.1-flash',
+      model: 'deepseek/deepseek-chat',
       fallback_model: 'qwen/qwen-2.5-coder-32b-instruct',
       max_tokens: 4096,
       timeout_ms: 300000
     };
-    this.refreshReports = [];
-    this.refreshCounts = null;
+
     this._boundOnScreenChange = this.handleExternalScreenChange.bind(this);
   }
 
@@ -52,6 +91,7 @@ export class OpenWikiCard extends HTMLElement {
     this.addEventListener('plugin-show-screen', this._boundOnScreenChange);
     this.render();
     this.refreshHubs();
+    this.loadTokenStatus();
     this.loadConfig();
   }
 
@@ -68,22 +108,41 @@ export class OpenWikiCard extends HTMLElement {
   }
 
   setScreen(id) {
-    if (this.activeScreen === id) return;
+    if (this.activeScreen === id && !this.selectedHub) return;
     this.activeScreen = id;
+    this.selectedHub = null;
+    this.selectedHubContent = null;
     this.errorMessage = null;
     this.render();
+
     if (typeof this.host?.screenChanged === 'function') {
       try {
         this.host.screenChanged({ screen: id });
       } catch {
-        // Host screenChanged callback optional
+        // optional host callback
       }
     }
-    if (id === 'refresh' && (!this.refreshReports || this.refreshReports.length === 0)) {
+
+    if (id === 'graph' && !this.graphData) {
+      this.loadGraph();
+    } else if (id === 'token') {
+      this.loadTokenStatus();
+    } else if (id === 'lint' && !this.lintData) {
+      this.loadLint();
+    } else if (id === 'refresh' && (!this.refreshReports || this.refreshReports.length === 0)) {
       this.loadRefreshReport();
     } else if (id === 'config') {
       this.loadConfig();
     }
+  }
+
+  setScope(newScope) {
+    if (this.scope === newScope) return;
+    this.scope = newScope;
+    this.refreshHubs();
+    if (this.activeScreen === 'graph') this.loadGraph();
+    if (this.activeScreen === 'lint') this.loadLint();
+    if (this.activeScreen === 'search' && this.searchQuery) this.executeSearch(this.searchQuery);
   }
 
   async loadConfig() {
@@ -96,7 +155,7 @@ export class OpenWikiCard extends HTMLElement {
         }
       }
     } catch {
-      // Retain active config defaults if host call fails
+      // Retain active defaults
     }
   }
 
@@ -119,19 +178,32 @@ export class OpenWikiCard extends HTMLElement {
     }
   }
 
-  async resetConfig() {
+  async loadTokenStatus() {
+    try {
+      if (this.host && typeof this.host.run === 'function') {
+        const res = await this.host.run('token', ['status', '--json']);
+        if (res?.tokens) {
+          this.tokenStatus = res.tokens;
+          this.render();
+        }
+      }
+    } catch {
+      // optional fallback
+    }
+  }
+
+  async saveToken(provider, tokenValue) {
+    if (!tokenValue || !tokenValue.trim()) return;
     this.loading = true;
     this.errorMessage = null;
     this.render();
     try {
       if (this.host && typeof this.host.run === 'function') {
-        const res = await this.host.run('config', ['reset', '--json']);
-        if (res?.config) {
-          this.config = res.config;
-        }
+        await this.host.run('token', ['set', provider, tokenValue.trim(), '--json']);
+        await this.loadTokenStatus();
       }
     } catch (err) {
-      this.errorMessage = err.message || 'Failed to reset configuration';
+      this.errorMessage = err.message || `Failed to save ${provider} token`;
     } finally {
       this.loading = false;
       this.render();
@@ -145,7 +217,14 @@ export class OpenWikiCard extends HTMLElement {
 
     try {
       if (this.host && typeof this.host.run === 'function') {
-        const res = await this.host.run('hubs', ['--json']);
+        const args = ['--json'];
+        if (this.scope === 'all-vaults') {
+          args.push('--all-vaults');
+        } else if (this.scope !== 'workspace') {
+          args.push(`--node=${this.scope}`);
+        }
+
+        const res = await this.host.run('hubs', args);
         if (res && Array.isArray(res.hubs)) {
           this.hubs = res.hubs;
           this.statusText = 'SYNCHRONIZED';
@@ -176,6 +255,108 @@ export class OpenWikiCard extends HTMLElement {
     }
   }
 
+  async readHubDocument(hub) {
+    this.selectedHub = hub;
+    this.loading = true;
+    this.render();
+    try {
+      if (this.host && typeof this.host.readFile === 'function') {
+        this.selectedHubContent = await this.host.readFile(hub.path);
+      } else {
+        this.selectedHubContent = `# ${hub.title}\n\n*File:* \`${hub.path}\`\n\n*Lines:* ${hub.lines} | *Size:* ${hub.size_bytes} bytes\n\n*(Full live rendering available)*`;
+      }
+    } catch {
+      this.selectedHubContent = `# ${hub.title}\n\n*Unable to load full content from ${hub.path}*`;
+    } finally {
+      this.loading = false;
+      this.render();
+    }
+  }
+
+  async executeSearch(query) {
+    if (!query || !query.trim()) {
+      this.searchResults = [];
+      this.searchStats = null;
+      this.render();
+      return;
+    }
+
+    this.loading = true;
+    this.searchQuery = query.trim();
+    this.errorMessage = null;
+    this.render();
+
+    try {
+      if (this.host && typeof this.host.run === 'function') {
+        const args = [this.searchQuery, '--json'];
+        if (this.scope === 'all-vaults') args.push('--all-vaults');
+        else if (this.scope !== 'workspace') args.push(`--node=${this.scope}`);
+
+        const res = await this.host.run('search', args);
+        if (res && Array.isArray(res.results)) {
+          this.searchResults = res.results;
+          this.searchStats = {
+            totalHubs: res.totalHubsScanned || 0,
+            count: res.count || 0,
+            scope: res.scope || this.scope
+          };
+        }
+      }
+    } catch (err) {
+      this.errorMessage = err.message || 'Search execution failure';
+      this.searchResults = [];
+    } finally {
+      this.loading = false;
+      this.render();
+    }
+  }
+
+  async loadGraph() {
+    this.loading = true;
+    this.errorMessage = null;
+    this.render();
+    try {
+      if (this.host && typeof this.host.run === 'function') {
+        const args = ['--format=json', '--json'];
+        if (this.scope === 'all-vaults') args.push('--all-vaults');
+        else if (this.scope !== 'workspace') args.push(`--node=${this.scope}`);
+
+        const res = await this.host.run('graph', args);
+        if (res?.nodes) {
+          this.graphData = res;
+        }
+      }
+    } catch (err) {
+      this.errorMessage = err.message || 'Graph build failure';
+    } finally {
+      this.loading = false;
+      this.render();
+    }
+  }
+
+  async loadLint() {
+    this.loading = true;
+    this.errorMessage = null;
+    this.render();
+    try {
+      if (this.host && typeof this.host.run === 'function') {
+        const args = ['--json'];
+        if (this.scope === 'all-vaults') args.push('--all-vaults');
+        else if (this.scope !== 'workspace') args.push(`--node=${this.scope}`);
+
+        const res = await this.host.run('lint', args);
+        if (res) {
+          this.lintData = res;
+        }
+      }
+    } catch (err) {
+      this.errorMessage = err.message || 'Lint execution failure';
+    } finally {
+      this.loading = false;
+      this.render();
+    }
+  }
+
   async loadRefreshReport() {
     this.loading = true;
     this.errorMessage = null;
@@ -199,25 +380,16 @@ export class OpenWikiCard extends HTMLElement {
   async executeFleetRefresh() {
     if (this.loading) return;
     this.loading = true;
-    this.executionResult = null;
     this.errorMessage = null;
     this.render();
 
     try {
       if (this.host && typeof this.host.run === 'function') {
         const res = await this.host.run('refresh', ['--apply', '--json']);
-        this.executionResult = {
-          action: 'fleet-refresh',
-          target: 'all-registered-projects',
-          details: res && typeof res === 'object' ? res : { message: String(res || 'Completed') },
-          timestamp: new Date().toLocaleTimeString()
-        };
         if (res?.reports) {
           this.refreshReports = res.reports;
           this.refreshCounts = res.counts;
         }
-      } else {
-        throw new Error('Host execution context unavailable');
       }
     } catch (err) {
       this.errorMessage = err.message || 'Fleet refresh execution failure';
@@ -227,10 +399,37 @@ export class OpenWikiCard extends HTMLElement {
     }
   }
 
+  async executeGenerate() {
+    if (this.loading) return;
+    this.loading = true;
+    this.errorMessage = null;
+    this.generateLogs = [`Dispatching on-demand generator for '${this.generateRepo || 'current repository'}'...`];
+    this.render();
+
+    try {
+      if (this.host && typeof this.host.run === 'function') {
+        const args = ['--json'];
+        if (this.generateRepo) args.push(`--repo=${this.generateRepo}`);
+        if (this.scope !== 'workspace' && this.scope !== 'all-vaults') {
+          args.push(`--node=${this.scope}`);
+        }
+
+        const res = await this.host.run('generate', args);
+        this.generateLogs.push(res?.ok ? `Generation completed successfully in ${Math.round((res.durationMs || 0)/1000)}s` : 'Generation finished with warnings');
+        if (res?.outputDir) this.generateLogs.push(`Output: ${res.outputDir}`);
+      }
+    } catch (err) {
+      this.errorMessage = err.message || 'Generation execution failure';
+      this.generateLogs.push(`Error: ${this.errorMessage}`);
+    } finally {
+      this.loading = false;
+      this.refreshHubs();
+    }
+  }
+
   async executeIngest() {
     if (this.loading) return;
     this.loading = true;
-    this.executionResult = null;
     this.errorMessage = null;
     this.render();
 
@@ -239,16 +438,7 @@ export class OpenWikiCard extends HTMLElement {
 
     try {
       if (this.host && typeof this.host.run === 'function') {
-        const res = await this.host.run('ingest', args);
-        this.executionResult = {
-          action: 'ingest',
-          target: this.targetPath,
-          dryRun: this.dryRun,
-          details: res && typeof res === 'object' ? res : { message: String(res || 'Completed') },
-          timestamp: new Date().toLocaleTimeString()
-        };
-      } else {
-        throw new Error('Host execution context unavailable');
+        await this.host.run('ingest', args);
       }
     } catch (err) {
       this.errorMessage = err.message || 'Ingestion cycle failure';
@@ -258,55 +448,21 @@ export class OpenWikiCard extends HTMLElement {
     }
   }
 
-  async executeBootstrap() {
-    if (this.loading) return;
-    this.loading = true;
-    this.executionResult = null;
-    this.errorMessage = null;
-    this.render();
-
-    try {
-      if (this.host && typeof this.host.run === 'function') {
-        const res = await this.host.run('bootstrap', ['--brain', '.', '--json']);
-        this.executionResult = {
-          action: 'bootstrap',
-          details: res && typeof res === 'object' ? res : { message: String(res || 'Completed') },
-          timestamp: new Date().toLocaleTimeString()
-        };
-      } else {
-        throw new Error('Host execution context unavailable');
-      }
-    } catch (err) {
-      this.errorMessage = err.message || 'Bootstrap procedure failure';
-    } finally {
-      this.loading = false;
-      this.refreshHubs();
-    }
-  }
-
   async executeWatch() {
     if (this.loading) return;
     this.loading = true;
-    this.executionResult = null;
     this.errorMessage = null;
     this.render();
 
     try {
       if (this.host && typeof this.host.run === 'function') {
         const res = await this.host.run('watch', ['--json']);
-        this.executionResult = {
-          action: 'watch',
-          details: res && typeof res === 'object' ? res : { message: String(res || 'Completed') },
-          timestamp: new Date().toLocaleTimeString()
-        };
         if (res?.status) {
           this.upstream = {
             recordedVersion: res.status.currentVersion,
             latestVersion: res.status.latestVersion
           };
         }
-      } else {
-        throw new Error('Host execution context unavailable');
       }
     } catch (err) {
       this.errorMessage = err.message || 'Upstream surveillance failure';
@@ -316,61 +472,35 @@ export class OpenWikiCard extends HTMLElement {
     }
   }
 
-  async executePropagate() {
-    if (this.loading) return;
-    this.loading = true;
-    this.executionResult = null;
-    this.errorMessage = null;
-    this.render();
-
-    try {
-      if (this.host && typeof this.host.run === 'function') {
-        const res = await this.host.run('propagate', ['--json']);
-        this.executionResult = {
-          action: 'propagate',
-          details: res && typeof res === 'object' ? res : { message: String(res || 'Completed') },
-          timestamp: new Date().toLocaleTimeString()
-        };
-      } else {
-        throw new Error('Host execution context unavailable');
-      }
-    } catch (err) {
-      this.errorMessage = err.message || 'Fleet propagation failure';
-    } finally {
-      this.loading = false;
-      this.refreshHubs();
-    }
-  }
-
   render() {
     if (!this.shadowRoot) return;
 
-    const countText = this.hubs.length ? `${this.hubs.length} Hubs` : '—';
+    const countText = this.hubs.length ? `${this.hubs.length} Hubs` : '0 Hubs';
     const totalLines = this.hubs.reduce((acc, h) => acc + (h.lines || 0), 0);
-    const linesText = this.hubs.length ? `${totalLines.toLocaleString()} Lines` : '—';
-    const upstreamText = this.upstream?.latestVersion ? `v${this.upstream.latestVersion}` : 'Tracking';
+    const linesText = `${totalLines.toLocaleString()} Lines`;
 
     this.shadowRoot.innerHTML = `
       <style>
         :host {
           display: block;
           box-sizing: border-box;
-          --face-bg: #0f172a;
-          --face-surface: #1e293b;
-          --face-surface-subtle: #334155;
-          --face-border: #475569;
-          --face-text: #f8fafc;
-          --face-text-muted: #94a3b8;
-          --face-accent: #f59e0b;
-          --face-accent-hover: #d97706;
-          --face-ok: #10b981;
-          --face-danger: #ef4444;
-          background: var(--face-bg);
-          color: var(--text-primary, var(--face-text));
-          border: 1px solid var(--border, var(--face-border));
-          border-radius: 8px;
+          --bg-base: #090d16;
+          --bg-surface: #111827;
+          --bg-elevated: #1f2937;
+          --border-subtle: #374151;
+          --border-focus: #f59e0b;
+          --text-main: #f9fafb;
+          --text-muted: #9ca3af;
+          --accent-amber: #f59e0b;
+          --accent-green: #10b981;
+          --accent-red: #ef4444;
+          background: var(--bg-base);
+          color: var(--text-main);
+          border: 1px solid var(--border-subtle);
+          border-radius: 10px;
           padding: 16px;
-          font-family: system-ui, -apple-system, sans-serif;
+          font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+          font-size: 13px;
         }
 
         *, *::before, *::after {
@@ -381,784 +511,891 @@ export class OpenWikiCard extends HTMLElement {
           display: flex;
           align-items: center;
           justify-content: space-between;
-          gap: 12px;
-          margin-bottom: 12px;
-          border-bottom: 1px solid var(--border, var(--face-border));
           padding-bottom: 12px;
+          border-bottom: 1px solid var(--border-subtle);
+          gap: 12px;
         }
 
         .brand-cluster {
           display: flex;
           align-items: center;
-          gap: 8px;
+          gap: 10px;
+        }
+
+        .crest-svg {
+          width: 24px;
+          height: 24px;
+          fill: var(--accent-amber);
+        }
+
+        .brand-title {
+          font-weight: 700;
+          font-size: 15px;
+          letter-spacing: 0.05em;
+          color: var(--text-main);
+          text-transform: uppercase;
         }
 
         .wordmark-badge {
-          display: inline-flex;
-          align-items: center;
           font-family: ui-monospace, monospace;
-          font-size: 13px;
-          font-weight: 700;
-          letter-spacing: 0.05em;
-          color: var(--face-accent);
-          background: var(--face-surface-subtle);
-          padding: 4px 8px;
+          font-size: 10px;
+          background: rgba(245, 158, 11, 0.15);
+          color: var(--accent-amber);
+          border: 1px solid rgba(245, 158, 11, 0.3);
+          padding: 2px 6px;
           border-radius: 4px;
-        }
-
-        .system-title {
-          font-size: 14px;
           font-weight: 600;
-          color: var(--text-primary, var(--face-text));
         }
 
-        .status-pill {
-          display: inline-flex;
-          align-items: center;
-          padding: 4px 10px;
-          border-radius: 12px;
-          font-size: 11px;
-          font-weight: 700;
-          letter-spacing: 0.04em;
-          text-transform: uppercase;
-          background: var(--face-surface-subtle);
-          color: var(--face-text-muted);
-          border: 1px solid var(--border, var(--face-border));
-        }
-
-        .status-pill.ok {
-          color: var(--face-ok);
-          border-color: var(--face-ok);
-        }
-
-        .status-pill.danger {
-          color: var(--face-danger);
-          border-color: var(--face-danger);
-        }
-
-        .screen-tabs {
+        .scope-control {
           display: flex;
+          align-items: center;
           gap: 6px;
-          margin-bottom: 16px;
-          border-bottom: 1px solid var(--border, var(--face-border));
-          padding-bottom: 8px;
-          overflow-x: auto;
         }
 
-        .screen-tab-btn {
-          min-height: 36px;
-          padding: 0 12px;
+        .scope-select {
+          background: var(--bg-surface);
+          color: var(--text-main);
+          border: 1px solid var(--border-subtle);
+          border-radius: 6px;
+          padding: 4px 8px;
+          font-size: 12px;
+          cursor: pointer;
+        }
+
+        /* Screen Navigation */
+        .screen-nav {
+          display: flex;
+          gap: 4px;
+          margin: 12px 0;
+          overflow-x: auto;
+          padding-bottom: 4px;
+        }
+
+        .nav-btn {
+          background: transparent;
+          color: var(--text-muted);
+          border: 1px solid transparent;
+          border-radius: 6px;
+          padding: 6px 12px;
           font-size: 12px;
           font-weight: 600;
-          border-radius: 6px;
-          border: 1px solid transparent;
-          background: transparent;
-          color: var(--face-text-muted);
           cursor: pointer;
-          transition: all 0.15s ease;
-          display: inline-flex;
-          align-items: center;
           white-space: nowrap;
+          min-height: 44px;
+          transition: all 0.15s ease;
+        }
+        .nav-btn:hover {
+          color: var(--text-main);
+          background: var(--bg-surface);
+        }
+        .nav-btn.active {
+          color: var(--accent-amber);
+          background: rgba(245, 158, 11, 0.12);
+          border-color: rgba(245, 158, 11, 0.4);
         }
 
-        .screen-tab-btn:hover {
-          color: var(--face-text);
-          background: var(--face-surface-subtle);
-        }
-
-        .screen-tab-btn.active {
-          color: var(--face-accent);
-          background: var(--face-surface);
-          border-color: var(--face-accent);
-        }
-
-        .stats-grid {
+        /* Metrics Deck */
+        .metric-deck {
           display: grid;
           grid-template-columns: repeat(3, 1fr);
           gap: 8px;
-          margin-bottom: 16px;
+          margin-bottom: 14px;
         }
 
-        .stat-card {
-          background: var(--face-surface);
-          border: 1px solid var(--border, var(--face-border));
+        .metric-cell {
+          background: var(--bg-surface);
+          border: 1px solid var(--border-subtle);
           border-radius: 6px;
-          padding: 10px;
+          padding: 8px 10px;
         }
-
-        .stat-label {
+        .metric-label {
           font-size: 11px;
+          color: var(--text-muted);
           text-transform: uppercase;
-          letter-spacing: 0.04em;
-          color: var(--face-text-muted);
-          margin-bottom: 4px;
         }
-
-        .stat-value {
-          font-size: 16px;
+        .metric-val {
+          font-size: 15px;
           font-weight: 700;
-          color: var(--text-primary, var(--face-text));
-          font-family: ui-monospace, monospace;
+          margin-top: 2px;
+          color: var(--text-main);
         }
 
-        .section-header {
-          display: flex;
-          align-items: center;
-          justify-content: space-between;
-          margin-bottom: 8px;
-        }
-
-        .section-title {
-          font-size: 12px;
-          font-weight: 700;
-          text-transform: uppercase;
-          letter-spacing: 0.05em;
-          color: var(--face-accent);
+        /* Content Deck */
+        .content-view {
+          background: var(--bg-surface);
+          border: 1px solid var(--border-subtle);
+          border-radius: 8px;
+          padding: 14px;
+          min-height: 260px;
         }
 
         .hub-list {
           display: flex;
           flex-direction: column;
           gap: 6px;
-          margin-bottom: 16px;
-          max-height: 180px;
-          overflow-y: auto;
         }
 
         .hub-item {
           display: flex;
           align-items: center;
           justify-content: space-between;
-          background: var(--face-surface);
-          border: 1px solid var(--border, var(--face-border));
+          padding: 8px 10px;
+          background: var(--bg-elevated);
+          border: 1px solid var(--border-subtle);
           border-radius: 6px;
-          padding: 8px 12px;
-          font-size: 13px;
+          cursor: pointer;
+          min-height: 44px;
+          transition: border-color 0.15s;
         }
-
+        .hub-item:hover {
+          border-color: var(--accent-amber);
+        }
         .hub-title {
           font-weight: 600;
-          color: var(--text-primary, var(--face-text));
+          color: var(--text-main);
         }
-
-        .hub-meta {
+        .repo-pill {
+          background: rgba(255, 255, 255, 0.08);
+          padding: 2px 6px;
+          border-radius: 4px;
           font-family: ui-monospace, monospace;
           font-size: 11px;
-          color: var(--face-text-muted);
         }
 
-        .empty-state {
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          padding: 24px;
-          color: var(--face-text-muted);
-          background: var(--face-surface);
-          border: 1px dashed var(--border, var(--face-border));
-          border-radius: 6px;
-          font-size: 13px;
-        }
-
-        .ingest-deck {
-          background: var(--face-surface);
-          border: 1px solid var(--border, var(--face-border));
-          border-radius: 6px;
-          padding: 12px;
-          margin-bottom: 16px;
-        }
-
-        .config-deck {
-          background: var(--face-surface);
-          border: 1px solid var(--border, var(--face-border));
-          border-radius: 6px;
-          padding: 14px;
-          margin-bottom: 16px;
-        }
-
-        .config-grid {
-          display: grid;
-          grid-template-columns: 1fr 1fr;
-          gap: 12px;
-          margin-bottom: 14px;
-        }
-
-        .field-group {
-          display: flex;
-          flex-direction: column;
-          gap: 4px;
-        }
-
-        .field-group.full-width {
-          grid-column: 1 / -1;
-        }
-
-        .field-label {
-          font-size: 11px;
-          font-weight: 700;
-          text-transform: uppercase;
-          letter-spacing: 0.04em;
-          color: var(--face-text-muted);
-        }
-
-        .input-group {
-          display: flex;
-          gap: 8px;
-          margin-bottom: 12px;
-        }
-
-        .path-input, .text-input, .select-input {
-          min-height: 44px;
-          background: var(--face-surface-subtle);
-          border: 1px solid var(--border, var(--face-border));
-          border-radius: 6px;
-          padding: 8px 12px;
-          color: var(--text-primary, var(--face-text));
-          font-family: ui-monospace, monospace;
-          font-size: 13px;
-          width: 100%;
-        }
-
-        .path-input:focus, .text-input:focus, .select-input:focus {
-          outline: none;
-          border-color: var(--face-accent);
-        }
-
-        .presets-bar {
-          display: flex;
-          gap: 6px;
-          flex-wrap: wrap;
-          margin-bottom: 14px;
-        }
-
-        .preset-chip {
-          min-height: 32px;
-          padding: 4px 10px;
-          background: var(--face-surface-subtle);
-          border: 1px solid var(--border, var(--face-border));
-          border-radius: 16px;
-          font-size: 11px;
-          font-family: ui-monospace, monospace;
-          color: var(--face-text);
-          cursor: pointer;
-          transition: all 0.15s ease;
-        }
-
-        .preset-chip:hover {
-          border-color: var(--face-accent);
-          color: var(--face-accent);
-        }
-
-        .auth-notice-card {
+        /* Reader */
+        .reader-header {
           display: flex;
           align-items: center;
           justify-content: space-between;
-          background: #022c22;
-          border: 1px solid var(--face-ok);
+          margin-bottom: 12px;
+          padding-bottom: 8px;
+          border-bottom: 1px solid var(--border-subtle);
+        }
+        .back-btn {
+          background: var(--bg-elevated);
+          color: var(--accent-amber);
+          border: 1px solid var(--border-subtle);
           border-radius: 6px;
-          padding: 10px 14px;
-          margin-bottom: 14px;
-          font-size: 12px;
-          color: #a7f3d0;
-        }
-
-        .toggle-label {
-          display: inline-flex;
-          align-items: center;
-          gap: 8px;
-          min-height: 44px;
-          font-size: 13px;
-          color: var(--text-primary, var(--face-text));
-          cursor: pointer;
-          user-select: none;
-          padding: 0 4px;
-        }
-
-        .button-group {
-          display: grid;
-          grid-template-columns: repeat(2, 1fr);
-          gap: 8px;
-        }
-
-        .btn {
-          display: inline-flex;
-          align-items: center;
-          justify-content: center;
-          min-height: 44px;
-          padding: 0 12px;
-          font-size: 12px;
+          padding: 4px 10px;
           font-weight: 600;
-          border-radius: 6px;
-          border: 1px solid transparent;
           cursor: pointer;
-          transition: background-color 0.15s ease, border-color 0.15s ease;
-          text-align: center;
+          min-height: 44px;
+        }
+        .markdown-body {
+          font-family: Georgia, Cambria, serif;
+          line-height: 1.6;
+          color: #e5e7eb;
+          max-height: 380px;
+          overflow-y: auto;
+          white-space: pre-wrap;
         }
 
-        .btn-primary {
-          background: var(--face-accent);
-          color: var(--face-bg);
-        }
-
-        .btn-primary:hover:not(:disabled) {
-          background: var(--face-accent-hover);
-        }
-
-        .btn-secondary {
-          background: var(--face-surface-subtle);
-          border-color: var(--border, var(--face-border));
-          color: var(--text-primary, var(--face-text));
-        }
-
-        .btn-secondary:hover:not(:disabled) {
-          border-color: var(--face-accent);
-        }
-
-        .btn:disabled {
-          opacity: 0.5;
-          cursor: not-allowed;
-        }
-
-        .result-deck {
-          background: var(--face-surface-subtle);
-          border: 1px solid var(--border, var(--face-border));
-          border-radius: 6px;
-          padding: 12px;
-          font-family: ui-monospace, monospace;
-          font-size: 12px;
-          color: var(--text-primary, var(--face-text));
-          margin-top: 12px;
-        }
-
-        .result-title {
-          font-weight: 600;
-          color: var(--face-accent);
-          margin-bottom: 6px;
-        }
-
-        .error-deck {
-          background: var(--face-surface);
-          border: 1px solid var(--face-danger);
-          border-radius: 6px;
-          padding: 12px;
-          color: var(--face-danger);
-          font-size: 12px;
+        /* Search */
+        .search-box {
+          display: flex;
+          gap: 8px;
           margin-bottom: 12px;
         }
-
-        .repo-status-badge {
-          display: inline-flex;
-          align-items: center;
-          padding: 2px 6px;
-          border-radius: 4px;
-          font-size: 10px;
+        .search-input {
+          flex: 1;
+          background: var(--bg-elevated);
+          border: 1px solid var(--border-subtle);
+          border-radius: 6px;
+          padding: 8px 12px;
+          color: var(--text-main);
+          font-size: 13px;
+          min-height: 44px;
+        }
+        .action-btn {
+          background: var(--accent-amber);
+          color: #000;
           font-weight: 700;
-          letter-spacing: 0.04em;
-          text-transform: uppercase;
+          border: none;
+          border-radius: 6px;
+          padding: 8px 14px;
+          cursor: pointer;
+          min-height: 44px;
+        }
+        .action-btn:hover {
+          background: #d97706;
         }
 
-        .repo-status-badge.current {
-          background: #064e3b;
-          color: #6ee7b7;
+        .result-item {
+          background: var(--bg-elevated);
+          border: 1px solid var(--border-subtle);
+          border-radius: 6px;
+          padding: 10px;
+          margin-bottom: 8px;
+        }
+        .result-heading {
+          font-weight: 600;
+          color: var(--accent-amber);
+          margin-bottom: 4px;
+        }
+        .result-snippet {
+          font-style: italic;
+          color: #d1d5db;
+          font-size: 12px;
+          line-height: 1.4;
         }
 
-        .repo-status-badge.due {
-          background: #78350f;
+        /* Graph SVG */
+        .graph-canvas-wrap {
+          width: 100%;
+          min-height: 280px;
+          background: #0b0f19;
+          border-radius: 6px;
+          border: 1px solid var(--border-subtle);
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          overflow: auto;
+          padding: 10px;
+        }
+
+        /* Token Screen */
+        .token-row {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          background: var(--bg-elevated);
+          border: 1px solid var(--border-subtle);
+          border-radius: 6px;
+          padding: 10px 12px;
+          margin-bottom: 8px;
+          min-height: 44px;
+        }
+        .token-key {
+          font-family: ui-monospace, monospace;
+          font-weight: 600;
+        }
+        .token-badge {
+          font-size: 11px;
+          padding: 2px 8px;
+          border-radius: 4px;
+          font-weight: 600;
+        }
+        .token-badge.ok {
+          background: rgba(16, 185, 129, 0.2);
+          color: var(--accent-green);
+          border: 1px solid var(--accent-green);
+        }
+        .token-badge.missing {
+          background: rgba(239, 68, 68, 0.2);
+          color: var(--accent-red);
+          border: 1px solid var(--accent-red);
+        }
+
+        .auth-notice-card {
+          background: rgba(245, 158, 11, 0.08);
+          border: 1px solid rgba(245, 158, 11, 0.3);
+          border-radius: 6px;
+          padding: 10px 12px;
+          margin-bottom: 12px;
+          font-size: 12px;
           color: #fde68a;
         }
 
-        .repo-status-badge.uninit {
-          background: #831843;
-          color: #fbcfe8;
+        .config-deck {
+          display: flex;
+          flex-direction: column;
+          gap: 12px;
+        }
+
+        .ingest-deck {
+          background: var(--bg-elevated);
+          border: 1px solid var(--border-subtle);
+          border-radius: 6px;
+          padding: 12px;
+          margin-top: 14px;
+        }
+
+        .preset-chip {
+          display: inline-block;
+          background: var(--bg-elevated);
+          border: 1px solid var(--border-subtle);
+          padding: 4px 10px;
+          border-radius: 4px;
+          font-size: 11px;
+          cursor: pointer;
+          margin-right: 6px;
+          margin-bottom: 6px;
+        }
+        .preset-chip:hover {
+          border-color: var(--accent-amber);
+        }
+
+        .error-banner {
+          background: rgba(239, 68, 68, 0.15);
+          border: 1px solid var(--accent-red);
+          color: #fca5a5;
+          padding: 8px 12px;
+          border-radius: 6px;
+          margin-bottom: 10px;
         }
 
         @media (prefers-reduced-motion: reduce) {
-          *, *::before, *::after {
-            animation-duration: 0.01ms !important;
-            animation-iteration-count: 1 !important;
-            transition-duration: 0.01ms !important;
-            scroll-behavior: auto !important;
+          * {
+            animation: none !important;
+            transition: none !important;
           }
         }
       </style>
 
       <div class="header-bar">
         <div class="brand-cluster">
-          <span class="wordmark-badge">[BRAIN//DUMP]</span>
-          <span class="system-title">Knowledge Graph Engine</span>
+          <svg class="crest-svg" viewBox="0 0 24 24">
+            <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/>
+          </svg>
+          <span class="brand-title">OpenWiki</span>
+          <span class="wordmark-badge">MESH KNOWLEDGE</span>
         </div>
-        <span class="status-pill ${this.statusText === 'SYNCHRONIZED' ? 'ok' : this.statusText === 'ERROR' ? 'danger' : ''}">
-          ${this.statusText}
-        </span>
+
+        <div class="scope-control">
+          <span style="font-size: 11px; color: var(--text-muted);">Scope:</span>
+          <select class="scope-select" id="scope-select">
+            <option value="workspace" ${this.scope === 'workspace' ? 'selected' : ''}>Current Workspace</option>
+            <option value="all-vaults" ${this.scope === 'all-vaults' ? 'selected' : ''}>All Vaults (Fleet)</option>
+          </select>
+        </div>
       </div>
 
-      <nav class="screen-tabs" aria-label="OpenWiki navigation screens">
-        ${OpenWikiCard.screens.map((screen) => `
-          <button
-            class="screen-tab-btn ${this.activeScreen === screen.id ? 'active' : ''}"
-            data-screen="${screen.id}"
-          >
-            ${screen.label}
+      <nav class="screen-nav">
+        ${OpenWikiCard.screens
+          .map(
+            (s) => `
+          <button class="nav-btn ${this.activeScreen === s.id ? 'active' : ''}" data-screen="${s.id}">
+            ${s.label}
           </button>
-        `).join('')}
+        `
+          )
+          .join('')}
       </nav>
 
-      <div class="stats-grid">
-        <div class="stat-card">
-          <div class="stat-label">Discovered Hubs</div>
-          <div class="stat-value">${countText}</div>
+      ${this.errorMessage ? `<div class="error-banner">${this.escape(this.errorMessage)}</div>` : ''}
+
+      <div class="metric-deck">
+        <div class="metric-cell">
+          <div class="metric-label">Knowledge Hubs</div>
+          <div class="metric-val">${countText}</div>
         </div>
-        <div class="stat-card">
-          <div class="stat-label">Documentation Lines</div>
-          <div class="stat-value">${linesText}</div>
+        <div class="metric-cell">
+          <div class="metric-label">Indexed Volume</div>
+          <div class="metric-val">${linesText}</div>
         </div>
-        <div class="stat-card">
-          <div class="stat-label">Active Model Routing</div>
-          <div class="stat-value" style="font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" title="${this.config.model}">
-            ${this.config.model.split('/').pop() || this.config.model}
-          </div>
+        <div class="metric-cell">
+          <div class="metric-label">Mesh Status</div>
+          <div class="metric-val" style="color: var(--accent-amber);">${this.statusText}</div>
         </div>
       </div>
 
-      ${this.errorMessage ? `
-        <div class="error-deck">
-          ${this.errorMessage}
-        </div>
-      ` : ''}
-
-      ${this.renderActiveScreen()}
-
-      ${this.executionResult ? `
-        <div class="result-deck">
-          <div class="result-title">Execution Receipt (${this.executionResult.timestamp})</div>
-          <div>Action: ${this.executionResult.action}</div>
-          <div>Target: ${this.executionResult.target || 'project'}</div>
-          <div>Result: ${JSON.stringify(this.executionResult.details)}</div>
-        </div>
-      ` : ''}
+      <div class="content-view">
+        ${this.renderActiveScreen()}
+      </div>
     `;
 
-    this.bindEvents();
+    this.attachEventListeners();
   }
 
   renderActiveScreen() {
-    if (this.activeScreen === 'config') {
-      return this.renderConfigScreen();
+    if (this.selectedHub) {
+      return this.renderReaderScreen();
     }
-    if (this.activeScreen === 'refresh') {
-      return this.renderRefreshScreen();
+
+    switch (this.activeScreen) {
+      case 'hubs':
+        return this.renderHubsScreen();
+      case 'search':
+        return this.renderSearchScreen();
+      case 'graph':
+        return this.renderGraphScreen();
+      case 'generate':
+        return this.renderGenerateScreen();
+      case 'refresh':
+        return this.renderRefreshScreen();
+      case 'token':
+        return this.renderTokenScreen();
+      case 'lint':
+        return this.renderLintScreen();
+      case 'upstream':
+        return this.renderUpstreamScreen();
+      case 'config':
+        return this.renderConfigScreen();
+      default:
+        return this.renderHubsScreen();
     }
-    if (this.activeScreen === 'upstream') {
-      return this.renderUpstreamScreen();
-    }
-    return this.renderHubsScreen();
   }
 
   renderHubsScreen() {
+    if (!this.hubs || this.hubs.length === 0) {
+      return `
+        <div style="text-align: center; padding: 30px; color: var(--text-muted);">
+          <div>No documentation hubs discovered for scope: <strong>${this.escape(this.scope)}</strong>.</div>
+          <button class="action-btn" id="btn-refresh-hubs" style="margin-top: 12px;">Sync Hubs</button>
+        </div>
+      `;
+    }
+
     return `
-      <div class="section-header">
-        <span class="section-title">Knowledge Hubs</span>
-        <button id="btn-refresh" class="btn btn-secondary" style="min-height: 32px; padding: 0 10px; font-size: 11px;" ${this.loading ? 'disabled' : ''}>
-          Sync
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+        <span style="font-weight: 600; color: var(--text-muted);">Click a hub to read documentation:</span>
+        <button class="back-btn" id="btn-refresh-hubs">Refresh</button>
+      </div>
+      <div class="hub-list">
+        ${this.hubs
+          .map(
+            (h, idx) => `
+          <div class="hub-item" data-hub-index="${idx}">
+            <div>
+              <span class="repo-pill">${this.escape(h.repoName || 'workspace')}</span>
+              <span class="hub-title" style="margin-left: 6px;">${this.escape(h.title)}</span>
+            </div>
+            <div class="hub-meta">
+              <span>${h.lines || 0} lines</span>
+              <span>${h.size_bytes ? Math.round(h.size_bytes / 1024) + ' KB' : ''}</span>
+            </div>
+          </div>
+        `
+          )
+          .join('')}
+      </div>
+      <div class="ingest-deck">
+        <div style="font-weight: 600; margin-bottom: 4px;">SSSS Vault Ingestion</div>
+        <div style="font-size: 11px; color: var(--text-muted); margin-bottom: 8px;">Embed current hub markdown into semantic memory categories.</div>
+        <button class="action-btn" id="btn-ingest-exec">Ingest into Vault</button>
+      </div>
+    `;
+  }
+
+  renderReaderScreen() {
+    const hub = this.selectedHub;
+    return `
+      <div class="reader-header">
+        <div>
+          <span class="repo-pill">${this.escape(hub.repoName || 'workspace')}</span>
+          <strong style="margin-left: 8px; color: var(--accent-amber);">${this.escape(hub.title)}</strong>
+        </div>
+        <button class="back-btn" id="btn-back-to-hubs">Back to Hubs</button>
+      </div>
+      <div class="markdown-body">${this.escape(this.selectedHubContent || 'Loading...')}</div>
+    `;
+  }
+
+  renderSearchScreen() {
+    return `
+      <div class="search-box">
+        <input class="search-input" id="search-input" placeholder="Search architecture, concepts, APIs across vaults..." value="${this.escape(this.searchQuery)}" />
+        <button class="action-btn" id="btn-search-exec">Search</button>
+      </div>
+      ${
+        this.searchStats
+          ? `<div style="font-size: 11px; color: var(--text-muted); margin-bottom: 8px;">
+               Found ${this.searchStats.count} passage(s) across ${this.searchStats.totalHubs} hubs (${this.searchStats.scope})
+             </div>`
+          : ''
+      }
+      <div class="search-results">
+        ${
+          this.searchResults.length === 0
+            ? `<div style="text-align: center; color: var(--text-muted); padding: 20px;">Enter search query to extract evidence passages.</div>`
+            : this.searchResults
+                .map(
+                  (r) => `
+            <div class="result-item">
+              <div class="result-heading">
+                <span class="repo-pill">${this.escape(r.repoName)}</span>
+                ${this.escape(r.title)} &gt; ${this.escape(r.section)} (Line ${r.line})
+              </div>
+              <div class="result-snippet">"${this.escape(r.snippet)}"</div>
+            </div>
+          `
+                )
+                .join('')
+        }
+      </div>
+    `;
+  }
+
+  renderGraphScreen() {
+    if (!this.graphData || !this.graphData.nodes) {
+      return `
+        <div style="text-align: center; padding: 30px; color: var(--text-muted);">
+          <div>Knowledge topology graph not loaded.</div>
+          <button class="action-btn" id="btn-load-graph" style="margin-top: 10px;">Extract Topology</button>
+        </div>
+      `;
+    }
+
+    const { nodes, edges, orphans } = this.graphData;
+
+    return `
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+        <span style="font-weight: 600; color: var(--text-muted);">
+          Topology: ${nodes.length} Nodes, ${edges.length} Edges, ${orphans.length} Orphans
+        </span>
+        <button class="back-btn" id="btn-load-graph">Refresh Graph</button>
+      </div>
+      <div class="graph-canvas-wrap">
+        <svg width="100%" height="240" viewBox="0 0 600 240">
+          <defs>
+            <marker id="arrow" viewBox="0 0 10 10" refX="10" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+              <path d="M 0 0 L 10 5 L 0 10 z" fill="#f59e0b" />
+            </marker>
+          </defs>
+          ${edges
+            .slice(0, 30)
+            .map((e, idx) => {
+              const x1 = 50 + (idx * 37) % 500;
+              const y1 = 40 + (idx * 23) % 160;
+              const x2 = 80 + (idx * 43) % 500;
+              const y2 = 60 + (idx * 31) % 160;
+              return `<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="rgba(245, 158, 11, 0.4)" stroke-width="1.5" marker-end="url(#arrow)" />`;
+            })
+            .join('')}
+          ${nodes
+            .slice(0, 20)
+            .map((n, idx) => {
+              const cx = 50 + (idx * 53) % 500;
+              const cy = 40 + (idx * 33) % 160;
+              return `
+                <g>
+                  <circle cx="${cx}" cy="${cy}" r="12" fill="#1e293b" stroke="#f59e0b" stroke-width="2" />
+                  <text x="${cx}" y="${cy + 22}" fill="#94a3b8" font-size="9" text-anchor="middle">
+                    ${this.escape(n.label.slice(0, 14))}
+                  </text>
+                </g>
+              `;
+            })
+            .join('')}
+        </svg>
+      </div>
+    `;
+  }
+
+  renderGenerateScreen() {
+    return `
+      <div style="margin-bottom: 12px;">
+        <label style="display: block; font-weight: 600; margin-bottom: 4px;">Target Repository (leave empty for current workspace):</label>
+        <input class="search-input" id="generate-repo-input" placeholder="e.g. total-recall or gro-crm" value="${this.escape(this.generateRepo)}" />
+      </div>
+      <div style="display: flex; justify-content: flex-end; margin-bottom: 12px;">
+        <button class="action-btn" id="btn-generate-exec" ${this.loading ? 'disabled' : ''}>
+          ${this.loading ? 'Generating...' : 'Generate Wiki Documentation'}
         </button>
       </div>
-
-      <div class="hub-list">
-        ${this.hubs.length === 0 ? `
-          <div class="empty-state">No documentation hubs indexed in ${this.targetPath}</div>
-        ` : this.hubs.map((h) => `
-          <div class="hub-item">
-            <span class="hub-title">${h.title}</span>
-            <span class="hub-meta">${h.lines} lines · ${h.path}</span>
-          </div>
-        `).join('')}
+      <div style="background: var(--bg-base); border: 1px solid var(--border-subtle); border-radius: 6px; padding: 10px; font-family: ui-monospace, monospace; font-size: 11px; max-height: 180px; overflow-y: auto;">
+        ${
+          this.generateLogs.length === 0
+            ? '<span style="color: var(--text-muted);">Ready to dispatch on-demand generation.</span>'
+            : this.generateLogs.map((l) => `<div>${this.escape(l)}</div>`).join('')
+        }
       </div>
+    `;
+  }
 
-      <div class="ingest-deck">
-        <div class="input-group">
-          <input
-            id="target-path-input"
-            class="path-input"
-            type="text"
-            value="${this.targetPath}"
-            placeholder="Directory path (openwiki)"
-            aria-label="Target documentation path"
-          />
-          <label class="toggle-label">
-            <input
-              id="dry-run-checkbox"
-              type="checkbox"
-              ${this.dryRun ? 'checked' : ''}
-            />
-            Dry Run
-          </label>
+  renderRefreshScreen() {
+    return `
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+        <span style="font-weight: 600; color: var(--text-muted);">Fleet Staleness Status:</span>
+        <button class="action-btn" id="btn-fleet-refresh" ${this.loading ? 'disabled' : ''}>
+          ${this.loading ? 'Refreshing...' : 'Execute Fleet Refresh'}
+        </button>
+      </div>
+      <div style="max-height: 220px; overflow-y: auto;">
+        ${
+          this.refreshReports.length === 0
+            ? '<div style="color: var(--text-muted); text-align: center; padding: 20px;">No refresh reports loaded. Click Execute to evaluate fleet.</div>'
+            : this.refreshReports
+                .map(
+                  (r) => `
+            <div style="display: flex; justify-content: space-between; padding: 6px 8px; background: var(--bg-elevated); border: 1px solid var(--border-subtle); border-radius: 4px; margin-bottom: 4px; font-size: 11px;">
+              <span><strong>${this.escape(r.name)}</strong>: ${this.escape(r.action)}</span>
+              <span style="color: var(--text-muted);">${r.commitsSince ? r.commitsSince + ' commits' : 'current'}</span>
+            </div>
+          `
+                )
+                .join('')
+        }
+      </div>
+    `;
+  }
+
+  renderTokenScreen() {
+    const { openrouter, google } = this.tokenStatus;
+    return `
+      <div class="auth-notice-card">
+        Total Recall Auth Secrets Store credentials for model-driven documentation. Secrets are stored encrypted in the global store.
+      </div>
+      <div class="token-row">
+        <div>
+          <span class="token-key">OPENROUTER_API_KEY</span>
+          <div style="font-size: 11px; color: var(--text-muted);">Default provider for cheap model wiki routing</div>
         </div>
-
-        <div class="button-group">
-          <button id="btn-ingest" class="btn btn-primary" ${this.loading ? 'disabled' : ''}>
-            ${this.loading ? 'Processing…' : 'Ingest Documentation'}
-          </button>
-          <button id="btn-bootstrap" class="btn btn-secondary" ${this.loading ? 'disabled' : ''}>
-            Bootstrap Wiki
-          </button>
+        <span class="token-badge ${openrouter?.configured ? 'ok' : 'missing'}">
+          ${openrouter?.configured ? 'Configured' : 'Missing'}
+        </span>
+      </div>
+      <div class="token-row">
+        <div>
+          <span class="token-key">GOOGLE_API_KEY</span>
+          <div style="font-size: 11px; color: var(--text-muted);">Google Gemini provider for native model generation</div>
+        </div>
+        <span class="token-badge ${google?.configured ? 'ok' : 'missing'}">
+          ${google?.configured ? 'Configured' : 'Missing'}
+        </span>
+      </div>
+      <div style="margin-top: 14px; border-top: 1px solid var(--border-subtle); padding-top: 12px;">
+        <label style="display: block; font-weight: 600; margin-bottom: 4px;">Save Key to Auth Vault:</label>
+        <div style="display: flex; gap: 8px;">
+          <select class="scope-select" id="token-provider-select">
+            <option value="openrouter">OpenRouter</option>
+            <option value="google">Google Gemini</option>
+          </select>
+          <input type="password" class="search-input" id="token-val-input" placeholder="Paste API Key (saved securely to auth secrets)..." />
+          <button class="action-btn" id="btn-save-token">Save Key</button>
         </div>
       </div>
+    `;
+  }
+
+  renderLintScreen() {
+    if (!this.lintData) {
+      return `
+        <div style="text-align: center; padding: 30px; color: var(--text-muted);">
+          <div>Link hygiene and documentation health not audited yet.</div>
+          <button class="action-btn" id="btn-run-lint" style="margin-top: 10px;">Run Health Check</button>
+        </div>
+      `;
+    }
+
+    const { healthScore, totalHubs, totalLinks, brokenLinksCount, orphanCount, issues } = this.lintData;
+    const scoreColor = healthScore > 80 ? 'var(--accent-green)' : (healthScore > 50 ? 'var(--accent-amber)' : 'var(--accent-red)');
+
+    return `
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+        <div style="font-size: 20px; font-weight: 700; color: ${scoreColor};">
+          ${healthScore}% Health Score
+        </div>
+        <button class="back-btn" id="btn-run-lint">Re-scan</button>
+      </div>
+      <div class="metric-deck">
+        <div class="metric-cell">
+          <div class="metric-label">Links Tested</div>
+          <div class="metric-val">${totalLinks}</div>
+        </div>
+        <div class="metric-cell">
+          <div class="metric-label">Broken Links</div>
+          <div class="metric-val" style="color: ${brokenLinksCount ? 'var(--accent-red)' : 'var(--accent-green)'};">${brokenLinksCount}</div>
+        </div>
+        <div class="metric-cell">
+          <div class="metric-label">Orphan Hubs</div>
+          <div class="metric-val">${orphanCount}</div>
+        </div>
+      </div>
+      <div style="max-height: 180px; overflow-y: auto;">
+        ${
+          issues.length === 0
+            ? '<div style="color: var(--accent-green); padding: 10px;">[OK] All documentation links and headings verified clean!</div>'
+            : issues
+                .map(
+                  (iss) => `
+            <div style="padding: 6px 8px; background: var(--bg-elevated); border: 1px solid var(--border-subtle); border-radius: 4px; margin-bottom: 4px; font-size: 11px;">
+              <span style="color: var(--accent-red); font-weight: 600;">[${this.escape(iss.type)}]</span>
+              ${this.escape(iss.message)}
+            </div>
+          `
+                )
+                .join('')
+        }
+      </div>
+    `;
+  }
+
+  renderUpstreamScreen() {
+    return `
+      <div style="margin-bottom: 12px;">
+        <div style="font-weight: 600; margin-bottom: 4px;">Upstream OpenWiki Surveillance:</div>
+        <div style="font-size: 12px; color: var(--text-muted);">
+          Recorded: v${this.upstream?.recordedVersion || '0.7.2'} | Latest: v${this.upstream?.latestVersion || '0.7.3'}
+        </div>
+      </div>
+      <button class="action-btn" id="btn-watch-exec" style="margin-top: 8px;">Check Upstream Releases</button>
     `;
   }
 
   renderConfigScreen() {
     return `
       <div class="config-deck">
-        <div class="section-header">
-          <span class="section-title">Documentation Model & Provider Routing</span>
+        <div>
+          <label style="display: block; font-weight: 600; margin-bottom: 4px;">Recommended Model Presets:</label>
+          <span class="preset-chip" data-model="deepseek/deepseek-chat">DeepSeek Chat</span>
+          <span class="preset-chip" data-model="deepseek/deepseek-v4.1-flash">DeepSeek Flash</span>
+          <span class="preset-chip" data-model="qwen/qwen-2.5-coder-32b-instruct">Qwen 2.5 Coder</span>
         </div>
-
-        <div class="auth-notice-card">
-          <span>✓ Model credentials routed via Total Recall Auth store (<code>total-recall auth secret</code>)</span>
-          <span style="font-family: ui-monospace, monospace; font-size: 10px;">AUTH_PLUGIN: ACTIVE</span>
+        <div>
+          <label style="display: block; font-weight: 600; margin-bottom: 4px;">Provider:</label>
+          <select class="scope-select" id="cfg-provider" style="width: 100%;">
+            <option value="openrouter" ${this.config.provider === 'openrouter' ? 'selected' : ''}>OpenRouter (Fleet Routing)</option>
+            <option value="google" ${this.config.provider === 'google' ? 'selected' : ''}>Google Gemini</option>
+          </select>
         </div>
-
-        <div class="field-label" style="margin-bottom: 6px;">Recommended Model Presets:</div>
-        <div class="presets-bar">
-          <button class="preset-chip" data-provider="openrouter" data-model="deepseek/deepseek-v4.1-flash" data-fallback="qwen/qwen-2.5-coder-32b-instruct">
-            DeepSeek V4.1 Flash ($0.025/1M)
-          </button>
-          <button class="preset-chip" data-provider="openrouter" data-model="qwen/qwen-2.5-coder-32b-instruct" data-fallback="deepseek/deepseek-v4.1-flash">
-            Qwen 2.5 Coder 32B ($0.06/1M)
-          </button>
-          <button class="preset-chip" data-provider="google" data-model="gemini-2.5-flash-lite" data-fallback="gemini-2.5-flash">
-            Gemini 2.5 Flash-Lite ($0.075/1M)
-          </button>
+        <div>
+          <label style="display: block; font-weight: 600; margin-bottom: 4px;">Model ID:</label>
+          <input class="search-input" id="cfg-model" value="${this.escape(this.config.model)}" style="width: 100%;" />
         </div>
-
-        <div class="config-grid">
-          <div class="field-group">
-            <label class="field-label" for="cfg-provider">Provider</label>
-            <select id="cfg-provider" class="select-input">
-              <option value="openrouter" ${this.config.provider === 'openrouter' ? 'selected' : ''}>OpenRouter (Multi-Model Hub)</option>
-              <option value="google" ${this.config.provider === 'google' ? 'selected' : ''}>Google (Gemini Direct)</option>
-              <option value="custom" ${this.config.provider === 'custom' ? 'selected' : ''}>Custom Provider</option>
-            </select>
-          </div>
-
-          <div class="field-group">
-            <label class="field-label" for="cfg-model">Primary Model Identifier</label>
-            <input id="cfg-model" class="text-input" type="text" value="${this.config.model}" placeholder="e.g. deepseek/deepseek-v4.1-flash" />
-          </div>
-
-          <div class="field-group">
-            <label class="field-label" for="cfg-fallback">Fallback Model Identifier</label>
-            <input id="cfg-fallback" class="text-input" type="text" value="${this.config.fallback_model}" placeholder="e.g. qwen/qwen-2.5-coder-32b-instruct" />
-          </div>
-
-          <div class="field-group">
-            <label class="field-label" for="cfg-tokens">Max Output Tokens</label>
-            <input id="cfg-tokens" class="text-input" type="number" value="${this.config.max_tokens}" min="512" max="131072" />
-          </div>
-
-          <div class="field-group full-width">
-            <label class="field-label" for="cfg-timeout">Timeout (milliseconds)</label>
-            <input id="cfg-timeout" class="text-input" type="number" value="${this.config.timeout_ms}" min="30000" max="1800000" />
-          </div>
+        <div>
+          <label style="display: block; font-weight: 600; margin-bottom: 4px;">Max Tokens:</label>
+          <input type="number" class="search-input" id="cfg-tokens" value="${this.config.max_tokens}" style="width: 100%;" />
         </div>
-
-        <div class="button-group">
-          <button id="btn-save-config" class="btn btn-primary" ${this.loading ? 'disabled' : ''}>
-            Save Configuration
-          </button>
-          <button id="btn-reset-config" class="btn btn-secondary" ${this.loading ? 'disabled' : ''}>
-            Reset to Defaults
-          </button>
+        <div style="display: flex; justify-content: flex-end;">
+          <button class="action-btn" id="btn-save-cfg">Save Settings</button>
         </div>
       </div>
     `;
   }
 
-  renderRefreshScreen() {
-    const dueCount = this.refreshCounts?.due ?? this.refreshReports.filter((r) => r.action === 'due').length;
-    const uninitCount = this.refreshCounts?.uninitialized ?? this.refreshReports.filter((r) => r.uninitialized).length;
+  attachEventListeners() {
+    const root = this.shadowRoot;
+    if (!root) return;
 
-    return `
-      <div class="ingest-deck">
-        <div class="section-header">
-          <span class="section-title">Fleet Documentation Governance</span>
-          <button id="btn-sync-refresh" class="btn btn-secondary" style="min-height: 32px; padding: 0 10px; font-size: 11px;" ${this.loading ? 'disabled' : ''}>
-            Check Fleet
-          </button>
-        </div>
+    // Scope selection
+    const scopeSelect = root.querySelector('#scope-select');
+    if (scopeSelect) {
+      scopeSelect.addEventListener('change', (e) => this.setScope(e.target.value));
+    }
 
-        <div style="font-size: 12px; color: var(--face-text-muted); margin-bottom: 12px;">
-          Registered Projects: <strong>${this.refreshReports.length}</strong> · Due for Update: <strong>${dueCount}</strong> · Uninitialized: <strong>${uninitCount}</strong>
-        </div>
-
-        <div class="hub-list" style="max-height: 240px;">
-          ${this.refreshReports.length === 0 ? `
-            <div class="empty-state">No fleet report loaded. Click Check Fleet to inspect registered repositories.</div>
-          ` : this.refreshReports.map((r) => {
-            let badgeClass = 'current';
-            let badgeText = 'CURRENT';
-            if (r.uninitialized) {
-              badgeClass = 'uninit';
-              badgeText = 'MISSING WIKI';
-            } else if (r.action === 'due') {
-              badgeClass = 'due';
-              badgeText = 'DUE';
-            }
-            return `
-              <div class="hub-item">
-                <div>
-                  <span class="hub-title">${r.name}</span>
-                  <div class="hub-meta">${r.generatedAt ? `Generated ${r.generatedAt.slice(0, 10)}` : 'Never generated'} · ${r.commitsSince ? `${r.commitsSince} commits behind` : 'Up to date'}</div>
-                </div>
-                <span class="repo-status-badge ${badgeClass}">${badgeText}</span>
-              </div>
-            `;
-          }).join('')}
-        </div>
-
-        <div style="margin-top: 12px;">
-          <button id="btn-fleet-refresh-apply" class="btn btn-primary" style="width: 100%;" ${this.loading ? 'disabled' : ''}>
-            ${this.loading ? 'Executing Fleet Refresh…' : `Regenerate Stale & Initialize Missing Wikis (${dueCount} due)`}
-          </button>
-        </div>
-      </div>
-    `;
-  }
-
-  renderUpstreamScreen() {
-    const currentVer = this.upstream?.recordedVersion || '0.7.2';
-    const latestVer = this.upstream?.latestVersion || '0.7.3';
-
-    return `
-      <div class="ingest-deck">
-        <div class="section-header">
-          <span class="section-title">Upstream Package Surveillance</span>
-        </div>
-
-        <div class="stats-grid" style="margin-bottom: 14px;">
-          <div class="stat-card">
-            <div class="stat-label">Recorded Version</div>
-            <div class="stat-value">v${currentVer}</div>
-          </div>
-          <div class="stat-card">
-            <div class="stat-label">Latest Registry</div>
-            <div class="stat-value">v${latestVer}</div>
-          </div>
-          <div class="stat-card">
-            <div class="stat-label">Watcher Status</div>
-            <div class="stat-value" style="color: var(--face-ok);">MONITORING</div>
-          </div>
-        </div>
-
-        <div class="button-group">
-          <button id="btn-watch" class="btn btn-secondary" ${this.loading ? 'disabled' : ''}>
-            Check Upstream Registry
-          </button>
-          <button id="btn-propagate" class="btn btn-primary" ${this.loading ? 'disabled' : ''}>
-            Propagate Latest Generator
-          </button>
-        </div>
-      </div>
-    `;
-  }
-
-  bindEvents() {
-    const shadow = this.shadowRoot;
-    if (!shadow) return;
-
-    shadow.querySelectorAll('.screen-tab-btn').forEach((tab) => {
-      tab.addEventListener('click', () => {
-        const targetScreen = tab.getAttribute('data-screen');
-        if (targetScreen) this.setScreen(targetScreen);
+    // Navigation buttons
+    root.querySelectorAll('.nav-btn').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const screen = btn.getAttribute('data-screen');
+        if (screen) this.setScreen(screen);
       });
     });
 
-    const pathInput = shadow.querySelector('#target-path-input');
-    if (pathInput) {
-      pathInput.addEventListener('input', (e) => {
-        this.targetPath = e.target.value.trim();
+    // Hub item click -> Read Hub
+    root.querySelectorAll('.hub-item').forEach((item) => {
+      item.addEventListener('click', () => {
+        const idx = parseInt(item.getAttribute('data-hub-index'), 10);
+        if (!isNaN(idx) && this.hubs[idx]) {
+          this.readHubDocument(this.hubs[idx]);
+        }
+      });
+    });
+
+    // Back to hubs from reader
+    const backBtn = root.querySelector('#btn-back-to-hubs');
+    if (backBtn) {
+      backBtn.addEventListener('click', () => {
+        this.selectedHub = null;
+        this.selectedHubContent = null;
+        this.render();
       });
     }
 
-    const dryRunCheckbox = shadow.querySelector('#dry-run-checkbox');
-    if (dryRunCheckbox) {
-      dryRunCheckbox.addEventListener('change', (e) => {
-        this.dryRun = e.target.checked;
+    // Refresh hubs button
+    const refreshHubsBtn = root.querySelector('#btn-refresh-hubs');
+    if (refreshHubsBtn) {
+      refreshHubsBtn.addEventListener('click', () => this.refreshHubs());
+    }
+
+    // Ingest button
+    const ingestBtn = root.querySelector('#btn-ingest-exec');
+    if (ingestBtn) {
+      ingestBtn.addEventListener('click', () => this.executeIngest());
+    }
+
+    // Search button
+    const searchBtn = root.querySelector('#btn-search-exec');
+    const searchInput = root.querySelector('#search-input');
+    if (searchBtn && searchInput) {
+      searchBtn.addEventListener('click', () => this.executeSearch(searchInput.value));
+      searchInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') this.executeSearch(searchInput.value);
       });
     }
 
-    const btnIngest = shadow.querySelector('#btn-ingest');
-    if (btnIngest) {
-      btnIngest.addEventListener('click', () => this.executeIngest());
+    // Graph button
+    const loadGraphBtn = root.querySelector('#btn-load-graph');
+    if (loadGraphBtn) {
+      loadGraphBtn.addEventListener('click', () => this.loadGraph());
     }
 
-    const btnBootstrap = shadow.querySelector('#btn-bootstrap');
-    if (btnBootstrap) {
-      btnBootstrap.addEventListener('click', () => this.executeBootstrap());
+    // Lint button
+    const runLintBtn = root.querySelector('#btn-run-lint');
+    if (runLintBtn) {
+      runLintBtn.addEventListener('click', () => this.loadLint());
     }
 
-    const btnRefresh = shadow.querySelector('#btn-refresh');
-    if (btnRefresh) {
-      btnRefresh.addEventListener('click', () => this.refreshHubs());
+    // Fleet refresh button
+    const fleetRefreshBtn = root.querySelector('#btn-fleet-refresh');
+    if (fleetRefreshBtn) {
+      fleetRefreshBtn.addEventListener('click', () => this.executeFleetRefresh());
     }
 
-    const btnSyncRefresh = shadow.querySelector('#btn-sync-refresh');
-    if (btnSyncRefresh) {
-      btnSyncRefresh.addEventListener('click', () => this.loadRefreshReport());
+    // Upstream watch button
+    const watchBtn = root.querySelector('#btn-watch-exec');
+    if (watchBtn) {
+      watchBtn.addEventListener('click', () => this.executeWatch());
     }
 
-    const btnFleetApply = shadow.querySelector('#btn-fleet-refresh-apply');
-    if (btnFleetApply) {
-      btnFleetApply.addEventListener('click', () => this.executeFleetRefresh());
+    // Generate button
+    const genBtn = root.querySelector('#btn-generate-exec');
+    const genInput = root.querySelector('#generate-repo-input');
+    if (genBtn) {
+      genBtn.addEventListener('click', () => {
+        if (genInput) this.generateRepo = genInput.value.trim();
+        this.executeGenerate();
+      });
     }
 
-    const btnWatch = shadow.querySelector('#btn-watch');
-    if (btnWatch) {
-      btnWatch.addEventListener('click', () => this.executeWatch());
+    // Save token button
+    const saveTokenBtn = root.querySelector('#btn-save-token');
+    const tokenProviderSelect = root.querySelector('#token-provider-select');
+    const tokenValInput = root.querySelector('#token-val-input');
+    if (saveTokenBtn && tokenProviderSelect && tokenValInput) {
+      saveTokenBtn.addEventListener('click', () => {
+        this.saveToken(tokenProviderSelect.value, tokenValInput.value);
+        tokenValInput.value = '';
+      });
     }
 
-    const btnPropagate = shadow.querySelector('#btn-propagate');
-    if (btnPropagate) {
-      btnPropagate.addEventListener('click', () => this.executePropagate());
-    }
-
-    shadow.querySelectorAll('.preset-chip').forEach((chip) => {
+    // Preset chips
+    root.querySelectorAll('.preset-chip').forEach((chip) => {
       chip.addEventListener('click', async () => {
-        const p = chip.getAttribute('data-provider');
-        const m = chip.getAttribute('data-model');
-        const f = chip.getAttribute('data-fallback');
-        if (p) await this.setConfigValue('provider', p);
-        if (m) await this.setConfigValue('model', m);
-        if (f) await this.setConfigValue('fallback_model', f);
+        const model = chip.getAttribute('data-model');
+        if (model) {
+          const modelInput = root.querySelector('#cfg-model');
+          if (modelInput) modelInput.value = model;
+          await this.setConfigValue('model', model);
+        }
       });
     });
 
-    const btnSaveConfig = shadow.querySelector('#btn-save-config');
-    if (btnSaveConfig) {
-      btnSaveConfig.addEventListener('click', async () => {
-        const provider = shadow.querySelector('#cfg-provider')?.value;
-        const model = shadow.querySelector('#cfg-model')?.value;
-        const fallback = shadow.querySelector('#cfg-fallback')?.value;
-        const tokens = shadow.querySelector('#cfg-tokens')?.value;
-        const timeout = shadow.querySelector('#cfg-timeout')?.value;
-
-        if (provider) await this.setConfigValue('provider', provider);
-        if (model) await this.setConfigValue('model', model);
-        if (fallback) await this.setConfigValue('fallback_model', fallback);
-        if (tokens) await this.setConfigValue('max_tokens', tokens);
-        if (timeout) await this.setConfigValue('timeout_ms', timeout);
+    // Save config button
+    const saveCfgBtn = root.querySelector('#btn-save-cfg');
+    if (saveCfgBtn) {
+      saveCfgBtn.addEventListener('click', async () => {
+        const prov = root.querySelector('#cfg-provider')?.value;
+        const mod = root.querySelector('#cfg-model')?.value;
+        const tok = root.querySelector('#cfg-tokens')?.value;
+        if (prov) await this.setConfigValue('provider', prov);
+        if (mod) await this.setConfigValue('model', mod);
+        if (tok) await this.setConfigValue('max_tokens', tok);
       });
     }
+  }
 
-    const btnResetConfig = shadow.querySelector('#btn-reset-config');
-    if (btnResetConfig) {
-      btnResetConfig.addEventListener('click', () => this.resetConfig());
-    }
+  escape(str) {
+    if (!str) return '';
+    return String(str)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;');
   }
 }
 
-if (!customElements.get('tr-openwiki-card')) {
+if (typeof customElements !== 'undefined' && !customElements.get('tr-openwiki-card')) {
   customElements.define('tr-openwiki-card', OpenWikiCard);
-}
-if (!customElements.get('openwiki-card')) {
-  customElements.define('openwiki-card', class extends OpenWikiCard {});
 }

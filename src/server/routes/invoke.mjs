@@ -15,6 +15,7 @@ import { composedCommandDirectories } from '../../core/composed-command-resoluti
 import { invokeAuthority, authorizeInvoke, operationAllowed } from '../invoke-policy.mjs';
 import { restrictedBrainTargets } from '../invoke-targets.mjs';
 import { INVOKE_LIMITS, InvokeError, executeInvokeChild, requireSuccessfulRun, invokeEnvironment, absoluteTarget } from '../invoke-execution.mjs';
+import { syncChangedFiles } from '../invoke-durability.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../..');
 // Share across router instances in this server; do not race projection refreshes.
@@ -214,6 +215,7 @@ const HANDLERS = {
     const { category, title, content, tags, scope, timeoutMs } = params;
     if (context.authority.mode === 'restricted') {
       const brain = context.selectedBrain;
+      const startedAt = Date.now();
       const run = await context.run({ entry: path.join(root, 'src/server/invoke-write-child.mjs'),
         cwd: root, env: invokeEnvironment(false), timeoutMs, nodeArgs: ['--max-old-space-size=128', '--permission',
           `--allow-fs-read=${path.join(root, 'src')}`, `--allow-fs-read=${path.join(root, 'node_modules')}`,
@@ -231,6 +233,11 @@ const HANDLERS = {
           result || { committed: 'unknown', indexed: false });
       }
       if (!result?.committed || !result?.indexed) throw new InvokeError(502, 'invalid-owner-output', 'Mutation returned invalid output.', { committed: 'unknown', indexed: false });
+      try {
+        syncChangedFiles([path.join(brain, 'memory-vault'), path.join(brain, 'memory-derived')], startedAt);
+      } catch {
+        throw new InvokeError(502, 'durability-unconfirmed', 'Fact was written but could not be flushed to disk; check it before retrying.', result);
+      }
       return result;
     }
     if (!content || typeof content !== 'string') throw new Error('ssss.write needs content.');

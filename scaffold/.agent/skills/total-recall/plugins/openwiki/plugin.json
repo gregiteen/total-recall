@@ -10,6 +10,12 @@
       "intent": "Watch upstream OpenWiki repository and announce/propagate updates",
       "schedule": "0 */4 * * *",
       "command": "watch"
+    },
+    {
+      "intent": "Auto-refresh OpenWiki documentation for repositories with new commits",
+      "schedule": "*/30 * * * *",
+      "command": "auto-refresh",
+      "timeout_ms": 600000
     }
   ],
   "branding": {
@@ -213,6 +219,33 @@
             "flag": "--apply",
             "label": "Regenerate stale pages",
             "type": "boolean"
+          },
+          {
+            "name": "force",
+            "flag": "--force",
+            "label": "Force regeneration",
+            "type": "boolean"
+          },
+          {
+            "name": "json",
+            "flag": "--json",
+            "label": "JSON output",
+            "type": "boolean"
+          }
+        ]
+      },
+      {
+        "name": "auto-refresh",
+        "description": "Daemon automated check and regeneration for stale OpenWiki documentation across registered repositories",
+        "timeout_ms": 600000,
+        "effect": "write",
+        "output": "json",
+        "args": [
+          {
+            "name": "repo",
+            "flag": "--repo",
+            "label": "Target repository",
+            "type": "string"
           },
           {
             "name": "force",

@@ -33,6 +33,8 @@ function printHelp() {
 }
 
 export default async function forget(args) {
+  // Checked first: a destructive command must never act on a request for help.
+  if (args.includes('--help') || args.includes('-h')) { printHelp(); return; }
   const { layer: explicitLayer, remainingArgs } = parseLayerFlag(args);
 
   // Check for --project-all

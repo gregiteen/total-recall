@@ -314,7 +314,8 @@
       "command-executor": "src/executor.mjs",
       "documentation": "src/documentation.mjs",
       "agent-runtime": "src/runtime.mjs",
-      "tracker": "src/tracker.mjs"
+      "tracker": "src/tracker.mjs",
+      "gate-adapters": "src/gate-adapters/index.mjs"
     },
     "setup_command": "setup"
   },

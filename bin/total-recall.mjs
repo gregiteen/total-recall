@@ -85,6 +85,7 @@ async function printHelp() {
 ${pluginsSection}
   Optional:
     update [--apply]    Auto-download total-recall-brain for registered repos
+    release <action>    Publish, propagate and verify a package release (plan|publish|propagate|verify|all)
     research, share, ingest, import, export, relay, setup, deploy,
     start, backup, restore, config, map, generate-pat, lint, sync, …
 
@@ -134,7 +135,7 @@ async function main() {
 
   // Core built-in memory and rules commands that always run from core
   const CORE_BUILTINS = new Set([
-    'remember', 'forget', 'edit', 'recall', 'context', 'rules',
+    'remember', 'forget', 'edit', 'recall', 'context', 'compact', 'rules',
     'compile', 'rebuild', 'dream', 'proposals', 'proposal', 'task',
     'daemon', 'skill', 'plugin', 'plugins',
     'harness', 'agent', 'agents', 'brain', 'status',
@@ -142,7 +143,7 @@ async function main() {
   ]);
 
   // Consulting Total Recall is what the repository-sweep policy looks for. Never fatal.
-  if (['recall', 'context', 'help'].includes(command)) {
+  if (['recall', 'context', 'compact', 'help'].includes(command)) {
     try {
       const { touchConsult, findRoot } = await import('../src/core/preflight-receipt.mjs');
       touchConsult(findRoot());
@@ -165,7 +166,8 @@ async function main() {
               if(result.stdout)process.stdout.write(result.stdout);
               if(result.stderr)process.stderr.write(result.stderr);
             }else if(result.output)process.stdout.write(result.output);
-            process.exit(result.ok ? 0 : (result.exitCode || 1));
+            const { exitAfterFlush } = await import('../src/core/stdio-flush.mjs');
+            await exitAfterFlush(result.ok ? 0 : (result.exitCode || 1));
           }
         }
       }
@@ -221,7 +223,8 @@ async function main() {
         const { default: dispatch } = await import('../src/cli/integration-dispatcher.mjs');
         const result = await dispatch(command, action, options);
         console.log(typeof result === 'object' ? JSON.stringify(result, null, 2) : result);
-        process.exit(0);
+        const { exitAfterFlush } = await import('../src/core/stdio-flush.mjs');
+        await exitAfterFlush(0);
       }
 
     } catch (err) {
@@ -235,7 +238,8 @@ async function main() {
       if ((await loadApiRoutes()).some((r) => r.group === command)) {
         const { default: apiCli } = await import('../src/cli/api.mjs');
         await apiCli(args);
-        process.exit(process.exitCode ?? 0);
+        const { exitAfterFlush } = await import('../src/core/stdio-flush.mjs');
+        await exitAfterFlush(process.exitCode ?? 0);
       }
     } catch (err) {
       console.error(`Error: ${err.message}`);

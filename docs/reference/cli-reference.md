@@ -89,8 +89,26 @@ Autonomously learn and save a new memory node to the vault.
 
 ---
 
+### `compact`
+Fit the applicable rules into a token budget you choose, ranked against the task.
+
+```sh
+total-recall compact "task description" --budget 2000 --action edit,test
+total-recall compact "task description" --expand some-rule-slug
+```
+
+The default budget is 4,000 estimated tokens and counts everything printed.
+Ranking uses vault embeddings through the local or mesh provider and falls back to
+lexical matching, reported as `ranking:`. Rules keep their own words: full text, a
+leading excerpt, or a slug under `Referenced`. Near-duplicates become references
+and absolute-priority rules are named first. The header counts every tier, so nothing
+disappears silently. Output is partial by design; `context` prints the complete
+capsule. Exit 2 means the budget cannot hold the header or the expanded rules.
+
 ### `context`
 Assemble applicable required rules for the current task before action.
+
+Over its budget, `context` compacts automatically and reports `ready:true compacted:true`: every absolute rule keeps at least a verbatim summary and every other rule keeps at least its slug. Configured budgets are capped at 7000 tokens so the capsule prints inline; pass a larger `--budget` to print the full capsule. Exit 2 means the budget cannot hold every rule, and the output names the budget that can.
 
 ```sh
 total-recall context "task description" --action edit,test

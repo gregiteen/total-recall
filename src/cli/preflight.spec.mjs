@@ -133,9 +133,11 @@ describe('total-recall preflight check and the tr-preflight alias', () => {
     const r = run(['preflight', 'check', '--json'], { cwd: repo });
     expect(JSON.parse(r.out)).toMatchObject({ ok: true, task: 'spec' });
   });
-  it('says plainly that adapters are not installed yet', () => {
-    const r = run(['preflight', 'install'], { cwd: repo });
-    expect(r.code).toBe(1);
-    expect(r.err).toContain('cli-agents');
+  it('installs adapter with dry-run or rejects unknown harness', () => {
+    const okRun = run(['preflight', 'install', '--dry-run'], { cwd: repo });
+    expect(okRun.code).toBe(0);
+    const failRun = run(['preflight', 'install', '--harness', 'no-such-harness'], { cwd: repo });
+    expect(failRun.code).toBe(1);
+    expect(failRun.err).toContain('no-such-harness');
   });
 });

@@ -4,8 +4,8 @@
  * The generated `openwiki/` pages are a per-repository projection: they are
  * written into <repo>/openwiki/ and describe that repository's code. They rot
  * silently, because nothing in the repository is obliged to regenerate them —
- * festech-modular, festech.live and ultrachat-ai-powered each carried pages
- * three months and 78-149 commits out of date while still looking authoritative.
+ * repositories have carried pages three months and 78-149 commits out of date
+ * while still looking authoritative.
  *
  * The driver belongs here rather than in every repository: the plugin is one of
  * the bundled defaults served from the shared brain, so one implementation
@@ -82,7 +82,16 @@ export function hasWiki(root) {
  * since the recorded generation, which is the same measure the per-repo driver
  * used. Uncommitted work is not counted, so an open edit does not read as drift.
  */
+export function isGitRepo(root, { git = spawnSync } = {}) {
+  if (fs.existsSync(path.join(root, '.git'))) return true;
+  const res = git('git', ['-C', root, 'rev-parse', '--is-inside-work-tree'], { encoding: 'utf8' });
+  return !res.error && res.status === 0;
+}
+
 export function staleness(root, { git = spawnSync } = {}) {
+  if (!isGitRepo(root, { git })) {
+    return { root, head: '', generatedAt: null, generatedStatus: null, files: null, lastCodeChange: null, commitsSince: 0, stale: false };
+  }
   const marker = path.join(root, 'openwiki', '.last-update.json');
   let head = '';
   const headRun = git('git', ['-C', root, 'rev-parse', 'HEAD'], { encoding: 'utf8' });
@@ -171,11 +180,19 @@ export function resolveKey({ provider = null, keys = null, run = spawnSync } = {
 export function resolveGenerator({ pluginRoot = null, run = spawnSync, env = process.env, home = os.homedir(), targetVersion = null } = {}) {
   const root = pluginRoot !== null ? pluginRoot : PLUGIN_ROOT;
   if (root) {
+    const bundled = path.join(root, 'vendor', 'openwiki.mjs');
+    if (fs.existsSync(bundled)) {
+      return { command: process.execPath, args: [bundled], via: 'bundled plugin generator' };
+    }
     const candidate = path.join(root, 'node_modules', '.bin', 'openwiki');
     if (fs.existsSync(candidate)) return { command: candidate, args: [], via: 'plugin local node_modules/.bin' };
   }
 
   if (pluginRoot === null) {
+    const localBundled = path.join(process.cwd(), 'vendor', 'openwiki.mjs');
+    if (fs.existsSync(localBundled)) {
+      return { command: process.execPath, args: [localBundled], via: 'bundled plugin generator' };
+    }
     const local = path.join(process.cwd(), 'node_modules', '.bin', 'openwiki');
     if (fs.existsSync(local)) return { command: local, args: [], via: 'local node_modules/.bin' };
   }
@@ -235,6 +252,9 @@ export function stillGenerating(root) {
 export function refreshProject(project, {
   key, model = null, provider = null, binary = null, binaryArgs = [], timeoutMs = 30 * 60 * 1000, run = spawnSync, now = Date.now(), targetVersion = null, pluginRoot = PLUGIN_ROOT,
 } = {}) {
+  if (!isGitRepo(project.root, { git: run })) {
+    return { ...project, action: 'skipped', reason: 'not a git repository' };
+  }
   const before = staleness(project.root, { git: run });
   const uninitialized = !hasWiki(project.root);
 
@@ -247,7 +267,7 @@ export function refreshProject(project, {
     ({ command, args, via } = resolved);
   }
 
-  const config = typeof loadOpenWikiConfig === 'function' ? loadOpenWikiConfig() : { model: 'deepseek/deepseek-v4.1-flash', provider: 'openrouter' };
+  const config = typeof loadOpenWikiConfig === 'function' ? loadOpenWikiConfig() : { model: 'deepseek/deepseek-chat', provider: 'openrouter' };
   const selectedModel = model || config.model;
   const selectedProvider = provider || config.provider;
 
@@ -339,6 +359,9 @@ export function refreshProject(project, {
 export async function refreshProjectAsync(project, {
   key, model = null, provider = null, binary = null, binaryArgs = [], timeoutMs = 30 * 60 * 1000, now = Date.now(), targetVersion = null, pluginRoot = PLUGIN_ROOT,
 } = {}) {
+  if (!isGitRepo(project.root, { git: spawnSync })) {
+    return { ...project, action: 'skipped', reason: 'not a git repository' };
+  }
   const before = staleness(project.root, { git: spawnSync });
   const uninitialized = !hasWiki(project.root);
   let command = binary, args = binaryArgs, via = binary ? 'explicit' : null;
@@ -350,7 +373,7 @@ export async function refreshProjectAsync(project, {
     ({ command, args, via } = resolved);
   }
 
-  const config = typeof loadOpenWikiConfig === 'function' ? loadOpenWikiConfig() : { model: 'deepseek/deepseek-v4.1-flash', provider: 'openrouter' };
+  const config = typeof loadOpenWikiConfig === 'function' ? loadOpenWikiConfig() : { model: 'deepseek/deepseek-chat', provider: 'openrouter' };
   const selectedModel = model || config.model;
   const selectedProvider = provider || config.provider;
 
@@ -421,11 +444,23 @@ export async function refreshProjectAsync(project, {
     ? 'partial'
     : (advanced ? (uninitialized ? 'initialized' : 'refreshed') : 'unchanged');
 
+  const extractReason = (rawErr, rawOut) => {
+    if (result.error?.message) return result.error.message;
+    const combined = `${rawErr || ''}\n${rawOut || ''}`.trim();
+    if (!combined) return `exit ${exitCode}`;
+    const lines = combined.split('\n').map((l) => l.trim()).filter(Boolean);
+    const diag = lines.find((l) => l.includes('Error Diagnostics') || l.includes('exited without') || l.includes('Could not restore') || l.includes('Provider returned error') || l.includes('fetch failed'));
+    if (diag) return diag.replace(/^\[ERR\]\s*/, '');
+    const last = lines[lines.length - 1];
+    return last ? last.replace(/^\[ERR\]\s*/, '') : `exit ${exitCode}`;
+  };
+  const failReason = extractReason(result.stderr, result.stdout);
+
   if (exitCode !== 0 && !wrote) {
-    return { ...project, action: 'failed', reason: result.error?.message || `exit ${exitCode}`, exitCode, ...after };
+    return { ...project, action: 'failed', reason: failReason, exitCode, ...after };
   }
   if (!advanced && !wrote) {
-    return { ...project, action: 'failed', reason: `command exited ${exitCode} and no page changed`, exitCode, ...after };
+    return { ...project, action: 'failed', reason: failReason || `command exited ${exitCode} and no page changed`, exitCode, ...after };
   }
   if (outcome === 'partial') {
     return {
@@ -440,13 +475,16 @@ export async function refreshProjectAsync(project, {
     };
   }
   if (exitCode !== 0) {
-    return { ...project, action: 'failed', reason: result.error?.message || `exit ${exitCode}`, exitCode, ...after };
+    return { ...project, action: 'failed', reason: failReason, exitCode, ...after };
   }
   return { ...project, action: uninitialized ? 'initialized' : 'refreshed', from: before.generatedAt, to: after.generatedAt, durationMs: Date.now() - startedAt, via, ...after };
 }
 
 /** Is a refresh due for this project under the configured interval? */
 export function isDue(project, { lockMs = DEFAULT_LOCK_MS, now = Date.now(), git = spawnSync } = {}) {
+  if (!isGitRepo(project.root, { git })) {
+    return { due: false, skipped: true, reason: 'not a git repository' };
+  }
   const state = staleness(project.root, { git });
   if (!hasWiki(project.root)) {
     return { due: true, uninitialized: true, reason: 'uninitialized (missing openwiki/ pages)', ...state };

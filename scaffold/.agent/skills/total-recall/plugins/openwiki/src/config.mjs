@@ -8,8 +8,8 @@ import path from 'node:path';
 
 export const DEFAULT_OPENWIKI_CONFIG = Object.freeze({
   provider: 'openrouter',
-  model: 'deepseek/deepseek-v4.1-flash',
-  fallback_model: 'qwen/qwen-2.5-coder-32b-instruct',
+  model: 'deepseek/deepseek-chat',
+  fallback_model: 'deepseek/deepseek-chat',
   max_tokens: 4096,
   timeout_ms: 300000
 });

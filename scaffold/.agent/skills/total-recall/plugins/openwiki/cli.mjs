@@ -9,6 +9,12 @@ import { runBootstrapCommand } from './src/bootstrap.mjs';
 import { describeRetention, hasWiki, isDue, readProjects, refreshProject, refreshProjectAsync, resolveKey, staleness } from './src/refresh.mjs';
 import { announceNewVersion, checkUpstreamStatus, propagateUpdates, readUpstreamState } from './src/upstream-watcher.mjs';
 import { loadOpenWikiConfig, setOpenWikiConfigValue, resetOpenWikiConfig, resolveConfigPath, ALLOWED_CONFIG_KEYS, ALLOWED_PROVIDERS } from './src/config.mjs';
+import { discoverAllHubs } from './src/mesh-vaults.mjs';
+import { searchWikiHubs } from './src/search.mjs';
+import { buildKnowledgeGraph } from './src/graph.mjs';
+import { getTokenStatus, setTokenValue } from './src/token.mjs';
+import { lintWikiHubs } from './src/lint.mjs';
+import { generateWiki } from './src/generate.mjs';
 
 /**
  * Regenerate the generated pages of every registered project that carries them.
@@ -55,7 +61,11 @@ async function refreshCommand(args) {
       continue;
     }
     if (!state.due) {
-      reports.push({ ...project, action: 'current', generatedAt: state.generatedAt, commitsSince: state.commitsSince });
+      if (state.skipped) {
+        reports.push({ ...project, action: 'skipped', reason: state.reason });
+      } else {
+        reports.push({ ...project, action: 'current', generatedAt: state.generatedAt, commitsSince: state.commitsSince });
+      }
       continue;
     }
     reports.push({
@@ -176,39 +186,241 @@ async function probeCommand(args) {
 
 async function hubsCommand(args) {
   const json = args.includes("--json");
-  const targetDir = path.resolve(process.cwd(), "openwiki");
-  const hubs = [];
+  const allVaults = args.includes("--all-vaults") || args.includes("--all");
+  const nodeArg = args.find((a) => a.startsWith('--node='));
+  const nodeIndex = args.indexOf('--node');
+  const node = nodeArg
+    ? nodeArg.slice('--node='.length)
+    : (nodeIndex >= 0 && args[nodeIndex + 1] && !args[nodeIndex + 1].startsWith('--') ? args[nodeIndex + 1] : null);
 
-  if (fs.existsSync(targetDir)) {
-    const entries = fs.readdirSync(targetDir, { withFileTypes: true });
-    for (const ent of entries) {
-      if (ent.isFile() && ent.name.endsWith(".md")) {
-        const fullPath = path.join(targetDir, ent.name);
-        const content = fs.readFileSync(fullPath, "utf8");
-        const titleMatch = content.match(/^#\s+(.+)$/m);
-        const title = titleMatch ? titleMatch[1].trim() : ent.name.replace(/\.md$/, "");
-        const lines = content.split("\n").length;
-        hubs.push({
-          title,
-          path: path.relative(process.cwd(), fullPath),
-          lines,
-          size_bytes: content.length
-        });
+  try {
+    const res = await discoverAllHubs({ allVaults, node });
+    if (json) {
+      console.log(JSON.stringify(res, null, 2));
+    } else {
+      if (!res.hubs || res.hubs.length === 0) {
+        console.log(`No markdown hubs found (${res.scope || 'workspace'})`);
+      } else {
+        const prefix = res.isRemote ? `[Node ${res.node}] ` : '';
+        console.log(`${prefix}Discovered ${res.hubs.length} OpenWiki Hub(s) (${res.scope || 'workspace'}):`);
+        for (const h of res.hubs) {
+          const repoTag = h.repoName ? `[${h.repoName}] ` : '';
+          console.log(`  - ${repoTag}${h.title}: ${h.path} (${h.lines} lines, ${h.size_bytes} bytes)`);
+        }
       }
     }
+  } catch (err) {
+    if (json) console.log(JSON.stringify({ ok: false, error: err.message }));
+    else console.error(`OpenWiki hubs error: ${err.message}`);
+    process.exitCode = 1;
+  }
+}
+
+async function searchCommand(args) {
+  const json = args.includes("--json");
+  const allVaults = args.includes("--all-vaults") || args.includes("--all");
+  const nodeArg = args.find((a) => a.startsWith('--node='));
+  const nodeIndex = args.indexOf('--node');
+  const node = nodeArg
+    ? nodeArg.slice('--node='.length)
+    : (nodeIndex >= 0 && args[nodeIndex + 1] && !args[nodeIndex + 1].startsWith('--') ? args[nodeIndex + 1] : null);
+
+  const limitArg = args.find((a) => a.startsWith('--limit='));
+  const limitIndex = args.indexOf('--limit');
+  const limit = limitArg
+    ? parseInt(limitArg.slice('--limit='.length), 10)
+    : (limitIndex >= 0 && args[limitIndex + 1] ? parseInt(args[limitIndex + 1], 10) : 20);
+
+  const queryTerms = args.filter((a, idx) => {
+    if (a.startsWith('--')) return false;
+    if (nodeIndex >= 0 && idx === nodeIndex + 1) return false;
+    if (limitIndex >= 0 && idx === limitIndex + 1) return false;
+    return true;
+  });
+  const query = queryTerms.join(' ').trim();
+
+  if (!query) {
+    if (json) console.log(JSON.stringify({ ok: false, error: 'Query argument required: openwiki search <query>' }));
+    else console.error('OpenWiki search error: query required. Usage: total-recall openwiki search <query> [--all-vaults] [--node <node>]');
+    process.exitCode = 1;
+    return;
   }
 
-  if (json) {
-    console.log(JSON.stringify({ hubs, count: hubs.length, directory: targetDir }));
-  } else {
-    if (hubs.length === 0) {
-      console.log(`No markdown hubs found in ${targetDir}`);
+  try {
+    const res = await searchWikiHubs(query, { allVaults, node, limit });
+    if (json) {
+      console.log(JSON.stringify(res, null, 2));
     } else {
-      console.log(`Discovered ${hubs.length} OpenWiki Hub(s) in ${targetDir}:`);
-      for (const h of hubs) {
-        console.log(`  - ${h.title}: ${h.path} (${h.lines} lines, ${h.size_bytes} bytes)`);
+      console.log(`\nOpenWiki Evidence Search: "${query}" (${res.count} match${res.count === 1 ? '' : 'es'} across ${res.totalHubsScanned} hubs, ${res.scope})`);
+      if (res.results.length === 0) {
+        console.log('  No matching evidence passages found.\n');
+      } else {
+        for (const r of res.results) {
+          console.log(`\n  • [${r.repoName}] ${r.title} > ${r.section} (line ${r.line}):`);
+          console.log(`    "${r.snippet}"`);
+        }
+        console.log('');
       }
     }
+  } catch (err) {
+    if (json) console.log(JSON.stringify({ ok: false, error: err.message }));
+    else console.error(`OpenWiki search error: ${err.message}`);
+    process.exitCode = 1;
+  }
+}
+
+async function graphCommand(args) {
+  const json = args.includes("--json");
+  const allVaults = args.includes("--all-vaults") || args.includes("--all");
+  const nodeArg = args.find((a) => a.startsWith('--node='));
+  const nodeIndex = args.indexOf('--node');
+  const node = nodeArg
+    ? nodeArg.slice('--node='.length)
+    : (nodeIndex >= 0 && args[nodeIndex + 1] && !args[nodeIndex + 1].startsWith('--') ? args[nodeIndex + 1] : null);
+
+  const formatArg = args.find((a) => a.startsWith('--format='));
+  const formatIndex = args.indexOf('--format');
+  const format = formatArg
+    ? formatArg.slice('--format='.length)
+    : (formatIndex >= 0 && args[formatIndex + 1] ? args[formatIndex + 1] : (args.includes('--mermaid') ? 'mermaid' : (args.includes('--dot') ? 'dot' : 'json')));
+
+  try {
+    const res = await buildKnowledgeGraph({ allVaults, node, format });
+    if (json || format === 'json') {
+      console.log(JSON.stringify(res, null, 2));
+    } else if (format === 'mermaid') {
+      console.log(res.mermaid);
+    } else if (format === 'dot') {
+      console.log(res.dot);
+    }
+  } catch (err) {
+    if (json) console.log(JSON.stringify({ ok: false, error: err.message }));
+    else console.error(`OpenWiki graph error: ${err.message}`);
+    process.exitCode = 1;
+  }
+}
+
+async function tokenCommand(args) {
+  const json = args.includes("--json");
+  const verb = args.find((a) => !a.startsWith('--')) || 'status';
+
+  try {
+    if (verb === 'status') {
+      const res = getTokenStatus();
+      if (json) {
+        console.log(JSON.stringify(res, null, 2));
+      } else {
+        console.log('\nOpenWiki Token Status (Total Recall Auth Store):');
+        for (const [provider, t] of Object.entries(res.tokens)) {
+          const icon = t.configured ? '✔' : '✖';
+          console.log(`  ${icon} ${provider.padEnd(12)} : ${t.key} (${t.status})`);
+        }
+        console.log('\nTo set a token: total-recall openwiki token set <openrouter|google> <key>');
+        console.log('Or via stdin:  echo "$KEY" | total-recall openwiki token set <provider> --stdin\n');
+      }
+      return;
+    }
+
+    if (verb === 'set') {
+      const clean = args.filter((a) => !a.startsWith('--'));
+      const provider = clean[1];
+      let value = clean[2];
+      if (args.includes('--stdin')) {
+        value = fs.readFileSync(0, 'utf8').trim();
+      }
+      if (!provider || !value) {
+        throw new Error('Provider and secret value required: openwiki token set <provider> <value> (or --stdin)');
+      }
+      const res = setTokenValue(provider, value);
+      if (json) console.log(JSON.stringify(res, null, 2));
+      else console.log(`✔ ${res.message}`);
+      return;
+    }
+
+    throw new Error(`Unknown token action '${verb}'. Supported: status, set`);
+  } catch (err) {
+    if (json) console.log(JSON.stringify({ ok: false, error: err.message }));
+    else console.error(`OpenWiki token error: ${err.message}`);
+    process.exitCode = 1;
+  }
+}
+
+async function lintCommand(args) {
+  const json = args.includes("--json");
+  const allVaults = args.includes("--all-vaults") || args.includes("--all");
+  const nodeArg = args.find((a) => a.startsWith('--node='));
+  const nodeIndex = args.indexOf('--node');
+  const node = nodeArg
+    ? nodeArg.slice('--node='.length)
+    : (nodeIndex >= 0 && args[nodeIndex + 1] && !args[nodeIndex + 1].startsWith('--') ? args[nodeIndex + 1] : null);
+
+  try {
+    const res = await lintWikiHubs({ allVaults, node });
+    if (json) {
+      console.log(JSON.stringify(res, null, 2));
+    } else {
+      console.log(`\nOpenWiki Documentation Health & Hygiene:`);
+      console.log(`  Health Score        : ${res.healthScore}%`);
+      console.log(`  Total Hubs Scanned  : ${res.totalHubs}`);
+      console.log(`  Total Links Tested  : ${res.totalLinks}`);
+      console.log(`  Broken Links        : ${res.brokenLinksCount}`);
+      console.log(`  Orphaned Hubs       : ${res.orphanCount}`);
+
+      if (res.issues.length > 0) {
+        console.log('\nIssues Found:');
+        for (const iss of res.issues) {
+          console.log(`  ✖ [${iss.type}] in ${path.basename(iss.file)}: ${iss.message}`);
+        }
+      } else {
+        console.log('\n✔ All wiki links and headers verified clean!');
+      }
+      console.log('');
+    }
+    if (!res.ok) process.exitCode = 1;
+  } catch (err) {
+    if (json) console.log(JSON.stringify({ ok: false, error: err.message }));
+    else console.error(`OpenWiki lint error: ${err.message}`);
+    process.exitCode = 1;
+  }
+}
+
+async function generateCommand(args) {
+  const json = args.includes("--json");
+  const force = args.includes("--force");
+  const dryRun = args.includes("--dry-run");
+  const repoIndex = args.indexOf('--repo');
+  const repoArg = args.find((a) => a.startsWith('--repo='));
+  const repo = repoArg
+    ? repoArg.slice('--repo='.length)
+    : (repoIndex >= 0 && args[repoIndex + 1] && !args[repoIndex + 1].startsWith('--') ? args[repoIndex + 1] : null);
+
+  const nodeArg = args.find((a) => a.startsWith('--node='));
+  const nodeIndex = args.indexOf('--node');
+  const node = nodeArg
+    ? nodeArg.slice('--node='.length)
+    : (nodeIndex >= 0 && args[nodeIndex + 1] && !args[nodeIndex + 1].startsWith('--') ? args[nodeIndex + 1] : null);
+
+  try {
+    const res = await generateWiki({
+      repo,
+      force,
+      dryRun,
+      node,
+      onProgress: (msg) => {
+        if (!json) console.log(`  ▶ ${msg}`);
+      },
+    });
+
+    if (json) {
+      console.log(JSON.stringify(res, null, 2));
+    } else {
+      console.log(`\n✔ Generated documentation for ${res.repoName} (${Math.round((res.durationMs || 0)/1000)}s) via ${res.generatorVia}`);
+      console.log(`  Output: ${res.outputDir}\n`);
+    }
+  } catch (err) {
+    if (json) console.log(JSON.stringify({ ok: false, error: err.message }));
+    else console.error(`OpenWiki generate error: ${err.message}`);
+    process.exitCode = 1;
   }
 }
 
@@ -392,15 +604,28 @@ async function configCommand(args) {
   }
 }
 
+async function autoRefreshCommand(args = []) {
+  const hasApply = args.includes('--apply');
+  const forwardArgs = hasApply ? args : ['--apply', ...args];
+  return refreshCommand(forwardArgs);
+}
+
 const IMPLEMENTED = {};
 IMPLEMENTED.probe = probeCommand;
 IMPLEMENTED.hubs = hubsCommand;
 IMPLEMENTED.ingest = ingestCommand;
 IMPLEMENTED.bootstrap = runBootstrapCommand;
 IMPLEMENTED.refresh = refreshCommand;
+IMPLEMENTED['auto-refresh'] = autoRefreshCommand;
+IMPLEMENTED.autorefresh = autoRefreshCommand;
 IMPLEMENTED.watch = watchCommand;
 IMPLEMENTED.propagate = propagateCommand;
 IMPLEMENTED.config = configCommand;
+IMPLEMENTED.search = searchCommand;
+IMPLEMENTED.graph = graphCommand;
+IMPLEMENTED.token = tokenCommand;
+IMPLEMENTED.lint = lintCommand;
+IMPLEMENTED.generate = generateCommand;
 
 export async function run(argv = process.argv) {
   let rawArgs = Array.isArray(argv) && argv.length > 0 ? [...argv] : process.argv.slice(2);
@@ -446,13 +671,26 @@ export async function run(argv = process.argv) {
   Subcommands:
     status                    Show OpenWiki plugin and upstream status
     probe [--json]            Check subsystem health
-    hubs [--json]             List indexed documentation hubs
+    hubs [--all-vaults] [--node <node>] [--json]
+                              List indexed documentation hubs across workspace, all vaults, or mesh
+    search <query> [--all-vaults] [--node <node>] [--limit <n>] [--json]
+                              Evidence passage search across knowledge hubs and vaults
+    graph [--all-vaults] [--node <node>] [--format json|mermaid|dot] [--json]
+                              Extract knowledge graph topology, nodes, and inter-hub links
+    generate [--repo <name>] [--path <dir>] [--output <dir>] [--force] [--dry-run] [--node <node>] [--json]
+                              Targeted on-demand documentation generation
+    token [status|set <provider> <value>] [--stdin] [--json]
+                              Check or securely configure Total Recall secrets store keys
+    lint [--all-vaults] [--node <node>] [--json]
+                              Validate link integrity, dead targets, and orphaned hubs
     ingest <path> [options]   Ingest Markdown files into knowledge graph
     bootstrap --brain <path> [--project-root <path>] [--dry-run] [--json]
                               Create missing plugin-owned documentation pages
     refresh [--repo <name>] [--apply] [--force] [--json]
                               Report which registered projects' generated pages are stale;
                               --apply regenerates stale pages (writes openwiki/ only)
+    auto-refresh [--repo <name>] [--force] [--json]
+                              Automated daemon trigger to regenerate stale pages across repositories
     config [show|get <key>|set <key> <value>|reset] [--json]
                               Configure generator provider, model, tokens, and timeout
     watch [--check-only] [--announce] [--propagate] [--json]

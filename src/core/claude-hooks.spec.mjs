@@ -17,10 +17,19 @@ const gate = (input, h = home) => execFileSync('node', [path.join(h, '.claude', 
 describe('installClaudeCodeHooks', () => {
   it('installs the skill loader and the gate into a fresh home', () => {
     const r = installClaudeCodeHooks({ home });
-    expect(r.added).toEqual(['gate script', 'SessionStart skill loader', 'PreToolUse gate', 'PostToolUse recorder']);
+    expect(r.added).toEqual([
+      'gate script',
+      'SessionStart skill loader',
+      'PreToolUse gate',
+      'PostToolUse recorder',
+      'managed PreToolUse preflight gate',
+      'managed UserPromptSubmit preflight reminder',
+    ]);
     const s = settingsOf();
     expect(s.hooks.SessionStart).toHaveLength(1);
     expect(s.hooks.PreToolUse[0].hooks[0].command).toContain('total-recall-gate.mjs');
+    expect(s.hooks.PreToolUse[1].hooks[0].command).toContain('total-recall preflight gate --harness claude');
+    expect(s.hooks.UserPromptSubmit[0].hooks[0].command).toContain('total-recall preflight remind');
     expect(fs.statSync(path.join(home, '.claude', 'hooks', 'total-recall-gate.mjs')).mode & 0o100).toBeTruthy();
   });
 
@@ -32,7 +41,31 @@ describe('installClaudeCodeHooks', () => {
     expect(again.added).toEqual([]);
     const s = settingsOf();
     expect(s.model).toBe('x');
-    expect(s.hooks.PreToolUse.map((e) => e.hooks[0].command)).toEqual(['mine', 'node "$HOME/.claude/hooks/total-recall-gate.mjs"']);
+    expect(s.hooks.PreToolUse.map((e) => e.hooks[0].command)).toEqual([
+      'mine',
+      'node "$HOME/.claude/hooks/total-recall-gate.mjs"',
+      'total-recall preflight gate --harness claude',
+    ]);
+  });
+
+  it('removes 2026-11-02 stopgap entries and file (ENFORCE-R14)', () => {
+    const claudeDir = path.join(home, '.claude');
+    const hooksDir = path.join(claudeDir, 'hooks');
+    fs.mkdirSync(hooksDir, { recursive: true });
+    const stopgap = path.join(hooksDir, 'total-recall-preflight.mjs');
+    fs.writeFileSync(stopgap, '// stopgap');
+    fs.writeFileSync(path.join(claudeDir, 'settings.json'), JSON.stringify({
+      hooks: {
+        PreToolUse: [{
+          matcher: '*',
+          hooks: [{ type: 'command', command: 'node "$HOME/.claude/hooks/total-recall-preflight.mjs"' }]
+        }]
+      }
+    }));
+    const r = installClaudeCodeHooks({ home });
+    expect(r.removed).toContain('stopgap hook script');
+    expect(r.removed).toContain('stopgap PreToolUse hook');
+    expect(fs.existsSync(stopgap)).toBe(false);
   });
 
   it('refuses to overwrite a settings file that is not JSON', () => {
