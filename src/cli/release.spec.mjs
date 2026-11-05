@@ -7,6 +7,7 @@ import {
   readSourcePackage,
   publishedVersion,
   awaitPublished,
+  alreadyPublishedRefusal,
   consumerState,
   verifyConsumers,
 } from './release.mjs';
@@ -92,6 +93,14 @@ describe('publishedVersion', () => {
     const r = publishedVersion('x', { exec: fake });
     expect(r.ok).toBe(false);
     expect(r.error).toContain('E404');
+  });
+});
+
+describe('alreadyPublishedRefusal', () => {
+  it('recognises npm refusing an existing version, and nothing else', () => {
+    expect(alreadyPublishedRefusal('npm error You cannot publish over the previously published versions: 3.42.0.')).toBe(true);
+    expect(alreadyPublishedRefusal('npm error code E403 forbidden')).toBe(false);
+    expect(alreadyPublishedRefusal()).toBe(false);
   });
 });
 

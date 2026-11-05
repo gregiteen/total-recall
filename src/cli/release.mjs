@@ -121,8 +121,11 @@ export function publishedVersion(pkg, { exec = spawnSync } = {}) {
   return { ok: true, version: (res.stdout || '').trim(), error: null };
 }
 
-/** Wait for a just-published version to become readable from the registry. */
-export async function awaitPublished(pkg, version, { attempts = 8, delayMs = 20000, exec = spawnSync, sleep } = {}) {
+/** npm refuses a version that already exists, so this refusal is evidence of a publish, still to confirm on the registry. */
+export const alreadyPublishedRefusal = (output = '') => /cannot publish over the previously published version/i.test(output);
+
+/** Wait for a just-published version to become readable. The registry can lag by minutes: 3.42.0 took about six. */
+export async function awaitPublished(pkg, version, { attempts = 30, delayMs = 20000, exec = spawnSync, sleep } = {}) {
   const pause = sleep || ((ms) => new Promise((r) => setTimeout(r, ms)));
   let last = null;
   for (let i = 0; i < attempts; i++) {
@@ -355,7 +358,7 @@ export async function run(argv = process.argv, deps = {}) {
         if (!gate.ok) return fail(`${pkg}: prepublishOnly gate failed.\n${gate.output}`);
         const pub = doPublish(source.dir, { otp: opts.otp, timeoutMs: opts.timeoutMs });
         entry.publish_output = pub.output;
-        if (!pub.ok) return fail(`${pkg}: npm publish failed.\n${pub.output}`);
+        if (!pub.ok && !alreadyPublishedRefusal(pub.output)) return fail(`${pkg}: npm publish failed.\n${pub.output}`);
         const confirmed = await (deps.awaitPublished || awaitPublished)(pkg, version, deps);
         entry.registry_after = confirmed;
         if (!confirmed.ok) return fail(`${pkg}@${version} published but the registry still reports ${confirmed.version}. Treat as NOT released.`);
