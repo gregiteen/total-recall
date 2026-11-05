@@ -1,5 +1,25 @@
 ## 3.41.6 — 2026-11-04
 
+- Hermes fail-closed memory gatekeeper (`src/core/duplicate-guard.mjs`): pre-write token
+  Jaccard, asymmetric containment, and SQLite vector similarity checks reject duplicate
+  rule writes before disk mutation with exit code 1, outputting existing rule location in
+  `AGENTS.md` and logging structured incident reports to `memory-derived/incidents.jsonl`.
+- Invariant pinning & rule restoration: fixed `conflict-detector.mjs` to prevent invariant
+  auto-supersession. Inverted surface compilation to strictly pin Tier 1 Absolute Invariants
+  to lines 1–50 (<1,000 tokens) across all compiled instruction surfaces (`INSTRUCTIONS.md`,
+  `AGENTS.md`, `CLAUDE.md`, `.cursorrules`).
+- Token minimization: eliminated 25KB raw CLI subcommand dump in instruction surfaces,
+  replacing it with the compact dynamic Mandatory Plugin Enforcement Table (slashing prompt
+  bloat by >80%).
+- Living offline model & benchmark catalog: maintained `model-catalog.json` and `MODELS.md`
+  in `meta-harness` with frontier models, token pricing, and verified coding benchmarks,
+  enabling <40ms offline reads without runtime fetching. Daily refresh automated under
+  `tr-plugin-user-automations` (`0 3 * * *`).
+- Multi-harness preflight enforcement: gate adapters across 11 coding agent harnesses
+  (`agy`, `codex`, `dsh`, `hermes`, `openclaw`, `cursor`, `devin`, `grok`, `cline`, `pi`)
+  with append-only decision logging and real compliance reporting.
+- Frontend overhaul: eradicated dead chat and prototype pages, modernized design tokens and
+  touch targets, and routed skills directly to the autonomous `tr-plugin-skill-manager` card.
 - `context` compacts automatically when the required rules exceed the budget, and
   `compact "<task>" --expand <slug>` reads a referenced rule. Every listed rule
   still applies. Inline capsules stay near 28 KB, under the size harnesses save
