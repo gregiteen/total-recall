@@ -124,14 +124,32 @@ export function publishedVersion(pkg, { exec = spawnSync } = {}) {
 /** npm refuses a version that already exists, so this refusal is evidence of a publish, still to confirm on the registry. */
 export const alreadyPublishedRefusal = (output = '') => /cannot publish over the previously published version/i.test(output);
 
-/** Wait for a just-published version to become readable. The registry can lag by minutes: 3.42.0 took about six. */
-export async function awaitPublished(pkg, version, { attempts = 30, delayMs = 20000, exec = spawnSync, sleep } = {}) {
+/** True once the registry serves this version's tarball. The listing appears minutes before the file does. */
+export async function tarballServed(pkg, version, { exec = spawnSync, fetchImpl = globalThis.fetch } = {}) {
+  const res = exec('npm', ['view', `${pkg}@${version}`, 'dist.tarball'], { encoding: 'utf8', timeout: 60000 });
+  const url = (res.stdout || '').trim();
+  if (res.status !== 0 || !url) return false;
+  try {
+    return (await fetchImpl(url, { method: 'HEAD' })).ok;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Wait until a just-published version can be installed: listed as latest, and its tarball served.
+ * 3.42.0 took about six minutes and 3.42.1 about eight, its listing four minutes ahead of its tarball.
+ */
+export async function awaitPublished(pkg, version, { attempts = 45, delayMs = 20000, exec = spawnSync, sleep, tarball = tarballServed } = {}) {
   const pause = sleep || ((ms) => new Promise((r) => setTimeout(r, ms)));
   let last = null;
   for (let i = 0; i < attempts; i++) {
     const read = publishedVersion(pkg, { exec });
     last = read;
-    if (read.ok && read.version === version) return { ok: true, version: read.version, attempts: i + 1 };
+    if (read.ok && read.version === version) {
+      if (await tarball(pkg, version, { exec })) return { ok: true, version: read.version, attempts: i + 1 };
+      last = { ...read, error: `registry lists ${version} but does not serve its tarball` };
+    }
     if (i < attempts - 1) await pause(delayMs);
   }
   return { ok: false, version: last?.version ?? null, error: last?.error ?? `registry still reports ${last?.version}`, attempts };

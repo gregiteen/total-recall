@@ -7,6 +7,7 @@ import {
   readSourcePackage,
   publishedVersion,
   awaitPublished,
+  tarballServed,
   alreadyPublishedRefusal,
   consumerState,
   verifyConsumers,
@@ -107,7 +108,7 @@ describe('alreadyPublishedRefusal', () => {
 describe('awaitPublished', () => {
   it('returns immediately when the registry already matches', async () => {
     const fake = () => ({ status: 0, stdout: '1.0.0\n', stderr: '' });
-    const r = await awaitPublished('x', '1.0.0', { exec: fake });
+    const r = await awaitPublished('x', '1.0.0', { exec: fake, tarball: async () => true });
     expect(r.ok).toBe(true);
     expect(r.attempts).toBe(1);
   });
@@ -115,7 +116,7 @@ describe('awaitPublished', () => {
   it('retries until the new version appears, then succeeds', async () => {
     let n = 0;
     const fake = () => ({ status: 0, stdout: `${++n >= 3 ? '2.0.0' : '1.0.0'}\n`, stderr: '' });
-    const r = await awaitPublished('x', '2.0.0', { exec: fake, attempts: 5, delayMs: 0, sleep: async () => {} });
+    const r = await awaitPublished('x', '2.0.0', { exec: fake, attempts: 5, delayMs: 0, sleep: async () => {}, tarball: async () => true });
     expect(r.ok).toBe(true);
     expect(r.attempts).toBe(3);
   });
@@ -125,6 +126,38 @@ describe('awaitPublished', () => {
     const r = await awaitPublished('x', '9.9.9', { exec: fake, attempts: 3, delayMs: 0, sleep: async () => {} });
     expect(r.ok).toBe(false);
     expect(r.version).toBe('1.0.0');
+  });
+
+  it('keeps waiting while the version is listed but its tarball is not served', async () => {
+    const fake = () => ({ status: 0, stdout: '2.0.0\n', stderr: '' });
+    let n = 0;
+    const r = await awaitPublished('x', '2.0.0', { exec: fake, attempts: 5, delayMs: 0, sleep: async () => {}, tarball: async () => ++n >= 3 });
+    expect(r.ok).toBe(true);
+    expect(r.attempts).toBe(3);
+  });
+
+  it('fails loudly when the tarball never appears', async () => {
+    const fake = () => ({ status: 0, stdout: '2.0.0\n', stderr: '' });
+    const r = await awaitPublished('x', '2.0.0', { exec: fake, attempts: 2, delayMs: 0, sleep: async () => {}, tarball: async () => false });
+    expect(r.ok).toBe(false);
+    expect(r.error).toMatch(/tarball/);
+  });
+});
+
+describe('tarballServed', () => {
+  const listed = () => ({ status: 0, stdout: 'https://example.test/x-1.0.0.tgz\n', stderr: '' });
+
+  it('asks the registry for the URL and checks the file itself', async () => {
+    const seen = [];
+    const ok = await tarballServed('x', '1.0.0', { exec: listed, fetchImpl: async (url, init) => { seen.push([url, init.method]); return { ok: true }; } });
+    expect(ok).toBe(true);
+    expect(seen).toEqual([['https://example.test/x-1.0.0.tgz', 'HEAD']]);
+  });
+
+  it('is false on a 404, a network failure or an unlisted version', async () => {
+    expect(await tarballServed('x', '1.0.0', { exec: listed, fetchImpl: async () => ({ ok: false }) })).toBe(false);
+    expect(await tarballServed('x', '1.0.0', { exec: listed, fetchImpl: async () => { throw new Error('offline'); } })).toBe(false);
+    expect(await tarballServed('x', '1.0.0', { exec: () => ({ status: 1, stdout: '' }), fetchImpl: async () => ({ ok: true }) })).toBe(false);
   });
 });
 
