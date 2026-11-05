@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import crypto from 'node:crypto';
-import { SKILLS, acknowledge, checkReceipt, consultPath, findRoot, lastConsultMs, readReceipt, receiptPath, skillHashes, touchConsult } from './preflight-receipt.mjs';
+import { SKILLS, acknowledge, checkReceipt, consultPath, findRoot, lastConsultMs, readReceipt, receiptPath, skillHashes, touchConsult, recordDecision, readDecisions, decisionsLogPath } from './preflight-receipt.mjs';
 
 let root;
 let home;
@@ -113,5 +113,19 @@ describe('consult stamp', () => {
     touchConsult(root, { now: 1234567, home });
     expect(lastConsultMs(root, { home })).toBe(1234567);
     expect(consultPath(root, home)).toContain('consult-');
+  });
+});
+
+describe('gate decisions log (ENFORCE-R5)', () => {
+  it('appends and reads back real decisions per session without fabricated rates', () => {
+    expect(readDecisions({ home })).toEqual([]);
+    const d1 = recordDecision({ harness: 'claude', decision: 'allow', rule: 'shell:satisfying-command' }, { home, now: 1000000 });
+    const d2 = recordDecision({ harness: 'claude', decision: 'deny', rule: 'receipt', reason: 'receipt missing' }, { home, now: 1000005 });
+
+    const read = readDecisions({ home });
+    expect(read).toHaveLength(2);
+    expect(read[0]).toMatchObject({ at: new Date(1000000).toISOString(), harness: 'claude', decision: 'allow' });
+    expect(read[1]).toMatchObject({ at: new Date(1000005).toISOString(), harness: 'claude', decision: 'deny', rule: 'receipt' });
+    expect(decisionsLogPath(home)).toContain('decisions.jsonl');
   });
 });

@@ -156,7 +156,7 @@ async function main() {
       const { discoverPlugins } = await import('../src/core/plugin-loader.mjs');
       const plugins = discoverPlugins(process.cwd());
       for (const p of plugins) {
-        if (p.valid && p.manifest.cli?.command === command) {
+        if (p.valid && (p.manifest.cli?.command === command || p.manifest.cli?.alias === command)) {
           const handlerRel = p.manifest.cli.handler;
           if (handlerRel) {
             const { runPluginCommand } = await import('../src/core/plugin-runner.mjs');

@@ -15,17 +15,49 @@ const POLICY_SLUG = 'context-policy';
 const ALL_ACTIONS = [...CONTEXT_ACTIONS];
 const DEFAULT_BUDGET = 4000;
 
+const explicitBudget = (flags) => {
+  const explicit = Number(flags.budget);
+  return Number.isFinite(explicit) && explicit > 0 ? explicit : undefined;
+};
+
 /** Budget for capsule checks: --budget, else the context_budget setting, else 4000. */
 function resolveBudget(flags) {
-  const explicit = Number(flags.budget);
-  if (Number.isFinite(explicit) && explicit > 0) return explicit;
+  return explicitBudget(flags) ?? configuredBudget() ?? DEFAULT_BUDGET;
+}
+
+function configuredBudget() {
   for (const layer of ['project', 'global']) {
     try {
       const value = readConfigValue('context_budget', layer);
       if (Number.isFinite(value) && value > 0) return value;
     } catch { /* fall through to the next layer */ }
   }
-  return DEFAULT_BUDGET;
+  return undefined;
+}
+
+/** The budget `context` applies when none is given. */
+async function effectiveBudget() {
+  const { CAPSULE_LIMIT } = await import('./context.mjs');
+  return Math.min(configuredBudget() ?? CAPSULE_LIMIT, CAPSULE_LIMIT);
+}
+
+/** Whether `context` can really serve each capsule: it compacts automatically, so raw size alone is not a failure (CAPSULE-R15). */
+async function checkCompactable(capsules, budget, problems) {
+  const { loadContextNodes, compactedHeader } = await import('./context.mjs');
+  const { compactNodes } = await import('./compact.mjs');
+  const { nodes, skillsDir, derivedDirs } = loadContextNodes();
+  const header = compactedHeader('0'.repeat(64), budget);
+  for (const capsule of capsules) {
+    capsule.compacted = capsule.tokens > budget;
+    try {
+      await compactNodes({ task: '', actions: capsule.actions.split(','), budget, complete: true, rank: false, nodes, skillsDir, derivedDirs, header });
+      capsule.withinBudget = true;
+    } catch (error) {
+      if (!error.requiredBudget) throw error;
+      capsule.withinBudget = false;
+      problems.push(`capsule for ${capsule.actions} cannot fit ${budget} tokens even compacted; it needs ${error.requiredBudget}`);
+    }
+  }
 }
 
 function help() {
@@ -37,7 +69,7 @@ function help() {
     audit   [--budget N] [--top N] [--json]   Capsule size per action, largest rules, curation health
     draft   [--all] [--actions a,b] [--out F]  Write a policy scaffold (original text as directives) to shorten
     apply   <file> [--dry-run] [--allow-exclude]  Validate a policy file and merge it into this repo's policy node
-    verify  [--budget N] [--json]              Exit 1 on stale/orphan curation or an action capsule over budget
+    verify  [--budget N] [--json]              Exit 1 on stale/orphan curation or a capsule context cannot serve even compacted; --budget checks raw size
     prune   [--apply] [--archive] [--json]     Drop stale policy entries; list (or archive) expired/superseded/duplicate rules
 
   Workflow: audit -> draft -> shorten each directive by hand (keep every operative
@@ -107,9 +139,10 @@ function parseFlags(args, valued = []) {
   return { flags, rest };
 }
 
-function audit(args) {
+async function audit(args) {
   const { flags } = parseFlags(args, ['budget', 'top']);
-  const budget = resolveBudget(flags);
+  const explicit = explicitBudget(flags);
+  const budget = explicit ?? await effectiveBudget();
   const state = loadState();
   const curated = curatedRules(state.nodes);
   const rows = curated.filter(n => RULE_CATEGORIES.has(n.category) && n.status === 'active').map(n => {
@@ -119,7 +152,12 @@ function audit(args) {
     return { id, original, current, curated: Boolean(n._directive), excluded: Boolean(n._contextExcluded) };
   });
   const sz = sizes(state);
-  const over = sz.filter(s => s.actions !== '(none)' && s.tokens > budget);
+  const capsules = sz.filter(s => s.actions !== '(none)');
+  // Without --budget, `over` means what it means to `context`: not servable even compacted.
+  const problems = [];
+  if (explicit) for (const s of capsules) s.withinBudget = s.tokens <= budget;
+  else await checkCompactable(capsules, budget, problems);
+  const over = capsules.filter(s => !s.withinBudget);
   const report = {
     policy: state.health, rules: rows.length, curated: rows.filter(r => r.curated).length,
     excluded: rows.filter(r => r.excluded).length, stale: state.stale, orphan: state.orphan,
@@ -131,9 +169,11 @@ function audit(args) {
   if (state.stale.length) console.log(`Stale curation (rule edited since; full text in use): ${state.stale.join(', ')}`);
   if (state.orphan.length) console.log(`Orphan curation (rule gone): ${state.orphan.join(', ')}`);
   console.log(`\nCapsule tokens by action (budget ${budget}):`);
-  for (const s of sz) console.log(`  ${s.actions !== '(none)' && s.tokens > budget ? 'OVER' : 'ok  '} ${String(s.tokens).padStart(6)}  ${s.actions} (${s.count} rules)`);
+  for (const s of sz) console.log(`  ${s.withinBudget === false ? 'OVER' : s.compacted ? 'comp' : 'ok  '} ${String(s.tokens).padStart(6)}  ${s.actions} (${s.count} rules)`);
+  if (sz.some(s => s.compacted)) console.log('  comp = larger than the budget; `context` compacts it automatically and every rule still applies');
   console.log('\nLargest rules (current/original tokens):');
   for (const r of report.largest) console.log(`  ${String(r.current).padStart(5)}/${String(r.original).padEnd(5)} ${r.id}${r.curated ? ' (curated)' : ''}`);
+  for (const p of problems) console.log(`\n${p}`);
   if (over.length) console.log('\nOver budget: run `total-recall rules draft --out policy.json`, shorten the directives, then `rules apply policy.json`.');
 }
 
@@ -224,20 +264,22 @@ async function apply(args) {
   console.log(`Applied ${Object.keys(clean).length} entries (${Object.keys(merged.rules).length} total). Run \`total-recall rules verify\` after the vault recompiles.`);
 }
 
-function verify(args) {
+async function verify(args) {
   const { flags } = parseFlags(args, ['budget']);
-  const budget = resolveBudget(flags);
+  const explicit = explicitBudget(flags);
+  const budget = explicit ?? await effectiveBudget();
   const state = loadState();
   const problems = [];
   if (state.health === 'ambiguous' || state.health === 'malformed') problems.push(`policy is ${state.health}; curation is ignored`);
   for (const id of state.stale) problems.push(`stale curation: ${id} (rule edited; full text in use)`);
   for (const id of state.orphan) problems.push(`orphan curation: ${id} (rule no longer exists)`);
   const capsules = sizes(state).filter(s => s.actions !== '(none)').map(s => ({ actions: s.actions, tokens: s.tokens, rules: s.count, withinBudget: s.tokens <= budget }));
-  for (const s of capsules) if (!s.withinBudget) problems.push(`capsule for ${s.actions} is ${s.tokens} tokens > ${budget}`);
+  if (explicit) for (const s of capsules) { if (!s.withinBudget) problems.push(`capsule for ${s.actions} is ${s.tokens} tokens > ${budget}`); }
+  else await checkCompactable(capsules, budget, problems);
   const ok = problems.length === 0;
   if (flags.json) { console.log(JSON.stringify({ ok, health: state.health, budget, capsules, problems }, null, 1)); if (!ok) process.exitCode = 1; return; }
   if (!ok) { for (const p of problems) console.log(`✖ ${p}`); process.exitCode = 1; return; }
-  console.log(`✔ policy ${state.health}; every action capsule within ${budget} tokens`);
+  console.log(`✔ policy ${state.health}; every action capsule within ${budget} tokens${explicit ? '' : ' (compacted where needed)'}`);
 }
 
 async function prune(args) {

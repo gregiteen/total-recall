@@ -121,3 +121,31 @@ export function touchConsult(root, { now = Date.now(), home = os.homedir() } = {
 export function lastConsultMs(root, { home = os.homedir() } = {}) {
   try { return Number(fs.readFileSync(consultPath(root, home), 'utf8')) || 0; } catch { return 0; }
 }
+
+export const decisionsLogPath = (home = os.homedir()) => path.join(stateDir(home), 'decisions.jsonl');
+
+/** Append a real gate decision to the persistent decisions log (ENFORCE-R5). */
+export function recordDecision(entry, { home = os.homedir(), now = Date.now() } = {}) {
+  try {
+    const file = decisionsLogPath(home);
+    fs.mkdirSync(path.dirname(file), { recursive: true, mode: 0o700 });
+    const record = { at: new Date(now).toISOString(), ...entry };
+    fs.appendFileSync(file, `${JSON.stringify(record)}\n`, { mode: 0o600 });
+    return record;
+  } catch { return null; }
+}
+
+/** Read recent gate decisions for compliance reporting. */
+export function readDecisions({ home = os.homedir(), limit = 1000 } = {}) {
+  try {
+    const file = decisionsLogPath(home);
+    if (!fs.existsSync(file)) return [];
+    const lines = fs.readFileSync(file, 'utf8').trim().split('\n').filter(Boolean);
+    const start = Math.max(0, lines.length - limit);
+    const records = [];
+    for (let i = start; i < lines.length; i++) {
+      try { records.push(JSON.parse(lines[i])); } catch {}
+    }
+    return records;
+  } catch { return []; }
+}

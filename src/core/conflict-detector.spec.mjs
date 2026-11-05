@@ -281,15 +281,15 @@ describe('Auto-Resolution Engine', () => {
     expect(result2.action).toBe('supersede');
     expect(result2.winner).toBe('new-node');
 
-    // 3. Candidate is chat, existing is protected invariant user-created node
+    // 3. Candidate is chat, existing is protected invariant user-created node -> protected invariant wins
     const conflict3 = makeConflict(
       { source: { type: 'chat', session_id: 's2', evidence_count: 1 } },
       { source: { type: 'chat', session_id: 's1', evidence_count: 1 }, priority: 'absolute', immutable: true }
     );
     const result3 = autoResolveConflict(conflict3);
     expect(result3.resolved).toBe(true);
-    expect(result3.action).toBe('supersede');
-    expect(result3.winner).toBe('new-node');
+    expect(result3.action).toBe('keep');
+    expect(result3.winner).toBe('existing-node');
   });
 
   it('Tier 1: quarantines when both nodes are protected invariants', async () => {

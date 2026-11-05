@@ -204,13 +204,16 @@ export default async function doctor() {
 
   if (agents.length > 0) {
     let healthyCount = 0;
+    const { HARNESS_SPECS } = await import('../core/meta-harness.mjs').catch(() => ({ HARNESS_SPECS: {} }));
     for (const agent of agents) {
       const exists = commandExists(agent.binary);
+      const spec = HARNESS_SPECS[agent.name] || HARNESS_SPECS[agent.binary];
+      const enfTier = spec?.enforcement || 'advisory';
       if (exists) {
-        logOk(`Agent ${agent.name.padEnd(8)}: Available (Binary: ${agent.binary})`);
+        logOk(`Agent ${agent.name.padEnd(8)}: Available (Binary: ${agent.binary}) [${enfTier}]`);
         healthyCount++;
       } else {
-        logWarn(`Agent ${agent.name.padEnd(8)}: NOT FOUND in PATH (Binary: ${agent.binary})`);
+        logWarn(`Agent ${agent.name.padEnd(8)}: NOT FOUND in PATH (Binary: ${agent.binary}) [${enfTier}]`);
         warnings++;
       }
     }

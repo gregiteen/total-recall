@@ -81,21 +81,25 @@ export default function RulesPage({ activeBrainId }: { activeBrainId: string }) 
         key={`${rule.scope}:${rule.slug}`}
         data-testid="rule-card"
         style={{
-          border: `1px solid ${isArchived ? 'var(--border)' : colorCode}`,
+          border: `1px solid ${isArchived ? 'rgba(148, 163, 184, 0.12)' : colorCode}`,
           opacity: isArchived ? 0.6 : 1,
-          borderRadius: 8,
-          padding: 16,
-          marginBottom: 12,
-          background: 'var(--bg-secondary)',
+          borderRadius: 12,
+          padding: 18,
+          marginBottom: 14,
+          background: 'rgba(12, 18, 32, 0.72)',
+          backdropFilter: 'blur(16px)',
+          WebkitBackdropFilter: 'blur(16px)',
+          boxShadow: '0 4px 16px rgba(0, 0, 0, 0.25)',
           display: 'flex',
           flexDirection: 'column',
-          gap: 8,
+          gap: 10,
+          transition: 'all var(--transition-fast)',
         }}
       >
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <h4 style={{ margin: 0, fontSize: 16, color: 'var(--text-primary)' }}>{rule.title}</h4>
+          <h4 style={{ margin: 0, fontSize: 16, fontWeight: 600, color: 'var(--text-primary)' }}>{rule.title}</h4>
           <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-            <span style={{ fontSize: 12, color: 'var(--text-tertiary)', background: 'var(--bg-primary)', padding: '2px 6px', borderRadius: 4 }}>
+            <span style={{ fontSize: 11, fontWeight: 500, color: 'var(--text-secondary)', background: 'rgba(148, 163, 184, 0.12)', border: '1px solid rgba(148, 163, 184, 0.15)', padding: '2px 8px', borderRadius: 6 }}>
               {rule.scope} brain
             </span>
             <span style={{ fontSize: 12, color: 'gold' }} aria-label={`Importance ${stars} of 5`}>
@@ -103,21 +107,21 @@ export default function RulesPage({ activeBrainId }: { activeBrainId: string }) 
             </span>
           </div>
         </div>
-        <div style={{ fontSize: 14, color: 'var(--text-secondary)', whiteSpace: 'pre-wrap' }}>
+        <div style={{ fontSize: 13.5, lineHeight: 1.6, color: 'var(--text-secondary)', whiteSpace: 'pre-wrap' }}>
           {rule.body || '(no body)'}
         </div>
-        <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 8 }}>
+        <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 6 }}>
           {isArchived ? (
             <button
               onClick={() => handleRestore(rule)}
-              style={{ padding: '4px 8px', borderRadius: 4, background: 'var(--bg-primary)', border: '1px solid var(--border)', cursor: 'pointer', color: 'var(--text-primary)' }}
+              style={{ padding: '6px 12px', borderRadius: 6, background: 'rgba(148, 163, 184, 0.1)', border: '1px solid var(--border)', cursor: 'pointer', color: 'var(--text-primary)', fontSize: 12, fontWeight: 500 }}
             >
               Restore
             </button>
           ) : (
             <button
               onClick={() => handleArchive(rule)}
-              style={{ padding: '4px 8px', borderRadius: 4, background: 'var(--bg-primary)', border: '1px solid var(--border)', cursor: 'pointer', color: 'var(--text-primary)' }}
+              style={{ padding: '6px 12px', borderRadius: 6, background: 'rgba(148, 163, 184, 0.1)', border: '1px solid var(--border)', cursor: 'pointer', color: 'var(--text-primary)', fontSize: 12, fontWeight: 500 }}
             >
               Archive
             </button>

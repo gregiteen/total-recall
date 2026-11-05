@@ -16,7 +16,7 @@ export async function manageRuntime(agent, args = [], { env = process.env, probe
     let result, code;
     try {
       console.log = (...parts) => lines.push(parts.join(' ')); console.error = (...parts) => errors.push(parts.join(' '));
-      result = await run([process.execPath, 'cli-agents', 'dsh', ...args]);
+      result = await run([process.execPath, 'meta-harness', 'dsh', ...args]);
       code = process.exitCode || 0;
     } finally { console.log = log; console.error = error; process.exitCode = previous; }
     return { ok:code === 0, agent, exitCode:code, data:result?.data, output:lines.join('\n'), error:errors.join('\n') || undefined };

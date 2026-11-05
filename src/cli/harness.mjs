@@ -1,6 +1,19 @@
 #!/usr/bin/env node
 
-import { detectHarnesses, detectHarnessesWithAuth, queryHarnessUsage, dispatchTask, runCouncil, HARNESS_SPECS } from '../core/meta-harness.mjs';
+import { checkReceipt, findRoot, ACK_COMMAND } from '../core/preflight-receipt.mjs';
+
+/** Harness work belongs to the meta-harness plugin. These commands are a thin door to it. */
+async function callPlugin(subcommand, args, options = {}) {
+  const { getPlugin } = await import('../core/plugin-loader.mjs');
+  const plugin = getPlugin('meta-harness', process.cwd());
+  if (!plugin?.valid) throw new Error('The meta-harness plugin is not installed. Run: total-recall plugin install meta-harness');
+  const { runPluginCommand } = await import('../core/plugin-runner.mjs');
+  const result = await runPluginCommand(plugin, { subcommand, args: [...args, '--json'], timeoutMs: 600000, ...options });
+  let data = null;
+  try { data = JSON.parse(result.output); } catch { /* reported below */ }
+  if (!data) throw new Error(`meta-harness ${subcommand} returned no result: ${String(result.output).trim().slice(0, 300)}`);
+  return { ok: result.ok, data };
+}
 
 function printHelp() {
   console.log(`
@@ -10,10 +23,10 @@ Usage:
   npx total-recall harness <command> [options]
 
 Commands:
-  list                      Inspect all external developer harnesses, versions & auth
-  usage                     Query harness account APIs for 5h & weekly quota remaining %
-  dispatch <id> "<task>"    Headlessly invoke a specific agent harness
+  list, usage               Harness readiness, versions and measured usage
+  dispatch <id> "<task>"    Headlessly invoke a specific agent harness (read-only by default)
                             Options: --node <name> to execute remotely on a mesh node
+                                     --write to let the agent change files
   council "<task>"          Run concurrent multi-harness consensus deliberation
 
 Available Harness IDs:
@@ -49,45 +62,32 @@ export async function run(argv) {
   const asJson = args.includes('--json');
 
   if (!command || command === 'list' || command === 'status' || command === 'usage') {
-    const reports = await queryHarnessUsage();
-    if (asJson) {
-      console.log(JSON.stringify(reports, null, 2));
-      return;
+    let report;
+    try { ({ data: report } = await callPlugin('quota', [])); }
+    catch (err) { console.error(`\n❌ ${err.message}`); process.exit(1); }
+    if (asJson) { console.log(JSON.stringify(report, null, 2)); return; }
+    const pad = (value, width) => String(value ?? '—').padEnd(width).slice(0, width);
+    console.log(`\n🎮 Total Recall — Agent Harnesses (${report.node})\n`);
+    console.log(`${pad('Harness', 12)} ${pad('Version', 12)} ${pad('Status', 14)} ${pad('5h used', 9)} ${pad('Week used', 10)} Note`);
+    for (const [id, quota] of Object.entries(report.quotas || {})) {
+      if (id === 'system' || id === 'metered') continue;
+      console.log(`${pad(id, 12)} ${pad(quota.version, 12)} ${pad(quota.status, 14)} ${pad(quota.rolling5hUsedPercent, 9)} ${pad(quota.weeklyUsedPercent, 10)} ${quota.quotaNote || ''}`);
     }
-
-    console.log(`\n🎮 Total Recall — Connected Agent Harnesses, Versions & Quotas\n`);
-
-    const pad = (s, l) => String(s || '').padEnd(l).slice(0, l);
-    console.log('┌──────────────┬──────────────────────────────┬──────────────┬──────────────┬──────────────────────────┬──────────────────────┬──────────────────────┬──────────────┐');
-    console.log(`│ ${pad('Harness ID', 12)} │ ${pad('Name', 28)} │ ${pad('Version', 12)} │ ${pad('Current?', 12)} │ ${pad('Auth Route', 24)} │ ${pad('5h Quota Rem. %', 20)} │ ${pad('Weekly Rem. %', 20)} │ ${pad('Status', 12)} │`);
-    console.log('├──────────────┼──────────────────────────────┼──────────────┼──────────────┼──────────────────────────┼──────────────────────┼──────────────────────┼──────────────┤');
-
-    for (const h of reports) {
-      const ver = h.version || '—';
-      const cur = h.isCurrent ? 'Current ✅   ' : (h.latestVersion ? `Update (${h.latestVersion.slice(0, 5)})` : 'Check ⚠️     ');
-      const auth = h.authRoute || '—';
-      const q5h = h.rolling5hRemainingPct || '—';
-      const qWeek = h.weeklyRemainingPct || '—';
-      let statusStr = '\x1b[31mNot Found ❌\x1b[0m';
-      if (h.available) {
-        if (h.status === 'ready') statusStr = '\x1b[32mReady ✅\x1b[0m     ';
-        else if (h.status === 'update_available') statusStr = '\x1b[33mUpdate 🔄\x1b[0m   ';
-        else statusStr = '\x1b[33mNo Auth ⚠️\x1b[0m   ';
-      }
-      console.log(`│ \x1b[1m${pad(h.id, 12)}\x1b[0m │ ${pad(h.name, 28)} │ ${pad(ver, 12)} │ ${pad(cur, 12)} │ ${pad(auth, 24)} │ ${pad(q5h, 20)} │ ${pad(qWeek, 20)} │ ${statusStr} │`);
-    }
-    console.log('└──────────────┴──────────────────────────────┴──────────────┴──────────────┴──────────────────────────┴──────────────────────┴──────────────────────┴──────────────┘\n');
+    console.log('');
     return;
   }
 
   if (command === 'dispatch') {
     let targetNode = null;
+    let write = false;
     const filteredRest = [];
     for (let i = 0; i < rest.length; i++) {
       if (rest[i] === '--node' || rest[i] === '-n') {
         targetNode = rest[i + 1];
         i++;
-      } else {
+      } else if (rest[i] === '--write') {
+        write = true;
+      } else if (rest[i] !== '--json') {
         filteredRest.push(rest[i]);
       }
     }
@@ -100,13 +100,24 @@ export async function run(argv) {
       process.exit(1);
     }
 
+    if (!targetNode) {
+      const root = findRoot(process.cwd());
+      const receipt = checkReceipt(root);
+      if (!receipt.ok) {
+        console.error(`\n❌ Dispatch refused by TR-PREFLIGHT gate: ${receipt.problems[0] || 'check failed'} (directory: ${root}).`);
+        console.error(`   Read the complete context capsule, then run: ${ACK_COMMAND}\n`);
+        process.exit(1);
+      }
+    }
+
     const nodeStr = targetNode ? ` on mesh node \x1b[1;33m${targetNode}\x1b[0m` : '';
     console.log(`\n🚀 Dispatching task to \x1b[1;36m${harnessId}\x1b[0m${nodeStr}...`);
     try {
-      const res = await dispatchTask(harnessId, task, { node: targetNode });
-      console.log(`\n--- [Response from ${res.harnessName}${targetNode ? ' (' + targetNode + ')' : ''}] ---\n`);
-      console.log(res.response);
-      console.log(`\n✅ Exit code: ${res.exitCode}`);
+      const { ok, data } = await callPlugin('dispatch', [], { stdinText: JSON.stringify({ agent: harnessId, cwd: process.cwd(), prompt: task, node: targetNode || 'local', permissions: { read: true, write }, allowUnknownAuth: true }) });
+      if (asJson) { console.log(JSON.stringify(data, null, 2)); if (!ok) process.exit(1); return; }
+      if (!ok) throw new Error(data.error || 'The agent failed');
+      console.log(`\n--- [Response from ${harnessId}${targetNode ? ' (' + targetNode + ')' : ''}] ---\n`);
+      console.log(data.response);
     } catch (err) {
       console.error(`\n❌ Dispatch failed: ${err.message}`);
       process.exit(1);
@@ -115,7 +126,14 @@ export async function run(argv) {
   }
 
   if (command === 'council') {
-    const task = rest.join(' ').trim();
+    const root = findRoot(process.cwd());
+    const receipt = checkReceipt(root);
+    if (!receipt.ok) {
+      console.error(`\n❌ Council deliberation refused by TR-PREFLIGHT gate: ${receipt.problems[0] || 'check failed'} (directory: ${root}).`);
+      console.error(`   Read the complete context capsule, then run: ${ACK_COMMAND}\n`);
+      process.exit(1);
+    }
+    const task = rest.filter(arg => arg !== '--json').join(' ').trim();
     if (!task) {
       console.error('Error: Please specify task prompt for council deliberation.');
       console.error('Usage: npx total-recall harness council "<task>"');
@@ -126,20 +144,14 @@ export async function run(argv) {
     console.log(`   Task: "${task}"\n`);
 
     try {
-      const councilRes = await runCouncil(task);
-      console.log(`Participating Harnesses: ${councilRes.participants.join(', ')}\n`);
-
-      for (const r of councilRes.results) {
-        console.log(`================================================================`);
-        console.log(`● Harness: \x1b[1;36m${r.harnessName}\x1b[0m (${r.harnessId})`);
-        console.log(`================================================================`);
-        if (r.success) {
-          console.log(r.response);
-        } else {
-          console.log(`\x1b[31mError: ${r.error || r.stderr || 'Execution failed'}\x1b[0m`);
-        }
-        console.log('');
+      const { data } = await callPlugin('coordinate', [task, '--mode', 'council', '--execute']);
+      if (!data.votes) throw new Error(data.error || 'No votes returned');
+      if (asJson) { console.log(JSON.stringify(data, null, 2)); return; }
+      for (const vote of data.votes) {
+        console.log(`● \x1b[1;36m${vote.harness}\x1b[0m: ${vote.vote}${vote.error ? ` (${vote.error})` : ''}`);
+        if (vote.feedback) console.log(`${vote.feedback}\n`);
       }
+      console.log(`Consensus: ${data.consensus}`);
     } catch (err) {
       console.error(`\n❌ Council deliberation failed: ${err.message}`);
       process.exit(1);

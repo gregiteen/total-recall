@@ -1,398 +1,215 @@
 /**
- * Meta Harness Multi-Agent Coordinator
- * Orchestrates role-specialized multi-agent execution pipelines:
- * - Pipeline: Architect -> Implementer -> Verifier (cross-model family, worktree-isolated)
- * - Council: Multi-model consensus voting
- * - Race: Speculative concurrent execution
- *
- * Works with any user's installed harness pool:
- * - Dynamically discovers installed harnesses and assigns distinct model families
- *   for Architect, Implementer, and Verifier so confirmation bias is avoided.
- * - Supports plan generation (default safe inspection) and live execution (`execute: true`)
- *   via `dispatchAgent` with real git worktree isolation for the Verifier stage.
+ * Multi-agent coordination.
+ * Pipeline: Explorer -> Architect -> Implementer -> Verifier. Writing happens only on a dedicated
+ * branch in its own worktree, and the Verifier inspects that exact commit from a different model
+ * family. Nothing merges into the operator's branch; the branch is the deliverable.
  */
-
-import fs from 'node:fs';
-import path from 'node:path';
-import os from 'node:os';
-import { spawnSync } from 'node:child_process';
-import { ADAPTER_CATALOG, classifyTaskComplexity } from '../capability/index.mjs';
-import { inspectAgents, dispatchAgent, getActiveAdapters } from './worker.mjs';
+import { ADAPTER_CATALOG, classifyTaskComplexity, synthesizeOneWayValve } from '../capability/index.mjs';
 import { notifyAlert } from './alerts.mjs';
-import { recordRunReceipt } from './learner.mjs';
+import { dispatchWithReceipt } from './dispatch.mjs';
+import { resolvePool } from './pool.mjs';
+import { createThread, appendThreadTurn, updateThread } from './threads.mjs';
+import { executeCodeReview } from './review.mjs';
+import { isGitRepo, isDirty, headCommit, createWorktree, removeWorktree, commitAll, diffBetween, linkDependencies, deleteBranch } from './worktree.mjs';
+import { lastJsonWith } from './json-reply.mjs';
+import { runQualityGate } from './gate.mjs';
 
-/**
- * Resolve installed or available harnesses with their model family metadata
- */
-async function resolvePool(options = {}) {
-  const active = getActiveAdapters();
-  let installedIds = [];
-  if (Array.isArray(options.availableHarnesses) && options.availableHarnesses.length > 0) {
-    installedIds = options.availableHarnesses;
-  } else {
-    try {
-      const inspected = await inspectAgents({ env: process.env });
-      installedIds = (inspected.agents || []).filter(a => a.installed).map(a => a.id);
-    } catch {}
-  }
-
-  const candidateIds = installedIds.length > 0 ? installedIds : active.map(a => a.id);
-  return candidateIds.map(id => {
-    const cap = ADAPTER_CATALOG[id] || {};
-    const workerSpec = active.find(a => a.id === id) || {};
-    return {
-      id,
-      name: cap.name || workerSpec.name || id,
-      family: cap.family || 'custom',
-      tier: cap.tier || 'budget',
-      qualityScore: cap.qualityScore ?? 7.5,
-      costScore: cap.costScore ?? 4
-    };
-  });
-}
-
-/**
- * Select three role-specialized harnesses preferring distinct model families
- */
 export function assignPipelineRoles(pool = [], options = {}) {
   const sorted = [...pool].sort((a, b) => b.qualityScore - a.qualityScore);
-  const findById = (id) => sorted.find(h => h.id === id) || (ADAPTER_CATALOG[id] ? { id, ...ADAPTER_CATALOG[id] } : { id, name: id, family: 'custom' });
+  const findById = id => sorted.find(h => h.id === id) || (ADAPTER_CATALOG[id] ? { ...ADAPTER_CATALOG[id], id } : { id, name: id, family: 'custom' });
+  // The session's own harness leads only when it can take work; TR_ACTIVE_HARNESS is advisory.
+  const active = process.env.TR_ACTIVE_HARNESS;
+  const orchestrator = options.orchestrator ? findById(options.orchestrator) : sorted.find(h => h.id === active) || sorted[0] || null;
+  if (!orchestrator) return { orchestrator: null, explorer: null, architect: null, implementer: null, verifier: null, heterogeneousFamilies: false };
 
-  const architect = options.architect
-    ? findById(options.architect)
-    : (sorted[0] || findById('claude'));
-
-  const implementer = options.implementer
-    ? findById(options.implementer)
-    : (sorted.find(h => h.id !== architect.id) || sorted[0] || findById('agy'));
-
-  // Verifier must use a distinct model family from Implementer whenever more than 1 family is available
-  const verifier = options.verifier
-    ? findById(options.verifier)
-    : (sorted.find(h => h.family !== implementer.family && h.id !== implementer.id)
-      || sorted.find(h => h.id !== implementer.id)
-      || implementer);
-
-  return {
-    architect,
-    implementer,
-    verifier,
-    heterogeneousFamilies: verifier.family !== implementer.family || pool.length <= 1
-  };
+  const byCost = [...pool].sort((a, b) => a.costScore - b.costScore);
+  const explorer = options.explorer ? findById(options.explorer) : byCost.find(h => h.id !== orchestrator.id) || orchestrator;
+  const architect = options.architect ? findById(options.architect) : orchestrator;
+  const implementer = options.implementer ? findById(options.implementer) : sorted.find(h => h.id !== explorer.id && h.id !== architect.id) || sorted.find(h => h.id !== architect.id) || architect;
+  const verifier = options.verifier ? findById(options.verifier) : sorted.find(h => h.family !== implementer.family) || null;
+  return { orchestrator, explorer, architect, implementer, verifier, heterogeneousFamilies: Boolean(verifier) && verifier.family !== implementer.family };
 }
 
-/**
- * Coordinate a task across specialized roles and model families
- */
+/** The agent must state a verdict. Silence or an unreadable answer is not a pass. */
+export function parseVerification(response) {
+  const parsed = lastJsonWith(response, 'verdict');
+  const verdict = String(parsed?.verdict).toUpperCase();
+  if (['PASS', 'FAIL'].includes(verdict)) return { parsed: true, verdict, findings: Array.isArray(parsed.findings) ? parsed.findings : [] };
+  return { parsed: false, verdict: 'UNREADABLE', findings: [] };
+}
+export function parseVote(response) {
+  const parsed = lastJsonWith(response, 'vote');
+  const vote = String(parsed?.vote).toUpperCase();
+  return ['APPROVE', 'REJECT'].includes(vote) ? { vote, reason: parsed.reason || null } : { vote: 'ABSTAIN', reason: null };
+}
+
+const stageOf = (role, harness, permissions, action, extra = {}) => ({ role, harness: harness?.id || null, harnessName: harness?.name || null, modelFamily: harness?.family || null, permissions, action, status: 'planned', output: null, ...extra });
+const READ = { read: true, write: false };
+const WRITE = { read: true, write: true };
+
+function buildStages(roles, withSubagents) {
+  const stages = [];
+  if (withSubagents) stages.push(stageOf('Explorer', roles.explorer, READ, 'Find the relevant files, symbols and interfaces.', { contextDigest: null }));
+  stages.push(stageOf('Architect', roles.architect, READ, 'Produce the blueprint, file list and verification steps.'));
+  stages.push(stageOf('Implementer', roles.implementer, WRITE, 'Write the code and tests on a dedicated branch in its own worktree.'));
+  stages.push(stageOf('Verifier', roles.verifier, READ, 'Audit the implementation commit from a different model family.', { worktreeIsolated: true, passed: null }));
+  return stages;
+}
+
+async function runPipeline(task, poolInfo, options) {
+  const started = Date.now();
+  const pool = poolInfo.ready;
+  const roles = assignPipelineRoles(pool, options);
+  const cwd = options.cwd || process.cwd();
+  const execute = options.execute === true;
+  const withSubagents = options.subagents !== false;
+  const stages = roles.orchestrator ? buildStages(roles, withSubagents) : [];
+  const base = { mode: 'pipeline', task, orchestrator: roles.orchestrator?.id || null, executedLive: execute, excluded: poolInfo.excluded, heterogeneousFamiliesVerified: roles.heterogeneousFamilies, stages };
+
+  if (!execute) {
+    const blockers = [];
+    if (!roles.orchestrator) blockers.push('No harness can take work right now.');
+    else if (!roles.heterogeneousFamilies) blockers.push('Only one model family is available, so no independent Verifier exists.');
+    return { ...base, ok: blockers.length === 0, threadId: null, blockers };
+  }
+  if (!roles.orchestrator) throw new Error(`No harness can take work right now: ${poolInfo.excluded.map(e => `${e.harness} (${e.reason})`).join(', ') || 'none installed'}`);
+  if (!roles.heterogeneousFamilies && options.allowSameFamily !== true) throw new Error('Refusing to run: only one model family is available, so no independent Verifier exists. Pass --allow-same-family to accept self-review.');
+  if (!isGitRepo(cwd)) throw new Error('A pipeline writes on its own branch, so it must run inside a git repository');
+
+  const verifier = roles.verifier || roles.implementer;
+  const complexity = classifyTaskComplexity(task);
+  const thread = createThread({ title: task.slice(0, 80), task, platform: roles.orchestrator.id, model: roles.orchestrator.name, status: 'active' });
+  const baseCommit = headCommit(cwd);
+  const branch = options.branch || `meta-harness/${thread.id}`;
+  const warnings = isDirty(cwd) ? ['The working tree has uncommitted changes; the branch starts from the last commit and does not include them.'] : [];
+  const run = async (stage, harness, prompt, { workdir = cwd, permissions, role = stage.role } = {}) => {
+    stage.status = 'running';
+    const result = await dispatchWithReceipt({ agent: harness.id, cwd: workdir, contextCwd: cwd, contextTask: task, prompt, permissions: permissions || stage.permissions, allowUnknownAuth: true }, { dispatchFn: options.dispatchFn, role, complexityScore: complexity.score });
+    stage.status = result.ok ? 'completed' : 'failed';
+    stage.output = result.response || result.error || null;
+    stage.failureKind = result.ok ? undefined : result.failureKind;
+    appendThreadTurn(thread.id, { role: role.toLowerCase(), agent: harness.id, content: stage.output || '' });
+    return result;
+  };
+
+  let ok = true, commit = null, implementerDir = null, gate = null;
+  const stage = role => stages.find(item => item.role === role);
+  try {
+    let digest = '';
+    if (withSubagents) {
+      const explorer = await run(stage('Explorer'), roles.explorer, `[ROLE: EXPLORER]\nDo not change any file. Find the files, symbols and interfaces relevant to this task:\n${task}`);
+      if (!explorer.ok) { ok = false; return finish(); }
+      digest = synthesizeOneWayValve(explorer.response, { maxChars: 2000 });
+      stage('Explorer').contextDigest = digest;
+    }
+    const architect = await run(stage('Architect'), roles.architect, `[ROLE: ARCHITECT]\nDo not change any file. Task:\n${task}\n\nExplorer digest:\n${digest || 'None.'}\n\nProduce a concise blueprint, the files to change, and how to verify the result.`);
+    if (!architect.ok) { ok = false; return finish(); }
+
+    implementerDir = createWorktree(cwd, { branch });
+    const implementer = await run(stage('Implementer'), roles.implementer, `[ROLE: IMPLEMENTER]\nWork only in this checkout. Implement the task and its tests. Do not commit; the harness commits your changes.\nTask:\n${task}\n\nBlueprint:\n${architect.response}`, { workdir: implementerDir });
+    if (!implementer.ok) { ok = false; return finish(); }
+    commit = commitAll(implementerDir, `meta-harness: ${task.slice(0, 60)}\n\nImplementer: ${roles.implementer.id}`);
+    if (!commit) {
+      Object.assign(stage('Implementer'), { status: 'failed', failureKind: 'agent', output: 'The Implementer reported success but changed no files.' });
+      ok = false; return finish();
+    }
+    stage('Implementer').commit = commit;
+    updateThread(thread.id, { branch, worktreePath: null });
+
+    if (options.gate) {
+      linkDependencies(cwd, implementerDir);
+      gate = runQualityGate(implementerDir, options.gateOptions);
+      if (!gate.passed) { ok = false; stage('Verifier').status = 'skipped'; stage('Verifier').output = `Quality gate did not pass: ${gate.summary}`; return finish(); }
+    }
+
+    const diff = diffBetween(cwd, baseCommit, commit);
+    const verifyDir = createWorktree(cwd, { ref: commit, prefix: 'meta-harness-verify-' });
+    try {
+      const verification = await run(stage('Verifier'), verifier, `[ROLE: INDEPENDENT VERIFIER]\nYou did not write this code. Do not change any file. Run the checks you can and audit commit ${commit} for this task:\n${task}\n\nBlueprint:\n${architect.response}\n\nDiff${diff.length > 30000 ? ' (first 30000 characters; read the rest from this checkout)' : ''}:\n${diff.slice(0, 30000)}\n\nEnd your reply with exactly one JSON object: {"verdict":"PASS"|"FAIL","findings":["..."]}`, { workdir: verifyDir });
+      const parsed = verification.ok ? parseVerification(verification.response) : { parsed: false, verdict: 'NOT_RUN', findings: [] };
+      Object.assign(stage('Verifier'), { commit, verdict: parsed.verdict, findings: parsed.findings, passed: parsed.verdict === 'PASS' });
+      if (parsed.verdict !== 'PASS') ok = false;
+    } finally { removeWorktree(cwd, verifyDir); }
+
+    if (options.autoReview) {
+      const review = await executeCodeReview({ cwd, author: roles.implementer.id, threadId: thread.id, task, target: `${baseCommit}...${commit}`, dispatchFn: options.dispatchFn, reviewer: options.reviewer });
+      stages.push({ role: 'Reviewer', harness: review.review?.reviewer || null, status: review.ok ? 'completed' : 'failed', verdict: review.review?.verdict || null, riskScore: review.review?.riskScore ?? null, output: review.review?.summary || review.error || null });
+      if (!review.ok || review.review?.verdict !== 'APPROVE') ok = false;
+    }
+    return finish();
+  } catch (error) {
+    // An infrastructure failure (git, a refused commit) must still close the thread and report.
+    ok = false;
+    const current = stages.find(item => ['running', 'planned'].includes(item.status));
+    if (current) Object.assign(current, { status: 'failed', failureKind: 'process', output: String(error.message) });
+    return finish();
+  } finally {
+    removeWorktree(cwd, implementerDir);
+    if (implementerDir && !commit) deleteBranch(cwd, branch);
+  }
+
+  function finish() {
+    return (async () => {
+      updateThread(thread.id, { status: ok ? 'completed' : 'failed', ...(commit ? { branch } : {}) });
+      const alert = await notifyAlert({ title: ok ? 'Meta Harness: pipeline passed' : 'Meta Harness: pipeline failed', message: `${task.slice(0, 80)}${commit ? ` (branch ${branch})` : ''}`, severity: ok ? 'info' : 'warning' });
+      return { ...base, ok, threadId: thread.id, branch: commit ? branch : null, commit, baseCommit, gate, warnings, durationMs: Date.now() - started, alert };
+    })();
+  }
+}
+
+async function runCouncil(task, poolInfo, options) {
+  // One seat per model family, strongest first, so the seats can actually disagree.
+  const families = new Set();
+  const seats = options.harnesses || [...poolInfo.ready].sort((a, b) => b.qualityScore - a.qualityScore).filter(h => !families.has(h.family) && families.add(h.family)).slice(0, 3).map(h => h.id);
+  if (options.execute !== true) return { ok: seats.length > 0, mode: 'council', task, executedLive: false, consensus: 'planned', excluded: poolInfo.excluded, votes: seats.map(harness => ({ harness, status: 'planned' })) };
+  if (!seats.length) throw new Error('No harness can take work right now');
+  const cwd = options.cwd || process.cwd();
+  const votes = await Promise.all(seats.map(async harness => {
+    const result = await dispatchWithReceipt({ agent: harness, cwd, contextTask: task, prompt: `[ROLE: COUNCIL MEMBER]\nDo not change any file. Assess this proposal, with its trade-offs and risks:\n${task}\n\nEnd your reply with exactly one JSON object: {"vote":"APPROVE"|"REJECT","reason":"..."}`, permissions: READ, allowUnknownAuth: true }, { dispatchFn: options.dispatchFn, role: 'Council' });
+    return { harness, ok: result.ok === true, ...(result.ok ? parseVote(result.response) : { vote: 'ABSTAIN', reason: null, error: result.error }), feedback: result.response || null };
+  }));
+  const count = vote => votes.filter(item => item.vote === vote).length;
+  const majority = votes.length / 2;
+  const consensus = count('APPROVE') > majority ? 'approved' : count('REJECT') > majority ? 'rejected' : 'no-consensus';
+  return { ok: votes.some(item => item.ok), mode: 'council', task, executedLive: true, consensus, excluded: poolInfo.excluded, votes };
+}
+
+async function runRace(task, poolInfo, options) {
+  const seats = options.candidates || [...poolInfo.ready].sort((a, b) => b.qualityScore - a.qualityScore).slice(0, 2).map(h => h.id);
+  if (options.execute !== true) return { ok: seats.length > 1, mode: 'race', task, executedLive: false, excluded: poolInfo.excluded, candidates: seats.map(harness => ({ harness, status: 'planned' })) };
+  if (seats.length < 2) throw new Error('A race needs at least two harnesses that can take work');
+  const cwd = options.cwd || process.cwd();
+  if (!isGitRepo(cwd)) throw new Error('A race writes on separate branches, so it must run inside a git repository');
+  const id = `race-${Date.now().toString(36)}`;
+  const entries = await Promise.all(seats.map(async harness => {
+    const branch = `meta-harness/${id}-${harness}`;
+    const directory = createWorktree(cwd, { branch });
+    let keep = false;
+    try {
+      const result = await dispatchWithReceipt({ agent: harness, cwd: directory, contextCwd: cwd, contextTask: task, prompt: `[ROLE: IMPLEMENTER]\nWork only in this checkout. Implement the task and its tests. Do not commit.\nTask:\n${task}`, permissions: WRITE, allowUnknownAuth: true }, { dispatchFn: options.dispatchFn, role: 'Race' });
+      const commit = result.ok ? commitAll(directory, `meta-harness race: ${task.slice(0, 60)}\n\nAgent: ${harness}`) : null;
+      if (commit && options.gate) linkDependencies(cwd, directory);
+      const gate = commit && options.gate ? runQualityGate(directory, options.gateOptions) : null;
+      keep = Boolean(commit) && (!gate || gate.passed);
+      return { harness, branch: keep ? branch : null, commit: keep ? commit : null, ok: keep, gate, durationMs: result.durationMs, error: result.ok ? (commit ? (keep ? undefined : 'The quality gate failed') : 'No files changed') : result.error };
+    } catch (error) {
+      return { harness, branch: null, commit: null, ok: false, gate: null, durationMs: null, error: String(error.message) };
+    } finally {
+      removeWorktree(cwd, directory);
+      if (!keep) deleteBranch(cwd, branch);
+    }
+  }));
+  const finishers = entries.filter(entry => entry.ok).sort((a, b) => a.durationMs - b.durationMs);
+  return { ok: finishers.length > 0, mode: 'race', task, executedLive: true, gateApplied: Boolean(options.gate), winner: finishers[0]?.harness || null, excluded: poolInfo.excluded, candidates: entries };
+}
+
 export async function coordinateTask(taskDescription, options = {}) {
-  const mode = options.mode || 'pipeline';
   const task = String(taskDescription || '').trim();
   if (!task) throw new Error('Task description is required for coordination');
-
-  const pool = await resolvePool(options);
-
-  if (mode === 'pipeline') {
-    return await runSpecializedPipeline(task, pool, options);
-  } else if (mode === 'council') {
-    return await runCouncilCoordination(task, pool, options);
-  } else if (mode === 'race') {
-    return await runRaceCoordination(task, pool, options);
-  } else {
-    throw new Error(`Unsupported coordination mode: ${mode}`);
-  }
-}
-
-/**
- * Create a temporary detached git worktree if inside a git repository
- */
-function createVerifierWorktree(cwd) {
-  try {
-    const check = spawnSync('git', ['rev-parse', '--is-inside-work-tree'], { cwd, encoding: 'utf8', timeout: 3000 });
-    if (check.status !== 0) return null;
-    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'meta-harness-verify-'));
-    const add = spawnSync('git', ['worktree', 'add', '--detach', tmpDir], { cwd, encoding: 'utf8', timeout: 10000 });
-    if (add.status !== 0) {
-      fs.rmSync(tmpDir, { recursive: true, force: true });
-      return null;
-    }
-    return tmpDir;
-  } catch {
-    return null;
-  }
-}
-
-function removeVerifierWorktree(cwd, worktreeDir) {
-  if (!worktreeDir) return;
-  try {
-    spawnSync('git', ['worktree', 'remove', '--force', worktreeDir], { cwd, encoding: 'utf8', timeout: 5000 });
-  } catch {}
-  try {
-    fs.rmSync(worktreeDir, { recursive: true, force: true });
-  } catch {}
-}
-
-/**
- * Architect -> Implementer -> Verifier Pipeline
- * Enforces heterogeneous model families to eliminate confirmation bias.
- */
-async function runSpecializedPipeline(task, pool, options = {}) {
-  const startTime = Date.now();
-  const roles = assignPipelineRoles(pool, options);
-  const executeLive = options.execute === true;
-  const cwd = options.cwd || process.cwd();
-  const dispatchFn = options.dispatchFn || dispatchAgent;
-  const complexity = classifyTaskComplexity(task);
-
-  const stages = [
-    {
-      role: 'Architect',
-      harness: roles.architect.id,
-      harnessName: roles.architect.name,
-      modelFamily: roles.architect.family,
-      permissions: { read: true, write: false },
-      status: executeLive ? 'pending' : 'planned',
-      action: 'Analyze requirements, design modular contracts, and formulate verification plan.',
-      output: null
-    },
-    {
-      role: 'Implementer',
-      harness: roles.implementer.id,
-      harnessName: roles.implementer.name,
-      modelFamily: roles.implementer.family,
-      permissions: { read: true, write: true },
-      status: executeLive ? 'pending' : 'planned',
-      action: 'Author implementation files and unit tests following Architectural blueprint.',
-      output: null
-    },
-    {
-      role: 'Verifier',
-      harness: roles.verifier.id,
-      harnessName: roles.verifier.name,
-      modelFamily: roles.verifier.family,
-      permissions: { read: true, write: false },
-      worktreeIsolated: true,
-      status: executeLive ? 'pending' : 'planned',
-      action: 'Execute deterministic test gates, audit diffs, and verify invariant compliance in isolated worktree.',
-      passed: executeLive ? null : true,
-      output: null
-    }
-  ];
-
-  let allSucceeded = true;
-
-  if (executeLive) {
-    // Stage 1: Architect (Read-Only Plan)
-    const archStart = Date.now();
-    const archRes = await dispatchFn({
-      agent: roles.architect.id,
-      cwd,
-      prompt: `[ROLE: ARCHITECT]\nProduce a concise architectural blueprint, file list, and verification steps for:\n${task}`,
-      permissions: { read: true, write: false },
-      allowUnknownAuth: options.allowUnknownAuth === true
-    });
-    stages[0].status = archRes.ok ? 'completed' : 'failed';
-    stages[0].output = archRes.response || archRes.error || null;
-    recordRunReceipt({
-      harness: roles.architect.id,
-      task: `[Architect] ${task}`,
-      complexityScore: complexity.score,
-      success: Boolean(archRes.ok),
-      durationMs: Date.now() - archStart
-    });
-
-    if (!archRes.ok) {
-      allSucceeded = false;
-    } else {
-      // Stage 2: Implementer
-      const implStart = Date.now();
-      const implRes = await dispatchFn({
-        agent: roles.implementer.id,
-        cwd,
-        prompt: `[ROLE: IMPLEMENTER]\nFollow this Architect blueprint:\n${archRes.response}\n\nImplement the requested task:\n${task}`,
-        permissions: { read: true, write: true },
-        allowUnknownAuth: options.allowUnknownAuth === true
-      });
-      stages[1].status = implRes.ok ? 'completed' : 'failed';
-      stages[1].output = implRes.response || implRes.error || null;
-      recordRunReceipt({
-        harness: roles.implementer.id,
-        task: `[Implementer] ${task}`,
-        complexityScore: complexity.score,
-        success: Boolean(implRes.ok),
-        durationMs: Date.now() - implStart
-      });
-
-      if (!implRes.ok) {
-        allSucceeded = false;
-      } else {
-        // Stage 3: Verifier (Isolated git worktree when available)
-        const verifyStart = Date.now();
-        const worktreeDir = createVerifierWorktree(cwd);
-        const verifyCwd = worktreeDir || cwd;
-        try {
-          const verRes = await dispatchFn({
-            agent: roles.verifier.id,
-            cwd: verifyCwd,
-            prompt: `[ROLE: INDEPENDENT VERIFIER]\nAudit the implementation and run verification checks for:\n${task}\n\nArchitect Blueprint:\n${archRes.response}\n\nImplementer Summary:\n${implRes.response}`,
-            permissions: { read: true, write: false },
-            allowUnknownAuth: options.allowUnknownAuth === true
-          });
-          stages[2].status = verRes.ok ? 'completed' : 'failed';
-          stages[2].passed = Boolean(verRes.ok);
-          stages[2].output = verRes.response || verRes.error || null;
-          stages[2].worktreePath = worktreeDir || null;
-          recordRunReceipt({
-            harness: roles.verifier.id,
-            task: `[Verifier] ${task}`,
-            complexityScore: complexity.score,
-            success: Boolean(verRes.ok),
-            durationMs: Date.now() - verifyStart
-          });
-          if (!verRes.ok) allSucceeded = false;
-        } finally {
-          removeVerifierWorktree(cwd, worktreeDir);
-        }
-      }
-    }
-  } else {
-    stages[0].output = `Planned Architect stage (${roles.architect.name}) for: ${task.slice(0, 80)}`;
-    stages[1].output = `Planned Implementer stage (${roles.implementer.name}) following Architect blueprint.`;
-    stages[2].output = `Planned cross-family Verifier stage (${roles.verifier.name}, family: ${roles.verifier.family}) in isolated git worktree.`;
-  }
-
-  const durationMs = Date.now() - startTime;
-  const result = {
-    ok: allSucceeded,
-    mode: 'pipeline',
-    executedLive: executeLive,
-    task,
-    stages,
-    durationMs,
-    heterogeneousFamiliesVerified: roles.heterogeneousFamilies
-  };
-
-  if (executeLive) {
-    await notifyAlert({
-      title: allSucceeded ? 'Meta Harness: Pipeline Completed' : 'Meta Harness: Pipeline Failed',
-      message: `Multi-agent pipeline ${allSucceeded ? 'succeeded' : 'failed'} for task: ${task.slice(0, 60)}`,
-      severity: allSucceeded ? 'info' : 'warning'
-    });
-  }
-
-  return result;
-}
-
-/**
- * Council Consensus (Multi-model deliberation across available harnesses)
- */
-async function runCouncilCoordination(task, pool, options = {}) {
-  const councilHarnesses = options.harnesses
-    || pool.slice(0, 3).map(h => h.id);
-  const executeLive = options.execute === true;
-  const cwd = options.cwd || process.cwd();
-  const dispatchFn = options.dispatchFn || dispatchAgent;
-
-  if (executeLive) {
-    const dispatches = await Promise.all(councilHarnesses.map(async (h) => {
-      try {
-        const res = await dispatchFn({
-          agent: h,
-          cwd,
-          prompt: `[COUNCIL DELIBERATION]\nProvide your independent engineering assessment and recommendation for:\n${task}`,
-          permissions: { read: true, write: false },
-          allowUnknownAuth: options.allowUnknownAuth === true
-        });
-        return {
-          harness: h,
-          ok: Boolean(res.ok),
-          recommendation: res.ok ? 'completed' : 'failed',
-          response: res.response || res.error || null
-        };
-      } catch (err) {
-        return {
-          harness: h,
-          ok: false,
-          recommendation: 'error',
-          response: err.message
-        };
-      }
-    }));
-
-    const passedCount = dispatches.filter(d => d.ok).length;
-    return {
-      ok: passedCount > 0,
-      mode: 'council',
-      executedLive: true,
-      task,
-      council: councilHarnesses,
-      consensus: passedCount === councilHarnesses.length ? 'unanimous' : (passedCount > 0 ? 'majority' : 'failed'),
-      votes: dispatches
-    };
-  }
-
-  const votes = councilHarnesses.map(h => ({
-    harness: h,
-    status: 'planned',
-    recommendation: 'ready',
-    reasoning: `Scheduled independent read-only deliberation on ${h}.`
-  }));
-
-  return {
-    ok: true,
-    mode: 'council',
-    executedLive: false,
-    task,
-    council: councilHarnesses,
-    consensus: 'planned',
-    votes
-  };
-}
-
-/**
- * Speculative Concurrent Race
- */
-async function runRaceCoordination(task, pool, options = {}) {
-  const contenders = options.harnesses
-    || pool.slice(0, 2).map(h => h.id);
-  const executeLive = options.execute === true;
-  const cwd = options.cwd || process.cwd();
-  const dispatchFn = options.dispatchFn || dispatchAgent;
-
-  if (executeLive) {
-    const results = await Promise.all(contenders.map(async (h) => {
-      const start = Date.now();
-      try {
-        const res = await dispatchFn({
-          agent: h,
-          cwd,
-          prompt: task,
-          permissions: { read: true, write: false },
-          allowUnknownAuth: options.allowUnknownAuth === true
-        });
-        return { harness: h, ok: Boolean(res.ok), durationMs: Date.now() - start, response: res.response || null };
-      } catch (err) {
-        return { harness: h, ok: false, durationMs: Date.now() - start, error: err.message };
-      }
-    }));
-    const winners = results.filter(r => r.ok).sort((a, b) => a.durationMs - b.durationMs);
-    return {
-      ok: winners.length > 0,
-      mode: 'race',
-      executedLive: true,
-      task,
-      contenders,
-      winner: winners[0]?.harness || null,
-      results
-    };
-  }
-
-  return {
-    ok: true,
-    mode: 'race',
-    executedLive: false,
-    task,
-    contenders,
-    winner: contenders[0] || null,
-    reason: 'Planned concurrent race across selected contenders.'
-  };
+  const mode = options.mode || 'pipeline';
+  if (!['pipeline', 'orchestrate', 'council', 'race'].includes(mode)) throw new Error(`Unsupported coordination mode: ${mode}`);
+  const poolInfo = await resolvePool(options);
+  if (mode === 'council') return runCouncil(task, poolInfo, options);
+  if (mode === 'race') return runRace(task, poolInfo, options);
+  return runPipeline(task, poolInfo, options);
 }

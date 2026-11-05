@@ -390,17 +390,18 @@ export function buildInstalledPluginsSummary(projectRoot = process.cwd()) {
     const plugins = discoverPlugins(projectRoot).filter((p) => p.valid);
     if (!plugins.length) return '';
     const lines = [
-      '## Installed Plugins & Capabilities\n',
-      'Use Total Recall and plugins first. Discover operations with `total-recall plugin library --json`, inspect the owner CLI help, then use its CLI.\n',
+      '## Mandatory Plugin Enforcement Table (Installed Plugins)\n',
+      'All tasks within these domains MUST use their owning Total Recall plugin CLI (`total-recall <namespace>`). Hand-rolling curl, ad-hoc scripts, raw bash, direct ssh, or manual file edits to bypass these plugins is a strict protocol violation. Discover operations with `total-recall plugin library --json` or run `total-recall <namespace> --help`.\n',
       'Namespaces below run as `total-recall <namespace> [command]`; declarations do not prove provider readiness.\n'
     ];
-    if (plugins.some(plugin => plugin.id === 'composable-cli')) lines.push('Composed commands: `total-recall composable-cli library --json`.\n');
+    if (plugins.some(plugin => plugin.id === 'composable-cli')) {
+      lines.push('Composed commands: run `total-recall composable-cli library --json` or `total-recall <command> --help`.\n');
+    }
     for (const p of plugins) {
       const cmd = p.manifest.cli?.command || p.id;
-      const desc = (p.manifest.description || 'Plugin capability').replace(/\s+/g, ' ').slice(0, 30).trimEnd();
-      const ops = (p.manifest.cli?.subcommands || []).map(sub => sub.name).filter(Boolean);
-      const shown = ops.join(' | ');
-      lines.push(`- **${p.id}** v${p.manifest.version || 'unknown'} · ${pluginActivation(p, { projectRoot }).state} · \`total-recall ${cmd}\` ${shown ? `[${shown}]` : '(no operations)'}: ${desc}`);
+      const desc = (p.manifest.description || 'Plugin capability').replace(/\s+/g, ' ').trim();
+      const state = pluginActivation(p, { projectRoot }).state;
+      lines.push(`- **${p.id}** v${p.manifest.version || 'unknown'} · ${state} · \`total-recall ${cmd}\`: ${desc}`);
     }
     return lines.join('\n') + '\n';
   } catch {
@@ -418,6 +419,19 @@ export async function buildRulesBlock(skillsDir, nodes = [], {
   const contributions = [];
   const counts = category => rules.filter(n => n.category === category).length;
   const commands = buildCommandsSection(listSurfaceCommands(commandDirsFor(skillsDir)));
+
+  // Tier 1 Absolute Invariants & Top Operational Directives lead lines 1-50 so they are never truncated
+  const tier1Rules = rules.filter(r => r.priority === 'absolute' || r.immutable === true || r.slug === 'invariants-8cd098fd' || r.slug === 'invariants-dc116371');
+  const otherRules = rules.filter(r => !tier1Rules.includes(r));
+
+  for (const node of tier1Rules) {
+    contributions.push({
+      id: `${node._layer || 'project'}:${node.slug}`,
+      required: true,
+      text: node._directive ? `[${node.slug}] ${node._directive}` : `### ${node.title || node.slug} [${node.slug}]\n\n${node.body || node.content || ''}`
+    });
+  }
+
   const header = bootstrap ? `${CLI_QUICK_REFERENCE}\n${buildInstalledPluginsSummary(root)}\n${commands}\n# 🔴 MANDATORY FIRST STEP: TOTAL RECALL CLI & TASK ROUTING
 
 1. RUN TOTAL RECALL CLI HELP FIRST:
@@ -435,13 +449,22 @@ DO NOT SKIP THIS. Run Total Recall CLI help and context first before doing anyth
 
 ` :
     `## Active Rules: ${counts('invariants')} invariants, ${counts('preferences')} preferences, ${counts('anti-patterns')} corrections`;
+
   contributions.push({ id: 'routing', text: header, required: true });
+
   const pluginsSummary = buildInstalledPluginsSummary(root);
   if (pluginsSummary && !bootstrap) {
     contributions.push({ id: 'installed-plugins', text: pluginsSummary, required: true });
   }
-  for (const node of rules) contributions.push({ id: `${node._layer || 'project'}:${node.slug}`, required: true,
-    text: node._directive ? `[${node.slug}] ${node._directive}` : `### ${node.title || node.slug} [${node.slug}]\n\n${node.body || node.content || ''}` });
+
+  for (const node of otherRules) {
+    contributions.push({
+      id: `${node._layer || 'project'}:${node.slug}`,
+      required: true,
+      text: node._directive ? `[${node.slug}] ${node._directive}` : `### ${node.title || node.slug} [${node.slug}]\n\n${node.body || node.content || ''}`
+    });
+  }
+
   if (!bootstrap) contributions.push({ id: 'commands', text: commands });
   if (!bootstrap) {
     if (skillsDir) {

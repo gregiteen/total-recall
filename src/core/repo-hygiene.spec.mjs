@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { execFileSync } from 'node:child_process';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -79,9 +79,15 @@ describe('open-source repo hygiene', () => {
     // (for example 100.64.0.1 or 100.64.0.10) but NOT the documentation CIDR
     // `100.64.0.0/10` (RFC 6598), which legitimately appears in mesh
     // networking docs and validators, nor the `100.64.0.0/10` prefix comment.
+    // Bundled third-party vendor artifacts (e.g. openwiki/vendor) are exempt from
+    // the generic personal filter to prevent false positives on third-party author
+    // license notices and REST endpoint paths like /users/me/.
     const meshHost = /100\.64\.0\.\d+(?!\d|\/)/;
     const personal = /festech|hedgehog|ultrachat|dabber|gmail\.com|\/Users\/[a-z]+\//i;
     const leaks = scaffold.filter((f) => {
+      if (f.includes('/vendor/')) return false;
+      // A tracked file deleted in the working tree has no content to scan.
+      if (!existsSync(path.join(ROOT, f))) return false;
       const text = readFileSync(path.join(ROOT, f), 'utf8');
       if (personal.test(text)) return true;
       // A concrete mesh host leaks; `100.64.0.0/10` and bare range mentions do not.

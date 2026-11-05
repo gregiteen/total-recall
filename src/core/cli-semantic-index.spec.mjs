@@ -64,10 +64,15 @@ describe('CLI Semantic Index', () => {
   });
 
   it('builds the semantic index and skips unchanged verbs', async () => {
+    // Both builds read one snapshot: the live inventory changes whenever another
+    // session edits a plugin manifest, and that must not fail this test.
+    const snapshot = harvestAllCliVerbs({ projectRoot: process.cwd() });
+    const harvest = () => snapshot;
     const firstBuild = await buildCliSemanticIndex({
       derivedDir: tempDir,
       projectRoot: process.cwd(),
-      force: true
+      force: true,
+      harvest
     });
     expect(firstBuild.total).toBeGreaterThan(100);
     expect(firstBuild.built).toBeGreaterThan(0);
@@ -80,10 +85,20 @@ describe('CLI Semantic Index', () => {
     const secondBuild = await buildCliSemanticIndex({
       derivedDir: tempDir,
       projectRoot: process.cwd(),
-      force: false
+      force: false,
+      harvest
     });
     expect(secondBuild.skipped).toBe(firstBuild.total);
     expect(secondBuild.built).toBe(0);
+  });
+
+  it('rebuilds only the verb whose content changed', async () => {
+    const snapshot = harvestAllCliVerbs({ projectRoot: process.cwd() });
+    await buildCliSemanticIndex({ derivedDir: tempDir, force: true, harvest: () => snapshot });
+    const changed = snapshot.map((verb, i) => (i === 0 ? { ...verb, hash: 'changed' } : verb));
+    const rebuilt = await buildCliSemanticIndex({ derivedDir: tempDir, force: false, harvest: () => changed });
+    expect(rebuilt.built).toBe(1);
+    expect(rebuilt.skipped).toBe(snapshot.length - 1);
   });
 
   it('queries the semantic index with hybrid search', async () => {

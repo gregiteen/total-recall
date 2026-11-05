@@ -84,6 +84,13 @@ export function syncScaffoldPlugins({ root, ids, write = false, run = spawnSync 
     };
     walk(target);
   }
+  // The release gate reads the pin, so a stale pin is drift even when every copied file matches its source.
+  const lockFile = path.join(root, 'scripts', 'scaffold-plugins.json');
+  if (!write && fs.existsSync(lockFile)) {
+    const pinned = JSON.parse(fs.readFileSync(lockFile, 'utf8'));
+    const stale = [...new Set([...Object.keys(pinned), ...Object.keys(lock)])].some(key => pinned[key] !== lock[key]);
+    if (stale) changes.push({ file: 'scripts/scaffold-plugins.json', change: 'stale pin' });
+  }
   if (write) fs.writeFileSync(path.join(root, 'scripts', 'scaffold-plugins.json'), `${JSON.stringify(Object.fromEntries(Object.entries(lock).sort()), null, 2)}\n`);
   return { changes, files: Object.keys(lock).length };
 }

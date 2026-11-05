@@ -40,6 +40,24 @@ export function ruleAppliesToRepo(node, repo) {
   return true;
 }
 
+const CRITICAL_TOP_RULES = new Set([
+  'invariants-8cd098fd',
+  'invariants-dc116371',
+  'never-ask-for-a-secret-before-searching-all-tr-stores',
+  'push-only-on-request',
+  'report-breakage-then-fix-at-the-source',
+  'invariants-bbbbec36',
+  'invariants-5d8df45d',
+  'invariants-7780389f',
+  'rule-total-recall-for-everything-always',
+]);
+
+function rulePrecedence(slug) {
+  if (slug === 'invariants-8cd098fd' || slug === 'invariants-dc116371') return 100;
+  if (CRITICAL_TOP_RULES.has(slug)) return 50;
+  return 0;
+}
+
 /** Applicability is explicit validated memory tags, independent of obligation.
  * Unknown rules remain required in task capsules. No inference from prose.
  */
@@ -51,6 +69,7 @@ export function selectRules(nodes, { actions = [], projectRoot = process.cwd(), 
     if (!ruleAppliesToRepo(node, repo)) return false;
     const tags = Array.isArray(node.tags) ? node.tags : [];
     if (tags.includes('context:universal')) return true;
+    if (node.priority === 'absolute' || node.immutable === true) return true;
     if (bootstrap) return false;
     const triggers = tags.filter(t => typeof t === 'string' && t.startsWith('context:action:')).map(t => t.slice(15));
     // Unknown actions conservatively activate every conditional restriction.
@@ -59,6 +78,7 @@ export function selectRules(nodes, { actions = [], projectRoot = process.cwd(), 
   });
   return applicable.filter(node => !applicable.some(other => other !== node && other.subject && other.subject === node.subject &&
     other.supersedes?.includes(node.slug))).sort((a, b) =>
+    (rulePrecedence(b.slug) - rulePrecedence(a.slug)) ||
     Number(b.priority === 'absolute') - Number(a.priority === 'absolute') || (b.importance || 3) - (a.importance || 3) || String(a.slug).localeCompare(String(b.slug)));
 }
 

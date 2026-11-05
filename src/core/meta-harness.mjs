@@ -23,7 +23,9 @@ export const HARNESS_SPECS = {
     category: 'frontier_reasoning',
     defaultFlags: ['--output-format', 'json', '-p'],
     execType: 'flag_last',
-    description: 'Frontier reasoning and research on Google AI Ultra plan.'
+    description: 'Frontier reasoning and research on Google AI Ultra plan.',
+    enforcement: 'enforced',
+    enforcementEvidence: 'PreToolUse deny hook verified live'
   },
   claude: {
     id: 'claude',
@@ -38,7 +40,9 @@ export const HARNESS_SPECS = {
     // Headless subscription auth (`claude setup-token`), read from the secret
     // store when the caller's environment does not already carry it.
     authSecrets: ['CLAUDE_CODE_OAUTH_TOKEN'],
-    description: 'Deep codebase editing, refactoring, and Unix command execution.'
+    description: 'Deep codebase editing, refactoring, and Unix command execution.',
+    enforcement: 'enforced',
+    enforcementEvidence: 'PreToolUse deny hook verified live'
   },
   codex: {
     id: 'codex',
@@ -47,7 +51,9 @@ export const HARNESS_SPECS = {
     category: 'code_synthesis',
     defaultFlags: ['exec', '--sandbox', 'workspace-write', '--json', '--skip-git-repo-check'],
     execType: 'subcommand',
-    description: 'Autonomous program synthesis and sandbox execution.'
+    description: 'Autonomous program synthesis and sandbox execution.',
+    enforcement: 'enforced',
+    enforcementEvidence: 'hooks.json PreToolUse block hook verified live'
   },
   ollama: {
     id: 'ollama',
@@ -56,7 +62,9 @@ export const HARNESS_SPECS = {
     category: 'local_neural',
     defaultFlags: ['run', process.env.TR_OLLAMA_MODEL || 'gemma4:latest'],
     execType: 'pipe_stdin',
-    description: 'Local neural inference, offline reasoning, zero API cost.'
+    description: 'Local neural inference, offline reasoning, zero API cost.',
+    enforcement: 'dispatch-only',
+    enforcementEvidence: 'No tool hooks; preflight checked before dispatch'
   },
   grok: {
     id: 'grok',
@@ -65,7 +73,9 @@ export const HARNESS_SPECS = {
     category: 'code_engineering',
     defaultFlags: ['-p'],
     execType: 'flag_last',
-    description: 'Autonomous coding, repo analysis, and shell execution via xAI Grok.'
+    description: 'Autonomous coding, repo analysis, and shell execution via xAI Grok.',
+    enforcement: 'enforced (unverified live)',
+    enforcementEvidence: 'PreToolUse hook adapter specification verified offline'
   },
   hermes: {
     id: 'hermes',
@@ -74,7 +84,9 @@ export const HARNESS_SPECS = {
     category: 'autonomous_agent',
     defaultFlags: ['chat', '-p'],
     execType: 'flag_last',
-    description: 'Supervised messaging gateway and multi-channel autonomous agent runtime.'
+    description: 'Supervised messaging gateway and multi-channel autonomous agent runtime.',
+    enforcement: 'enforced',
+    enforcementEvidence: 'pre_tool_call block hook verified live'
   },
   dsh: {
     id: 'dsh',
@@ -83,7 +95,9 @@ export const HARNESS_SPECS = {
     category: 'reasoning_engine',
     defaultFlags: ['-p'],
     execType: 'flag_last',
-    description: 'High-throughput DeepSeek reasoning and tool execution harness.'
+    description: 'High-throughput DeepSeek reasoning and tool execution harness.',
+    enforcement: 'enforced',
+    enforcementEvidence: 'PreToolUse deny hook verified live'
   },
   openclaw: {
     id: 'openclaw',
@@ -92,7 +106,9 @@ export const HARNESS_SPECS = {
     category: 'multichannel_bridge',
     defaultFlags: ['status', '--json'],
     execType: 'flag_last',
-    description: 'Multi-channel messaging bridge (WhatsApp, Telegram, Discord, Slack) and agent execution.'
+    description: 'Multi-channel messaging bridge (WhatsApp, Telegram, Discord, Slack) and agent execution.',
+    enforcement: 'enforced',
+    enforcementEvidence: 'before_tool_call block hook verified live'
   }
 };
 
@@ -567,6 +583,7 @@ export async function queryHarnessUsage() {
   const reports = [];
 
   for (const h of harnesses) {
+    const spec = HARNESS_SPECS[h.id];
     if (!h.available) {
       reports.push({
         id: h.id,
@@ -582,7 +599,9 @@ export async function queryHarnessUsage() {
         plan: '—',
         rolling5hRemainingPct: '—',
         weeklyRemainingPct: '—',
-        quotaRemaining: 'not installed'
+        quotaRemaining: 'not installed',
+        enforcement: spec?.enforcement || 'advisory',
+        enforcementEvidence: spec?.enforcementEvidence || null
       });
       continue;
     }
@@ -610,7 +629,6 @@ export async function queryHarnessUsage() {
           const acc = JSON.parse(fs.readFileSync(accPath, 'utf8'));
           if (acc.active) identity = acc.active;
         }
-        plan = 'Google AI Ultra / Pro';
       } catch {}
     } else if (h.id === 'claude') {
       try {
@@ -722,7 +740,9 @@ export async function queryHarnessUsage() {
       plan,
       rolling5hRemainingPct,
       weeklyRemainingPct,
-      quotaRemaining
+      quotaRemaining,
+      enforcement: spec?.enforcement || 'advisory',
+      enforcementEvidence: spec?.enforcementEvidence || null
     });
   }
 

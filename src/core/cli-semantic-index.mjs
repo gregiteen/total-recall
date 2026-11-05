@@ -508,13 +508,14 @@ export async function buildCliSemanticIndex({
   skillsDir = null,
   projectRoot = process.cwd(),
   force = false,
-  semantic = true
+  semantic = true,
+  harvest = harvestAllCliVerbs
 } = {}) {
   if (!derivedDir) {
     throw new Error('derivedDir is required to build CLI semantic index');
   }
 
-  const harvested = harvestAllCliVerbs({ projectRoot, skillsDir });
+  const harvested = harvest({ projectRoot, skillsDir });
   const existing = force ? null : loadCliSemanticIndex(derivedDir);
   const existingMap = new Map();
 

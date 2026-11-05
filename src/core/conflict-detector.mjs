@@ -291,17 +291,6 @@ export function autoResolveConflict(conflict) {
   const newIsProtected = isProtectedInvariant(newNode);
   const existingIsProtected = isProtectedInvariant(existingNode);
 
-  // Tier 0: New user-created node always wins and auto-supersedes
-  if (newAuth === 'user') {
-    return {
-      resolved: true,
-      action: 'supersede',
-      winner: newNode.slug,
-      loser: existingNode.slug,
-      reason: `User-created candidate node '${newNode.slug}' automatically supersedes existing node '${existingNode.slug}' to keep the developer in the loop within the IDE context.`,
-    };
-  }
-
   // Tier 1: Both are protected invariants — require human review
   if (newIsProtected && existingIsProtected) {
     return {
@@ -318,7 +307,7 @@ export function autoResolveConflict(conflict) {
       action: 'keep',
       winner: existingNode.slug,
       loser: newNode.slug,
-      reason: `Existing node '${existingNode.slug}' is a protected invariant. New node auto-rejected.`,
+      reason: `Existing node '${existingNode.slug}' is a protected invariant. Non-protected node rejected.`,
     };
   }
   if (newIsProtected && !existingIsProtected) {
@@ -328,6 +317,28 @@ export function autoResolveConflict(conflict) {
       winner: newNode.slug,
       loser: existingNode.slug,
       reason: `New node '${newNode.slug}' is a protected invariant. Existing node auto-superseded.`,
+    };
+  }
+
+  // Tier 0: New user-created node always wins against machine-generated node
+  if (newAuth === 'user' && existingAuth === 'machine') {
+    return {
+      resolved: true,
+      action: 'supersede',
+      winner: newNode.slug,
+      loser: existingNode.slug,
+      reason: `User-created candidate node '${newNode.slug}' automatically supersedes existing node '${existingNode.slug}' to keep the developer in the loop within the IDE context.`,
+    };
+  }
+
+  // Tier 0b: New user-created node against other user node (non-protected)
+  if (newAuth === 'user' && existingAuth === 'user') {
+    return {
+      resolved: true,
+      action: 'supersede',
+      winner: newNode.slug,
+      loser: existingNode.slug,
+      reason: `User-created candidate node '${newNode.slug}' automatically supersedes existing user node '${existingNode.slug}' to reflect latest intent.`,
     };
   }
 

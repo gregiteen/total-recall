@@ -1,10 +1,36 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import runAgent, { parseSpawnArgs } from './agent.mjs';
+import * as preflightReceipt from '../core/preflight-receipt.mjs';
 
 describe('agent.mjs', () => {
   it('exports default function', () => {
     expect(runAgent).toBeDefined();
     expect(typeof runAgent).toBe('function');
+  });
+
+  it('refuses local agent spawn when preflight receipt is missing or invalid', async () => {
+    const origExit = process.exit;
+    let exitCode = null;
+    process.exit = (code) => { exitCode = code; throw new Error(`exit(${code})`); };
+    const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    vi.spyOn(preflightReceipt, 'checkReceipt').mockReturnValue({
+      ok: false,
+      problems: ['no preflight receipt for this repository'],
+      receipt: null,
+      ageMs: null
+    });
+
+    try {
+      await expect(runAgent(['node', 'total-recall', 'agent', 'spawn', 'agy', 'some task'])).rejects.toThrow('exit(1)');
+      expect(exitCode).toBe(1);
+      const errors = errSpy.mock.calls.map(c => c[0]).join('\n');
+      expect(errors).toContain('TR-PREFLIGHT gate');
+      expect(errors).toContain('no preflight receipt');
+    } finally {
+      process.exit = origExit;
+      vi.restoreAllMocks();
+    }
   });
 });
 

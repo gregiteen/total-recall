@@ -25,16 +25,19 @@ export function loadContextNodes(layer) {
     derivedDirs: [own, global].filter(Boolean).map(dir => path.join(dir, 'memory-derived')) };
 }
 
+/** The first lines of an automatically compacted capsule. `rules verify` measures with it too, so both agree on what fits. */
+export const compactedHeader = (version, budget) => (counts, tokens, ranking) => [
+  `ready:true compacted:true tokens:${tokens} budget:${budget} version:${version} rules:${counts.rules} full:${counts.full} summarized:${counts.summarized} referenced:${counts.referenced} duplicate:${counts.duplicate} ranking:${ranking}`,
+  PREFLIGHT_NOTICE,
+  `COMPACTED: every rule below still applies. Read a referenced rule with: total-recall compact "<task>" --expand <slug>`,
+].join('\n');
+
 /** Compact the over-budget capsule, or explain the budget it needs. `fullRequired` is what the uncompacted capsule would take. */
 async function printCompacted({ query, actions, budget, format, version, fullRequired, nodes, skillsDir, derivedDirs }) {
   const { compactNodes } = await import('./compact.mjs');
   // JSON escaping and its wrapper count against the budget too.
   const target = format === 'json' ? Math.floor(budget * JSON_ESCAPE_SHARE) - JSON_WRAPPER_TOKENS : budget;
-  const header = (counts, tokens, ranking) => [
-    `ready:true compacted:true tokens:${tokens} budget:${budget} version:${version} rules:${counts.rules} full:${counts.full} summarized:${counts.summarized} referenced:${counts.referenced} duplicate:${counts.duplicate} ranking:${ranking}`,
-    PREFLIGHT_NOTICE,
-    `COMPACTED: every rule below still applies. Read a referenced rule with: total-recall compact "<task>" --expand <slug>`,
-  ].join('\n');
+  const header = compactedHeader(version, budget);
   let result;
   try {
     result = await compactNodes({ task: query, actions, budget: Math.max(target, 1), complete: true, nodes, skillsDir, derivedDirs, header });
@@ -43,8 +46,8 @@ async function printCompacted({ query, actions, budget, format, version, fullReq
     const floor = format === 'json' ? Math.ceil((error.requiredBudget + JSON_WRAPPER_TOKENS) / JSON_ESCAPE_SHARE) : error.requiredBudget;
     const requiredBudget = Math.min(fullRequired, floor);
     console.log(format === 'json'
-      ? JSON.stringify({ ready: false, reason: 'budget-overflow', context: '', stats: { version, budget, required_budget: requiredBudget, token_measurement: 'estimated_chars_divided_by_four' } })
-      : `ready:false reason:budget-overflow budget:${budget} required_budget:${requiredBudget} version:${version}\nThis budget cannot hold every rule even compacted. Retry with --budget ${requiredBudget}; do not act until ready:true.`);
+      ? JSON.stringify({ ready: false, reason: 'budget-overflow', context: '', stats: { version, budget, required_budget: requiredBudget, overage: requiredBudget - budget, rules: error.ruleCount, token_measurement: 'estimated_chars_divided_by_four' } })
+      : `ready:false reason:budget-overflow budget:${budget} required_budget:${requiredBudget} overage:${requiredBudget - budget} rules:${error.ruleCount} version:${version}\nThis budget cannot hold all ${error.ruleCount} applicable rules even compacted; \`total-recall rules audit\` lists them by size. Retry with --budget ${requiredBudget}; do not act until ready:true.`);
     process.exitCode = 2;
     return;
   }

@@ -69,10 +69,10 @@ Installed capabilities:`);
     return;
   }
   const plugins = discoverPlugins(process.cwd()).filter(p => p.valid);
-  const plugin = plugins.find(p => p.manifest.cli?.handler && (p.manifest.cli.command || p.id) === command)
+  const plugin = plugins.find(p => p.manifest.cli?.handler && ((p.manifest.cli.command || p.id) === command || p.manifest.cli.alias === command))
     || plugins.find(p => p.manifest.commands?.some(entry => entry.name === command));
   if (!plugin) throw new Error(`Unknown command '${command}'. Install its capability plugin or run total-recall --help.`);
-  const declared = plugin.manifest.cli?.handler && (plugin.manifest.cli.command || plugin.id) === command
+  const declared = plugin.manifest.cli?.handler && ((plugin.manifest.cli.command || plugin.id) === command || plugin.manifest.cli.alias === command)
     ? null : plugin.manifest.commands.find(entry => entry.name === command);
   if (declared && rest.some(arg => ['--help', '-h'].includes(arg))) {
     console.log(`Usage: total-recall ${command} [args] [--json]\n${declared.description || ''}`);

@@ -120,7 +120,8 @@ export const claudeAdapter = {
   /**
    * Install Claude Code managed hooks in settings.json, removing the stopgap
    */
-  install({ home = os.homedir(), dryRun = false } = {}) {
+  install({ home = os.homedir(), dryRun = false, remove = false, off = false } = {}) {
+    const isRemove = remove || off;
     const claudeDir = path.join(home, '.claude');
     const settingsPath = path.join(claudeDir, 'settings.json');
     const stopgapPath = path.join(claudeDir, 'hooks', 'total-recall-preflight.mjs');
@@ -137,6 +138,25 @@ export const claudeAdapter = {
     }
 
     const hooks = settings.hooks || (settings.hooks = {});
+
+    if (isRemove) {
+      for (const event of ['PreToolUse', 'UserPromptSubmit', 'SessionStart', 'PostToolUse']) {
+        if (Array.isArray(hooks[event])) {
+          const beforeLen = hooks[event].length;
+          hooks[event] = hooks[event].filter(entry => {
+            const subHooks = entry.hooks || [];
+            return !subHooks.some(h => String(h.command || '').includes('preflight') || String(h.command || '').includes('total-recall-preflight'));
+          });
+          if (hooks[event].length < beforeLen) {
+            removed.push(`managed ${event} hook entry`);
+          }
+        }
+      }
+      if (!dryRun && (removed.length || fs.existsSync(settingsPath))) {
+        fs.writeFileSync(settingsPath, `${JSON.stringify(settings, null, 2)}\n`);
+      }
+      return { settings: settingsPath, added: [], removed };
+    }
 
     // 1. Remove stopgap references if present
     for (const event of ['PreToolUse', 'UserPromptSubmit', 'SessionStart', 'PostToolUse']) {

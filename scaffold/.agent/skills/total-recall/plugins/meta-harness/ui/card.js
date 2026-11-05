@@ -3,7 +3,7 @@
  *
  * Bespoke operator interface for terminal coding agent fleet management.
  * Displays real-time agent discovery matrix, mesh node targets, authentication
- * postures, quotas/RAM, SWE-bench/Terminal-Bench benchmarks, and RouteLLM router.
+ * postures, quotas and memory, sourced model figures, routing, threads and review.
  */
 
 const DASH = '\u2014';
@@ -27,11 +27,16 @@ export class CommandFleetCard extends HTMLElement {
     this.selectedNode = 'local';
     this.nodes = [];
     this.executing = false;
-    this.screen = 'fleet'; // 'fleet' | 'router' | 'quotas' | 'benchmarks'
+    this.screen = 'fleet'; // 'fleet' | 'router' | 'quotas' | 'benchmarks' | 'threads'
     this.quotas = null;
     this.benchmarks = null;
     this.routeResult = null;
     this.routeInput = '';
+    this.threads = [];
+    this.selectedThreadId = null;
+    this.reviewVerdict = null;
+    this.reviewing = false;
+    this.reviewBase = 'main';
   }
 
   connectedCallback() {
@@ -49,6 +54,8 @@ export class CommandFleetCard extends HTMLElement {
       await this.refreshQuotas();
     } else if (screen === 'benchmarks' && !this.benchmarks) {
       await this.refreshBenchmarks();
+    } else if (screen === 'threads' && this.threads.length === 0) {
+      await this.refreshThreads();
     }
   }
 
@@ -87,11 +94,23 @@ export class CommandFleetCard extends HTMLElement {
         this.nodes = [{ id: 'local', name: 'This Node' }];
       }
 
+      this.loadError = null;
       this.render();
-    } catch {
+    } catch (error) {
       this.agents = [];
+      this.loadError = error?.message || 'The fleet could not be read';
       this.render();
     }
+  }
+
+  /** Re-read whatever the visible screen shows, after a failure or a node change. */
+  retry() {
+    this.loadError = null;
+    this.render();
+    if (this.screen === 'quotas') return this.refreshQuotas();
+    if (this.screen === 'benchmarks') return this.refreshBenchmarks();
+    if (this.screen === 'threads') return this.refreshThreads();
+    return this.refreshFleet();
   }
 
   async refreshQuotas() {
@@ -100,9 +119,12 @@ export class CommandFleetCard extends HTMLElement {
       const res = await this.host.run('quota', ['--node', this.selectedNode, '--json']);
       const parsed = typeof res === 'string' ? JSON.parse(res) : res;
       this.quotas = parsed?.quotas || null;
+      this.fleet = parsed?.fleet || null;
+      this.loadError = null;
       this.render();
-    } catch {
+    } catch (error) {
       this.quotas = null;
+      this.loadError = error?.message || 'Quotas could not be read';
       this.render();
     }
   }
@@ -112,10 +134,12 @@ export class CommandFleetCard extends HTMLElement {
     try {
       const res = await this.host.run('benchmarks', ['--json']);
       const parsed = typeof res === 'string' ? JSON.parse(res) : res;
-      this.benchmarks = parsed?.matrix || null;
+      this.benchmarks = parsed || null;
+      this.loadError = null;
       this.render();
-    } catch {
+    } catch (error) {
       this.benchmarks = null;
+      this.loadError = error?.message || 'The catalog could not be read';
       this.render();
     }
   }
@@ -133,6 +157,44 @@ export class CommandFleetCard extends HTMLElement {
       this.executing = false;
       this.render();
     }
+  }
+
+  async refreshThreads() {
+    if (!this.host) return;
+    try {
+      const res = await this.host.run('threads', ['list', '--json']);
+      const parsed = typeof res === 'string' ? JSON.parse(res) : res;
+      this.threads = Array.isArray(parsed) ? parsed : (parsed?.threads || []);
+      if (this.threads.length > 0 && !this.selectedThreadId) {
+        this.selectedThreadId = this.threads[0].id;
+      }
+      this.loadError = null;
+      this.render();
+    } catch (error) {
+      this.threads = [];
+      this.loadError = error?.message || 'Threads could not be read';
+      this.render();
+    }
+  }
+
+  async executeReview(base = 'main') {
+    if (!this.host || this.reviewing) return;
+    this.reviewing = true;
+    this.render();
+    try {
+      const res = await this.host.run('review', [`${base}...HEAD`, '--json']);
+      this.reviewVerdict = typeof res === 'string' ? JSON.parse(res) : res;
+    } catch (err) {
+      this.reviewVerdict = { ok: false, error: err.message };
+    } finally {
+      this.reviewing = false;
+      this.render();
+    }
+  }
+
+  selectThread(id) {
+    this.selectedThreadId = id;
+    this.render();
   }
 
   async selectAgent(id) {
@@ -585,6 +647,151 @@ export class CommandFleetCard extends HTMLElement {
           color: var(--text-secondary, var(--face-muted));
         }
 
+        /* Threads & Review Layout */
+        .threads-grid {
+          display: grid;
+          grid-template-columns: 280px 1fr;
+          gap: 14px;
+        }
+
+        @media (max-width: 768px) {
+          .threads-grid {
+            grid-template-columns: 1fr;
+          }
+        }
+
+        .threads-list {
+          background: rgba(15, 23, 42, 0.6);
+          border: 1px solid var(--border, var(--face-line));
+          border-radius: 6px;
+          padding: 8px;
+          max-height: 440px;
+          overflow-y: auto;
+          display: flex;
+          flex-direction: column;
+          gap: 6px;
+        }
+
+        .thread-card-btn {
+          display: flex;
+          flex-direction: column;
+          gap: 4px;
+          padding: 10px;
+          border-radius: 5px;
+          border: 1px solid transparent;
+          background: rgba(30, 41, 59, 0.4);
+          cursor: pointer;
+          text-align: left;
+          width: 100%;
+          min-height: 44px;
+          box-sizing: border-box;
+        }
+
+        .thread-card-btn:hover {
+          background: rgba(30, 41, 59, 0.7);
+        }
+
+        .thread-card-btn[data-selected="true"] {
+          background: rgba(59, 130, 246, 0.15);
+          border-color: rgba(59, 130, 246, 0.4);
+        }
+
+        .thread-title-text {
+          font-size: 12px;
+          font-weight: 700;
+          color: var(--text-primary, var(--face-text));
+        }
+
+        .thread-meta-row {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          font-size: 10px;
+          color: var(--text-secondary, var(--face-muted));
+        }
+
+        .thread-detail-panel {
+          background: rgba(15, 23, 42, 0.6);
+          border: 1px solid var(--border, var(--face-line));
+          border-radius: 6px;
+          padding: 14px;
+          display: flex;
+          flex-direction: column;
+          gap: 14px;
+          max-height: 440px;
+          overflow-y: auto;
+        }
+
+        .review-box {
+          background: rgba(30, 41, 59, 0.4);
+          border: 1px solid var(--border, var(--face-line));
+          border-radius: 6px;
+          padding: 12px;
+          display: flex;
+          flex-direction: column;
+          gap: 10px;
+        }
+
+        .verdict-badge {
+          display: inline-flex;
+          align-items: center;
+          padding: 4px 10px;
+          border-radius: 4px;
+          font-weight: 700;
+          font-size: 11px;
+          text-transform: uppercase;
+        }
+
+        .verdict-pass {
+          background: rgba(16, 185, 129, 0.2);
+          color: var(--face-ok);
+          border: 1px solid rgba(16, 185, 129, 0.4);
+        }
+
+        .verdict-fail {
+          background: rgba(239, 68, 68, 0.2);
+          color: var(--face-danger);
+          border: 1px solid rgba(239, 68, 68, 0.4);
+        }
+
+        .verdict-caution {
+          background: rgba(245, 158, 11, 0.2);
+          color: var(--face-warn);
+          border: 1px solid rgba(245, 158, 11, 0.4);
+        }
+
+        .turns-log {
+          display: flex;
+          flex-direction: column;
+          gap: 8px;
+        }
+
+        .turn-box {
+          background: rgba(15, 23, 42, 0.7);
+          border: 1px solid var(--border, var(--face-line));
+          border-radius: 5px;
+          padding: 8px 10px;
+          font-size: 11px;
+        }
+
+        .turn-header {
+          display: flex;
+          justify-content: space-between;
+          font-weight: 700;
+          color: var(--face-accent);
+          margin-bottom: 4px;
+          font-size: 10px;
+          text-transform: uppercase;
+        }
+
+        .turn-content {
+          font-family: var(--font-mono, 'JetBrains Mono', monospace);
+          font-size: 10px;
+          color: var(--text-primary, var(--face-text));
+          white-space: pre-wrap;
+          word-break: break-word;
+        }
+
         /* Footer Telemetry */
         .footer-bar {
           display: flex;
@@ -607,15 +814,23 @@ export class CommandFleetCard extends HTMLElement {
           </div>
         </div>
         <div class="status-chip">
-          ${installedAgents.length > 0 ? `${installedAgents.length} Agents Discovered` : 'Scanning Fleet'}
+          ${installedAgents.length > 0 ? `${installedAgents.length} Agents Installed` : this.loadError ? 'Not Loaded' : 'Scanning Fleet'}
         </div>
       </div>
+
+      ${this.loadError ? `
+        <div class="inspector-panel" role="alert" style="flex-direction: row; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap;">
+          <span style="font-size: 12px; color: var(--face-danger);">${escapeHtml(String(this.loadError).slice(0, 240))}</span>
+          <button class="btn-action" id="btn-retry" type="button">Retry</button>
+        </div>
+      ` : ''}
 
       <div class="tabs-bar">
         <button class="tab-btn" data-active="${this.screen === 'fleet'}" data-screen="fleet" type="button">Fleet Roster</button>
         <button class="tab-btn" data-active="${this.screen === 'quotas'}" data-screen="quotas" type="button">Quotas & RAM</button>
         <button class="tab-btn" data-active="${this.screen === 'benchmarks'}" data-screen="benchmarks" type="button">Benchmarks</button>
         <button class="tab-btn" data-active="${this.screen === 'router'}" data-screen="router" type="button">Smart Router</button>
+        <button class="tab-btn" data-active="${this.screen === 'threads'}" data-screen="threads" type="button">Threads & Review</button>
       </div>
 
       <div class="node-bar">
@@ -644,13 +859,15 @@ export class CommandFleetCard extends HTMLElement {
                   <span class="badge-status ${a.installed !== false ? 'badge-online' : 'badge-offline'}">
                     ${a.installed !== false ? 'Installed' : 'Missing'}
                   </span>
-                  <span class="badge-status ${a.authenticated !== false ? 'badge-auth-ok' : 'badge-auth-needed'}">
-                    ${a.authenticated !== false ? 'Auth OK' : 'Sign-in'}
-                  </span>
+                  ${a.installed !== false ? `
+                    <span class="badge-status ${a.authenticated === true ? 'badge-auth-ok' : 'badge-auth-needed'}">
+                      ${a.blockedBy === 'no-chat-model' ? 'No chat model' : a.authenticated === true ? 'Signed in' : a.authenticated === false ? 'Sign-in needed' : 'Not probed'}
+                    </span>
+                  ` : ''}
                 </div>
               </button>
             `).join('') : `
-              <div class="empty-agents-box">Scanning for terminal coding agents...</div>
+              <div class="empty-agents-box">${this.loadError ? 'The fleet could not be read.' : 'Scanning for terminal coding agents...'}</div>
             `}
           </div>
 
@@ -659,34 +876,27 @@ export class CommandFleetCard extends HTMLElement {
               <h4 class="inspector-title">${escapeHtml(active.name || active.id)} Details</h4>
               <div class="property-grid">
                 <div class="property-box">
-                  <span class="property-label">Runtime Binary</span>
-                  <span class="property-val">${escapeHtml(active.binary || active.id || DASH)}</span>
-                </div>
-                <div class="property-box">
                   <span class="property-label">Installed Version</span>
                   <span class="property-val">${escapeHtml(active.version || DASH)}</span>
                 </div>
                 <div class="property-box">
-                  <span class="property-label">Primary Model</span>
-                  <span class="property-val">${escapeHtml(active.primaryModel || 'Default Model')}</span>
+                  <span class="property-label">Account</span>
+                  <span class="property-val">${active.authenticated === true ? 'Signed in' : active.authenticated === false ? 'Not signed in' : 'No login probe; a run proves it'}</span>
                 </div>
+                ${active.chatModels ? `
+                  <div class="property-box">
+                    <span class="property-label">Chat Models</span>
+                    <span class="property-val">${escapeHtml(active.chatModels.join(', ') || 'None installed')}</span>
+                  </div>
+                ` : ''}
                 <div class="property-box">
-                  <span class="property-label">Documentation</span>
+                  <span class="property-label">Fleet Documentation</span>
                   <span class="property-val" style="color: ${this.docsFresh ? 'var(--face-ok)' : 'var(--face-muted)'};">
-                    ${this.docsFresh ? 'Verified Fresh' : 'Documentation Checked'}
+                    ${this.docsFresh ? 'All sources current' : 'Some sources stale'}
                   </span>
                 </div>
               </div>
-
-              <div>
-                <span class="property-label">Permission Enforcement Gates</span>
-                <div class="permission-pills">
-                  <span class="pill-permission pill-active">Read Safe</span>
-                  <span class="pill-permission pill-active">Write Gated</span>
-                  <span class="pill-permission pill-active">Send Guarded</span>
-                  <span class="pill-permission">Destructive Locked</span>
-                </div>
-              </div>
+              ${active.docs ? `<a class="property-label" href="${escapeHtml(active.docs)}" target="_blank" rel="noreferrer">Official documentation</a>` : ''}
             ` : `
               <div class="empty-agents-box">Select an agent from the fleet roster to inspect configuration.</div>
             `}
@@ -702,8 +912,8 @@ export class CommandFleetCard extends HTMLElement {
                 <th>Harness / System</th>
                 <th>Type</th>
                 <th>Usage %</th>
-                <th>5h Rolling Left</th>
-                <th>Weekly Left</th>
+                <th>5h Used</th>
+                <th>Weekly Used</th>
                 <th>Status</th>
               </tr>
             </thead>
@@ -722,16 +932,16 @@ export class CommandFleetCard extends HTMLElement {
                   <td><strong>${escapeHtml(k.toUpperCase())}</strong></td>
                   <td>${escapeHtml(q.billingModel || (q.metered ? 'Metered Credits' : 'Subscription'))}</td>
                   <td>${typeof q.usagePercent === 'number' ? `${q.usagePercent}%` : DASH}</td>
-                  <td>${typeof q.rolling5hRemainingPercent === 'number' ? `${q.rolling5hRemainingPercent}%` : DASH}</td>
-                  <td>${typeof q.weeklyRemainingPercent === 'number' ? `${q.weeklyRemainingPercent}%` : (q.quotaNote ? escapeHtml(q.quotaNote) : DASH)}</td>
-                  <td>
-                    <span class="badge-status ${q.status === 'optimal' || q.status === 'ready' ? 'badge-online' : (q.status === 'not_installed' ? 'badge-offline' : 'badge-auth-needed')}">
-                      ${escapeHtml(q.status)}
+                  <td>${typeof q.rolling5hUsedPercent === 'number' ? `${q.rolling5hUsedPercent}%` : DASH}</td>
+                  <td>${typeof q.weeklyUsedPercent === 'number' ? `${q.weeklyUsedPercent}%` : DASH}</td>
+                  <td title="${escapeHtml(q.quotaNote || '')}">
+                    <span class="badge-status ${q.status === 'ready' ? 'badge-online' : (q.status === 'not_installed' ? 'badge-offline' : 'badge-auth-needed')}">
+                      ${escapeHtml(q.status === 'exhausted' && q.resetsAt ? `exhausted until ${new Date(q.resetsAt).toLocaleString()}` : q.status)}
                     </span>
                   </td>
                 </tr>
               `).join('') : `
-                <tr><td colspan="6" style="text-align:center;">Loading quota telemetry...</td></tr>
+                <tr><td colspan="6" style="text-align:center;">${this.loadError ? 'Not loaded.' : 'Loading quota telemetry...'}</td></tr>
               `}
             </tbody>
           </table>
@@ -743,29 +953,46 @@ export class CommandFleetCard extends HTMLElement {
           <table class="data-table">
             <thead>
               <tr>
+                <th>Model</th>
                 <th>Harness</th>
-                <th>Provider</th>
+                <th>Per 1M In / Out</th>
+                <th>Intelligence</th>
+                <th>Engineering</th>
                 <th>SWE-bench Pro</th>
-                <th>Terminal-Bench 2</th>
-                <th>ELO Rating</th>
-                <th>Local Pass Rate</th>
+                <th>Terminal-Bench${this.benchmarks?.sources?.terminalBench?.benchmark ? ` ${escapeHtml(this.benchmarks.sources.terminalBench.benchmark)}` : ''}</th>
+                <th>Harness Pass Rate</th>
               </tr>
             </thead>
             <tbody>
-              ${this.benchmarks ? Object.entries(this.benchmarks).map(([k, b]) => `
-                <tr>
-                  <td><strong>${escapeHtml(k.toUpperCase())}</strong></td>
-                  <td>${escapeHtml(b.provider)}</td>
-                  <td>${typeof b.sweBenchPro === 'number' ? `${b.sweBenchPro}%` : DASH}</td>
-                  <td>${typeof b.terminalBench2 === 'number' ? `${b.terminalBench2}%` : DASH}</td>
-                  <td>${typeof b.artificialAnalysisElo === 'number' ? b.artificialAnalysisElo : DASH}</td>
-                  <td>${b.localPassRatePercent !== null ? `${b.localPassRatePercent}% (${b.localRuns} runs)` : DASH}</td>
-                </tr>
-              `).join('') : `
-                <tr><td colspan="6" style="text-align:center;">Loading benchmark matrix...</td></tr>
+              ${this.benchmarks ? (this.benchmarks.models || []).filter(m => !/-(low|medium)$/.test(m.id)).map(m => {
+                const local = this.benchmarks.local?.[m.harness];
+                return `
+                  <tr>
+                    <td><strong>${escapeHtml(m.name || m.id)}</strong></td>
+                    <td>${escapeHtml(m.harness)}</td>
+                    <td>${m.pricing ? `$${m.pricing.promptPer1M} / $${m.pricing.completionPer1M}` : DASH}</td>
+                    <td>${m.intelligenceIndex ?? DASH}</td>
+                    <td>${m.engineeringIndex ?? DASH}</td>
+                    <td>${typeof m.sweBenchPro === 'number' ? `${m.sweBenchPro}%` : DASH}</td>
+                    <td>${typeof m.terminalBench === 'number' ? `${m.terminalBench}%` : DASH}</td>
+                    <td>${local ? `${local.passRate}% (${local.total} runs)` : DASH}</td>
+                  </tr>
+                `;
+              }).join('') : `
+                <tr><td colspan="7" style="text-align:center;">${this.loadError ? 'Not loaded.' : 'Loading catalog...'}</td></tr>
               `}
+              ${this.benchmarks && !this.benchmarks.synced ? `
+                <tr><td colspan="7" style="text-align:center;">${escapeHtml(this.benchmarks.note || 'Catalog not synced')}</td></tr>
+              ` : ''}
             </tbody>
           </table>
+          ${this.benchmarks?.sources ? `
+            <div style="display:flex; flex-direction:column; gap:4px; padding:10px; font-size:11px; color:var(--face-muted);">
+              ${Object.entries(this.benchmarks.sources).map(([name, s]) => `
+                <span>${escapeHtml(name)}: ${s.ok ? `${s.count} rows, ${escapeHtml(new Date(s.fetchedAt).toLocaleString())}` : `unavailable (${escapeHtml(s.error || 'unknown error')})`}${s.attribution ? `. ${escapeHtml(s.attribution)}` : ''}</span>
+              `).join('')}
+            </div>
+          ` : ''}
         </div>
       ` : ''}
 
@@ -778,15 +1005,23 @@ export class CommandFleetCard extends HTMLElement {
 
           ${this.routeResult ? `
             <div class="inspector-panel" style="background: rgba(30, 41, 59, 0.3);">
-              <h4 class="inspector-title">Route Recommendation: ${escapeHtml(this.routeResult.selected?.toUpperCase())} (${escapeHtml(this.routeResult.tier?.toUpperCase())} TIER)</h4>
+              <h4 class="inspector-title">${this.routeResult.selected ? `Route Recommendation: ${escapeHtml(this.routeResult.selected.toUpperCase())} (${escapeHtml(this.routeResult.tier?.toUpperCase())} TIER)` : escapeHtml(this.routeResult.error || 'No harness can take this task right now')}</h4>
               <div class="property-grid">
                 <div class="property-box">
                   <span class="property-label">Complexity Score</span>
-                  <span class="property-val">${this.routeResult.complexity?.score}/100</span>
+                  <span class="property-val">${this.routeResult.complexity?.score ?? DASH}/100</span>
                 </div>
                 <div class="property-box">
                   <span class="property-label">Active Factors</span>
-                  <span class="property-val">${(this.routeResult.complexity?.factors || []).join(', ') || 'Standard task'}</span>
+                  <span class="property-val">${escapeHtml((this.routeResult.complexity?.factors || []).join(', ') || 'Standard task')}</span>
+                </div>
+                <div class="property-box">
+                  <span class="property-label">Unavailable Now</span>
+                  <span class="property-val">${escapeHtml((this.routeResult.excluded || []).map(e => `${e.harness}: ${e.reason}`).join('; ') || 'None')}</span>
+                </div>
+                <div class="property-box">
+                  <span class="property-label">Warnings</span>
+                  <span class="property-val">${escapeHtml((this.routeResult.warnings || []).join(' ') || 'None')}</span>
                 </div>
               </div>
             </div>
@@ -794,9 +1029,96 @@ export class CommandFleetCard extends HTMLElement {
         </div>
       ` : ''}
 
+      ${this.screen === 'threads' ? `
+        <div class="threads-grid">
+          <div class="threads-list">
+            ${this.threads.length > 0 ? this.threads.map(t => `
+              <button class="thread-card-btn" data-selected="${t.id === (this.selectedThreadId || this.threads[0]?.id)}" type="button" data-thread-id="${escapeHtml(t.id)}">
+                <div class="thread-title-text">${escapeHtml(t.title || t.id)}</div>
+                <div class="thread-meta-row">
+                  <span>${escapeHtml(t.branch || 'No branch')}</span>
+                  <span class="badge-status ${t.status === 'closed' ? 'badge-offline' : 'badge-online'}">${escapeHtml(t.status || 'active')}</span>
+                </div>
+                <div class="thread-meta-row">
+                  <span>Lead: ${escapeHtml(t.platform || DASH)}</span>
+                  <span>${(t.turns || []).length} turns</span>
+                </div>
+              </button>
+            `).join('') : `
+              <div class="empty-agents-box">No persistent threads found. Create one with: total-recall meta-harness threads create</div>
+            `}
+          </div>
+
+          <div class="thread-detail-panel">
+            <div class="review-box">
+              <h4 class="inspector-title" style="margin:0 0 6px 0;">Cross-Model Adversarial Code Review</h4>
+              <p class="plugin-subtitle" style="margin:0 0 10px 0;">Audits branch diff against base using a strictly distinct model family to eliminate confirmation bias.</p>
+              <div class="input-row">
+                <input class="task-input" id="review-base-input" type="text" placeholder="Base branch (default: main)" value="${escapeHtml(this.reviewBase)}" />
+                <button class="btn-action" id="btn-run-review" type="button" ${this.reviewing ? 'disabled' : ''}>
+                  ${this.reviewing ? 'Auditing...' : 'Run Review'}
+                </button>
+              </div>
+
+              ${this.reviewVerdict ? (() => {
+                const result = this.reviewVerdict;
+                const review = result.review;
+                const verdict = review?.verdict || result.verdict || null;
+                if (!verdict) return `<div style="margin-top: 10px; font-size: 11px; color: var(--face-danger);">${escapeHtml(result.error || 'The review did not complete.')}</div>`;
+                const tone = verdict === 'APPROVE' ? 'pass' : verdict === 'REQUEST_CHANGES' ? 'fail' : 'caution';
+                return `
+                  <div style="margin-top: 10px; display: flex; flex-direction: column; gap: 8px;">
+                    <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 6px;">
+                      <span class="verdict-badge verdict-${tone}">VERDICT: ${escapeHtml(verdict)}</span>
+                      ${review ? `<span class="pill-permission pill-active">Reviewer: ${escapeHtml(review.reviewerName || review.reviewer)}</span>` : ''}
+                    </div>
+                    <div style="font-size: 11px;">${escapeHtml(review?.summary || result.summary || '')}</div>
+                    ${review?.truncated ? `<div style="font-size: 11px; color: var(--face-danger);">The diff was too large to send whole; the reviewer was told to read the rest.</div>` : ''}
+                    ${review?.findings?.length ? `
+                      <div style="font-size: 11px; color: var(--face-danger);">
+                        <strong>Findings:</strong>
+                        <ul style="margin: 4px 0; padding-left: 18px;">
+                          ${review.findings.map(f => `<li>${escapeHtml(f.severity || '')} ${escapeHtml(f.file || '')}: ${escapeHtml(f.issue || '')}</li>`).join('')}
+                        </ul>
+                      </div>
+                    ` : ''}
+                  </div>
+                `;
+              })() : ''}
+            </div>
+
+            ${(() => {
+              const active = this.threads.find(t => t.id === this.selectedThreadId) || this.threads[0];
+              if (!active) return '';
+              return `
+                <div class="inspector-panel" style="background: rgba(30, 41, 59, 0.3);">
+                  <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                    <h4 class="inspector-title" style="margin: 0;">${escapeHtml(active.title)}</h4>
+                    <span class="agent-version">Thread ID: ${escapeHtml(active.id)}</span>
+                  </div>
+                  <div class="turns-log">
+                    ${(active.turns && active.turns.length > 0) ? active.turns.map(turn => `
+                      <div class="turn-box">
+                        <div class="turn-header">
+                          <span>${escapeHtml(turn.role || 'Agent')} &bull; ${escapeHtml(turn.agent || '')}</span>
+                          <span>${new Date(turn.timestamp || Date.now()).toLocaleTimeString()}</span>
+                        </div>
+                        <div class="turn-content">${escapeHtml(turn.content)}</div>
+                      </div>
+                    `).join('') : `
+                      <div style="font-size: 11px; color: var(--face-muted);">No turns recorded in this thread yet.</div>
+                    `}
+                  </div>
+                </div>
+              `;
+            })()}
+          </div>
+        </div>
+      ` : ''}
+
       <div class="footer-bar">
         <span>Target: ${this.selectedNode.toUpperCase()} MESH NODE</span>
-        <span>Fleet Version: v0.3.0</span>
+        <span>${this.agents.filter(a => a.authenticated === true).length} signed in, ${this.agents.filter(a => a.authenticated === 'unknown').length} not probed</span>
       </div>
     `;
 
@@ -823,6 +1145,7 @@ export class CommandFleetCard extends HTMLElement {
     });
 
     root.querySelector('#btn-docs')?.addEventListener('click', () => this.refreshDocs());
+    root.querySelector('#btn-retry')?.addEventListener('click', () => this.retry());
 
     const taskInput = root.querySelector('#task-input');
     if (taskInput) {
@@ -834,6 +1157,24 @@ export class CommandFleetCard extends HTMLElement {
     root.querySelector('#btn-route')?.addEventListener('click', () => {
       if (this.routeInput) this.executeRoute(this.routeInput);
     });
+
+    root.querySelectorAll('.thread-card-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const id = btn.getAttribute('data-thread-id');
+        if (id) this.selectThread(id);
+      });
+    });
+
+    const reviewBaseInput = root.querySelector('#review-base-input');
+    if (reviewBaseInput) {
+      reviewBaseInput.addEventListener('input', (e) => {
+        this.reviewBase = e.target.value;
+      });
+    }
+
+    root.querySelector('#btn-run-review')?.addEventListener('click', () => {
+      this.executeReview(this.reviewBase);
+    });
   }
 }
 
@@ -841,5 +1182,5 @@ if (!customElements.get('meta-harness-card')) {
   customElements.define('meta-harness-card', CommandFleetCard);
 }
 if (!customElements.get('command-fleet-card')) {
-  customElements.define('command-fleet-card', CommandFleetCard);
+  customElements.define('command-fleet-card', class extends CommandFleetCard {});
 }

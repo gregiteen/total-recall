@@ -12,7 +12,7 @@ const nodes = [
 const writes = [];
 vi.mock('./agent-dir.mjs', () => ({ getBothBrains: () => ({ project: { brainDir: '/fixture/brain' } }) }));
 vi.mock('../core/vault-cache.mjs', () => ({ getNodes: () => nodes }));
-vi.mock('../core/surface.mjs', () => ({ mergeGlobalRuleNodes: n => n }));
+vi.mock('../core/surface.mjs', () => ({ mergeGlobalRuleNodes: n => n, legacyRuleContributions: () => [] }));
 vi.mock('../core/brain-registry.mjs', () => ({ isBrainEnabled: () => true }));
 vi.mock('./remember.mjs', () => ({ default: async args => { writes.push(['remember', args]); } }));
 vi.mock('./edit.mjs', () => ({ default: async args => { writes.push(['edit', args]); } }));
@@ -104,6 +104,31 @@ describe('rules CLI', () => {
     expect(report.capsules.every(c => typeof c.tokens === 'number' && typeof c.rules === 'number' && typeof c.withinBudget === 'boolean')).toBe(true);
     expect(report.capsules.some(c => !c.withinBudget)).toBe(true);
     expect(process.exitCode).toBe(1);
+  });
+
+  it('verify without --budget passes a capsule that exceeds the budget but compacts, and says so', async () => {
+    const original = nodes.splice(0, nodes.length, ...Array.from({ length: 40 }, (_, i) => ({ slug: `big-${i}`, category: 'preferences', status: 'active', body: `Rule ${i} text. `.repeat(200), _layer: 'project' })));
+    try {
+      const log = vi.spyOn(console, 'log').mockImplementation(() => {});
+      await rules(['verify', '--json']);
+      const report = JSON.parse(log.mock.calls.flat().join('\n'));
+      expect(report.budget).toBeLessThanOrEqual(7000);
+      expect(report.capsules.some(c => c.tokens > report.budget && c.compacted && c.withinBudget)).toBe(true);
+      expect(report.ok).toBe(true);
+      expect(process.exitCode).toBeUndefined();
+    } finally { nodes.splice(0, nodes.length, ...original); }
+  });
+
+  it('verify without --budget fails, naming the required budget, when compaction cannot fit the capsule', async () => {
+    const original = nodes.splice(0, nodes.length, ...Array.from({ length: 4000 }, (_, i) => ({ slug: `a-very-long-rule-slug-number-${i}`, category: 'preferences', status: 'active', body: `Rule ${i} text.`, _layer: 'project' })));
+    try {
+      const log = vi.spyOn(console, 'log').mockImplementation(() => {});
+      await rules(['verify', '--json']);
+      const report = JSON.parse(log.mock.calls.flat().join('\n'));
+      expect(report.ok).toBe(false);
+      expect(report.problems.join(' ')).toMatch(/cannot fit \d+ tokens even compacted; it needs \d+/);
+      expect(process.exitCode).toBe(1);
+    } finally { nodes.splice(0, nodes.length, ...original); }
   });
 
   it('verify --json reports ok and exits 0 when every capsule fits', async () => {

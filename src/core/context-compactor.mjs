@@ -100,6 +100,7 @@ export function compactRules(items, { budget, expand = [], header, complete = fa
   if (!complete && floor > budget) {
     const error = new Error(`Budget ${budget} cannot hold the capsule header; the minimum is ${floor}`);
     error.requiredBudget = floor;
+    error.ruleCount = items.length;
     throw error;
   }
 
@@ -120,6 +121,7 @@ export function compactRules(items, { budget, expand = [], header, complete = fa
     if (completeFloor > budget) {
       const error = new Error(`Budget ${budget} cannot hold every rule; the minimum is ${completeFloor}`);
       error.requiredBudget = completeFloor;
+      error.ruleCount = items.length;
       throw error;
     }
   }

@@ -300,6 +300,35 @@ describe('connect — Core skills seeding', () => {
 });
 
 
+describe('connect — Client Enforcement Conformance (EN-08)', () => {
+  it('declares a verified enforcement level and reason for every supported client', async () => {
+    const { CLIENTS } = await import('./connect.mjs');
+    const validTiers = new Set(['enforced', 'enforced (unverified live)', 'dispatch-only', 'advisory']);
+
+    for (const [clientId, preset] of Object.entries(CLIENTS)) {
+      expect(validTiers.has(preset.enforcement), `Client "${clientId}" must declare a valid enforcement tier`).toBe(true);
+      expect(typeof preset.enforcementReason, `Client "${clientId}" must declare an enforcementReason string`).toBe('string');
+      expect(preset.enforcementReason.length > 0).toBe(true);
+    }
+  });
+
+  it('records enforcement tier and reason in clients.json', async () => {
+    await runConnect(['cursor']);
+    const registry = JSON.parse(
+      fs.readFileSync(path.join(tmpAgentDir, 'skills', 'total-recall', 'config', 'clients.json'), 'utf8')
+    );
+    expect(registry.clients.cursor.enforcement).toBe('enforced (unverified live)');
+    expect(registry.clients.cursor.enforcementReason).toContain('failClosed');
+
+    await runConnect(['aider']);
+    const updated = JSON.parse(
+      fs.readFileSync(path.join(tmpAgentDir, 'skills', 'total-recall', 'config', 'clients.json'), 'utf8')
+    );
+    expect(updated.clients.aider.enforcement).toBe('dispatch-only');
+    expect(updated.clients.aider.enforcementReason).toContain('dispatch');
+  });
+});
+
 describe('maskToken', () => {
   it('never prints a whole token', async () => {
     const { maskToken } = await import('./connect.mjs');

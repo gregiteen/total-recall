@@ -25,14 +25,11 @@ vi.mock('./utils/onboarding', () => ({
 vi.mock('./pages/LoginPage', () => ({
   default: ({ onAuthenticated }: { onAuthenticated: () => void }) => <div data-testid="login-page"><button onClick={onAuthenticated}>Login</button></div>
 }));
-vi.mock('./pages/ChatPage', () => ({ default: () => <div data-testid="chat-page" /> }));
 vi.mock('./pages/MemoryPage', () => ({ default: () => <div data-testid="memory-page" /> }));
 vi.mock('./pages/SettingsPage', () => ({ default: () => <div data-testid="settings-page" /> }));
 vi.mock('./pages/TasksPage', () => ({ default: () => <div data-testid="tasks-page" /> }));
-vi.mock('./pages/ApiKeysPage', () => ({ default: () => <div data-testid="apikeys-page" /> }));
-vi.mock('./pages/IntegrationsPage', () => ({ default: () => <div data-testid="integrations-page" /> }));
+vi.mock('./pages/PluginsPage', () => ({ default: () => <div data-testid="plugins-page" /> }));
 vi.mock('./components/BrainSelector', () => ({ default: () => <div data-testid="brain-selector" /> }));
-vi.mock('./pages/SkillsPage', () => ({ default: () => <div data-testid="skills-page" /> }));
 vi.mock('./pages/HelpPage', () => ({ default: () => <div data-testid="help-page" /> }));
 vi.mock('./pages/GraphPage', () => ({ default: () => <div data-testid="graph-page" /> }));
 vi.mock('./pages/OnboardingPage', () => ({ default: () => <div data-testid="onboarding-page" /> }));
@@ -61,24 +58,48 @@ describe('App', () => {
   it('renders app layout if authed', async () => {
     vi.mocked(api.checkSession).mockResolvedValue(true);
     vi.mocked(onboarding.isOnboardingComplete).mockReturnValue(true);
-    
     render(<App />);
-    
+
     await waitFor(() => {
-      // Sidebar should be present
-      expect(screen.getByText('Chat')).toBeInTheDocument();
+      // Sidebar should contain core memory and capabilities
+      expect(screen.queryByText('Chat')).not.toBeInTheDocument();
+      expect(screen.queryByText('Skills')).not.toBeInTheDocument();
+      expect(screen.queryByText('IDEs')).not.toBeInTheDocument();
       expect(screen.getByText('Vault')).toBeInTheDocument();
-      // Chat page is always rendered initially (floating or main)
-      expect(screen.getByTestId('chat-page')).toBeInTheDocument();
+      expect(screen.getByText('Rules')).toBeInTheDocument();
+      expect(screen.getByText('Plugins')).toBeInTheDocument();
+      // Default route / redirects to /memory when onboarding is complete
+      expect(screen.getByTestId('memory-page')).toBeInTheDocument();
+    });
+  });
+
+  it('redirects /chat to /memory', async () => {
+    window.history.replaceState({}, '', '/chat');
+    vi.mocked(api.checkSession).mockResolvedValue(true);
+    vi.mocked(onboarding.isOnboardingComplete).mockReturnValue(true);
+    render(<App />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId('memory-page')).toBeInTheDocument();
+    });
+  });
+
+  it('redirects /integrations to meta-harness plugin', async () => {
+    window.history.replaceState({}, '', '/integrations');
+    vi.mocked(api.checkSession).mockResolvedValue(true);
+    vi.mocked(onboarding.isOnboardingComplete).mockReturnValue(true);
+    render(<App />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId('plugins-page')).toBeInTheDocument();
     });
   });
 
   it('redirects to onboarding if not complete', async () => {
     vi.mocked(api.checkSession).mockResolvedValue(true);
     vi.mocked(onboarding.isOnboardingComplete).mockReturnValue(false);
-    
     render(<App />);
-    
+
     await waitFor(() => {
       expect(screen.getByTestId('onboarding-page')).toBeInTheDocument();
     });

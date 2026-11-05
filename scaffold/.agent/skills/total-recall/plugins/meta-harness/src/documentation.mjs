@@ -19,6 +19,8 @@ export const DOC_SOURCES = [
   { id: 'cline', index: 'https://docs.cline.bot/llms.txt', prefix: 'https://docs.cline.bot/', catalog:true },
   { id: 'openclaw', index: 'https://docs.openclaw.ai/llms.txt', prefix: 'https://docs.openclaw.ai/', catalog:true },
   { id: 'aider', index: 'https://aider.chat/docs/', prefix: 'https://aider.chat/docs/' },
+  { id: 'goose', index: 'https://block.github.io/goose/docs/quickstart', prefix: 'https://block.github.io/goose/docs/' },
+  { id: 'openhands', index: 'https://docs.openhands.dev/llms.txt', prefix: 'https://docs.openhands.dev/', catalog:true },
   { id: 'replit', index: 'https://docs.replit.com/llms.txt', prefix: 'https://docs.replit.com/', catalog:true },
   { id: 'lovable', index: 'https://docs.lovable.dev/llms.txt', prefix: 'https://docs.lovable.dev/', catalog:true },
   { id: 'ollama', index: 'https://docs.ollama.com/llms.txt', prefix: 'https://docs.ollama.com/', catalog:true },
@@ -29,7 +31,11 @@ function pageFile(directory,id,file){if(!/^[a-f0-9]{64}-[a-f0-9]{64}\.txt$/.test
 function atomic(file, value) { fs.mkdirSync(path.dirname(file), { recursive: true }); const temp = `${file}.${process.pid}.tmp`; fs.writeFileSync(temp, value, { mode: 0o600 }); fs.renameSync(temp, file); }
 export function documentationDirectory() {
   const brain = process.env.TR_SECRETS_BRAIN || path.join(process.env.AGENT_DIR || path.join(os.homedir(), '.agent'), 'skills/total-recall');
-  return path.join(brain, 'memory-derived/cli-agents/docs');
+  const directory = path.join(brain, 'memory-derived/meta-harness/docs');
+  // Keep the downloaded pages when the old directory name is still on disk.
+  const legacy = path.join(brain, 'memory-derived/cli-agents/docs');
+  if (!fs.existsSync(directory) && fs.existsSync(legacy)) { fs.mkdirSync(path.dirname(directory), { recursive: true }); fs.renameSync(legacy, directory); }
+  return directory;
 }
 function metadata(directory, id) { try { return JSON.parse(fs.readFileSync(path.join(directory,id,'index.json'),'utf8')); } catch { return null; } }
 export function documentationStatus({ directory = documentationDirectory(), agent, now = Date.now() } = {}) {
@@ -47,11 +53,11 @@ export function documentationStatus({ directory = documentationDirectory(), agen
   return { ok:agents.every(row=>row.fresh), directory, agents };
 }
 async function download(url, fetchImpl) {
-  const allowed = new Set(['code.claude.com','claude.com','platform.claude.com','docs.anthropic.com','anthropic.com','developers.openai.com','openai.com','help.openai.com','learn.chatgpt.com','chatgpt.com','antigravity.google','cursor.com','docs.x.ai','dev.meta.ai','docs.devin.ai','docs.windsurf.com','windsurf.com','docs.cline.bot','docs.openclaw.ai','aider.chat','docs.replit.com','docs.lovable.dev','docs.ollama.com','raw.githubusercontent.com','api.github.com']);
+  const allowed = new Set(['code.claude.com','claude.com','platform.claude.com','docs.anthropic.com','anthropic.com','developers.openai.com','openai.com','help.openai.com','learn.chatgpt.com','chatgpt.com','antigravity.google','cursor.com','docs.x.ai','dev.meta.ai','docs.devin.ai','docs.windsurf.com','windsurf.com','docs.cline.bot','docs.openclaw.ai','aider.chat','docs.replit.com','docs.lovable.dev','docs.ollama.com','block.github.io','docs.openhands.dev','raw.githubusercontent.com','api.github.com']);
   let target = new URL(url);
   for(let redirects=0;redirects<5;redirects++) {
     if(target.protocol!=='https:' || target.username || target.password || !allowed.has(target.hostname)) throw new Error(`Unapproved official documentation origin: ${target.hostname}`);
-    const response=await fetchImpl(target,{redirect:'manual',signal:AbortSignal.timeout(20000),headers:{'User-Agent':'Total-Recall-CLI-Agents-Docs','Accept':'*/*'}});
+    const response=await fetchImpl(target,{redirect:'manual',signal:AbortSignal.timeout(20000),headers:{'User-Agent':'Total-Recall-Meta-Harness-Docs','Accept':'*/*'}});
     if(response.status>=300 && response.status<400){target=new URL(response.headers.get('location'),target);continue;}
     // Some entries advertise Markdown exports which no longer exist while the
     // same official HTML document remains available. Fetch that representation.

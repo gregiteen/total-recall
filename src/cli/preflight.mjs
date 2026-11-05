@@ -1,13 +1,14 @@
 import fs from 'node:fs';
 import { decide, SWEEP_CONSULT_MS } from '../core/preflight-gate.mjs';
-import { ACK_COMMAND, acknowledge, checkReceipt, findRoot, lastConsultMs } from '../core/preflight-receipt.mjs';
+import { ACK_COMMAND, acknowledge, checkReceipt, findRoot, lastConsultMs, recordDecision, readDecisions } from '../core/preflight-receipt.mjs';
 
 const USAGE = `Usage: total-recall preflight <command>
   ack --task "<task>" [--action read,edit,test] [--json]   Record a receipt after context ready:true and rules verify
   check [--json]                                            Exit 1 unless a fresh receipt exists for this directory
   gate [--harness <id>]                                     Hook entry: read a call on stdin, answer allow or deny (exit 2 on deny)
   remind [--json]                                           Prompt-hook entry: advisory text when the receipt is missing; always exits 0
-  install | verify | report                                 Harness adapters, owned by the cli-agents plugin
+  install [--harness <id>] [--dry-run]                      Install the gate for a harness. The gate has no off switch.
+  verify | report                                           Harness adapters, owned by the cli-agents plugin
 Aliases: total-recall tr-preflight --ack | --check. A receipt lasts 30 minutes (config preflight_max_age_minutes).`;
 
 /** An explicit override only. The configured window is read once, by `ack`, and recorded in the receipt. */
@@ -103,12 +104,12 @@ async function gate(args) {
       const adapters = await loadGateAdapters();
       const adapter = adapters?.get?.(harness);
       if (!adapter) return deny('gate-error', `No gate adapter for harness "${harness}": adapters are owned by the meta-harness plugin and it does not provide one. The gate fails closed.`);
-      const out = await adapter.run({ stdin: call, decideWith: evaluate });
+      const out = await adapter.run({ stdin: call, decideWith: (c) => evaluate(c, { harness, readablePaths: adapter.readablePaths }) });
       if (out?.stdout) process.stdout.write(out.stdout);
       process.exitCode = Number.isInteger(out?.exitCode) ? out.exitCode : 2;
       return;
     }
-    const answer = evaluate(call);
+    const answer = evaluate(call, { harness: 'generic' });
     process.stdout.write(`${JSON.stringify(answer)}\n`);
     if (answer.decision === 'allow') process.exitCode = 0;
   } catch (err) {
@@ -119,6 +120,11 @@ async function gate(args) {
 async function install(args) {
   const harness = flag(args, '--harness') || 'claude';
   const dryRun = args.includes('--dry-run');
+  if (args.includes('--remove') || args.includes('--off')) {
+    console.error('✖ The preflight gate has no off switch. If it blocks work, fix the cause: `total-recall tr-preflight --ack` names it, and `total-recall rules` stays open to repair it.');
+    process.exitCode = 1;
+    return;
+  }
   const adapters = await loadGateAdapters();
   if (!adapters) {
     console.error('✖ Gate adapters are owned by the meta-harness (cli-agents) plugin and are not available.');
@@ -128,7 +134,7 @@ async function install(args) {
   try {
     const res = adapters.install(harness, { dryRun });
     if (args.includes('--json')) {
-      console.log(JSON.stringify({ ok: true, harness, ...res }));
+      console.log(JSON.stringify({ ok: true, harness, action: 'installed', ...res }));
     } else {
       console.log(`✔ Installed preflight gate for ${harness}`);
       if (res.added?.length) console.log(`  added: ${res.added.join(', ')}`);
@@ -183,19 +189,56 @@ async function report(args) {
     level: a.level,
     verification: adapters.verify(a.id)
   }));
+
+  const decisions = readDecisions();
+  const summary = {
+    total: decisions.length,
+    allowed: decisions.filter(d => d.decision === 'allow').length,
+    denied: decisions.filter(d => d.decision === 'deny').length,
+    byHarness: {},
+    byRepo: {}
+  };
+  for (const d of decisions) {
+    const h = d.harness || 'generic';
+    summary.byHarness[h] ??= { total: 0, allowed: 0, denied: 0 };
+    summary.byHarness[h].total++;
+    if (d.decision === 'allow') summary.byHarness[h].allowed++;
+    else summary.byHarness[h].denied++;
+
+    const r = d.repo || 'unknown';
+    summary.byRepo[r] ??= { total: 0, allowed: 0, denied: 0 };
+    summary.byRepo[r].total++;
+    if (d.decision === 'allow') summary.byRepo[r].allowed++;
+    else summary.byRepo[r].denied++;
+  }
+
   if (args.includes('--json')) {
-    console.log(JSON.stringify({ adapters: results }));
+    console.log(JSON.stringify({ adapters: results, compliance: summary }, null, 2));
   } else {
     for (const r of results) {
       console.log(`- ${r.id}: ${r.level} (installed: ${r.verification.installed}, exercised: ${r.verification.exercised})`);
     }
+    if (summary.total > 0) {
+      console.log(`\nCompliance summary (${summary.total} real gate decisions observed):`);
+      const pct = ((summary.allowed / summary.total) * 100).toFixed(1);
+      console.log(`  Allowed: ${summary.allowed} | Denied: ${summary.denied} | Rate: ${pct}%`);
+      console.log('  By harness:');
+      for (const [hId, stats] of Object.entries(summary.byHarness)) {
+        const hPct = ((stats.allowed / stats.total) * 100).toFixed(1);
+        console.log(`    ${hId.padEnd(14)}: ${stats.allowed}/${stats.total} allowed (${hPct}%)`);
+      }
+    } else {
+      console.log('\nCompliance summary:');
+      console.log('  No gate decisions recorded yet (live gate traffic has not been observed).');
+    }
   }
 }
 
-function evaluate(call) {
+function evaluate(call, { harness, readablePaths } = {}) {
   const root = findRoot(call.cwd || process.cwd());
   const limit = envMaxAgeMs();
-  return decide(call, {
+  const decision = decide(call, {
+    readablePaths,
     check: () => checkReceipt(root, { maxAgeMs: limit }),
     recentConsult: () => {
       const now = Date.now();
@@ -204,6 +247,18 @@ function evaluate(call) {
       return Boolean(receipt && now - Date.parse(receipt.at) < SWEEP_CONSULT_MS);
     },
   });
+  recordDecision({
+    harness: harness || call.harness || 'generic',
+    cwd: call.cwd || process.cwd(),
+    repo: root,
+    tool: call.tool || 'other',
+    command: call.command || null,
+    path: call.path || null,
+    decision: decision.decision,
+    rule: decision.rule,
+    reason: decision.reason || null
+  });
+  return decision;
 }
 
 /**
@@ -230,6 +285,8 @@ export default async function preflight(args = []) {
   // Original `tr-preflight` forms.
   if (first === '--ack' || first === 'ack') return ack(args);
   if (first === '--check' || first === 'check') return check(args);
+  // Help never performs the subcommand: `install --help` once rewrote the harness settings (C-019).
+  if (args.includes('--help') || args.includes('-h')) return console.log(USAGE);
   if (first === 'gate') return gate(args.slice(1));
   if (first === 'remind') return remind(args);
   if (first === 'install') return install(args.slice(1));

@@ -4,15 +4,11 @@ import './App.css'
 import { getApiBase, setApiBase, checkSession, logout, registerUnauthedCallback, fetchHealth } from './api'
 import type { HealthData } from './types'
 import LoginPage from './pages/LoginPage'
-import ChatPage from './pages/ChatPage'
 import MemoryPage from './pages/MemoryPage'
 import SettingsPage from './pages/SettingsPage'
 import NetworkPage from './pages/NetworkPage'
-import TasksPage from './pages/TasksPage'
-import IntegrationsPage from './pages/IntegrationsPage'
 import { WebhooksPage } from './pages/WebhooksPage'
 import BrainSelector from './components/BrainSelector'
-import SkillsPage from './pages/SkillsPage'
 import RulesPage from './pages/RulesPage'
 import HelpPage from './pages/HelpPage'
 import GraphPage from './pages/GraphPage'
@@ -106,12 +102,6 @@ function Sidebar({ onLogout, health, activeBrainId, onBrainChange }: SidebarProp
             Setup
           </NavLink>
         )}
-        <NavLink to="/" end className={getNavLinkClass} id="nav-chat">
-          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z" />
-          </svg>
-          Chat
-        </NavLink>
         <NavLink to="/memory" className={getNavLinkClass} id="nav-memory">
           <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
             <circle cx="12" cy="12" r="10" /><path d="M12 16v-4M12 8h.01" />
@@ -132,28 +122,8 @@ function Sidebar({ onLogout, health, activeBrainId, onBrainChange }: SidebarProp
           </svg>
           Graph
         </NavLink>
-        <NavLink to="/tasks" className={getNavLinkClass} id="nav-tasks">
-          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M9 11l3 3L22 4" /><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11" />
-          </svg>
-          Tasks
-        </NavLink>
 
-
-        <div className="nav-section-label">Connect</div>
-        <NavLink to="/integrations" className={getNavLinkClass} id="nav-integrations">
-          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71" />
-            <path d="M14 11a5 5 0 00-7.54-.54l-3 3a5 5 0 007.07 7.07l1.71-1.71" />
-          </svg>
-          IDEs
-        </NavLink>
-        <NavLink to="/skills" className={getNavLinkClass} id="nav-skills">
-          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" />
-          </svg>
-          Skills
-        </NavLink>
+        <div className="nav-section-label">Capabilities</div>
         <NavLink to="/plugins" className={getNavLinkClass} id="nav-plugins">
           <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
             <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" />
@@ -228,13 +198,16 @@ function Sidebar({ onLogout, health, activeBrainId, onBrainChange }: SidebarProp
           title="API host"
           style={{
             width: '100%',
-            background: 'rgba(148, 163, 184, 0.06)',
-            color: 'var(--text-tertiary)',
-            border: '1px solid var(--border)',
+            background: 'rgba(148, 163, 184, 0.08)',
+            color: 'var(--text-secondary)',
+            border: '1px solid rgba(148, 163, 184, 0.18)',
             borderRadius: 8,
-            padding: '5px 8px',
-            fontSize: 10,
+            padding: '6px 10px',
+            fontSize: 11,
+            fontWeight: 500,
             outline: 'none',
+            cursor: 'pointer',
+            transition: 'border-color var(--transition-fast)',
           }}
         >
           <option value="">Local API</option>
@@ -338,95 +311,47 @@ function OnboardingRedirect() {
   return null
 }
 
-function MainContent({ activeBrainId, onBrainChange }: { activeBrainId: string; onBrainChange: (id: string) => void }) {
-  const location = useLocation();
-  const isChat = location.pathname === '/' || location.pathname === '/chat';
-  const [floatingChat, setFloatingChat] = useState(false);
-
-  useEffect(() => {
-    const handleToggle = () => setFloatingChat(v => !v);
-    window.addEventListener('toggle-floating-chat', handleToggle);
-    return () => window.removeEventListener('toggle-floating-chat', handleToggle);
-  }, []);
-
-  const showChat = isChat || floatingChat;
-
-  const chatStyle: React.CSSProperties = floatingChat ? {
-    display: 'flex',
-    position: 'fixed',
-    bottom: 20,
-    right: 20,
-    width: 400,
-    height: 600,
-    zIndex: 9999,
-    backgroundColor: 'var(--bg-primary)',
-    border: '1px solid var(--border)',
-    borderRadius: 12,
-    boxShadow: '0 8px 32px rgba(0, 0, 0, 0.4)',
-    overflow: 'hidden',
-    flexDirection: 'column'
-  } : {
-    display: showChat ? 'flex' : 'none',
-    flex: 1,
-    flexDirection: 'column',
-    height: '100%',
-    overflow: 'hidden'
-  };
-
+function MainContent({ activeBrainId }: { activeBrainId: string }) {
   return (
     <main className="main-content" style={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden', position: 'relative' }}>
       <OnboardingRedirect />
-      <div style={chatStyle}>
-        {floatingChat && (
-          <div style={{ padding: '8px', background: 'var(--bg-secondary)', borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <span style={{ fontSize: 12, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 8 }}>
-              <img src="/brand/total-recall-icon.svg" alt="" width={18} height={18} style={{ borderRadius: 4 }} />
-              Total Recall
-            </span>
-            <button onClick={() => setFloatingChat(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-tertiary)' }}>✖</button>
-          </div>
-        )}
-        <ChatPage activeBrainId={activeBrainId} onBrainChange={onBrainChange} />
+      <div style={{ flex: 1, overflow: 'auto', display: 'flex', flexDirection: 'column', height: '100%' }}>
+        <Routes>
+          <Route path="/" element={<Navigate to={isOnboardingComplete() ? '/memory' : '/onboarding'} replace />} />
+          <Route path="/chat" element={<Navigate to="/memory" replace />} />
+          <Route path="/onboarding" element={<OnboardingPage />} />
+          <Route path="/memory" element={<MemoryPage activeBrainId={activeBrainId} />} />
+          <Route path="/rules" element={<RulesPage activeBrainId={activeBrainId} />} />
+          <Route path="/graph" element={<GraphPage activeBrainId={activeBrainId} />} />
+          <Route path="/tasks" element={<Navigate to="/plugins?id=user-automations" replace />} />
+          <Route path="/skills" element={<Navigate to="/plugins?id=skill-manager" replace />} />
+          <Route path="/openwiki" element={<Navigate to="/plugins?id=openwiki" replace />} />
+          <Route path="/plugins" element={<PluginsPage activeBrainId={activeBrainId} />} />
+          <Route path="/integrations" element={<Navigate to="/plugins?id=meta-harness" replace />} />
+          <Route path="/keys" element={<Navigate to="/secrets" replace />} />
+          <Route path="/settings" element={<SettingsPage activeBrainId={activeBrainId} />} />
+          <Route path="/network" element={<NetworkPage />} />
+          <Route path="/mesh" element={<Navigate to="/plugins?id=mesh" replace />} />
+          <Route path="/webhooks" element={<WebhooksPage />} />
+          <Route path="/secrets" element={<Navigate to="/plugins?id=auth" replace />} />
+          <Route path="/notifications" element={<NotificationsPage />} />
+          <Route path="/help" element={<HelpPage />} />
+          {/* Legacy OS-control-plane routes → core product */}
+          <Route path="/vault" element={<Navigate to="/memory" replace />} />
+          <Route path="/inbox" element={<Navigate to="/tasks" replace />} />
+          <Route path="/automations" element={<Navigate to="/plugins?id=user-automations" replace />} />
+          <Route path="/files" element={<Navigate to="/memory" replace />} />
+          <Route path="/sandbox" element={<Navigate to="/memory" replace />} />
+          <Route path="/models" element={<Navigate to="/settings" replace />} />
+          <Route path="/health" element={<Navigate to="/settings" replace />} />
+          <Route path="/usage" element={<Navigate to="/settings" replace />} />
+          <Route path="/collab" element={<Navigate to="/memory" replace />} />
+          <Route path="/instructions" element={<Navigate to="/memory" replace />} />
+          <Route path="/design" element={<Navigate to="/memory" replace />} />
+          <Route path="/okf" element={<Navigate to="/memory" replace />} />
+          <Route path="*" element={<Navigate to="/memory" replace />} />
+        </Routes>
       </div>
-      {(!isChat || floatingChat) && (
-        <div style={{ flex: 1, overflow: 'auto' }}>
-          <Routes>
-            <Route path="/" element={<Navigate to={isOnboardingComplete() ? '/memory' : '/onboarding'} replace />} />
-            <Route path="/chat" element={<ChatPage activeBrainId={activeBrainId} />} />
-            <Route path="/onboarding" element={<OnboardingPage />} />
-            <Route path="/memory" element={<MemoryPage activeBrainId={activeBrainId} />} />
-            <Route path="/rules" element={<RulesPage activeBrainId={activeBrainId} />} />
-            <Route path="/graph" element={<GraphPage activeBrainId={activeBrainId} />} />
-            <Route path="/tasks" element={<TasksPage />} />
-            <Route path="/skills" element={<SkillsPage activeBrainId={activeBrainId} />} />
-            <Route path="/openwiki" element={<Navigate to="/plugins?id=openwiki" replace />} />
-            <Route path="/plugins" element={<PluginsPage activeBrainId={activeBrainId} />} />
-            <Route path="/integrations" element={<IntegrationsPage activeBrainId={activeBrainId} />} />
-            <Route path="/keys" element={<Navigate to="/secrets" replace />} />
-            <Route path="/settings" element={<SettingsPage activeBrainId={activeBrainId} />} />
-            <Route path="/network" element={<NetworkPage />} />
-            <Route path="/mesh" element={<Navigate to="/plugins?id=mesh" replace />} />
-            <Route path="/webhooks" element={<WebhooksPage />} />
-            <Route path="/secrets" element={<Navigate to="/plugins?id=auth" replace />} />
-            <Route path="/notifications" element={<NotificationsPage />} />
-            <Route path="/help" element={<HelpPage />} />
-            {/* Legacy OS-control-plane routes → core product */}
-            <Route path="/vault" element={<Navigate to="/memory" replace />} />
-            <Route path="/inbox" element={<Navigate to="/tasks" replace />} />
-            <Route path="/automations" element={<Navigate to="/plugins?id=user-automations" replace />} />
-            <Route path="/files" element={<Navigate to="/memory" replace />} />
-            <Route path="/sandbox" element={<Navigate to="/memory" replace />} />
-            <Route path="/models" element={<Navigate to="/settings" replace />} />
-            <Route path="/health" element={<Navigate to="/settings" replace />} />
-            <Route path="/usage" element={<Navigate to="/settings" replace />} />
-            <Route path="/collab" element={<Navigate to="/memory" replace />} />
-            <Route path="/instructions" element={<Navigate to="/memory" replace />} />
-            <Route path="/design" element={<Navigate to="/memory" replace />} />
-            <Route path="/okf" element={<Navigate to="/memory" replace />} />
-            <Route path="*" element={<Navigate to="/memory" replace />} />
-          </Routes>
-        </div>
-      )}
     </main>
   );
 }
@@ -512,7 +437,7 @@ function App() {
     <BrowserRouter>
       <div className="app-layout">
         <Sidebar onLogout={handleLogout} health={health} activeBrainId={activeBrainId} onBrainChange={setActiveBrainId} />
-        <MainContent activeBrainId={activeBrainId} onBrainChange={setActiveBrainId} />
+        <MainContent activeBrainId={activeBrainId} />
       </div>
       <ContextualHelp />
     </BrowserRouter>

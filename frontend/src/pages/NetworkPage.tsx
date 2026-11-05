@@ -199,7 +199,7 @@ export default function NetworkPage() {
         {/* Firewall Blocklist */}
         <div className="card">
           <div className="section-title">
-            🛡️ Firewall Blocklist
+            Firewall Blocklist
             <span className="badge badge-warning">{policy?.blocked_domains?.length ?? 0}</span>
           </div>
 
@@ -247,7 +247,7 @@ export default function NetworkPage() {
 
         {/* Global Limits Editor */}
         <div className="card">
-          <div className="section-title">⚙️ Global Limits</div>
+          <div className="section-title">Global Limits</div>
           <div className="limits-form">
             <div className="limits-row">
               <span className="limits-label">Max Global Concurrency</span>
@@ -302,7 +302,7 @@ export default function NetworkPage() {
 
       {/* Audit Log */}
       <div className="card network-section-full">
-        <div className="section-title">📋 Audit Log</div>
+        <div className="section-title">Audit Log</div>
 
         <div className="audit-filters">
           <input

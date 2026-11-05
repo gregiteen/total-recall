@@ -3,10 +3,32 @@
  * Provides harness-specific parsing, emission, installation and verification.
  */
 import { claudeAdapter } from './claude.mjs';
+import { agyAdapter } from './agy.mjs';
+import { codexAdapter } from './codex.mjs';
+import { dshAdapter } from './dsh.mjs';
+import { hermesAdapter } from './hermes.mjs';
+import { openclawAdapter } from './openclaw.mjs';
+import { cursorAdapter } from './cursor.mjs';
+import { devinAdapter } from './devin.mjs';
+import { grokAdapter } from './grok.mjs';
+import { clineAdapter } from './cline.mjs';
+import { piAdapter } from './pi.mjs';
 
 const ADAPTERS = new Map([
   ['claude', claudeAdapter],
-  ['claude-code', claudeAdapter]
+  ['claude-code', claudeAdapter],
+  ['agy', agyAdapter],
+  ['antigravity', agyAdapter],
+  ['codex', codexAdapter],
+  ['dsh', dshAdapter],
+  ['hermes', hermesAdapter],
+  ['openclaw', openclawAdapter],
+  ['cursor', cursorAdapter],
+  ['devin', devinAdapter],
+  ['windsurf', devinAdapter],
+  ['grok', grokAdapter],
+  ['cline', clineAdapter],
+  ['pi', piAdapter]
 ]);
 
 export function get(harnessId) {
@@ -50,6 +72,16 @@ export default {
   install,
   verify,
   adapters: {
-    claude: claudeAdapter
+    claude: claudeAdapter,
+    agy: agyAdapter,
+    codex: codexAdapter,
+    dsh: dshAdapter,
+    hermes: hermesAdapter,
+    openclaw: openclawAdapter,
+    cursor: cursorAdapter,
+    devin: devinAdapter,
+    grok: grokAdapter,
+    cline: clineAdapter,
+    pi: piAdapter
   }
 };

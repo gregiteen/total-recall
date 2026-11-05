@@ -88,7 +88,7 @@ export default function HelpPage() {
         <p>Offline docs for portable memory: CLI commands, vault layout, dream, tasks, and IDE connect.</p>
       </div>
 
-      {error && <div className="badge badge-error" style={{ marginBottom: '16px' }}>⚠️ {error}</div>}
+      {error && <div className="badge badge-error" style={{ marginBottom: '16px' }}>{error}</div>}
 
       <div style={{ display: 'grid', gridTemplateColumns: '260px 1fr', gap: '30px', minHeight: '500px' }}>
         {/* Sidebar */}
@@ -99,17 +99,19 @@ export default function HelpPage() {
               onClick={() => setSelectedTopic(t.id)}
               style={{
                 textAlign: 'left',
+                minHeight: '44px',
                 padding: '12px 16px',
-                borderRadius: '8px',
-                background: selectedTopic === t.id ? 'var(--purple-primary)' : 'rgba(255, 255, 255, 0.03)',
+                borderRadius: 'var(--radius-md, 10px)',
+                background: selectedTopic === t.id ? 'var(--color-primary, #8b5cf6)' : 'rgba(12, 18, 32, 0.72)',
                 color: '#fff',
-                border: selectedTopic === t.id ? '1px solid var(--purple-border)' : '1px solid transparent',
+                border: selectedTopic === t.id ? '1px solid var(--purple-border, #a78bfa)' : '1px solid rgba(148, 163, 184, 0.12)',
+                backdropFilter: 'blur(16px)',
                 cursor: 'pointer',
                 transition: 'all 0.2s',
               }}
             >
-              <div style={{ fontWeight: 'bold', fontSize: '14px' }}>{t.title}</div>
-              <div style={{ fontSize: '11px', color: selectedTopic === t.id ? 'rgba(255, 255, 255, 0.8)' : 'var(--text-secondary)', marginTop: '4px' }}>
+              <div style={{ fontWeight: 600, fontSize: '14px' }}>{t.title}</div>
+              <div style={{ fontSize: '12px', color: selectedTopic === t.id ? 'rgba(255, 255, 255, 0.9)' : 'var(--text-secondary)', marginTop: '4px' }}>
                 {t.description}
               </div>
             </button>
@@ -119,10 +121,11 @@ export default function HelpPage() {
         {/* Content Pane */}
         <div
           style={{
-            background: 'var(--surface-bg)',
-            border: '1px solid var(--border)',
-            borderRadius: '12px',
-            padding: '30px',
+            background: 'rgba(12, 18, 32, 0.72)',
+            backdropFilter: 'blur(16px)',
+            border: '1px solid rgba(148, 163, 184, 0.12)',
+            borderRadius: 'var(--radius-lg, 16px)',
+            padding: '32px',
             overflowY: 'auto',
             maxHeight: '75vh',
           }}

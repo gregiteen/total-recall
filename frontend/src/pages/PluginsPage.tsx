@@ -632,17 +632,18 @@ export default function PluginsPage({ activeBrainId }: PluginsPageProps) {
 
   const closeDetail = () => {
     setDetail(null)
-    if (searchParams.has("id")) {
+    if (searchParams.has("id") || searchParams.has("plugin")) {
       const next = new URLSearchParams(searchParams)
       next.delete("id")
+      next.delete("plugin")
       setSearchParams(next)
     }
   }
 
   useEffect(() => {
-    const id = searchParams.get("id")
+    const id = searchParams.get("id") || searchParams.get("plugin")
     if (!id || detail?.id === id) return
-    const match = installed.find((p) => p.id === id)
+    const match = installed.find((p) => p.id === id || p.id === `tr-plugin-${id}` || p.name === id)
     if (match) openDetail(match)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchParams, installed])
@@ -1331,14 +1332,14 @@ export default function PluginsPage({ activeBrainId }: PluginsPageProps) {
 
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
                 <div style={{ background: "var(--bg-tertiary)", padding: "12px", borderRadius: "8px", border: "1px solid var(--border)" }}>
-                  <div style={{ fontWeight: 600, color: "#38bdf8", marginBottom: "4px" }}>🔒 Private Plugins</div>
+                  <div style={{ fontWeight: 600, color: "#38bdf8", marginBottom: "4px" }}>Private Plugins</div>
                   <div style={{ ...muted, fontSize: "12px", lineHeight: 1.4 }}>
                     Store directly inside <code style={mono}>.agent/skills/total-recall/plugins/&lt;id&gt;</code> or link locally. Never shared outside this machine or project. Zero cloud exposure.
                   </div>
                 </div>
 
                 <div style={{ background: "var(--bg-tertiary)", padding: "12px", borderRadius: "8px", border: "1px solid var(--border)" }}>
-                  <div style={{ fontWeight: 600, color: "#a855f7", marginBottom: "4px" }}>🌐 Plugin Store Distribution</div>
+                  <div style={{ fontWeight: 600, color: "#a855f7", marginBottom: "4px" }}>Plugin Store Distribution</div>
                   <div style={{ ...muted, fontSize: "12px", lineHeight: 1.4 }}>
                     Deploy to the store via <code style={mono}>total-recall deploy-store &lt;id&gt;</code>. Cryptographically signed and distributed across the mesh for team consumption.
                   </div>

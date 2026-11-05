@@ -133,6 +133,19 @@ describe('total-recall preflight check and the tr-preflight alias', () => {
     const r = run(['preflight', 'check', '--json'], { cwd: repo });
     expect(JSON.parse(r.out)).toMatchObject({ ok: true, task: 'spec' });
   });
+  it.each(['--off', '--remove'])('has no off switch: install %s refuses', (off) => {
+    const r = run(['preflight', 'install', off], { cwd: repo });
+    expect(r.code).toBe(1);
+    expect(r.err).toMatch(/no off switch/);
+  });
+
+  it('install --help prints usage and performs nothing', () => {
+    const r = run(['preflight', 'install', '--help'], { cwd: repo });
+    expect(r.code).toBe(0);
+    expect(r.out).toMatch(/Usage: total-recall preflight/);
+    expect(r.out).not.toMatch(/Installed preflight gate/);
+  });
+
   it('installs adapter with dry-run or rejects unknown harness', () => {
     const okRun = run(['preflight', 'install', '--dry-run'], { cwd: repo });
     expect(okRun.code).toBe(0);

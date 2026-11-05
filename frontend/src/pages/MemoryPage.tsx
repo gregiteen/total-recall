@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from "react"
 import { useSearchParams } from "react-router-dom"
-import { listMemory, searchMemory, readMemory, fetchConflicts, resolveConflict, saveMemory, createMemory, deleteMemory, fetchSessions, deleteSession } from "../api"
+import { listMemory, searchMemory, readMemory, fetchConflicts, resolveConflict, saveMemory, createMemory, deleteMemory, fetchSessions, deleteSession, getApiBase } from "../api"
 import type { MemoryNode, Conflict } from "../types"
 import type { SessionSummary } from "../api"
 
@@ -297,9 +297,10 @@ export default function MemoryPage({ activeBrainId }: { activeBrainId?: string }
     }
   }, [urlSlug, activeBrainId, nodes])
 
-  // Wire SSE Live Agent Monitor Streaming (Port 9111)
+  // Wire SSE Live Agent Monitor Streaming
   useEffect(() => {
-    const sseUrl = "http://localhost:9111/stream"
+    const base = getApiBase() || window.location.origin
+    const sseUrl = `${base.replace(/\/+$/, '')}/stream`
     const eventSource = new EventSource(sseUrl)
 
     eventSource.onmessage = (event) => {
@@ -529,9 +530,9 @@ export default function MemoryPage({ activeBrainId }: { activeBrainId?: string }
 
         {/* Action Buttons */}
         <div style={{ display: "flex", justifyContent: "flex-end", gap: 12, marginTop: 12 }}>
-          <button className="btn btn-ghost" type="button" onClick={onCancel} style={{ fontSize: 13 }}>Cancel</button>
-          <button className="btn btn-purple" type="button" onClick={onSubmit} style={{ fontSize: 13 }}>
-            {isNew ? "🚀 Create Memory Node" : "💾 Save Changes"}
+          <button className="btn btn-ghost" type="button" onClick={onCancel} style={{ fontSize: 13, minHeight: 44, padding: "0 18px", borderRadius: "var(--radius-md, 10px)" }}>Cancel</button>
+          <button className="btn btn-purple" type="button" onClick={onSubmit} style={{ fontSize: 13, minHeight: 44, padding: "0 18px", borderRadius: "var(--radius-md, 10px)" }}>
+            {isNew ? "Create Memory Node" : "Save Changes"}
           </button>
         </div>
       </div>
@@ -552,20 +553,20 @@ export default function MemoryPage({ activeBrainId }: { activeBrainId?: string }
         </div>
         
         {/* Tab Selection */}
-        <div style={{ display: "flex", background: "rgba(255,255,255,0.03)", padding: 4, borderRadius: 8, border: "1px solid var(--border)" }}>
+        <div style={{ display: "flex", background: "rgba(12, 18, 32, 0.72)", backdropFilter: "blur(16px)", padding: 4, borderRadius: "var(--radius-md, 10px)", border: "1px solid var(--border)" }}>
           <button 
             className={`btn btn-sm ${activeTab === "vault" ? "btn-purple" : "btn-ghost"}`}
             onClick={() => { setActiveTab("vault"); setSelected(null); setSearchParams({}); }}
-            style={{ borderRadius: 6, fontSize: 12, padding: "6px 12px" }}
+            style={{ borderRadius: 6, fontSize: 12, minHeight: 36, padding: "6px 14px", fontWeight: 600 }}
           >
-            🧠 Active Nodes
+            Active Nodes
           </button>
           <button 
             className={`btn btn-sm ${activeTab === "conflicts" ? "btn-cyan" : "btn-ghost"}`}
             onClick={() => { setActiveTab("conflicts"); setSelected(null); setSearchParams({}); }}
-            style={{ borderRadius: 6, fontSize: 12, padding: "6px 12px", display: "flex", alignItems: "center", gap: 6 }}
+            style={{ borderRadius: 6, fontSize: 12, minHeight: 36, padding: "6px 14px", fontWeight: 600, display: "flex", alignItems: "center", gap: 6 }}
           >
-            ⚠️ Quarantined Conflicts
+            Quarantined Conflicts
             {conflicts.length > 0 && (
               <span style={{ background: "#ef4444", color: "#fff", fontSize: 9, padding: "1px 5px", borderRadius: 10, fontWeight: 700 }}>
                 {conflicts.length}
@@ -575,9 +576,9 @@ export default function MemoryPage({ activeBrainId }: { activeBrainId?: string }
           <button 
             className={`btn btn-sm ${activeTab === "sessions" ? "btn-purple" : "btn-ghost"}`}
             onClick={() => { setActiveTab("sessions"); setSelected(null); setSearchParams({}); }}
-            style={{ borderRadius: 6, fontSize: 12, padding: "6px 12px" }}
+            style={{ borderRadius: 6, fontSize: 12, minHeight: 36, padding: "6px 14px", fontWeight: 600 }}
           >
-            📝 Sessions
+            Sessions
             {sessionsTotal > 0 && (
               <span style={{ background: "rgba(139,92,246,0.3)", color: "#a78bfa", fontSize: 9, padding: "1px 5px", borderRadius: 10, fontWeight: 700, marginLeft: 4 }}>
                 {sessionsTotal}
@@ -587,7 +588,7 @@ export default function MemoryPage({ activeBrainId }: { activeBrainId?: string }
         </div>
       </div>
 
-      {error && <div className="badge badge-error" style={{ alignSelf: "flex-start", marginBottom: 15 }}>⚠️ {error}</div>}
+      {error && <div className="badge badge-error" style={{ alignSelf: "flex-start", marginBottom: 15 }}>{error}</div>}
 
       {activeTab === "vault" ? (
         <div className="memory-layout">
@@ -599,7 +600,7 @@ export default function MemoryPage({ activeBrainId }: { activeBrainId?: string }
                 className={`category-btn ${category === c ? "active" : ""}`}
                 onClick={() => { setCategory(c); setSearchParams({}); setIsCreating(false); setIsEditing(false); }}
               >
-                <span>{c === "all" ? "📋 All Nodes" : c}</span>
+                <span>{c === "all" ? "All Nodes" : c}</span>
                 {c === "all"
                   ? <span className="category-count">{nodes.length}</span>
                   : categoryCounts[c]
@@ -611,7 +612,7 @@ export default function MemoryPage({ activeBrainId }: { activeBrainId?: string }
             
             <button
               className="btn btn-purple"
-              style={{ width: "100%", marginTop: 20, display: "flex", alignItems: "center", justifyContent: "center", gap: 8, fontSize: 13 }}
+              style={{ width: "100%", marginTop: 20, display: "flex", alignItems: "center", justifyContent: "center", gap: 8, fontSize: 13, minHeight: 44, borderRadius: "var(--radius-md, 10px)", fontWeight: 600 }}
               onClick={() => {
                 setSelected(null);
                 setSearchParams({});
@@ -632,7 +633,7 @@ export default function MemoryPage({ activeBrainId }: { activeBrainId?: string }
                 setEditSupersedes("");
               }}
             >
-              ➕ Create New Node
+              Create New Node
             </button>
           </div>
           <div className="memory-main">
@@ -710,14 +711,14 @@ export default function MemoryPage({ activeBrainId }: { activeBrainId?: string }
                       }} 
                       style={{ fontSize: 12, border: "1px solid var(--border)" }}
                     >
-                      ✏️ Edit Node
+                      Edit Node
                     </button>
                     <button 
                       className="btn btn-ghost btn-sm" 
                       onClick={() => handleDelete(selected.slug)} 
-                      style={{ fontSize: 12, borderColor: "rgba(239,68,68,0.2)", color: "#fca5a5" }}
+                      style={{ fontSize: 12, minHeight: 36, padding: "0 12px", borderColor: "rgba(239,68,68,0.2)", color: "#fca5a5" }}
                     >
-                      🗑️ Delete
+                      Delete
                     </button>
                   </div>
                 </div>
@@ -900,13 +901,13 @@ export default function MemoryPage({ activeBrainId }: { activeBrainId?: string }
                         )}
                       </div>
                       <div style={{ display: "flex", flexWrap: "wrap", gap: 16, fontSize: 11, color: "var(--text-tertiary)", marginTop: 8 }}>
-                        <span>📂 {n.category}</span>
+                        <span>{n.category}</span>
                         {n.importance !== undefined && (
                           <span style={{ color: "#fbbf24" }}>★ {n.importance}/5</span>
                         )}
                         {n.confidence !== undefined && (
                           <span style={{ display: "flex", alignItems: "center", gap: 4 }}>
-                            🧠 {Math.round(n.confidence * 100)}%
+                            {Math.round(n.confidence * 100)}%
                           </span>
                         )}
                       </div>
@@ -929,8 +930,7 @@ export default function MemoryPage({ activeBrainId }: { activeBrainId?: string }
 
           {conflicts.length === 0 ? (
             <div style={{ textAlign: "center", padding: 60, background: "rgba(255,255,255,0.02)", borderRadius: 12, border: "1px dashed var(--border)", color: "var(--text-tertiary)" }}>
-              <span style={{ fontSize: 32, display: "block", marginBottom: 12 }}>🛡️</span>
-              <h4 style={{ color: "#fff", marginBottom: 6 }}>All Clear!</h4>
+              <h4 style={{ color: "#fff", marginBottom: 6 }}>All Clear</h4>
               No memory conflicts enqueued or quarantined in `.agent/memory-inbox/conflicts/`.
             </div>
           ) : (
@@ -1040,8 +1040,8 @@ export default function MemoryPage({ activeBrainId }: { activeBrainId?: string }
       {activeTab === "sessions" && (
         <div className="health-log" style={{ background: "rgba(15,23,42,0.45)", backdropFilter: "blur(12px)", border: "1px solid var(--border)", borderRadius: 12, padding: 24 }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
-            <h2 style={{ margin: 0, color: "#fff", fontSize: 16 }}>📝 IDE Sessions ({sessionsTotal})</h2>
-            <button className="btn btn-ghost btn-sm" onClick={loadSessions} style={{ fontSize: 12 }}>🔄 Refresh</button>
+            <h2 style={{ margin: 0, color: "#fff", fontSize: 16 }}>IDE Sessions ({sessionsTotal})</h2>
+            <button className="btn btn-ghost btn-sm" onClick={loadSessions} style={{ fontSize: 12, minHeight: 36, padding: "0 12px" }}>Refresh</button>
           </div>
 
           {sessionsLoading ? (
@@ -1050,7 +1050,6 @@ export default function MemoryPage({ activeBrainId }: { activeBrainId?: string }
             </div>
           ) : sessionsList.length === 0 ? (
             <div style={{ textAlign: "center", padding: 40, color: "var(--text-tertiary)" }}>
-              <span style={{ fontSize: 32, display: "block", marginBottom: 8 }}>📝</span>
               No sessions ingested yet. Sessions appear here when the relay ships IDE conversation data.
             </div>
           ) : (
@@ -1072,7 +1071,6 @@ export default function MemoryPage({ activeBrainId }: { activeBrainId?: string }
                     codex: "#10b981",
                     vscode: "#3b82f6",
                     cursor: "#06b6d4",
-                    "gemini-cli": "#ec4899",
                   }
                   const color = sourceColors[s.source || ""] || "var(--text-secondary)"
                   return (
@@ -1106,9 +1104,9 @@ export default function MemoryPage({ activeBrainId }: { activeBrainId?: string }
                         <button
                           className="btn btn-ghost btn-sm"
                           onClick={() => handleDeleteSession(s.id)}
-                          style={{ fontSize: 10, padding: "2px 6px", color: "#fca5a5", borderColor: "rgba(239,68,68,0.2)" }}
+                          style={{ fontSize: 11, padding: "4px 8px", color: "#fca5a5", borderColor: "rgba(239,68,68,0.2)" }}
                         >
-                          🗑️
+                          Delete
                         </button>
                       </td>
                     </tr>

@@ -69,4 +69,16 @@ describe('syncScaffoldPlugins', () => {
     expect(Object.keys(lock)).toEqual(['auth/cli.mjs', 'auth/package-lock.json', 'auth/package.json', 'auth/src/new.mjs']);
     expect(syncScaffoldPlugins({ root, ids: ['auth'], write: false, run }).changes).toEqual([]);
   });
+
+  it('reports a stale pin in check mode even when every copied file matches its source', () => {
+    const ids = ['auth'];
+    const stalePinRun = packed(['cli.mjs', 'src/new.mjs', 'package.json']);
+    syncScaffoldPlugins({ root, ids, write: true, run: stalePinRun });
+    expect(syncScaffoldPlugins({ root, ids, run: stalePinRun }).changes).toEqual([]);
+    const lockFile = path.join(root, 'scripts/scaffold-plugins.json');
+    const lock = JSON.parse(fs.readFileSync(lockFile, 'utf8'));
+    lock[Object.keys(lock)[0]] = 'stale';
+    fs.writeFileSync(lockFile, JSON.stringify(lock));
+    expect(syncScaffoldPlugins({ root, ids, run: stalePinRun }).changes).toEqual([{ file: 'scripts/scaffold-plugins.json', change: 'stale pin' }]);
+  });
 });

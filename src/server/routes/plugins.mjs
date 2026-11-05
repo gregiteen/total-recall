@@ -35,7 +35,7 @@ const projectRoot = () => process.cwd();
 router.get('/api/plugins/execution-targets', requireAuth, requireScope('config:read'), async (req, res) => {
   try {
     const { loadPluginModule } = await import('../../core/plugin-runtime.mjs');
-    const owner = await loadPluginModule('cli-agents', 'command-executor', { activeRequired: true });
+    const owner = await loadPluginModule('meta-harness', 'command-executor', { activeRequired: true });
     const result = req.query.node ? await owner.inspectNode(String(req.query.node)) : await owner.listTargets();
     res.json({ success: true, ...result });
   } catch (err) { badRequest(res, err.message); }
@@ -338,7 +338,7 @@ router.post("/api/plugins/:id/run", requireAuth, (req, res, next) => {
       if (stdin !== undefined) return badRequest(res, 'Credential operations require direct local execution');
       if (!pluginActivation(plugin, { projectRoot: projectRoot() }).enabled && !['on', 'off', 'status', 'health', 'jobs', '--help', 'help'].includes(subcommand)) return badRequest(res, `Plugin ${plugin.id} is inactive`);
       const { loadPluginModule } = await import('../../core/plugin-runtime.mjs');
-      const owner = await loadPluginModule('cli-agents', 'command-executor', { activeRequired: true });
+      const owner = await loadPluginModule('meta-harness', 'command-executor', { activeRequired: true });
       const result = await owner.executeCommand({ plugin, subcommand, args, execution, projectRoot: projectRoot() });
       return res.json({ success: result.ok, pluginId: plugin.id, ...result });
     }

@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { runWorker, runProcess, getActiveAdapters } from './worker.mjs';
+import { runWorker, runProcess, getActiveAdapters, notReady } from './worker.mjs';
 
 async function hostModule(name) {
   const selected = process.env.TR_PACKAGE_ROOT;
@@ -36,7 +36,7 @@ export async function listTargets() {
 
 export function workerProgram(request) {
   const source = fs.readFileSync(new URL('./worker.mjs', import.meta.url), 'utf8');
-  return source + '\nrunWorker(' + JSON.stringify(request) + ').then(result=>console.log(JSON.stringify(result))).catch(()=>{console.error("Selected agent worker failed");process.exitCode=1;});\n';
+  return source + '\nrunWorker(' + JSON.stringify(request) + ').then(result=>console.log(JSON.stringify(result))).catch(error=>{console.error(String(error?.message||"Selected agent worker failed"));process.exitCode=1;});\n';
 }
 
 export async function executeOnNode(node, request, { worker = runWorker, processRunner = runProcess, mesh, access } = {}) {
@@ -49,8 +49,8 @@ export async function executeOnNode(node, request, { worker = runWorker, process
   const resolved = access.resolveNodeAccess(target);
   const args = access.buildSshArgs(resolved, { command: 'export PATH="$HOME/.local/bin:/opt/homebrew/bin:/usr/local/bin:$PATH"; exec node --input-type=module', extraOptions: ['BatchMode=yes', 'ConnectTimeout=10'] });
   if (!args) throw new Error('Selected mesh node has no verified SSH access');
-  const result = await processRunner('ssh', args, { input: workerProgram(request), timeoutMs: request.operation === 'inspect' ? 120000 : 330000 });
-  if (result.reason || result.exitCode !== 0) throw new Error('Selected mesh worker failed; verify node access, workspace and agent installation');
+  const result = await processRunner('ssh', args, { input: workerProgram(request), timeoutMs: request.operation === 'inspect' ? 120000 : (request.timeoutMs || 900000) + 30000 });
+  if (result.reason || result.exitCode !== 0) throw notReady(`Worker on ${node} failed: ${String(result.stderr || result.reason || 'verify node access, workspace and agent installation').trim().slice(0, 400)}`);
   try { return JSON.parse(result.stdout); } catch { throw new Error('Selected mesh worker returned invalid data'); }
 }
 

@@ -130,10 +130,17 @@
       },
       {
         "name": "maintenance",
-        "description": "Total Recall daemon maintenance: current official documentation and integration surfaces",
+        "description": "Daemon maintenance: official documentation and integration surfaces, or the model catalog with --models",
         "effect": "write",
         "output": "json",
-        "args": [],
+        "args": [
+          {
+            "name": "models",
+            "flag": "--models",
+            "type": "boolean",
+            "label": "Refresh the model and benchmark catalog"
+          }
+        ],
         "timeout_ms": 600000
       },
       {
@@ -259,16 +266,17 @@
       },
       {
         "name": "benchmarks",
-        "description": "Inspect SWE-bench Pro, Terminal-Bench 2.0, and local empirical pass rates",
+        "description": "Sourced model pricing, coding index and leaderboard results, with pass rates measured on this machine",
         "effect": "read",
         "output": "json",
         "args": []
       },
       {
         "name": "route",
-        "description": "Evaluate task complexity and select optimal harness via two-stage RouteLLM classifier",
-        "effect": "read",
+        "description": "Choose the harness for a task; with --execute, run it on its own branch and escalate on failure",
+        "effect": "write",
         "output": "json",
+        "timeout_ms": 600000,
         "args": [
           {
             "name": "task",
@@ -276,6 +284,30 @@
             "label": "Task description",
             "required": true,
             "positional": true
+          },
+          {
+            "name": "execute",
+            "flag": "--execute",
+            "type": "boolean",
+            "label": "Run the task on its own branch"
+          },
+          {
+            "name": "gate",
+            "flag": "--gate",
+            "type": "boolean",
+            "label": "Require the code-quality gate, escalating when it fails"
+          },
+          {
+            "name": "jev",
+            "flag": "--jev",
+            "type": "boolean",
+            "label": "Classify through the decision plugin"
+          },
+          {
+            "name": "tier",
+            "flag": "--tier",
+            "type": "string",
+            "label": "Gate tier: fast | full | remote"
           }
         ]
       },
@@ -297,15 +329,194 @@
             "flag": "--mode",
             "type": "string",
             "label": "pipeline | council | race"
+          },
+          {
+            "name": "execute",
+            "flag": "--execute",
+            "type": "boolean",
+            "label": "Run the agents; without this the plan is only reported"
+          },
+          {
+            "name": "gate",
+            "flag": "--gate",
+            "type": "boolean",
+            "label": "Require the code-quality gate"
+          },
+          {
+            "name": "autoReview",
+            "flag": "--auto-review",
+            "type": "boolean",
+            "label": "Add a cross-model code review"
+          },
+          {
+            "name": "allowSameFamily",
+            "flag": "--allow-same-family",
+            "type": "boolean",
+            "label": "Accept a Verifier from the Implementer's model family"
+          }
+        ],
+        "timeout_ms": 600000
+      },
+      {
+        "name": "learn",
+        "description": "Summarize run receipts into scorecards and quota walls; --emit writes proposals to memory",
+        "effect": "write",
+        "output": "json",
+        "args": [
+          {
+            "name": "emit",
+            "flag": "--emit",
+            "type": "boolean",
+            "label": "Write proposals through the memory owner"
           }
         ]
       },
       {
-        "name": "learn",
-        "description": "Summarize empirical run scorecards and generate memory friction proposals",
+        "name": "alerts",
+        "description": "Send operator alerts for quota walls and usage over the threshold",
+        "effect": "send",
+        "output": "json",
+        "args": [
+          {
+            "name": "action",
+            "type": "string",
+            "label": "check | test",
+            "positional": true
+          },
+          {
+            "name": "threshold",
+            "flag": "--threshold",
+            "type": "number",
+            "label": "Usage percent that triggers an alert"
+          },
+          {
+            "name": "dryRun",
+            "flag": "--dry-run",
+            "type": "boolean",
+            "label": "Report without sending"
+          }
+        ]
+      },
+      {
+        "name": "decompose",
+        "description": "Decompose complex multi-step tasks into specialized Explorer, Architect, Implementer, and Verifier subagent stages",
         "effect": "read",
         "output": "json",
-        "args": []
+        "args": [
+          {
+            "name": "task",
+            "type": "string",
+            "label": "Task description",
+            "required": true,
+            "positional": true
+          }
+        ]
+      },
+      {
+        "name": "orchestrate",
+        "description": "Orchestrate multi-step tasks using subagent fan-out, one-way valve context compression, and cross-model verification",
+        "effect": "write",
+        "output": "json",
+        "args": [
+          {
+            "name": "task",
+            "type": "string",
+            "label": "Task description",
+            "required": true,
+            "positional": true
+          },
+          {
+            "name": "orchestrator",
+            "flag": "--orchestrator",
+            "type": "string",
+            "label": "Active orchestrator harness (claude, codex, agy, hermes, cursor)"
+          },
+          {
+            "name": "execute",
+            "flag": "--execute",
+            "type": "boolean",
+            "label": "Execute live stages"
+          },
+          {
+            "name": "autoReview",
+            "flag": "--auto-review",
+            "type": "boolean",
+            "label": "Trigger adversarial code review upon completion"
+          },
+          {
+            "name": "gate",
+            "flag": "--gate",
+            "type": "boolean",
+            "label": "Require the code-quality gate"
+          },
+          {
+            "name": "allowSameFamily",
+            "flag": "--allow-same-family",
+            "type": "boolean",
+            "label": "Accept a Verifier from the Implementer's model family"
+          }
+        ],
+        "timeout_ms": 600000
+      },
+      {
+        "name": "threads",
+        "description": "Manage multi-platform agent threads, PR branch tracking, and turn history across all connected platforms",
+        "effect": "write",
+        "output": "json",
+        "args": [
+          {
+            "name": "action",
+            "type": "string",
+            "label": "list | show | create | close | delete",
+            "required": true,
+            "positional": true
+          },
+          {
+            "name": "target",
+            "type": "string",
+            "label": "Thread ID or title",
+            "positional": true
+          }
+        ]
+      },
+      {
+        "name": "review",
+        "description": "Execute automated adversarial cross-model code review on Git diffs, PR branches, or staged changes",
+        "effect": "write",
+        "output": "json",
+        "args": [
+          {
+            "name": "target",
+            "type": "string",
+            "label": "Target branch, PR commit, or empty for working-tree",
+            "positional": true
+          },
+          {
+            "name": "reviewer",
+            "flag": "--reviewer",
+            "type": "string",
+            "label": "Adversarial reviewer harness"
+          },
+          {
+            "name": "staged",
+            "flag": "--staged",
+            "type": "boolean",
+            "label": "Review staged diffs"
+          },
+          {
+            "name": "author",
+            "flag": "--author",
+            "type": "string",
+            "label": "Harness that wrote the code, excluded with its model family"
+          },
+          {
+            "name": "thread",
+            "flag": "--thread",
+            "type": "string",
+            "label": "Thread to attach the review to"
+          }
+        ],
+        "timeout_ms": 600000
       }
     ]
   },
@@ -372,6 +583,13 @@
       "command": "maintenance",
       "placement": "selected-node",
       "timeout_ms": 600000
+    },
+    {
+      "intent": "Automated daily model and benchmark catalog refresh into offline living documents",
+      "schedule": "0 3 * * *",
+      "command": "maintenance --models",
+      "placement": "selected-node",
+      "timeout_ms": 300000
     }
   ]
 }

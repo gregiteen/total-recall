@@ -41,7 +41,7 @@ export default async function startup(args = []) {
     const availH = harnesses.filter(h => h.available);
     const readyH = availH.filter(h => h.authed);
     if (availH.length) {
-      console.log(`Harnesses: ${readyH.length}/${availH.length} ready (${readyH.map(h => `${h.id}: 5h ${h.rolling5hRemainingPct}`).join(', ')})`);
+      console.log(`Harnesses: ${readyH.length}/${availH.length} ready (${readyH.map(h => `${h.id}: 5h ${h.rolling5hRemainingPct} [${h.enforcement || 'enforced'}]`).join(', ')})`);
     }
     for (const action of (report.actions || [])) console.log(`Action: ${action.component} ${action.action} (${action.accepted === true ? 'accepted; see observed readiness' : action.reason || 'failed'})`);
   }

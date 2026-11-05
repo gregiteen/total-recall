@@ -86,10 +86,10 @@ export const ADAPTER_CATALOG = {
     name: 'Hermes Agent Runtime',
     bin: 'hermes',
     family: 'nous-open-weights',
-    tier: 'local',
-    billingModel: 'local',
+    tier: 'budget',
+    billingModel: 'metered',
     speed: 'fast',
-    costScore: 1,
+    costScore: 3,
     qualityScore: 8.2,
     contextLimit: 65536,
     modalities: ['text', 'code'],
@@ -341,7 +341,9 @@ function resolveAdapterEntry(h, catalog = ADAPTER_CATALOG) {
 export function selectOptimalHarness(taskDescription, availableHarnesses = [], quotaStatus = {}, options = {}) {
   const catalog = options.catalog || ADAPTER_CATALOG;
   const empiricalScorecard = options.empiricalScorecard || {};
-  const complexity = classifyTaskComplexity(taskDescription, options);
+  const base = classifyTaskComplexity(taskDescription, options);
+  // A caller with a better classifier (such as a typed decision) may supply the tier.
+  const complexity = options.tierOverride ? { ...base, tier: options.tierOverride } : base;
 
   const pool = availableHarnesses.length > 0
     ? availableHarnesses.map(h => resolveAdapterEntry(h, catalog))
@@ -357,7 +359,7 @@ export function selectOptimalHarness(taskDescription, availableHarnesses = [], q
     return true;
   });
 
-  const candidates = viable.length > 0 ? viable : pool;
+  const candidates = viable;
   const isFrontier = complexity.tier === 'frontier';
   const isLocal = complexity.tier === 'local';
 
@@ -378,6 +380,10 @@ export function selectOptimalHarness(taskDescription, availableHarnesses = [], q
     if (q && q.status === 'needs_auth') {
       rawUtility -= 6.0;
     }
+    // No login probe exists for this harness, so it ranks below one verified as signed in
+    if (q && q.status === 'unverified') {
+      rawUtility -= 1.0;
+    }
 
     // Factor in empirical local pass rate if at least 2 runs recorded
     const emp = empiricalScorecard[h.id] || empiricalScorecard[h.bin];
@@ -397,7 +403,7 @@ export function selectOptimalHarness(taskDescription, availableHarnesses = [], q
   }).sort((a, b) => b.utility - a.utility);
 
   return {
-    selected: ranked[0]?.harness || pool[0]?.id || pool[0]?.bin || null,
+    selected: ranked[0]?.harness || null,
     complexity,
     candidates: ranked
   };
@@ -495,6 +501,8 @@ export function evaluateGateCascade(currentHarness, gateResults = {}, availableH
 export function computeEmpiricalScorecard(historyRuns = []) {
   const summary = {};
   for (const run of historyRuns) {
+    // Quota walls, sign-in gaps and process failures say nothing about the harness's work.
+    if (['quota', 'auth', 'process', 'not-ready'].includes(run.failureKind)) continue;
     const h = run.harness || 'unknown';
     if (!summary[h]) {
       summary[h] = { total: 0, passed: 0, failed: 0, totalDurationMs: 0, passRate: 0, avgDurationMs: 0 };
@@ -518,6 +526,125 @@ export function computeEmpiricalScorecard(historyRuns = []) {
 }
 
 /**
+ * Synthesize raw subagent output through a strict "One-Way Valve" filter.
+ * Compresses verbose exploratory dumps, file trees, and search outputs into
+ * a dense, structured context digest bounded by maxChars (default 2000 chars, ~500 tokens).
+ * Prevents downstream context rot across multi-step orchestration.
+ */
+export function synthesizeOneWayValve(rawOutput, options = {}) {
+  const maxChars = options.maxChars || 2000;
+  const text = String(rawOutput || '').trim();
+  if (!text) return 'No findings reported.';
+
+  // Extract file paths, line references, and key findings
+  const fileLines = text.split('\n');
+  const filesFound = new Set();
+  const keyObservations = [];
+
+  for (const line of fileLines) {
+    const trimmed = line.trim();
+    if (!trimmed) continue;
+    // Match potential file paths: e.g. src/foo.js, /path/to/file.mjs:42
+    const pathMatch = trimmed.match(/(?:[a-zA-Z0-9_-]+\/)+[a-zA-Z0-9._-]+\.[a-zA-Z0-9]+/);
+    if (pathMatch) {
+      filesFound.add(pathMatch[0]);
+    }
+    if (/^(found|note|warning|error|exports|function|class|symbol|defined|status|schema|todo|fixme)/i.test(trimmed) || trimmed.startsWith('- ') || trimmed.startsWith('* ')) {
+      if (keyObservations.length < 15) {
+        keyObservations.push(trimmed.replace(/^[-*]\s*/, ''));
+      }
+    }
+  }
+
+  const parts = [];
+  if (filesFound.size > 0) {
+    parts.push(`Relevant Files: ${Array.from(filesFound).slice(0, 10).join(', ')}`);
+  }
+  if (keyObservations.length > 0) {
+    parts.push(`Key Findings:\n- ${keyObservations.join('\n- ')}`);
+  }
+
+  let digest = parts.join('\n\n');
+  if (!digest || digest.length < 50) {
+    digest = text.length > maxChars ? `${text.slice(0, maxChars - 20)}... [truncated]` : text;
+  } else if (digest.length > maxChars) {
+    digest = `${digest.slice(0, maxChars - 20)}... [truncated]`;
+  }
+
+  return digest;
+}
+
+/**
+ * Decompose a multi-step task into specialized subagent stages:
+ * 1. Explorer (read-only codebase sweep, zero-cost / local preference)
+ * 2. Architect (modular design & file contracts, frontier preference)
+ * 3. Implementer (code authoring & unit test generation)
+ * 4. Verifier (adversarial code audit in isolated worktree, distinct model family)
+ */
+export function decomposeTask(taskDescription, options = {}) {
+  const task = String(taskDescription || '').trim();
+  if (!task) throw new Error('Task description is required for decomposition');
+
+  const complexity = classifyTaskComplexity(task, options);
+  const catalog = options.catalog || ADAPTER_CATALOG;
+  const available = options.availableHarnesses?.length ? options.availableHarnesses : Object.keys(catalog);
+  const entry = id => catalog[id] || {};
+  const byQuality = [...available].sort((a, b) => (entry(b).qualityScore ?? 0) - (entry(a).qualityScore ?? 0));
+  const byCost = [...available].sort((a, b) => (entry(a).costScore ?? 99) - (entry(b).costScore ?? 99));
+
+  // Explorer takes the cheapest harness, Architect the strongest
+  const explorerHarness = byCost[0] || null;
+  const architectHarness = byQuality[0] || null;
+  const implementerHarness = byQuality.find(id => id !== architectHarness && id !== explorerHarness) || architectHarness;
+
+  // Verifier must come from a different model family. Without one, it stays null rather than grading its own work.
+  const verifierHarness = byQuality.find(id => entry(id).family && entry(id).family !== entry(implementerHarness).family) || null;
+  const tierOf = id => entry(id).tier || null;
+
+  return {
+    task,
+    complexity,
+    crossFamilyVerification: Boolean(verifierHarness),
+    stages: [
+      {
+        id: 'stage-1-explore',
+        role: 'Explorer',
+        preferredHarness: explorerHarness,
+        tier: tierOf(explorerHarness),
+        permissions: { read: true, write: false },
+        objective: 'Sweep workspace, locate relevant files, inspect interfaces, and read official documentation without context bloat.',
+        valveFilter: true
+      },
+      {
+        id: 'stage-2-architect',
+        role: 'Architect',
+        preferredHarness: architectHarness,
+        tier: tierOf(architectHarness),
+        permissions: { read: true, write: false },
+        objective: 'Synthesize Explorer digest into modular architectural blueprint, interface contracts, and verification gates.'
+      },
+      {
+        id: 'stage-3-implement',
+        role: 'Implementer',
+        preferredHarness: implementerHarness,
+        tier: tierOf(implementerHarness),
+        permissions: { read: true, write: true },
+        objective: 'Author production implementation files and test cases strictly following the Architectural blueprint.'
+      },
+      {
+        id: 'stage-4-verify',
+        role: 'Verifier',
+        preferredHarness: verifierHarness,
+        tier: tierOf(verifierHarness),
+        worktreeIsolated: true,
+        permissions: { read: true, write: false },
+        objective: 'Adversarial code review and quality gate verification executed in an isolated Git worktree with a distinct model family.'
+      }
+    ]
+  };
+}
+
+/**
  * Meta Harness Brick Factory
  */
 export function createMetaHarness(customAdapters = {}) {
@@ -529,6 +656,8 @@ export function createMetaHarness(customAdapters = {}) {
     select: (task, available, quotas, opts) => selectOptimalHarness(task, available, quotas, { ...opts, catalog: mergedAdapters }),
     buildEnvelope: (task, opts) => buildBootstrapEnvelope(task, opts),
     evaluateCascade: (harness, gates, available) => evaluateGateCascade(harness, gates, available),
-    scorecard: (runs) => computeEmpiricalScorecard(runs)
+    scorecard: (runs) => computeEmpiricalScorecard(runs),
+    decompose: (task, opts) => decomposeTask(task, { ...opts, catalog: mergedAdapters }),
+    valve: (raw, opts) => synthesizeOneWayValve(raw, opts)
   };
 }

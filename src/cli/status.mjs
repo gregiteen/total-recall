@@ -78,7 +78,16 @@ function projectionsStatus(clients, instructionsMtime) {
         fresh = projMtime >= instructionsMtime;
       } catch { fresh = false; }
     }
-    return { name, label: info.label, mode: info.mode, connectedAt: info.connectedAt, projectionPath: info.projectionPath, fresh };
+    return {
+      name,
+      label: info.label,
+      mode: info.mode,
+      enforcement: info.enforcement || 'advisory',
+      enforcementReason: info.enforcementReason || null,
+      connectedAt: info.connectedAt,
+      projectionPath: info.projectionPath,
+      fresh
+    };
   });
 }
 
@@ -312,7 +321,8 @@ export default async function statusCmd(args) {
       if (c.mode === 'file' || c.mode === 'symlink') {
         freshnessTag = c.fresh === null ? '  (no projection)' : c.fresh ? '  ✅ fresh' : '  ⚠️  stale — run: total-recall connect ' + c.name;
       }
-      console.log(`    ${c.label.padEnd(18)} [${c.mode}]${freshnessTag}`);
+      const enfTag = c.enforcement ? ` [${c.enforcement}]` : '';
+      console.log(`    ${c.label.padEnd(18)} [${c.mode}]${enfTag}${freshnessTag}`);
     }
   } else {
     console.log('  Connected clients: (none — run total-recall connect <client>)');

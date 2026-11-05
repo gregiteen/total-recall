@@ -2,6 +2,7 @@
 
 import { listAgents, spawnAgent, killAgent, getAgentLogs } from '../core/agent-manager.mjs';
 import { detectHarnesses } from '../core/meta-harness.mjs';
+import { checkReceipt, findRoot, ACK_COMMAND } from '../core/preflight-receipt.mjs';
 
 function printHelp() {
   console.log(`
@@ -33,7 +34,7 @@ Auth:
   else from the Total Recall secret store, so SSH/launchd sessions without a login keychain work.
 
 Available Harnesses:
-  agy, claude, codex, gemini
+  agy, claude, codex, dsh, hermes, openclaw
 
 Examples:
   npx total-recall agent list
@@ -142,6 +143,16 @@ export async function run(argv) {
       console.error('Error: Please specify harness ID and task prompt.');
       console.error('Usage: npx total-recall agent spawn <harness> "<task>" [--name "..."] [--node <node>] [--cwd <dir>] [--tools <list|none|default>]');
       process.exit(1);
+    }
+
+    if (!targetNode) {
+      const root = findRoot(cwd || process.cwd());
+      const receipt = checkReceipt(root);
+      if (!receipt.ok) {
+        console.error(`\n❌ Agent spawn refused by TR-PREFLIGHT gate: ${receipt.problems[0] || 'check failed'} (directory: ${root}).`);
+        console.error(`   Read the complete context capsule, then run: ${ACK_COMMAND}\n`);
+        process.exit(1);
+      }
     }
 
     const nodeStr = targetNode ? ` on mesh node \x1b[1;33m${targetNode}\x1b[0m` : '';

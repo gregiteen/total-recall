@@ -234,7 +234,7 @@ export default async function remember(args) {
         i++;
       }
     } else if (arg === '--no-dedup') {
-      // Accepted for compatibility; remember never archives another node.
+      // Skips the duplicate guard below; remember never archives another node.
     } else if (arg === '--allow-long') {
       allowLong = true;
     } else if (arg === '--universal') {
@@ -322,6 +322,24 @@ export default async function remember(args) {
   if (priority === 'absolute') {
     node.priority = 'absolute';
     node.immutable = true;
+  }
+
+  // Hermes-grade fail-closed duplicate guard: prevent writing duplicate rules/invariants
+  if (!layerArgs.includes('--force') && !layerArgs.includes('--no-dedup')) {
+    try {
+      const { assertNoDuplicateRule } = await import('../core/duplicate-guard.mjs');
+      assertNoDuplicateRule(node, {
+        vaultDir,
+        derivedDir,
+        globalVaultDir: path.join(getBothBrains().global.brainDir, 'memory-vault'),
+        projectRoot: (project && project.projectRoot) ? project.projectRoot : process.cwd(),
+      });
+    } catch (err) {
+      if (err.code === 'ERR_DUPLICATE_RULE') {
+        process.exit(1);
+      }
+      throw err;
+    }
   }
 
   // Saving memory never optimizes or archives other canonical documents.
