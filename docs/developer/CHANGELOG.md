@@ -1,3 +1,17 @@
+## 3.42.1 — 2026-11-05
+
+- Fix audited secret reads failing and stalling the brain. Plugin ledgers were one document
+  that grew until reading it overflowed the worker's output limit (`ENOBUFS`), and each
+  audited read blocked the server. Ledgers now roll over to a new document at 1 MiB, with
+  existing history still readable. Workers return only the version and receipt. A retry
+  replays correctly across a rollover. `appendAsync` batches rows without blocking the
+  server, and a read still fails if its audit row cannot be saved.
+- Fix a mutation guard left by a dead process blocking every write to that document. The
+  guard now records its owner, and an abandoned guard is reclaimed. A guard held by a live
+  process is never taken.
+- Prune expired idempotency records from one-shot workers, which never reached the store's
+  own prune threshold.
+
 ## 3.42.0 — 2026-11-05
 
 - Meta Harness owns harness, process and reasoning execution. `src/core/meta-harness.mjs`,
