@@ -61,6 +61,33 @@ function activeSegment(root, file, plugin, limit) {
   if (readCurrent(root, relative, plugin)?.data.type !== 'plugin-store:ledger') throw new Error('Plugin ledger is not append-only');
   return segment + 1;
 }
+const guardOwnerFile = lock => path.join(lock, 'owner');
+function readGuardOwner(lock) {
+  try { return fs.readFileSync(guardOwnerFile(lock), 'utf8').trim(); } catch { return null; }
+}
+function processIsDead(pid) {
+  if (!Number.isInteger(pid) || pid < 1) return false;
+  try { process.kill(pid, 0); return false; } catch (error) { return error.code === 'ESRCH'; }
+}
+/**
+ * A worker killed mid-mutation, by a service restart for one, leaves its guard
+ * behind, and every later mutation then fails. Reclaim only a guard whose owner
+ * is provably gone. One with no owner is honored until it is older than any
+ * worker can live, since a holder may be between creating it and naming itself.
+ */
+function guardIsAbandoned(lock, stat, now = Date.now()) {
+  const owner = readGuardOwner(lock);
+  if (owner) return processIsDead(Number(owner));
+  return now - stat.mtimeMs > WORKER_TIMEOUT_MS * 2;
+}
+function reclaimGuard(lock) {
+  const owner = readGuardOwner(lock);
+  const aside = `${lock}.abandoned.${crypto.randomUUID()}`;
+  try { fs.renameSync(lock, aside); } catch (error) { if (error.code === 'ENOENT') return; throw error; }
+  // A new holder took the guard between the check and the rename: give it back.
+  if (readGuardOwner(aside) !== owner) { fs.renameSync(aside, lock); return; }
+  fs.rmSync(aside, { recursive: true, force: true });
+}
 function documentVersion(root, relative) {
   return crypto.createHash('sha256').update(fs.readFileSync(path.join(root, relative), 'utf8')).digest('hex');
 }
@@ -105,6 +132,7 @@ export async function executePluginState(request) {
   for (;;) {
   try {
     fs.mkdirSync(lock, { mode: 0o700 });
+    fs.writeFileSync(guardOwnerFile(lock), String(process.pid), { mode: 0o600 });
     break;
   } catch (err) {
     // Distinguish a genuine concurrent mutation from an environment failure so
@@ -113,6 +141,7 @@ export async function executePluginState(request) {
       const stat = fs.lstatSync(lock, { throwIfNoEntry: false });
       if (!stat) continue;
       if (stat.isSymbolicLink() || !stat.isDirectory()) throw new Error('Unsafe plugin mutation guard');
+      if (guardIsAbandoned(lock, stat)) { reclaimGuard(lock); continue; }
       if (performance.now() >= deadline) throw new Error('Plugin state mutation is busy; timed out waiting for the guard');
       await new Promise(resolve => setTimeout(resolve, 20));
       continue;
@@ -181,7 +210,7 @@ export async function executePluginState(request) {
     // The store's own prune counter never advances in a one-shot worker.
     if (crypto.randomInt(IDEMPOTENCY_PRUNE_ONE_IN) === 0) durableKeys.prune();
     return { version: documentVersion(root, target), receipt: result };
-  } finally { fs.rmdirSync(lock); }
+  } finally { fs.rmSync(lock, { recursive: true, force: true }); }
 }
 
 function nativeWrite(request) {

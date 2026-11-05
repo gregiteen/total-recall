@@ -1,4 +1,5 @@
 import { describe, it, expect, afterEach, vi } from 'vitest';
+import { spawn, spawnSync } from 'node:child_process';
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import os from 'node:os';
@@ -55,6 +56,40 @@ describe('native plugin SSSS state', () => {
     expect(fs.statSync(lock).isDirectory()).toBe(true);
     expect(new PluginStateStore(file, 'auth').read([])).toEqual([]);
   });
+  it('reclaims a guard whose owner died, and only then', async () => {
+    const file = fixture(), lock = path.join(path.dirname(file), '.ssss', '.mutation-lock');
+    fs.mkdirSync(lock, { recursive: true });
+    const dead = spawnSync(process.execPath, ['-e', 'process.stdout.write(String(process.pid))'], { encoding: 'utf8' }).stdout;
+    fs.writeFileSync(path.join(lock, 'owner'), dead);
+    const result = await executePluginState({ file, plugin: 'auth', action: 'append', value: { id: 1 }, guardTimeoutMs: 200 });
+    expect(result.receipt.success).toBe(true);
+    expect(fs.existsSync(lock)).toBe(false);
+    fs.mkdirSync(lock);
+    fs.writeFileSync(path.join(lock, 'owner'), String(process.pid));
+    await expect(executePluginState({ file, plugin: 'auth', action: 'append', value: { id: 2 }, guardTimeoutMs: 30 })).rejects.toThrow(/busy/);
+    expect(fs.existsSync(lock)).toBe(true);
+    fs.rmSync(lock, { recursive: true });
+  });
+  it('reclaims an ownerless guard only once no worker could still hold it', async () => {
+    const file = fixture(), lock = path.join(path.dirname(file), '.ssss', '.mutation-lock');
+    fs.mkdirSync(lock, { recursive: true });
+    const old = new Date(Date.now() - 5 * 60 * 1000);
+    fs.utimesSync(lock, old, old);
+    const result = await executePluginState({ file, plugin: 'auth', action: 'append', value: { id: 1 }, guardTimeoutMs: 200 });
+    expect(result.receipt.success).toBe(true);
+  });
+  it('recovers when a worker is killed holding the guard', async () => {
+    const file = fixture(), store = new PluginStateStore(file, 'auth');
+    store.append({ id: 0 });
+    const lock = path.join(path.dirname(file), '.ssss', '.mutation-lock');
+    const holder = spawn(process.execPath, ['-e', `const fs=require('fs');fs.mkdirSync(${JSON.stringify(lock)});fs.writeFileSync(${JSON.stringify(path.join(lock, 'owner'))},String(process.pid));setInterval(()=>{},1000);process.stdout.write('held');`], { stdio: ['ignore', 'pipe', 'ignore'] });
+    await new Promise(resolve => holder.stdout.once('data', resolve));
+    await expect(executePluginState({ file, plugin: 'auth', action: 'append', value: { id: 1 }, guardTimeoutMs: 30 })).rejects.toThrow(/busy/);
+    holder.kill('SIGKILL');
+    await new Promise(resolve => holder.once('close', resolve));
+    await store.appendAsync({ id: 2 });
+    expect(store.read([]).map(row => row.id)).toEqual([0, 2]);
+  }, 30000);
   it('starts a new ledger document at the size limit and never rewrites a sealed one', async () => {
     const file = fixture(), store = new PluginStateStore(file, 'auth');
     const append = id => executePluginState({ file, plugin: 'auth', action: 'append', value: { id }, segmentBytes: 400 });
