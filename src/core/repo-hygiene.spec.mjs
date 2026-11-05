@@ -35,16 +35,17 @@ describe('open-source repo hygiene', () => {
     expect(forbidden).toEqual([]);
   });
 
-  it('keeps the owner-requested project handoff free of private state and outside the npm payload', () => {
+  it('publishes no internal project records or one-off scripts', () => {
     const files = tracked();
-    if (!files?.includes('HANDOFF.md')) return;
-    const text = readFileSync(path.join(ROOT, 'HANDOFF.md'), 'utf8');
-    expect(text).not.toMatch(/\/Users\/[^/\s]+\/|(?:Bearer\s+tr_|tr_)[A-Za-z0-9_-]{30,}|-----BEGIN.*PRIVATE KEY/);
-    const manifest = JSON.parse(readFileSync(path.join(ROOT, 'package.json'), 'utf8'));
-    // The root handoff is project documentation, not an installation instruction.
-    expect(manifest.files).not.toContain('HANDOFF.md');
-    expect(manifest.files).not.toContain('*');
-    expect(manifest.files).not.toContain('**');
+    if (!files) return;
+    const internal = files.filter((f) => /^docs\/projects\//.test(f)
+      || /^(HANDOFF|MEMORY|AGENTS|CLAUDE|GEMINI)\.md$/.test(f)
+      || /^(scratch|\.github\/disabled-workflows)\//.test(f)
+      || /(^|\/)[^/]*(PROJECT_TRACKER|_AUDIT|DEVELOPMENT_PLAN)[^/]*\.md$/.test(f) && !f.startsWith('scaffold/'));
+    expect(internal).toEqual([]);
+    const rootScripts = files.filter((f) => !f.includes('/') && /^(fix|test|debug|patch|clean|run-|sim|tmp|temp)[-_.]?.*\.(c?js|mjs|sh|txt)$/.test(f));
+    expect(rootScripts).toEqual([]);
+    expect(files.filter((f) => !f.includes('/') && f.endsWith('.log'))).toEqual([]);
   });
 
   it('ships only the generic bootstrap in scaffold/ (fixed allowlist, no personal markers)', () => {

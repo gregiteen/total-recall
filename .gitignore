@@ -178,3 +178,6 @@ WINDSURF.md
 .hermes/
 # The owner-requested root project handoff is tracked; private session exports stay local.
 .deploy-state.json
+
+# Internal project records live in a private repository, cloned here
+docs/projects/
