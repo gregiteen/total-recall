@@ -2,7 +2,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
-import { spawnSync } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { createKernel } from '@ssss/cli/kernel';
 import { FileSystemVfs } from '@ssss/cli/vfs';
@@ -15,6 +15,12 @@ import { parseDocument, serializeDocument } from '@ssss/cli/frontmatter';
 
 const worker = fileURLToPath(import.meta.url);
 const ownerPattern = /^[a-z][a-z0-9-]{0,63}$/;
+// A ledger is a chain of documents, so one append never costs more than this much history.
+const LEDGER_SEGMENT_BYTES = 1024 * 1024;
+const MAX_APPEND_BATCH = 500;
+const WORKER_TIMEOUT_MS = 30000;
+const WORKER_BUFFER_BYTES = 16 * 1024 * 1024;
+const IDEMPOTENCY_PRUNE_ONE_IN = 500;
 const registry = composeRegistryLayers({ core: loadRegistries().core, installed: [{
   registry: 'plugin-store', extends: 'ssss', version: '1.0.0', document_primitives: {
     state: { family: 'host', append_only: false, portability: 'tenant_private',
@@ -33,8 +39,30 @@ function location(file, plugin) {
   if (!ownerPattern.test(plugin)) throw new Error('Explicit valid plugin identity required');
   if (typeof file !== 'string' || !path.isAbsolute(file)) throw new Error('Explicit absolute plugin state path required');
   const root = path.join(path.dirname(file), '.ssss');
-  const id = crypto.createHash('sha256').update(path.basename(file)).digest('hex');
-  return { root, relative: `${plugin}/${id}.md` };
+  return { root, relative: segmentPath(file, plugin, 0) };
+}
+/** Segment 0 keeps the document's original path, so existing ledgers need no migration. */
+function segmentPath(file, plugin, segment) {
+  const name = segment === 0 ? path.basename(file) : `${path.basename(file)}#${segment}`;
+  return `${plugin}/${crypto.createHash('sha256').update(name).digest('hex')}.md`;
+}
+function lastSegment(root, file, plugin) {
+  let segment = 0;
+  while (fs.lstatSync(path.join(root, segmentPath(file, plugin, segment + 1)), { throwIfNoEntry: false })) segment += 1;
+  return segment;
+}
+/** The segment an append writes to. Runs under the mutation guard. */
+function activeSegment(root, file, plugin, limit) {
+  const segment = lastSegment(root, file, plugin);
+  const relative = segmentPath(file, plugin, segment);
+  const stat = fs.lstatSync(path.join(root, relative), { throwIfNoEntry: false });
+  if (!stat || stat.size < limit) return segment;
+  // Refuse to seal a state document as if it were ledger history.
+  if (readCurrent(root, relative, plugin)?.data.type !== 'plugin-store:ledger') throw new Error('Plugin ledger is not append-only');
+  return segment + 1;
+}
+function documentVersion(root, relative) {
+  return crypto.createHash('sha256').update(fs.readFileSync(path.join(root, relative), 'utf8')).digest('hex');
 }
 function safeRoot(root, create = false) {
   const stat = fs.lstatSync(root, { throwIfNoEntry: false });
@@ -62,7 +90,7 @@ function readCurrent(root, relative, plugin) {
 
 /** Asynchronous native kernel entry. This is not exposed as a public server route. */
 export async function executePluginState(request) {
-  const { file, plugin, action, value, expectedVersion, idempotencyKey = crypto.randomUUID() } = request;
+  const { file, plugin, action, value, values, expectedVersion, idempotencyKey = crypto.randomUUID() } = request;
   const { root, relative } = location(file, plugin);
   safeRoot(root, true);
   for (const name of ['.events', '.idempotency', '.leases']) {
@@ -100,19 +128,26 @@ export async function executePluginState(request) {
   }
   try {
     const durableKeys = new FileIdempotencyStore(path.join(root, '.idempotency'));
-    const intentHash = crypto.createHash('sha256').update(JSON.stringify({ path: relative, action, value, expectedVersion, format: request.format })).digest('hex');
+    const rows = action === 'append' ? (values ?? [value]) : null;
+    if (rows && (!Array.isArray(rows) || rows.length === 0)) throw new Error('Plugin ledger append requires at least one row');
+    const segmentLimit = request.segmentBytes ?? LEDGER_SEGMENT_BYTES;
+    if (!Number.isInteger(segmentLimit) || segmentLimit < 1) throw new Error('Invalid plugin ledger segment size');
+    // Hashed against the first segment, so a retry that crosses a rollover still replays.
+    const intentHash = crypto.createHash('sha256').update(JSON.stringify({ path: relative, action, value: rows ?? value, expectedVersion, format: request.format })).digest('hex');
     const replay = await durableKeys.get(plugin, idempotencyKey);
     if (replay) {
       if (replay.intent_hash !== intentHash) throw new Error('Plugin state idempotency conflict');
-      return { ...readCurrent(root, relative, plugin), receipt: { ...replay.response, replay: true } };
+      const replayed = replay.response?.path || relative;
+      return { version: documentVersion(root, replayed), receipt: { ...replay.response, replay: true } };
     }
-    const current = readCurrent(root, relative, plugin);
+    const target = rows ? segmentPath(file, plugin, activeSegment(root, file, plugin, segmentLimit)) : relative;
+    const current = readCurrent(root, target, plugin);
     if (action !== 'append' && expectedVersion !== (current?.version ?? null)) throw new Error('Plugin state version conflict; reload before retrying');
     let next = value;
     const ledger = action === 'append' || request.format === 'jsonl';
     if (action === 'append') {
       if (current && current.data.type !== 'plugin-store:ledger') throw new Error('Plugin ledger is not append-only');
-      next = [...(current?.value || []), value];
+      next = [...(current?.value || []), ...rows];
     } else if (action !== 'write') throw new Error('Unsupported plugin state operation');
     const body = ledger ? next.map(item => JSON.stringify(item)).join('\n') : JSON.stringify(next, null, 2);
     if (typeof body !== 'string') throw new Error('Plugin state must be JSON serializable');
@@ -129,32 +164,83 @@ export async function executePluginState(request) {
       title: current?.data.title || `${plugin} state`, description: current?.data.description || 'Plugin-owned persistent state',
       timestamp: new Date().toISOString() }, `${body}\n`);
     const envelope = action === 'append' && current
-      ? { type: 'patch', patches: { __body__: `${JSON.stringify(value)}\n` } }
+      ? { type: 'patch', patches: { __body__: `${rows.map(row => JSON.stringify(row)).join('\n')}\n` } }
       : { type: 'operation', content };
     const operationId = crypto.randomUUID();
-    const leaseInput = { workspace_id: plugin, target: relative, principal_id: principal.id, operation_id: operationId };
+    const leaseInput = { workspace_id: plugin, target, principal_id: principal.id, operation_id: operationId };
     const lease = await leases.acquire(leaseInput, 30000);
     let result;
     try {
-      const operation = { ...envelope, workspace_id: plugin, path: relative, operation_id: operationId,
+      const operation = { ...envelope, workspace_id: plugin, path: target, operation_id: operationId,
         lease_id: lease.lease_id, idempotency_key: idempotencyKey };
       const preflight = await kernel.execute({ ...operation, dry_run: true }, { principal, requireLease: true });
       if (!preflight.success) throw new Error(`SSSS preflight rejected: ${preflight.error?.code}: ${preflight.error?.message}`);
       result = await kernel.execute(operation, { principal, requireLease: true });
       if (!result.success) throw new Error(`SSSS mutation rejected: ${result.error?.code}: ${result.error?.message}`);
     } finally { await leases.release({ ...leaseInput, lease_id: lease.lease_id }); }
-    return { ...readCurrent(root, relative, plugin), receipt: result };
+    // The store's own prune counter never advances in a one-shot worker.
+    if (crypto.randomInt(IDEMPOTENCY_PRUNE_ONE_IN) === 0) durableKeys.prune();
+    return { version: documentVersion(root, target), receipt: result };
   } finally { fs.rmdirSync(lock); }
 }
 
 function nativeWrite(request) {
   const child = spawnSync(process.execPath, [worker, '--native-state-worker'], {
-    input: JSON.stringify(request), encoding: 'utf8', timeout: 30000, maxBuffer: 16 * 1024 * 1024,
+    input: JSON.stringify(request), encoding: 'utf8', timeout: WORKER_TIMEOUT_MS, maxBuffer: WORKER_BUFFER_BYTES,
     // No provider credentials or ambient brain selection cross this transport.
     env: { PATH: process.env.PATH || '', NODE_NO_WARNINGS: '1' },
   });
   if (child.error || child.status !== 0) throw new Error(child.stderr?.trim() || child.error?.message || 'Native SSSS worker failed');
   return JSON.parse(child.stdout);
+}
+
+/** The same worker as nativeWrite, off the caller's thread. */
+function nativeWriteAsync(request) {
+  return new Promise((resolve, reject) => {
+    const child = spawn(process.execPath, [worker, '--native-state-worker'], {
+      stdio: ['pipe', 'pipe', 'pipe'],
+      env: { PATH: process.env.PATH || '', NODE_NO_WARNINGS: '1' },
+    });
+    let stdout = '', stderr = '', settled = false;
+    const settle = (fn, arg) => { if (!settled) { settled = true; clearTimeout(timer); fn(arg); } };
+    const timer = setTimeout(() => { child.kill('SIGKILL'); settle(reject, new Error('Native SSSS worker timed out')); }, WORKER_TIMEOUT_MS);
+    const overflow = () => { child.kill('SIGKILL'); settle(reject, new Error('Native SSSS worker output exceeds limit')); };
+    child.stdout.setEncoding('utf8').on('data', chunk => { stdout += chunk; if (stdout.length > WORKER_BUFFER_BYTES) overflow(); });
+    child.stderr.setEncoding('utf8').on('data', chunk => { if (stderr.length < WORKER_BUFFER_BYTES) stderr += chunk; });
+    child.on('error', error => settle(reject, error));
+    // A worker that dies early closes stdin; its exit status carries the failure.
+    child.stdin.on('error', () => {});
+    child.on('close', (code, signal) => {
+      if (code !== 0) return settle(reject, new Error(stderr.trim() || `Native SSSS worker failed (${signal || code})`));
+      try { settle(resolve, JSON.parse(stdout)); } catch (error) { settle(reject, error); }
+    });
+    child.stdin.end(JSON.stringify(request));
+  });
+}
+
+const appendQueues = new Map();
+async function drainAppends(queueKey, queue, file, plugin) {
+  while (queue.pending.length) {
+    const batch = queue.pending.splice(0, MAX_APPEND_BATCH);
+    try {
+      const result = await nativeWriteAsync({ file, plugin, action: 'append', values: batch.map(item => item.value) });
+      for (const item of batch) item.resolve(result);
+    } catch (error) {
+      for (const item of batch) item.reject(error);
+    }
+  }
+  appendQueues.delete(queueKey);
+}
+/** Rows queued while a worker runs go together in the next one. */
+function queueAppend(file, plugin, value) {
+  const queueKey = JSON.stringify([file, plugin]);
+  return new Promise((resolve, reject) => {
+    const existing = appendQueues.get(queueKey);
+    if (existing) { existing.pending.push({ value, resolve, reject }); return; }
+    const queue = { pending: [{ value, resolve, reject }] };
+    appendQueues.set(queueKey, queue);
+    drainAppends(queueKey, queue, file, plugin);
+  });
 }
 
 /** Enumerate one explicit native namespace; malformed or linked entries fail closed. */
@@ -175,9 +261,35 @@ export class PluginStateStore {
   constructor(file, plugin) { this.file = path.resolve(file); this.plugin = plugin; this.location = location(this.file, plugin); this.version = undefined; }
   get documentPath() { return path.join(this.location.root, this.location.relative); }
   read(fallback) {
-    const current = readCurrent(this.location.root, this.location.relative, this.plugin);
+    const { root, relative } = this.location;
+    const current = readCurrent(root, relative, this.plugin);
     this.version = current?.version ?? null;
-    return current ? structuredClone(current.value) : structuredClone(fallback);
+    if (!current) return structuredClone(fallback);
+    if (current.data.type !== 'plugin-store:ledger') return structuredClone(current.value);
+    const rows = [...current.value];
+    for (const segment of this.#laterSegments(1)) rows.push(...this.#segment(segment));
+    return rows;
+  }
+  /** The newest rows of a ledger, reading only as many documents as that takes. */
+  readTail(limit) {
+    if (!Number.isInteger(limit) || limit < 1) throw new Error('Invalid plugin ledger tail limit');
+    const { root } = this.location;
+    if (!safeRoot(root)) return [];
+    let rows = [];
+    for (let segment = lastSegment(root, this.file, this.plugin); segment >= 0 && rows.length < limit; segment -= 1) {
+      rows = [...this.#segment(segment), ...rows];
+    }
+    return rows.slice(-limit);
+  }
+  #laterSegments(from) {
+    const last = lastSegment(this.location.root, this.file, this.plugin);
+    return Array.from({ length: Math.max(0, last - from + 1) }, (_, index) => from + index);
+  }
+  #segment(segment) {
+    const current = readCurrent(this.location.root, segmentPath(this.file, this.plugin, segment), this.plugin);
+    if (!current) return [];
+    if (current.data.type !== 'plugin-store:ledger') throw new Error('Plugin state is not a ledger');
+    return current.value;
   }
   write(value, options = {}) {
     if (this.version === undefined) this.read(null);
@@ -188,6 +300,12 @@ export class PluginStateStore {
   }
   append(value, options = {}) {
     const result = nativeWrite({ file: this.file, plugin: this.plugin, action: 'append', value, idempotencyKey: options.idempotencyKey });
+    this.version = result.version;
+    return result.receipt;
+  }
+  /** Append without blocking the event loop. Resolves once the row is committed. */
+  async appendAsync(value) {
+    const result = await queueAppend(this.file, this.plugin, value);
     this.version = result.version;
     return result.receipt;
   }
