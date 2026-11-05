@@ -63,10 +63,11 @@ function copyFile(src, dest, dryRun) {
   return true;
 }
 
-function copyDirMerge(src, dest, dryRun) {
+function copyDirMerge(src, dest, dryRun, skipTopLevel = []) {
   if (!fs.existsSync(src)) return;
   ensureDir(dest, dryRun);
   for (const entry of fs.readdirSync(src, { withFileTypes: true })) {
+    if (skipTopLevel.includes(entry.name)) continue;
     const srcPath = path.join(src, entry.name);
     const destPath = path.join(dest, entry.name);
     if (entry.isDirectory()) {
@@ -337,7 +338,8 @@ export default async function init(args) {
     if (!fs.existsSync(skillSrc)) {
       logWarn(`${skill} skill source not found — skipping.`);
     } else {
-      copyDirMerge(skillSrc, skillDest, opts.dryRun);
+      // Plugins live in the one shared folder. A project copy would outrank it and freeze the repository on today's version.
+      copyDirMerge(skillSrc, skillDest, opts.dryRun, isProject && skill === 'total-recall' ? ['plugins'] : []);
       logOk(`${skill} skill installed`);
     }
   }

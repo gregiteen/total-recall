@@ -9,12 +9,16 @@
  */
 
 import { spawnSync } from 'node:child_process';
+import fs from 'node:fs';
+import path from 'node:path';
 import { ADAPTER_CATALOG } from '../capability/index.mjs';
 import { appendThreadTurn, updateThread } from './threads.mjs';
 import { notifyAlert } from './alerts.mjs';
 import { dispatchWithReceipt } from './dispatch.mjs';
-import { resolvePool } from './pool.mjs';
+import { resolvePool, localExecutionNode } from './pool.mjs';
 import { lastJsonWith } from './json-reply.mjs';
+import { createWorktree, removeWorktree, commitAll, headCommit } from './worktree.mjs';
+import { forwardRemoteOperation } from './remote-operation.mjs';
 
 const MAX_DIFF = 30000;
 // Generated surfaces say nothing a reviewer can act on, and they crowd out the source.
@@ -27,25 +31,35 @@ const GENERATED = ['.cursorrules', '.cursor', 'openwiki', 'package-lock.json', '
  */
 export function extractGitDiff(options = {}) {
   const cwd = options.cwd || process.cwd();
-  const read = (args, extra = []) => spawnSync('git', ['diff', ...extra, ...args, '--', '.', ...GENERATED], { cwd, encoding: 'utf8', timeout: 15000, maxBuffer: 64 * 1024 * 1024 });
-  const done = (args, diff, target) => {
+  const run = args => spawnSync('git', args, { cwd, encoding: 'utf8', timeout: 15000, maxBuffer: 64 * 1024 * 1024 });
+  const read = (args, extra = []) => run(['diff', ...(extra.length ? extra : ['--binary']), ...args, '--', '.', ...GENERATED]);
+  const ref = value => {
+    const result = run(['rev-parse', '--verify', `${value}^{commit}`]);
+    if (result.status !== 0) throw new Error(String(result.stderr || 'Invalid review reference').trim());
+    return result.stdout.trim();
+  };
+  const done = (args, diff, target, snapshot) => {
     const stat = read(args, ['--stat']).stdout || '';
-    const untracked = spawnSync('git', ['ls-files', '-o', '--exclude-standard'], { cwd, encoding: 'utf8', timeout: 15000 }).stdout || '';
-    return { ok: true, diff, target, stat: stat.trim(), untracked: untracked.trim().split('\n').filter(Boolean) };
+    const untracked = snapshot.mode === 'working' ? run(['ls-files', '-o', '--exclude-standard', '-z', '--', '.', ...GENERATED]).stdout || '' : '';
+    return { ok: true, diff, target, stat: stat.trim(), untracked: untracked.split('\0').filter(Boolean), snapshot };
   };
   const explicit = options.staged === true ? ['--staged'] : (options.target || options.branch) ? [options.target || options.branch] : null;
   try {
     if (explicit) {
+      if (explicit[0] !== '--staged' && explicit[0].startsWith('-')) throw new Error('Review targets must be Git references, not options');
       const result = read(explicit);
       if (result.status !== 0) return { ok: false, error: String(result.stderr || 'git diff failed').trim(), diff: '' };
-      return done(explicit, result.stdout.trim(), explicit.join(' '));
+      let snapshot;
+      if (options.staged === true) snapshot = { mode: 'staged', ref: ref('HEAD') };
+      else if (explicit[0].includes('..')) snapshot = { mode: 'commit', ref: ref(explicit[0].split(/\.{2,3}/).at(-1) || 'HEAD') };
+      else snapshot = { mode: 'working', ref: ref(explicit[0]) };
+      return done(explicit, result.stdout.trim(), explicit.join(' '), snapshot);
     }
-    const branchRange = `${getDefaultBranch(cwd)}...HEAD`;
-    const branch = read([branchRange]);
-    if (branch.status === 0 && branch.stdout.trim()) return done([branchRange], branch.stdout.trim(), branchRange);
-    const working = read(['HEAD']);
+    const mergeBase = run(['merge-base', getDefaultBranch(cwd), 'HEAD']);
+    const base = mergeBase.status === 0 ? mergeBase.stdout.trim() : ref('HEAD');
+    const working = read([base]);
     if (working.status !== 0) return { ok: false, error: String(working.stderr || 'git diff failed').trim(), diff: '' };
-    return done(['HEAD'], working.stdout.trim(), 'HEAD');
+    return done([base], working.stdout.trim(), 'working tree', { mode: 'working', ref: base });
   } catch (error) {
     return { ok: false, error: error.message, diff: '' };
   }
@@ -55,10 +69,31 @@ function getDefaultBranch(cwd) {
   try {
     const res = spawnSync('git', ['symbolic-ref', 'refs/remotes/origin/HEAD'], { cwd, encoding: 'utf8', timeout: 3000 });
     if (res.status === 0 && res.stdout.includes('/')) {
-      return res.stdout.trim().split('/').pop();
+      return res.stdout.trim();
     }
   } catch {}
   return 'main';
+}
+
+/** Pin the selected diff in a disposable commit, so reviewers never read unrelated current files. */
+function reviewSnapshot(cwd, selection) {
+  const directory = createWorktree(cwd, { ref: selection.snapshot.ref, prefix: 'meta-harness-review-' });
+  try {
+    if (selection.snapshot.mode !== 'commit') {
+      if (selection.diff) {
+        const patch = spawnSync('git', ['apply', '--index', '--binary', '-'], { cwd: directory, input: `${selection.diff}\n`, encoding: 'utf8', timeout: 15000 });
+        if (patch.status !== 0) throw new Error(`Could not pin the selected review diff: ${String(patch.stderr || patch.error).trim()}`);
+      }
+      for (const file of selection.untracked) {
+        const source = path.resolve(cwd, file), destination = path.resolve(directory, file);
+        if (!source.startsWith(`${path.resolve(cwd)}${path.sep}`) || !destination.startsWith(`${directory}${path.sep}`) || !fs.lstatSync(source).isFile()) throw new Error(`Unsafe untracked review file: ${file}`);
+        fs.mkdirSync(path.dirname(destination), { recursive: true });
+        fs.copyFileSync(source, destination);
+      }
+      commitAll(directory, 'meta-harness: pin selected review snapshot');
+    }
+    return { directory, commit: headCommit(directory) };
+  } catch (error) { removeWorktree(cwd, directory); throw error; }
 }
 
 /**
@@ -132,14 +167,17 @@ export function parseReviewVerdict(response) {
 }
 
 export async function executeCodeReview(options = {}) {
+  const remote = await forwardRemoteOperation('review', null, options);
+  if (remote) return remote;
+  localExecutionNode(options);
   const cwd = options.cwd || process.cwd();
   const author = options.author || null;
   const diffResult = extractGitDiff({ cwd, target: options.target, staged: options.staged });
   if (!diffResult.ok) throw new Error(`Failed to read the diff: ${diffResult.error}`);
-  if (!diffResult.diff) return { ok: true, verdict: 'NO_DIFF', target: diffResult.target, summary: `Nothing to review for ${diffResult.target}.` };
+  if (!diffResult.diff && !diffResult.untracked?.length) return { ok: true, verdict: 'NO_DIFF', target: diffResult.target, summary: `Nothing to review for ${diffResult.target}.` };
 
   const { ready, excluded } = await resolvePool(options);
-  const reviewer = options.reviewer ? (ready.find(h => h.id === options.reviewer) || { id: options.reviewer, name: options.reviewer }) : selectAdversarialReviewer(author, ready);
+  const reviewer = options.reviewer ? ready.find(h => h.id === options.reviewer) : selectAdversarialReviewer(author, ready);
   if (!reviewer) throw new Error(`No independent reviewer can take work right now: ${excluded.map(e => `${e.harness} (${e.reason})`).join(', ') || 'no other harness available'}`);
 
   const authorFamily = ADAPTER_CATALOG[author]?.family || null;
@@ -147,14 +185,17 @@ export async function executeCodeReview(options = {}) {
   if (author && (reviewer.id === author || (authorFamily && authorFamily === reviewerFamily))) throw new Error(`${reviewer.id} shares a model family with the author ${author}, so it cannot review this independently`);
   const independence = author ? 'verified' : 'unverified: the author was not named';
   const truncated = diffResult.diff.length > MAX_DIFF;
-  const result = await dispatchWithReceipt({
-    agent: reviewer.id, cwd, contextTask: options.task || `Review the code changes in ${diffResult.target}`,
+  const snapshot = reviewSnapshot(cwd, diffResult);
+  let result;
+  try { result = await dispatchWithReceipt({
+    agent: reviewer.id, node: 'local', cwd: snapshot.directory, contextCwd: cwd, contextTask: options.task || `Review the code changes in ${diffResult.target}`,
     prompt: buildReviewPrompt(diffResult.diff, { task: options.task, branch: options.branch || diffResult.target, stat: diffResult.stat, untracked: diffResult.untracked }),
-    permissions: { read: true, write: false }, allowUnknownAuth: true,
-  }, { dispatchFn: options.dispatchFn, role: 'Reviewer' });
+    permissions: { read: true, write: false }, allowUnknownAuth: options.allowUnknownAuth === true,
+  }, { dispatchFn: options.dispatchFn, role: 'Reviewer' }); }
+  finally { removeWorktree(cwd, snapshot.directory); }
   if (!result.ok) return { ok: false, target: diffResult.target, reviewer: reviewer.id, error: result.error, failureKind: result.failureKind, excluded };
 
-  const review = { ...parseReviewVerdict(result.response), reviewer: reviewer.id, reviewerName: reviewer.name || reviewer.id, author, target: diffResult.target, truncated, independence, timestamp: new Date().toISOString() };
+  const review = { ...parseReviewVerdict(result.response), reviewer: reviewer.id, reviewerName: reviewer.name || reviewer.id, author, target: diffResult.target, snapshotCommit: snapshot.commit, truncated, independence, node: 'local', workspace: cwd, ...(options.threadId ? { threadId: options.threadId } : {}), timestamp: new Date().toISOString() };
   let threadError;
   if (options.threadId) {
     try {

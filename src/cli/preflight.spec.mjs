@@ -84,6 +84,72 @@ describe('total-recall preflight gate (real process)', () => {
   });
 });
 
+describe('the gate survives a broken owner plugin (it can never lock out its own repair)', () => {
+  const ADAPTER = `export function get() { return {
+    readablePaths: [],
+    async run({ stdin, decideWith }) {
+      const d = decideWith({ tool: stdin.tool_name === 'Bash' ? 'shell' : 'write', command: stdin.tool_input?.command, path: stdin.tool_input?.file_path, cwd: stdin.cwd });
+      return d.decision === 'allow' ? { stdout: '', exitCode: 0 } : { stdout: 'ADAPTER-DENY', exitCode: 2 };
+    } }; }`;
+  let pluginHome;
+  const pluginDir = () => path.join(pluginHome, '.agent', 'skills', 'total-recall', 'plugins', 'meta-harness');
+  const install = (manifest, adapter = ADAPTER) => {
+    fs.rmSync(pluginDir(), { recursive: true, force: true });
+    fs.mkdirSync(pluginDir(), { recursive: true });
+    fs.writeFileSync(path.join(pluginDir(), 'plugin.json'), typeof manifest === 'string' ? manifest : JSON.stringify(manifest));
+    fs.writeFileSync(path.join(pluginDir(), 'adapters.mjs'), adapter);
+  };
+  const hook = (payload, cwd) => {
+    const r = spawnSync(process.execPath, [BIN, 'preflight', 'gate', '--harness', 'claude'], { cwd, input: JSON.stringify({ cwd, ...payload }), encoding: 'utf8', env: { ...process.env, HOME: pluginHome, AGENT_DIR: path.join(pluginHome, '.agent'), _TR_TEST_AGENT_DIR: '', TR_PREFLIGHT_MAX_AGE_MIN: '' } });
+    return { code: r.status, out: r.stdout, err: r.stderr };
+  };
+  const EDIT = { tool_name: 'Edit', tool_input: { file_path: '/x/plugin.json' } };
+  const CONTEXT = { tool_name: 'Bash', tool_input: { command: 'total-recall context "repair"' } };
+  // The manifest that caused the lockout: valid JSON, one snake_case argument name.
+  const INVALID = { id: 'meta-harness', name: 'x', version: '1.0.0', runtime: { modules: { 'gate-adapters': 'adapters.mjs' } }, cli: { command: 'meta-harness', subcommands: [{ name: 'route', args: [{ name: 'timeout_ms', flag: '--timeout-ms', type: 'number' }] }] } };
+  let receiptRepo;
+
+  beforeAll(() => {
+    pluginHome = fs.mkdtempSync(path.join(os.tmpdir(), 'tr-pf-owner-home-'));
+    receiptRepo = fs.mkdtempSync(path.join(os.tmpdir(), 'tr-pf-owner-repo-'));
+    for (const rel of SKILLS) { const f = path.join(receiptRepo, rel); fs.mkdirSync(path.dirname(f), { recursive: true }); fs.writeFileSync(f, rel); }
+    receiptRepo = findRoot(receiptRepo);
+    acknowledge({ root: receiptRepo, task: 'spec', home: pluginHome, run: (a) => (a[0] === 'context' ? { ok: true, out: 'ready:true tokens:1 version:aa', err: '', code: 0 } : { ok: true, out: '', err: '', code: 0 }) });
+  });
+  afterAll(() => { for (const d of [pluginHome, receiptRepo]) fs.rmSync(d, { recursive: true, force: true }); });
+
+  it('still uses the adapter when the manifest fails schema validation', () => {
+    install(INVALID);
+    expect(hook(EDIT, receiptRepo).code).toBe(0);
+    const denied = hook(EDIT, bare);
+    expect(denied.code).toBe(2);
+    expect(denied.out).toContain('ADAPTER-DENY');
+    expect(denied.err).toContain('tr-preflight --ack');
+  });
+  for (const [label, setUp, ownerFailed] of [
+    ['an unparseable manifest', () => install('{ not json'), true],
+    ['adapter code that throws on import', () => install({ ...INVALID }, 'throw new Error("boom");'), true],
+    // The bundled copy may answer for a removed global plugin; either way nothing locks.
+    ['a removed plugin', () => fs.rmSync(pluginDir(), { recursive: true, force: true }), false],
+  ]) {
+    it(`keeps repair and receipted work open with ${label}, and explains every denial`, () => {
+      setUp();
+      expect(hook(CONTEXT, bare).code).toBe(0);
+      expect(hook(EDIT, receiptRepo).code).toBe(0);
+      const denied = hook(EDIT, bare);
+      expect(denied.code).toBe(2);
+      if (ownerFailed) expect(denied.err).toContain('meta-harness plugin could not load');
+      expect(denied.err).toContain('tr-preflight --ack');
+    });
+  }
+  it('still fails closed, with a reason on stderr, on a payload it cannot read', () => {
+    install('{ not json');
+    const r = hook({ something: 'else' }, receiptRepo);
+    expect(r.code).toBe(2);
+    expect(r.err).toContain('fails closed');
+  });
+});
+
 describe('total-recall preflight remind (prompt hooks never block the human)', () => {
   const remind = (input, cwd, extra = []) => run(['preflight', 'remind', ...extra], { cwd, input });
   it('prints the reminder when there is no receipt, and still exits 0', () => {

@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 import crypto from 'node:crypto';
+import { loadCustomAdapters } from './worker.mjs';
 
 export const DOC_SOURCES = [
   { id: 'claude', index: 'https://code.claude.com/docs/llms.txt', prefix: 'https://code.claude.com/docs/', catalog:true },
@@ -19,12 +20,22 @@ export const DOC_SOURCES = [
   { id: 'cline', index: 'https://docs.cline.bot/llms.txt', prefix: 'https://docs.cline.bot/', catalog:true },
   { id: 'openclaw', index: 'https://docs.openclaw.ai/llms.txt', prefix: 'https://docs.openclaw.ai/', catalog:true },
   { id: 'aider', index: 'https://aider.chat/docs/', prefix: 'https://aider.chat/docs/' },
-  { id: 'goose', index: 'https://block.github.io/goose/docs/quickstart', prefix: 'https://block.github.io/goose/docs/' },
+  { id: 'goose', index: 'https://goose-docs.ai/llms.txt', prefix: 'https://goose-docs.ai/', catalog:true },
   { id: 'openhands', index: 'https://docs.openhands.dev/llms.txt', prefix: 'https://docs.openhands.dev/', catalog:true },
   { id: 'replit', index: 'https://docs.replit.com/llms.txt', prefix: 'https://docs.replit.com/', catalog:true },
   { id: 'lovable', index: 'https://docs.lovable.dev/llms.txt', prefix: 'https://docs.lovable.dev/', catalog:true },
   { id: 'ollama', index: 'https://docs.ollama.com/llms.txt', prefix: 'https://docs.ollama.com/', catalog:true },
 ];
+function sourcesFor(agent) {
+  const sources = new Map(DOC_SOURCES.map(source => [source.id, source]));
+  for (const adapter of loadCustomAdapters()) if (adapter.docs) {
+    const url = new URL(adapter.docs);
+    sources.set(adapter.id, { id: adapter.id, index: url.href, prefix: new URL('.', url).href, origin: url.hostname });
+  }
+  const selected = agent ? [sources.get(agent)].filter(Boolean) : [...sources.values()];
+  if (!selected.length) throw new Error('Unknown documentation adapter or missing declared documentation URL');
+  return selected;
+}
 const hash = value => crypto.createHash('sha256').update(value).digest('hex');
 const TTL = 24 * 60 * 60 * 1000;
 function pageFile(directory,id,file){if(!/^[a-f0-9]{64}-[a-f0-9]{64}\.txt$/.test(file || ''))throw new Error('Invalid cached documentation filename');return path.join(directory,id,file);}
@@ -39,11 +50,11 @@ export function documentationDirectory() {
 }
 function metadata(directory, id) { try { return JSON.parse(fs.readFileSync(path.join(directory,id,'index.json'),'utf8')); } catch { return null; } }
 export function documentationStatus({ directory = documentationDirectory(), agent, now = Date.now() } = {}) {
-  const sources = agent ? DOC_SOURCES.filter(source => source.id === agent) : DOC_SOURCES;
+  const sources = sourcesFor(agent);
   if (!sources.length) throw new Error('Unknown documentation adapter');
   const agents = sources.map(source => {
     const saved = metadata(directory,source.id);
-    const complete = saved?.complete === true && saved.pages?.length > 0 && saved.pages.every(page => {
+    const complete = saved?.complete === true && saved.pages?.some(page => page.url === source.index) && saved.pages.every(page => {
       try { return hash(fs.readFileSync(pageFile(directory,source.id,page.file))) === page.sha256; } catch { return false; }
     });
     const age=now-Date.parse(saved?.checkedAt);
@@ -52,9 +63,10 @@ export function documentationStatus({ directory = documentationDirectory(), agen
   });
   return { ok:agents.every(row=>row.fresh), directory, agents };
 }
-async function download(url, fetchImpl) {
-  const allowed = new Set(['code.claude.com','claude.com','platform.claude.com','docs.anthropic.com','anthropic.com','developers.openai.com','openai.com','help.openai.com','learn.chatgpt.com','chatgpt.com','antigravity.google','cursor.com','docs.x.ai','dev.meta.ai','docs.devin.ai','docs.windsurf.com','windsurf.com','docs.cline.bot','docs.openclaw.ai','aider.chat','docs.replit.com','docs.lovable.dev','docs.ollama.com','block.github.io','docs.openhands.dev','raw.githubusercontent.com','api.github.com']);
+async function download(url, fetchImpl, declaredOrigin) {
+  const allowed = new Set(['code.claude.com','claude.com','platform.claude.com','docs.anthropic.com','anthropic.com','developers.openai.com','openai.com','help.openai.com','learn.chatgpt.com','chatgpt.com','antigravity.google','cursor.com','docs.x.ai','dev.meta.ai','docs.devin.ai','docs.windsurf.com','windsurf.com','docs.cline.bot','docs.openclaw.ai','aider.chat','docs.replit.com','docs.lovable.dev','docs.ollama.com','goose-docs.ai','block.github.io','docs.openhands.dev','raw.githubusercontent.com','api.github.com']);
   let target = new URL(url);
+  if (declaredOrigin) allowed.add(declaredOrigin);
   for(let redirects=0;redirects<5;redirects++) {
     if(target.protocol!=='https:' || target.username || target.password || !allowed.has(target.hostname)) throw new Error(`Unapproved official documentation origin: ${target.hostname}`);
     const response=await fetchImpl(target,{redirect:'manual',signal:AbortSignal.timeout(20000),headers:{'User-Agent':'Total-Recall-Meta-Harness-Docs','Accept':'*/*'}});
@@ -80,7 +92,7 @@ function links(text,base,prefix) {
     .filter(url=>url.startsWith(prefix) && !/%3[CE]|[<>"'`\s]/i.test(url) && !/\.(png|jpg|jpeg|svg|gif|css|js|woff2?|ico|pdf|json|ya?ml|xml|zip|gz|tgz|lock)$/i.test(url));
 }
 export async function refreshDocumentation({ directory = documentationDirectory(), agent, fetchImpl = fetch, now = () => new Date(), maxPages = 1500 } = {}) {
-  const sources=agent?DOC_SOURCES.filter(source=>source.id===agent):DOC_SOURCES;
+  const sources=sourcesFor(agent);
   if(!sources.length)throw new Error('Unknown documentation adapter');
   const reports=[];
   for(const source of sources) {
@@ -98,7 +110,7 @@ export async function refreshDocumentation({ directory = documentationDirectory(
         const batch=[];
         while(queue.length && batch.length<4){const url=queue.shift();if(!seen.has(url)){seen.add(url);batch.push(url);}}
         if(seen.size>maxPages)throw new Error('Official documentation exceeds configured page budget');
-        const downloads=await Promise.allSettled(batch.map(async url=>({url,text:await download(url,fetchImpl)})));
+        const downloads=await Promise.allSettled(batch.map(async url=>({url,text:await download(url,fetchImpl,source.origin)})));
         for(let index=0;index<downloads.length;index++) {
           const result=downloads[index];
           if(result.status==='rejected'){
@@ -152,7 +164,7 @@ export async function maintainDocumentation(options={}) {
 }
 
 export function readDocumentation({agent,url,directory=documentationDirectory()}) {
-  if(!DOC_SOURCES.some(source=>source.id===agent))throw new Error('Unknown documentation adapter');
+  sourcesFor(agent);
   const index=metadata(directory,agent);
   if(!url)return {agent,pages:index?.pages?.map(page=>({url:page.url,sha256:page.sha256,bytes:page.bytes})) || []};
   const page=index?.pages?.find(page=>page.url===url);
@@ -164,7 +176,7 @@ export function readDocumentation({agent,url,directory=documentationDirectory()}
 
 export function searchDocumentation({agent,query,directory=documentationDirectory()}) {
   if(typeof query!=='string' || !query.trim())throw new Error('Documentation query required');
-  const sources=agent?DOC_SOURCES.filter(source=>source.id===agent):DOC_SOURCES;
+  const sources=sourcesFor(agent);
   const matches=[],phrase=query.trim().toLowerCase(),terms=phrase.split(/\s+/).filter(Boolean);
   for(const source of sources)for(const page of metadata(directory,source.id)?.pages || []) {
     const doc=readDocumentation({agent:source.id,url:page.url,directory});const text=doc.content.toLowerCase();

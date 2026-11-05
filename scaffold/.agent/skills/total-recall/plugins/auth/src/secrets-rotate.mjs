@@ -23,7 +23,7 @@ import { getProvider, providerForKeyName } from './provider-catalog.mjs';
 import { atomicWrite, safeStringify } from './vault.mjs';
 import { getRotationPlan, generateSecretValue } from './rotation-capability.mjs';
 import { getRecipe, valueLooksValid } from './provider-rotation-recipes.mjs';
-import { rotateViaProviderApi } from './provider-api-rotation.mjs';
+import { rotateViaProviderApi, listProviderKeys, revokeProviderKey } from './provider-api-rotation.mjs';
 import {
   launchRotationContext,
   openConsole,
@@ -470,6 +470,7 @@ export async function rotateAuto(brainDir, key, opts = {}) {
         actor: o.actor, exportEnv: opts.exportEnv !== false,
       }),
       secretMeta: async (brain, name) => (await listSecretsMeta(brain)).find((r) => r.key === name) || null,
+      listRows: listSecretsMeta,
       // Remember which key the provider minted, so the next rotation can revoke this one instead of
       // reporting that the previous credential cannot be addressed.
       recordKeyId: async (brain, name, id) => {
@@ -491,4 +492,22 @@ export async function rotateAuto(brainDir, key, opts = {}) {
     error: plan.reason,
     console_url: plan.console_url,
   };
+}
+
+const storedSecret = async (brain, name) => {
+  try {
+    const found = await getSecret(brain, name);
+    if (!found || found.found === false) return null;
+    const value = found.value ?? found;
+    return typeof value === 'string' && value ? value : null;
+  } catch { return null; }
+};
+
+/** List the provider account's keys, or revoke one that the store no longer holds. */
+export async function manageProviderKeys(brainDir, providerId, { revoke, fetchImpl } = {}) {
+  const provider = getProvider(providerId);
+  if (!provider) throw new Error(`Unknown provider: ${providerId}`);
+  const context = { brainDir, provider, readSecret: storedSecret, listRows: listSecretsMeta, ...(fetchImpl ? { fetchImpl } : {}) };
+  if (revoke) return revokeProviderKey({ ...context, hash: revoke });
+  return { ok: true, provider: provider.id, keys: await listProviderKeys(context) };
 }

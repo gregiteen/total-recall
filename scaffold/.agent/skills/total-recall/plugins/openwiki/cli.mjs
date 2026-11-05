@@ -15,6 +15,7 @@ import { buildKnowledgeGraph } from './src/graph.mjs';
 import { getTokenStatus, setTokenValue } from './src/token.mjs';
 import { lintWikiHubs } from './src/lint.mjs';
 import { generateWiki } from './src/generate.mjs';
+import { retrieveContext } from './src/context-provider.mjs';
 
 /**
  * Regenerate the generated pages of every registered project that carries them.
@@ -611,6 +612,16 @@ async function autoRefreshCommand(args = []) {
 }
 
 const IMPLEMENTED = {};
+IMPLEMENTED.context = async args => {
+  if (args.includes('--help') || args.includes('-h')) { console.log('Usage: total-recall openwiki context <task> [--json]'); return; }
+  try {
+    if (args.some(arg => arg.startsWith('--') && arg !== '--json')) throw new Error('context accepts a task and --json');
+    const task = args.filter(arg => arg !== '--json').join(' ').trim();
+    if (!task) throw new Error('context requires a task');
+    const result = await retrieveContext({ task });
+    console.log(args.includes('--json') ? JSON.stringify({ ok: true, ...result }) : result.candidates.map(row => `${row.source.path}:${row.source.startLine}-${row.source.endLine}\n${row.text}`).join('\n\n'));
+  } catch (error) { console.log(JSON.stringify({ ok: false, error: error.message })); process.exitCode = 1; }
+};
 IMPLEMENTED.probe = probeCommand;
 IMPLEMENTED.hubs = hubsCommand;
 IMPLEMENTED.ingest = ingestCommand;
@@ -675,9 +686,10 @@ export async function run(argv = process.argv) {
                               List indexed documentation hubs across workspace, all vaults, or mesh
     search <query> [--all-vaults] [--node <node>] [--limit <n>] [--json]
                               Evidence passage search across knowledge hubs and vaults
+    context <task> [--json]    Task evidence with useful linked vicinity, provenance and freshness
     graph [--all-vaults] [--node <node>] [--format json|mermaid|dot] [--json]
                               Extract knowledge graph topology, nodes, and inter-hub links
-    generate [--repo <name>] [--path <dir>] [--output <dir>] [--force] [--dry-run] [--node <node>] [--json]
+    generate [--repo <name>] [--force] [--dry-run] [--node <node>] [--json]
                               Targeted on-demand documentation generation
     token [status|set <provider> <value>] [--stdin] [--json]
                               Check or securely configure Total Recall secrets store keys

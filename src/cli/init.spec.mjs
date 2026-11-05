@@ -4,13 +4,31 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { execFileSync } from 'node:child_process';
+import { execFileSync, spawnSync } from 'node:child_process';
 import init, { connectDetectedClients } from './init.mjs';
 
 describe('init.mjs', () => {
   it('exports default', () => {
     expect(init).toBeDefined();
   });
+});
+
+describe('init --project', () => {
+  it('leaves plugins in the shared folder instead of copying them into the repository', () => {
+    const home = fs.mkdtempSync(path.join(os.tmpdir(), 'tr-init-home-'));
+    const repo = fs.mkdtempSync(path.join(os.tmpdir(), 'tr-init-repo-'));
+    try {
+      const { AGENT_DIR, _TR_TEST_AGENT_DIR, ...env } = process.env;
+      // init reports on stderr, so keep stdout clean for machine readers.
+      const output = spawnSync(process.execPath, [fileURLToPath(new URL('../../bin/total-recall.mjs', import.meta.url)), 'init', '--project', '--yes', '--dry-run'],
+        { cwd: repo, encoding: 'utf8', env: { ...env, HOME: home } }).stderr;
+      expect(output).toContain('skills/total-recall/SKILL.md');
+      expect(output).not.toMatch(/skills\/total-recall\/plugins\//);
+    } finally {
+      fs.rmSync(home, { recursive: true, force: true });
+      fs.rmSync(repo, { recursive: true, force: true });
+    }
+  }, 60000);
 });
 
 describe('connectDetectedClients', () => {

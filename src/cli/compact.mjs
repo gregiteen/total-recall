@@ -55,10 +55,10 @@ function lexicalScore(terms, text) {
 }
 
 /** Rank the applicable rules against the task and fit them into `budget`. Shared by `compact` and `context`. */
-export async function compactNodes({ task, actions = [], budget, expand = [], complete = false, rank = true, nodes, skillsDir, derivedDirs, header }) {
+export async function compactNodes({ task, actions = [], budget, expand = [], complete = false, rank = true, nodes, skillsDir, derivedDirs, header, supplemental = [], taskVector: suppliedVector }) {
   const rules = selectRules(curatedRules(nodes), { actions, projectRoot: process.cwd() });
   const vectors = loadVectors(derivedDirs);
-  const taskVector = rank ? await embedTask(task) : null;
+  const taskVector = suppliedVector !== undefined ? suppliedVector : rank ? await embedTask(task) : null;
   const terms = String(task).toLowerCase().match(/[\p{L}\p{N}_-]{3,}/gu) || [];
   const semantic = Boolean(taskVector);
 
@@ -76,7 +76,7 @@ export async function compactNodes({ task, actions = [], budget, expand = [], co
   }
 
   const ranking = semantic ? 'semantic' : 'lexical';
-  return { ranking, ...compactRules(items, { budget, expand, complete, header: (counts, tokens) => header(counts, tokens, ranking) }) };
+  return { ranking, ...compactRules(items, { budget, expand, complete, supplemental, header: (counts, tokens) => header(counts, tokens, ranking) }) };
 }
 
 export default async function compact(args = []) {

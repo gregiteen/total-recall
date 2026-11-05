@@ -11,7 +11,7 @@ import * as startupHealth from '../core/startup-health.mjs';
 import doctor, { isOwnedServerPort } from './doctor.mjs';
 import { inspectRequiredPlugins } from '../core/required-plugins.mjs';
 vi.mock('../core/required-plugins.mjs', () => ({ inspectRequiredPlugins: vi.fn(() => ({ status: 'ready', errors: [] })) }));
-vi.mock('../core/plugin-runtime.mjs', () => ({ loadPluginModule: vi.fn(async (_owner, module) => module === 'configuration' ? { runtimeConfiguration: () => ({}) } : module === 'runtime-credentials' ? { runtimeCredentials: () => ({ google_api_key: 'auth-fixture' }) } : { defaultBrainDir: () => '/fixture/auth' }) }));
+vi.mock('../core/plugin-runtime.mjs', () => ({ loadPluginModule: vi.fn(async (_owner, module) => module === 'reasoning-runtime' ? { loadRuntimeConfig: () => ({ agents: [{ name: 'claude', binary: 'claude' }] }) } : module === 'configuration' ? { runtimeConfiguration: () => ({}) } : module === 'runtime-credentials' ? { runtimeCredentials: () => ({ google_api_key: 'auth-fixture' }) } : { defaultBrainDir: () => '/fixture/auth' }) }));
 
 describe('doctor command', () => {
   let logSpy, errorSpy;

@@ -19,13 +19,13 @@ import { inspectAgents } from './worker.mjs';
 import { inspectNode } from './executor.mjs';
 import { getModelCatalog, joinHarnessModels } from './model-catalog.mjs';
 import { readReceipts, activeQuotaWalls, activeCredentialBlocks } from './learner.mjs';
-import { resolvePool, exclusionReason } from './pool.mjs';
+import { resolvePool, exclusionReason, isLocalExecutionNode } from './pool.mjs';
 import { readCodexRateLimits, measuredWalls } from './telemetry.mjs';
 
 /**
  * Helper to safely query host Total Recall CLI without assumptions
  */
-function runHostCli(args = []) {
+function runHostCli(args = [], { captureFailure = false } = {}) {
   try {
     const totalRecallBin = process.env.TOTAL_RECALL_BIN || 'total-recall';
     const output = execFileSync(totalRecallBin, args, {
@@ -34,8 +34,9 @@ function runHostCli(args = []) {
       encoding: 'utf8'
     });
     return output.trim();
-  } catch {
-    return null;
+  } catch (error) {
+    // A failing owner often explains itself as JSON on stdout. Callers that need the reason read it here.
+    return captureFailure ? String(error.stdout || '').trim() || null : null;
   }
 }
 
@@ -136,7 +137,26 @@ export async function inspectQuotas(options = {}) {
     meteredQuota.quotaNote = `OpenRouter could not be reached: ${error.message}`;
     meteredQuota.status = 'unavailable';
   }
+  // Per-key usage says nothing about whether the account can pay. Only the account balance does.
+  try {
+    const management = options.openRouterManagementKey !== undefined ? options.openRouterManagementKey : runHostCli(['auth', 'secret', 'get', 'OPENROUTER_MANAGEMENT_KEY']);
+    if (management) {
+      const response = await (options.fetchImpl || fetch)('https://openrouter.ai/api/v1/credits', { headers: { Authorization: `Bearer ${management}` }, signal: AbortSignal.timeout(6000) });
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      const { total_credits: credits, total_usage: used } = (await response.json()).data || {};
+      if (typeof credits === 'number' && typeof used === 'number') {
+        meteredQuota.creditRemainingUSD = +(credits - used).toFixed(2);
+        meteredQuota.quotaNote = `Account balance $${meteredQuota.creditRemainingUSD} of $${credits}`;
+        if (credits - used <= 0) meteredQuota.status = 'exhausted';
+      }
+    }
+  } catch (error) {
+    meteredQuota.balanceError = `The OpenRouter balance could not be read: ${error.message}`;
+  }
   quotas.metered = meteredQuota;
+  if (meteredQuota.status === 'exhausted') for (const id of ['dsh', 'hermes', 'pi']) {
+    if (quotas[id]?.installed && !['needs_auth', 'blocked'].includes(quotas[id].status)) Object.assign(quotas[id], { status: 'exhausted', quotaNote: `Bills OpenRouter. ${meteredQuota.quotaNote}` });
+  }
 
   return { ok: true, timestamp: new Date().toISOString(), node: options.node || 'local', fleet: { ok: fleet.ok, error: fleet.error, machines: fleet.machines, answered: fleet.answered, nodes: fleet.nodes }, quotas };
 }
@@ -154,11 +174,12 @@ export async function getBenchmarks(options = {}) {
 }
 
 /** Ask the decision plugin to classify. Its failure is reported; the caller sees which classifier answered. */
-export function classifyWithDecision(task, run = args => runHostCli(args)) {
-  const questions = { complexity: { type: 'choice', prompt: 'How demanding is this software engineering task for a coding agent?', options: ['local', 'budget', 'frontier'] } };
+export function classifyWithDecision(task, run = args => runHostCli(args, { captureFailure: true })) {
+  const questions = { complexity: { type: 'choice', instructions: 'How demanding is this software engineering task for a coding agent?', criteria: { local: 'A small mechanical change a local model can make.', budget: 'Routine engineering with a clear path.', frontier: 'Architecture, security, or work across many files.' } } };
   const output = run(['decision', 'run', '--state', JSON.stringify({ task: task.slice(0, 2000) }), '--questions', JSON.stringify(questions), '--json']);
   if (!output) throw new Error('The decision plugin did not answer');
   const parsed = JSON.parse(output);
+  if (parsed.ok === false) throw new Error(parsed.error || 'The decision plugin reported a failure');
   const answer = parsed.answers?.complexity ?? parsed.decision?.answers?.complexity ?? parsed.result?.complexity;
   const tier = typeof answer === 'string' ? answer : answer?.choice;
   if (!['local', 'budget', 'frontier'].includes(tier)) throw new Error('The decision plugin returned no usable tier');
@@ -185,7 +206,11 @@ export async function routeTask(taskDescription, options = {}) {
       classifier = { source: 'heuristic', decisionError: String(error.message).slice(0, 300) };
     }
   }
-  const [quotaReport, pool, receipts] = await Promise.all([inspectQuotas(options), resolvePool(options), readReceipts()]);
+  // Plan-only routing on a selected node chooses from that node's harnesses, not this machine's.
+  const remote = options.node && !isLocalExecutionNode(options.node);
+  const inspected = remote ? (options.inspectNodeFn || inspectNode)(options.node) : null;
+  const scoped = remote ? { ...options, inspectNodeFn: () => inspected, inspect: () => inspected } : options;
+  const [quotaReport, pool, receipts] = await Promise.all([inspectQuotas(scoped), resolvePool(scoped), readReceipts()]);
   const quotas = quotaReport.quotas;
   const routing = selectOptimalHarness(taskDescription, pool.ready.map(h => h.id), quotas, { ...options, tierOverride: complexity.tier, empiricalScorecard: computeEmpiricalScorecard(receipts) });
   const selectedQuota = quotas[routing.selected] || {};

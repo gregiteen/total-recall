@@ -262,6 +262,13 @@ function findTarget(brainDir, targetName) {
   return target;
 }
 
+/** Names in a parsed env file whose value has this fingerprint: how to find a credential's consumers without reading it. */
+export function holdersOfFingerprint(remote, fingerprint) {
+  const wanted = String(fingerprint);
+  if (wanted.length < 8) throw new Error('--find-fingerprint needs at least 8 characters');
+  return [...remote.entries()].filter(([, found]) => secretValueFingerprint(found.value)?.startsWith(wanted)).map(([key]) => key);
+}
+
 /**
  * Compare a deployed remote file with what the store would project there, key
  * by key, by value fingerprint. Values never leave this process.
@@ -294,6 +301,7 @@ export async function verifyRemote(brainDir, targetName, opts = {}) {
     remoteFile,
     rows,
     remoteOnly: [...remote.keys()].filter((key) => !projected.has(key)),
+    ...(opts.findFingerprint ? { holders: holdersOfFingerprint(remote, opts.findFingerprint) } : {}),
     ok: rows.every((row) => row.status === 'match' && !row.duplicates),
   };
 }

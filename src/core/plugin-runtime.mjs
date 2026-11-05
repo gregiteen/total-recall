@@ -3,9 +3,11 @@ import { pathToFileURL } from 'node:url';
 import { discoverPlugins, resolvePluginFile, PACKAGE_ROOT } from './plugin-loader.mjs';
 import { pluginActivation } from './plugin-state.mjs';
 
-export async function loadPluginModule(id, name, { activeRequired = false, projectRoot = process.cwd() } = {}) {
+export async function loadPluginModule(id, name, { activeRequired = false, requireValid = true, projectRoot = process.cwd() } = {}) {
   const plugin = discoverPlugins(projectRoot).find(item => item.id === id);
-  if (!plugin?.valid) throw new Error(`Required plugin ${id} is missing or invalid`);
+  // requireValid:false is for the preflight gate alone: a schema error elsewhere in a
+  // manifest must not disable the module that keeps every tool call working.
+  if (!plugin || (requireValid && !plugin.valid)) throw new Error(`Required plugin ${id} is missing or invalid`);
   if (activeRequired && !pluginActivation(plugin, { projectRoot }).enabled) throw new Error(`Plugin ${id} is inactive`);
   // Pure bootstrap bindings remain importable so an inactive auth/config owner
   // cannot prevent the management CLI from turning it back on. Execution is

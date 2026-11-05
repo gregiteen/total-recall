@@ -1,7 +1,6 @@
 #!/usr/bin/env node
 
 import { listAgents, spawnAgent, killAgent, getAgentLogs } from '../core/agent-manager.mjs';
-import { detectHarnesses } from '../core/meta-harness.mjs';
 import { checkReceipt, findRoot, ACK_COMMAND } from '../core/preflight-receipt.mjs';
 
 function printHelp() {
@@ -28,10 +27,11 @@ Options:
   --tools <list>            Built-in tools for the harness: default (all), none, or e.g. "Bash,Read,WebFetch"
                             (alias --allow-tools; --no-tools = none). Spawns default to all tools.
   --setting-sources <list>  Settings layers the harness loads (e.g. local, or user,project)
+  --read-only              Run without persistent changes
+  --allow-unknown-auth     Explicitly permit a harness without a verified login probe
 
 Auth:
-  Claude Code reads CLAUDE_CODE_OAUTH_TOKEN (from \`claude setup-token\`) from the environment,
-  else from the Total Recall secret store, so SSH/launchd sessions without a login keychain work.
+  The Meta Harness owner probes login and resolves only adapter-declared credentials through auth.
 
 Available Harnesses:
   agy, claude, codex, dsh, hermes, openclaw
@@ -54,6 +54,7 @@ const SPAWN_VALUE_FLAGS = {
   '--tools': 'tools',
   '--allow-tools': 'tools',
   '--setting-sources': 'settingSources',
+  '--model': 'model',
 };
 
 /**
@@ -61,7 +62,7 @@ const SPAWN_VALUE_FLAGS = {
  * they never leak into the task text; `--tools ""` is a real (empty) value.
  */
 export function parseSpawnArgs(rest) {
-  const out = { detach: true, isJson: false, name: null, targetNode: null, cwd: undefined, tools: undefined, settingSources: undefined };
+  const out = { detach: true, isJson: false, name: null, targetNode: null, cwd: undefined, tools: undefined, settingSources: undefined, write: true, allowUnknownAuth: false };
   const positional = [];
   for (let i = 0; i < rest.length; i++) {
     const arg = rest[i];
@@ -79,6 +80,9 @@ export function parseSpawnArgs(rest) {
     else if (arg === '--no-detach') out.detach = false;
     else if (arg === '--detach') out.detach = true;
     else if (arg === '--no-tools') out.tools = 'none';
+    else if (arg === '--read-only') out.write = false;
+    else if (arg === '--write') out.write = true;
+    else if (arg === '--allow-unknown-auth') out.allowUnknownAuth = true;
     else if (arg.startsWith('--')) throw new Error(`Unknown option for agent spawn: ${arg}`);
     else positional.push(arg);
   }
@@ -137,7 +141,7 @@ export async function run(argv) {
       console.error(`Error: ${err.message}`);
       process.exit(1);
     }
-    const { harness, task, detach, isJson, name, targetNode, cwd, tools, settingSources } = parsed;
+    const { harness, task, detach, isJson, name, targetNode, cwd, tools, settingSources, model, write, allowUnknownAuth } = parsed;
 
     if (!harness || !task) {
       console.error('Error: Please specify harness ID and task prompt.');
@@ -158,7 +162,8 @@ export async function run(argv) {
     const nodeStr = targetNode ? ` on mesh node \x1b[1;33m${targetNode}\x1b[0m` : '';
     if (!isJson) console.log(`\n🚀 Spawning agent on harness: \x1b[1;36m${harness}\x1b[0m${nodeStr}...`);
     try {
-      const record = await spawnAgent(harness, task, { detach, name, node: targetNode, cwd, tools, settingSources });
+      const record = await spawnAgent(harness, task, { detach, name, node: targetNode, cwd, tools, settingSources, model, write, allowUnknownAuth });
+      if (record.status === 'failed') process.exitCode = 1;
       if (isJson) {
         console.log(JSON.stringify(record, null, 2));
         return;

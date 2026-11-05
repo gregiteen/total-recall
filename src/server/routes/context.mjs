@@ -34,7 +34,10 @@ router.post('/api/context', requireAuth, requireScope('memory:read'), async (req
       consumer: 'api',
       momentumSlugs: momentum_slugs || [],
       actions: actions || [],
-      includeKnowledge: include_knowledge === true,
+      includeKnowledge: include_knowledge !== false,
+      indexScopes: path.resolve(vaultDir) === path.resolve(globalVault)
+        ? [{ layer: 'global', derivedDir }]
+        : [{ layer: 'project', derivedDir }, { layer: 'global', derivedDir: path.join(globalBrainDir, 'memory-derived') }],
       nodes,
       projectRoot: path.dirname(path.dirname(skillsDir)),
       contributions: legacyRuleContributions(skillsDir),

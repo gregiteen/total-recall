@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
+vi.mock('./context-providers.mjs', () => ({ retrievePluginContext: async () => ({ candidates: [], diagnostics: [], coverage: [] }) }));
 
 vi.mock('./logger.mjs', () => ({
   logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() },

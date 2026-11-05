@@ -12,7 +12,7 @@ Coordinates coding agent harnesses across mesh nodes. `cli-agents` is an alias o
 1. **Believe the status words.** `ready` was proved by a login probe. `unverified` has no probe, so only a completed run proves it. `needs_auth`, `blocked` and `exhausted` cannot take work; the reason is in `quotaNote` and in `excluded`.
 2. **No figure without a source.** `benchmarks` shows only fetched figures with their source and time. A dash means nobody measured it. Adapter quality and cost scores are configured priors, not measurements.
 3. **Writing happens on a branch.** `route --execute`, `coordinate --execute` and race work in their own worktree on a `meta-harness/...` branch. Nothing merges into your branch; review the branch and merge it yourself.
-4. **Long runs go to the background.** The host stops plugin commands after 10 minutes, so add `--background` to any multi-stage `--execute` and follow it with `threads list`.
+4. **Long runs go to the background.** The host stops plugin commands after 10 minutes, so add `--background` to any multi-stage `--execute`. It prints a log path that receives the final JSON, and a pipeline also records a thread. Stopping a run stops its agents and removes its worktrees, unfinished branches and open thread. A remote job (`--node` with an absolute `--cwd`) has a one-hour budget; `--timeout-ms` changes it.
 5. **Cost.** dsh, hermes and other metered harnesses bill per token, and `route` warns when it picks one. `--jev` also makes a metered call.
 
 ## Commands

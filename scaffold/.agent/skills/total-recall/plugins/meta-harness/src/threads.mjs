@@ -1,156 +1,119 @@
-/**
- * Meta Harness Multi-Platform Thread Manager
- * Unifies thread tracking and session supervision across integrated agent platforms:
- * agy, claude, codex, dsh, hermes, openclaw, cursor, devin, etc.
- *
- * Persists thread state, PR branch associations, turn history, and review status.
- */
-
+/** Thread state is canonical SSSS, mutated through the native kernel with optimistic concurrency. */
 import fs from 'node:fs';
-import path from 'node:path';
+import crypto from 'node:crypto';
 import { threadsFile } from './paths.mjs';
+import { PluginStateStore } from './ssss-store.mjs';
 
-/** A missing file is an empty store. A corrupt one is an error, so the next write cannot erase it. */
-export function readThreads() {
-  let content;
-  try { content = fs.readFileSync(threadsFile(), 'utf8'); }
-  catch (error) { if (error.code === 'ENOENT') return []; throw error; }
-  let parsed;
-  try { parsed = JSON.parse(content); }
-  catch { throw new Error(`The thread store ${threadsFile()} is corrupt. It was left in place; repair or move it.`); }
-  return Array.isArray(parsed) ? parsed : (parsed.threads || []);
+const STATUSES = new Set(['active', 'review_pending', 'approved', 'completed', 'failed']);
+const identifier = /^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,127}$/;
+const storeForThreads = () => new PluginStateStore(threadsFile(), 'meta-harness');
+
+function validateThreads(value) {
+  if (!Array.isArray(value)) throw new Error('The thread store is corrupt: threads must be an array');
+  const ids = new Set();
+  for (const thread of value) {
+    if (!thread || typeof thread !== 'object' || !identifier.test(thread.id || '') || ids.has(thread.id)
+      || typeof thread.title !== 'string' || !STATUSES.has(thread.status) || !Array.isArray(thread.turns)
+      || thread.turns.some(turn => !turn || typeof turn !== 'object' || typeof turn.content !== 'string')) {
+      throw new Error('The thread store is corrupt: invalid thread identity, status or turns');
+    }
+    ids.add(thread.id);
+  }
+  return value;
 }
 
-/** Serialize read-modify-write across processes. A lock older than 30 seconds belongs to a dead process. */
-function withLock(work) {
-  const lock = `${threadsFile()}.lock`;
-  fs.mkdirSync(path.dirname(lock), { recursive: true, mode: 0o700 });
-  const deadline = Date.now() + 10000;
-  for (;;) {
-    try { fs.mkdirSync(lock); break; }
-    catch (error) {
-      if (error.code !== 'EEXIST') throw error;
-      try { if (Date.now() - fs.statSync(lock).mtimeMs > 30000) { fs.rmdirSync(lock); continue; } } catch { continue; }
-      if (Date.now() > deadline) throw new Error('The thread store is locked by another process');
-      Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 50);
+/** Existing JSON is read only for migration. The first mutation imports it through SSSS; it is never overwritten. */
+function readState(store) {
+  let value;
+  try { value = store.read(null); }
+  catch (error) { throw new Error(`The canonical thread store is corrupt or unsafe: ${error.message}`); }
+  if (value === null) {
+    let content;
+    try { content = fs.readFileSync(threadsFile(), 'utf8'); }
+    catch (error) { if (error.code === 'ENOENT') return { threads: [] }; throw error; }
+    try { value = JSON.parse(content); }
+    catch { throw new Error(`The thread store ${threadsFile()} is corrupt. It was left in place.`); }
+  }
+  const state = Array.isArray(value) ? { threads: value } : value;
+  if (!state || typeof state !== 'object') throw new Error('The thread store is corrupt: missing thread state');
+  validateThreads(state.threads);
+  return state;
+}
+
+export const threadDocumentPath = () => storeForThreads().documentPath;
+export function readThreads() { return readState(storeForThreads()).threads; }
+
+/** Native SSSS owns the mutation guard and leases. CAS retries reload state; no age-based lock stealing. */
+function mutate(work) {
+  for (let attempt = 0; attempt < 8; attempt += 1) {
+    const store = storeForThreads();
+    const state = readState(store);
+    const result = work(state.threads);
+    validateThreads(state.threads);
+    try {
+      store.write({ ...state, version: '2.0.0', updatedAt: new Date().toISOString(), threads: state.threads });
+      return structuredClone(result);
+    } catch (error) {
+      if (!String(error.message).includes('version conflict') || attempt === 7) throw error;
     }
   }
-  try { return work(); } finally { fs.rmdirSync(lock); }
 }
 
 export function writeThreads(threads) {
-  const file = threadsFile();
-  fs.mkdirSync(path.dirname(file), { recursive: true, mode: 0o700 });
-  const payload = {
-    version: '1.0.0',
-    updatedAt: new Date().toISOString(),
-    threads: Array.isArray(threads) ? threads : []
-  };
-  const temporary = `${file}.${process.pid}.tmp`;
-  fs.writeFileSync(temporary, JSON.stringify(payload, null, 2), { mode: 0o600 });
-  fs.renameSync(temporary, file);
+  validateThreads(threads);
+  return mutate(current => { current.splice(0, current.length, ...structuredClone(threads)); return current; });
 }
 
 export function listThreads(filter = {}) {
-  const threads = readThreads();
-  return threads
-    .filter(t => {
-      if (filter.platform && t.platform !== filter.platform) return false;
-      if (filter.status && t.status !== filter.status) return false;
-      if (filter.branch && t.branch !== filter.branch) return false;
-      return true;
-    })
+  return readThreads().filter(thread => (!filter.platform || thread.platform === filter.platform)
+    && (!filter.status || thread.status === filter.status) && (!filter.branch || thread.branch === filter.branch))
     .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
 }
-
-export function getThread(id) {
-  const threads = readThreads();
-  return threads.find(t => t.id === id) || null;
-}
+export function getThread(id) { return readThreads().find(thread => thread.id === id) || null; }
 
 export function createThread(data = {}) {
-  return withLock(() => {
-  const threads = readThreads();
-  const now = new Date().toISOString();
-  const id = data.id || `thread-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
-
-  const thread = {
-    id,
-    title: String(data.title || 'Untitled Agent Thread').slice(0, 140),
-    task: String(data.task || data.title || '').trim(),
-    platform: data.platform || 'universal',
-    model: data.model || 'auto',
-    branch: data.branch || null,
-    worktreePath: data.worktreePath || null,
-    prNumber: data.prNumber || null,
-    prUrl: data.prUrl || null,
-    status: data.status || 'active', // 'active' | 'review_pending' | 'approved' | 'completed' | 'failed'
-    createdAt: now,
-    updatedAt: now,
-    turns: Array.isArray(data.turns) ? data.turns : [],
-    review: data.review || null,
-    summary: data.summary || null
-  };
-
-  threads.unshift(thread);
-  writeThreads(threads);
-  return thread;
+  const id = data.id || `thread-${crypto.randomUUID()}`;
+  return mutate(threads => {
+    if (threads.some(thread => thread.id === id)) throw new Error(`Thread already exists: ${id}`);
+    const now = new Date().toISOString();
+    const thread = {
+      ...data, id, title: String(data.title || 'Untitled Agent Thread').slice(0, 140),
+      task: String(data.task || data.title || '').trim(), platform: data.platform || 'universal', model: data.model || 'auto',
+      branch: data.branch || null, worktreePath: data.worktreePath || null, prNumber: data.prNumber || null, prUrl: data.prUrl || null,
+      status: data.status || 'active', createdAt: now, updatedAt: now,
+      turns: Array.isArray(data.turns) ? data.turns : [], review: data.review || null, summary: data.summary || null,
+    };
+    threads.unshift(thread);
+    return thread;
   });
 }
 
 export function appendThreadTurn(id, turn = {}) {
-  return withLock(() => {
-  const threads = readThreads();
-  const index = threads.findIndex(t => t.id === id);
-  if (index === -1) throw new Error(`Thread not found: ${id}`);
-
-  const now = new Date().toISOString();
-  const entry = {
-    role: turn.role || 'agent',
-    agent: turn.agent || 'unknown',
-    content: String(turn.content || '').slice(0, 50000),
-    timestamp: now
-  };
-
-  threads[index].turns.push(entry);
-  threads[index].updatedAt = now;
-  writeThreads(threads);
-  return threads[index];
+  return mutate(threads => {
+    const thread = threads.find(item => item.id === id);
+    if (!thread) throw new Error(`Thread not found: ${id}`);
+    const now = new Date().toISOString();
+    thread.turns.push({ role: turn.role || 'agent', agent: turn.agent || 'unknown', content: String(turn.content || '').slice(0, 50000), timestamp: now });
+    thread.updatedAt = now;
+    return thread;
   });
 }
 
 export function updateThread(id, updates = {}) {
-  return withLock(() => {
-  const threads = readThreads();
-  const index = threads.findIndex(t => t.id === id);
-  if (index === -1) throw new Error(`Thread not found: ${id}`);
-
-  const now = new Date().toISOString();
-  threads[index] = {
-    ...threads[index],
-    ...updates,
-    id, // protect immutable ID
-    updatedAt: now
-  };
-
-  writeThreads(threads);
-  return threads[index];
+  if (!updates || typeof updates !== 'object' || Array.isArray(updates)) throw new Error('Thread updates must be an object');
+  return mutate(threads => {
+    const index = threads.findIndex(thread => thread.id === id);
+    if (index < 0) throw new Error(`Thread not found: ${id}`);
+    threads[index] = { ...threads[index], ...updates, id, createdAt: threads[index].createdAt, updatedAt: new Date().toISOString() };
+    return threads[index];
   });
 }
-
-export function closeThread(id, resolution = 'completed') {
-  return updateThread(id, {
-    status: resolution,
-    closedAt: new Date().toISOString()
-  });
-}
-
+export function closeThread(id, resolution = 'completed') { return updateThread(id, { status: resolution, closedAt: new Date().toISOString() }); }
 export function deleteThread(id) {
-  return withLock(() => {
-    const threads = readThreads();
-    const filtered = threads.filter(t => t.id !== id);
-    if (filtered.length === threads.length) return false;
-    writeThreads(filtered);
+  return mutate(threads => {
+    const index = threads.findIndex(thread => thread.id === id);
+    if (index < 0) return false;
+    threads.splice(index, 1);
     return true;
   });
 }

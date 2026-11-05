@@ -80,6 +80,8 @@ export function mergeSecretMeta(prev = {}, patch = {}) {
   });
   assign('auto_rotate', (v) => !!v);
   assign('notes', (v) => (v == null || v === '' ? null : String(v)));
+  // The provider's id for the live key, so the next rotation can revoke it.
+  assign('provider_key_id', (v) => (v == null || v === '' ? null : String(v)));
   // The app-facing name a production key stands in for: GRO_CRM_TICKETS_SIGNING_SECRET
   // provides TICKETS_SIGNING_SECRET to the repos it is bound to (see resolveSecretKey).
   assign('provides', (v) => (v == null || v === '' ? null : String(v)));
@@ -270,6 +272,7 @@ export async function listSecretsMeta(brainDir) {
       provider: providerId,
       provider_name: catalog?.name || providerId,
       label: m.label || null,
+      provider_key_id: m.provider_key_id || null,
       repos,
       repo: repos.length === 1 ? repos[0] : null,
       multi_repo_error: false,

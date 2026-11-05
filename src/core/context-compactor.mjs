@@ -54,7 +54,7 @@ function findDuplicates(ranked) {
  * Assign each rule a tier so the printed output fits `budget`, measuring the real
  * render after every change. `header(counts, tokens)` supplies the status lines.
  */
-export function compactRules(items, { budget, expand = [], header, complete = false }) {
+export function compactRules(items, { budget, expand = [], header, complete = false, supplemental = [] }) {
   if (!Number.isFinite(budget) || budget < 1) throw new Error('Compact budget must be a positive token estimate');
   const ranked = rank(items);
   const known = new Set(ranked.map(item => item.slug));
@@ -71,6 +71,7 @@ export function compactRules(items, { budget, expand = [], header, complete = fa
     const blocks = [
       ...full.map(item => item.text.trim()),
       ...summary.map(item => `[${item.slug}] ${summarizeRule(item.body)}`),
+      ...supplemental.filter(item => item.text).map(item => item.text.trim()),
     ];
     if (reference.length) blocks.push(`Referenced: ${reference.map(item => item.slug).join(', ')}`);
     if (duplicate.length) blocks.push(`Duplicates: ${duplicate.map(item => `${item.slug} (of ${duplicateOf.get(item.slug)})`).join(', ')}`);

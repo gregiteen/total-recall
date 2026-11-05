@@ -1,5 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
 vi.mock('./logger.mjs', () => ({ logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() } }));
+vi.mock('./context-providers.mjs', () => ({ retrievePluginContext: async () => ({ candidates: [], diagnostics: [], coverage: [] }) }));
+vi.mock('./embeddings.mjs', async original => ({ ...await original(), getEmbedding: async () => { throw new Error('fixture provider unavailable'); } }));
 import { compileContext, previewContext, capsuleResponse } from './context-compiler.mjs';
 import { ruleFingerprint } from './context-policy.mjs';
 describe('context compiler required coverage', () => {
@@ -18,10 +20,11 @@ describe('context compiler required coverage', () => {
     expect(result.context).not.toContain('publish only');
   });
   it('exports a local preview', () => expect(typeof previewContext).toBe('function'));
-  it('does not auto-fill a routing capsule with supporting documents', async () => {
+  it('adds bounded supporting task knowledge by default and preserves explicit rules-only consumers', async () => {
     const nodes = [{ slug: 'rule', category: 'invariants', status: 'active', body: 'Keep data.' },
       { slug: 'manual', category: 'facts', status: 'active', body: 'deployment '.repeat(500) }];
-    expect((await compileContext({ nodes, query: 'deployment' })).context).not.toContain('manual');
+    expect((await compileContext({ nodes, query: 'deployment' })).context).toContain('manual');
+    expect((await compileContext({ nodes, query: 'deployment', includeKnowledge: false })).context).not.toContain('manual');
     expect((await compileContext({ nodes, query: 'deployment', includeKnowledge: true })).context).toContain('manual');
   });
   it('uses explicit curation only while the canonical source still matches', async () => {

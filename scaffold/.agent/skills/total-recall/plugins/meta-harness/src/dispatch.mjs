@@ -4,7 +4,7 @@ import { classifyFailure, READ_ONLY_ADAPTERS } from './worker.mjs';
 import { recordRunReceipt } from './learner.mjs';
 import { isGitRepo, createWorktree, removeWorktree } from './worktree.mjs';
 
-export async function dispatchWithReceipt(request, { dispatchFn, node = request.node || 'local', role, complexityScore, escalatedFrom } = {}) {
+export async function dispatchWithReceipt(request, { dispatchFn, node = request.node || 'local', role, complexityScore, escalatedFrom, record = recordRunReceipt } = {}) {
   const started = Date.now();
   // A harness that cannot be told not to write does read-only work in a checkout that is thrown away.
   const contain = node === 'local' && request.permissions?.write !== true && !READ_ONLY_ADAPTERS.includes(request.agent) && request.isolated !== true && isGitRepo(request.cwd);
@@ -24,10 +24,15 @@ export async function dispatchWithReceipt(request, { dispatchFn, node = request.
     if (scratch) removeWorktree(request.cwd, scratch);
   }
   const durationMs = Date.now() - started;
-  await recordRunReceipt({
+  // A finished run keeps its result: the worktree and any cost are real even when bookkeeping fails.
+  let receiptError;
+  try {
+    await record({
     harness: request.agent, role, node, task: request.contextTask || request.prompt, complexityScore,
+    model: result.model ?? null, exitCode: result.exitCode ?? null, finishedReason: result.finishedReason ?? null,
     success: result.ok === true, durationMs, failureKind: result.ok ? null : result.failureKind || 'agent',
     error: result.ok ? null : result.error, resetsAt: result.resetsAt, escalatedFrom,
-  });
-  return { ...result, durationMs };
+    });
+  } catch (error) { receiptError = String(error?.message || error); }
+  return { ...result, durationMs, ...(receiptError ? { receiptError } : {}) };
 }

@@ -5,7 +5,8 @@
   "type": "module",
   "main": "cli.mjs",
   "scripts": {
-    "test": "node --test test/*.test.mjs && vitest run test"
+    "test": "node --test test/*.test.mjs && vitest run test",
+    "ssss": "ssss"
   },
   "keywords": [
     "total-recall-plugin",
@@ -21,7 +22,8 @@
     "express": "^5.2.1",
     "express-rate-limit": "^8.5.1",
     "jsonwebtoken": "^9.0.3",
-    "yaml": "^2.9.0"
+    "yaml": "^2.9.0",
+    "@gregiteen/ssss-cli": "0.14.4"
   },
   "files": [
     "cli.mjs",
@@ -35,5 +37,8 @@
   ],
   "publishConfig": {
     "access": "public"
+  },
+  "overrides": {
+    "@ssss/cli": "npm:@gregiteen/ssss-cli@0.14.4"
   }
 }

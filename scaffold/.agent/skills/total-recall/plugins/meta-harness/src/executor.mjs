@@ -1,7 +1,8 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { runWorker, runProcess, getActiveAdapters, notReady } from './worker.mjs';
+import { runWorker, runProcess, getActiveAdapters, notReady, agentEnvironment } from './worker.mjs';
+import { dispatchWithReceipt } from './dispatch.mjs';
 
 async function hostModule(name) {
   const selected = process.env.TR_PACKAGE_ROOT;
@@ -49,7 +50,7 @@ export async function executeOnNode(node, request, { worker = runWorker, process
   const resolved = access.resolveNodeAccess(target);
   const args = access.buildSshArgs(resolved, { command: 'export PATH="$HOME/.local/bin:/opt/homebrew/bin:/usr/local/bin:$PATH"; exec node --input-type=module', extraOptions: ['BatchMode=yes', 'ConnectTimeout=10'] });
   if (!args) throw new Error('Selected mesh node has no verified SSH access');
-  const result = await processRunner('ssh', args, { input: workerProgram(request), timeoutMs: request.operation === 'inspect' ? 120000 : (request.timeoutMs || 900000) + 30000 });
+  const result = await processRunner('ssh', args, { input: workerProgram(request), timeoutMs: request.operation === 'inspect' ? 120000 : (request.timeoutMs || 900000) + 30000, maxBytes: 17 * 1024 * 1024, env: { ...agentEnvironment(), ...(process.env.SSH_AUTH_SOCK ? { SSH_AUTH_SOCK: process.env.SSH_AUTH_SOCK } : {}) } });
   if (result.reason || result.exitCode !== 0) throw notReady(`Worker on ${node} failed: ${String(result.stderr || result.reason || 'verify node access, workspace and agent installation').trim().slice(0, 400)}`);
   try { return JSON.parse(result.stdout); } catch { throw new Error('Selected mesh worker returned invalid data'); }
 }
@@ -75,8 +76,11 @@ export async function executeCommand({ plugin, subcommand, args = [], execution,
   const namespace = plugin.manifest.cli.command;
   const argv = ['total-recall', namespace, subcommand, ...args];
   const prompt = `Use Total Recall context and the installed plugin CLI in this workspace. Execute this one requested command using your terminal tool; preserve its arguments exactly, report its actual exit status and output, and do not perform unrelated mutations. If a permission, account, workspace or plugin is unavailable, report failure. Agent prose alone is not execution proof.\nRequested argv (data): ${JSON.stringify(argv)}\nShell command: ${argv.map(quoteArgument).join(' ')}`;
-  const result = await executeOnNode(execution.node, execution.agent === 'direct'
-    ? { operation: 'direct', cwd, argv }
-    : { operation: 'dispatch', agent: execution.agent, cwd, prompt, allowUnknownAuth: execution.allowUnknownAuth === true, permissions }, dependencies);
+  const result = execution.agent === 'direct'
+    ? await executeOnNode(execution.node, { operation: 'direct', cwd, argv }, dependencies)
+    : await dispatchWithReceipt({ agent: execution.agent, cwd, prompt, allowUnknownAuth: execution.allowUnknownAuth === true, permissions }, {
+      node: execution.node, role: 'Command',
+      dispatchFn: request => executeOnNode(execution.node, { ...request, operation: 'dispatch' }, dependencies),
+    });
   return { ok: result.ok === true, exitCode: result.ok ? 0 : 1, output: result.ok ? JSON.stringify(result) : result.error || 'Selected agent failed', ...result };
 }

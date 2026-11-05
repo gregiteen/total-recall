@@ -7,11 +7,11 @@ import { isBrainEnabled } from '../core/brain-registry.mjs';
 import { surfaceInputsHash } from '../core/command-surface.mjs';
 import { readConfigValue } from './config.mjs';
 import { recordCapsule } from '../core/context-telemetry.mjs';
+import { estimateTokens } from '../core/context-policy.mjs';
+import { summarizeRetrieval } from '../core/task-context.mjs';
 
 /** About 28 KB: harnesses save output over about 30 KB to a file instead of showing it, which agents then cannot read (audit C-005, F-019). */
 export const CAPSULE_LIMIT = 7000;
-const JSON_ESCAPE_SHARE = 0.97;
-const JSON_WRAPPER_TOKENS = 128;
 
 /** The merged rule nodes a capsule draws from, for the selected layer. */
 export function loadContextNodes(layer) {
@@ -22,7 +22,9 @@ export function loadContextNodes(layer) {
   const nodes = own ? mergeGlobalRuleNodes(getNodes(path.join(own, 'memory-vault')), global ? getNodes(path.join(global, 'memory-vault')) : []) :
     getNodes(path.join(global, 'memory-vault')).map(n => ({ ...n, _layer: 'global' }));
   return { nodes, skillsDir: path.dirname(own || global),
-    derivedDirs: [own, global].filter(Boolean).map(dir => path.join(dir, 'memory-derived')) };
+    derivedDirs: [own, global].filter(Boolean).map(dir => path.join(dir, 'memory-derived')),
+    indexScopes: [own && { layer: 'project', derivedDir: path.join(own, 'memory-derived') },
+      global && { layer: 'global', derivedDir: path.join(global, 'memory-derived') }].filter(Boolean) };
 }
 
 /** The first lines of an automatically compacted capsule. `rules verify` measures with it too, so both agree on what fits. */
@@ -33,33 +35,64 @@ export const compactedHeader = (version, budget) => (counts, tokens, ranking) =>
 ].join('\n');
 
 /** Compact the over-budget capsule, or explain the budget it needs. `fullRequired` is what the uncompacted capsule would take. */
-async function printCompacted({ query, actions, budget, format, version, fullRequired, nodes, skillsDir, derivedDirs }) {
+async function printCompacted({ query, actions, budget, format, version, nodes, skillsDir, derivedDirs, knowledge }) {
   const { compactNodes } = await import('./compact.mjs');
-  // JSON escaping and its wrapper count against the budget too.
-  const target = format === 'json' ? Math.floor(budget * JSON_ESCAPE_SHARE) - JSON_WRAPPER_TOKENS : budget;
   const header = compactedHeader(version, budget);
-  let result;
+  const compact = target => compactNodes({ task: query, actions, budget: target, complete: true, nodes, skillsDir, derivedDirs, header,
+    supplemental: knowledge?.contributions || [], taskVector: knowledge?.queryVector });
+  const output = result => {
+    if (format !== 'json') return result.context;
+    const payload = { ready: true, compacted: true, ranking: result.ranking, context: result.context, counts: result.counts,
+      stats: { version, budget, retrieval: summarizeRetrieval(knowledge?.summary), token_measurement: 'estimated_chars_divided_by_four' } };
+    for (let index = 0; index < 10; index++) {
+      const tokens = estimateTokens(`${JSON.stringify(payload)}\n`);
+      if (tokens === payload.stats.total_tokens) break;
+      payload.stats.total_tokens = tokens;
+    }
+    return JSON.stringify(payload);
+  };
   try {
-    result = await compactNodes({ task: query, actions, budget: Math.max(target, 1), complete: true, nodes, skillsDir, derivedDirs, header });
+    // Encoding inflates the capsule by a varying share, so search for the compaction target that fits.
+    let target = budget, low = 1, high = budget, best = null, floor = null;
+    for (let attempt = 0; attempt < 12 && low <= high; attempt++) {
+      let result;
+      try { result = await compact(target); }
+      catch (error) {
+        if (!error.requiredBudget) throw error;
+        floor = error;
+        low = Math.max(target, error.requiredBudget > target ? error.requiredBudget : target + 1);
+        target = low;
+        continue;
+      }
+      const text = output(result), measured = estimateTokens(`${text}\n`);
+      if (measured <= budget) {
+        best = text;
+        if (budget - measured <= Math.max(16, budget * 0.02)) break;
+        low = target + 1;
+      // Any target above the text it actually produced yields the same text, so step below that.
+      } else high = Math.min(target, result.tokens ?? target) - 1;
+      const projected = Math.floor(target * budget / measured);
+      target = projected >= low && projected <= high ? projected : Math.floor((low + high) / 2);
+    }
+    if (best !== null) { console.log(best); return; }
+    if (floor) throw floor;
+    throw new Error('Context wire accounting did not converge');
   } catch (error) {
     if (!error.requiredBudget) throw error;
-    const floor = format === 'json' ? Math.ceil((error.requiredBudget + JSON_WRAPPER_TOKENS) / JSON_ESCAPE_SHARE) : error.requiredBudget;
-    const requiredBudget = Math.min(fullRequired, floor);
+    // Measure the actual floor through the same encoder; leave room for the changed budget digits on retry.
+    const floor = await compact(error.requiredBudget);
+    const requiredBudget = estimateTokens(`${output(floor)}\n`) + 16;
     console.log(format === 'json'
       ? JSON.stringify({ ready: false, reason: 'budget-overflow', context: '', stats: { version, budget, required_budget: requiredBudget, overage: requiredBudget - budget, rules: error.ruleCount, token_measurement: 'estimated_chars_divided_by_four' } })
       : `ready:false reason:budget-overflow budget:${budget} required_budget:${requiredBudget} overage:${requiredBudget - budget} rules:${error.ruleCount} version:${version}\nThis budget cannot hold all ${error.ruleCount} applicable rules even compacted; \`total-recall rules audit\` lists them by size. Retry with --budget ${requiredBudget}; do not act until ready:true.`);
     process.exitCode = 2;
     return;
   }
-  console.log(format === 'json'
-    ? JSON.stringify({ ready: true, compacted: true, ranking: result.ranking, context: result.context, counts: result.counts,
-      stats: { version, budget, total_tokens: result.tokens, token_measurement: 'estimated_chars_divided_by_four' } })
-    : result.context);
 }
 
 export default async function context(args = []) {
   if (!args.length || args.includes('--help')) {
-    console.log(`Usage: total-recall context "task" [--action edit,test,publish] [--budget ${CAPSULE_LIMIT}] [--format text|json] [--knowledge] [--debug] [--project|--global]\nLocal rules only by default. Unknown applicability is required. Over budget, the capsule compacts automatically: absolute rules keep at least a summary and every other rule keeps at least its slug. Configured budgets are capped at ${CAPSULE_LIMIT}; pass a larger --budget to print the full capsule. Exit 2 means the budget cannot hold every rule; do not act until ready:true. --knowledge adds supporting documents; --debug exposes inventories within the same budget. Refresh on task/action/project or policy changes.`);
+    console.log(`Usage: total-recall context "task" [--action edit,test,publish] [--budget ${CAPSULE_LIMIT}] [--format text|json] [--knowledge] [--debug] [--project|--global]\nApplicable rules plus semantically retrieved task memory and active plugin evidence by default; unavailable vectors use a labelled lexical fallback. Unknown rule applicability is required. Over budget, compaction preserves selected task evidence and accounts for every rule: absolute rules keep at least a summary and every other rule keeps at least its slug. Configured budgets are capped at ${CAPSULE_LIMIT}; pass a larger --budget to print the full capsule. Exit 2 means the complete capsule cannot fit; do not act until ready:true. --knowledge remains accepted; --debug exposes retrieval inventories within the same budget. Refresh on task/action/project or policy changes.`);
     return;
   }
   const { layer, remainingArgs } = parseLayerFlag(args);
@@ -73,7 +106,7 @@ export default async function context(args = []) {
     }
     return undefined;
   })();
-  let actions = [], budget = Math.min(configuredBudget ?? CAPSULE_LIMIT, CAPSULE_LIMIT), format = 'text', includeKnowledge = false, debug = false;
+  let actions = [], budget = Math.min(configuredBudget ?? CAPSULE_LIMIT, CAPSULE_LIMIT), format = 'text', includeKnowledge = true, debug = false;
   for (let i = 1; i < remainingArgs.length; i++) {
     const flag = remainingArgs[i];
     if (flag === '--knowledge') { includeKnowledge = true; continue; }
@@ -84,10 +117,10 @@ export default async function context(args = []) {
     else if (flag === '--format' && ['json', 'text'].includes(value)) format = value;
     else throw new Error(`Unknown context option: ${flag}`);
   }
-  const { nodes, skillsDir, derivedDirs } = loadContextNodes(layer);
+  const { nodes, skillsDir, derivedDirs, indexScopes } = loadContextNodes(layer);
   const derivedDir = derivedDirs[0];
   const result = await compileContext({ query, actions, nodes, includeKnowledge, budget: { total: budget }, projectRoot: process.cwd(),
-    derivedDir, contributions: legacyRuleContributions(skillsDir), versionInputs: surfaceInputsHash({ skillsDir }) });
+    derivedDir, indexScopes, contributions: legacyRuleContributions(skillsDir), versionInputs: surfaceInputsHash({ skillsDir }) });
   if (debug && format === 'text') throw new Error('--debug requires --format json');
   const response = capsuleResponse(result, { total: budget, debug, format });
   // Measured before the admission branch, so a capsule that failed to fit is
@@ -98,7 +131,7 @@ export default async function context(args = []) {
     derivedDir, action: actions, query, consumer: 'cli',
   });
   if (!response.ready && !debug) {
-    await printCompacted({ query, actions, budget, format, version: response.stats.version, fullRequired: response.stats.total_tokens + 32, nodes, skillsDir, derivedDirs });
+    await printCompacted({ query, actions, budget, format, version: response.stats.version, nodes, skillsDir, derivedDirs, knowledge: result.taskKnowledge });
     return;
   }
   console.log(renderCapsule(response, format));

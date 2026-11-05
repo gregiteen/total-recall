@@ -10,6 +10,8 @@ vi.mock('../core/vault-cache.mjs', () => ({ getNodes: () => [
 vi.mock('../core/surface.mjs', () => ({ mergeGlobalRuleNodes: nodes => nodes, legacyRuleContributions: () => [] }));
 vi.mock('../core/brain-registry.mjs', () => ({ isBrainEnabled: () => true }));
 vi.mock('../core/command-surface.mjs', () => ({ surfaceInputsHash: () => 'fixture' }));
+vi.mock('../core/context-providers.mjs', () => ({ retrievePluginContext: async () => ({ candidates: [], diagnostics: [], coverage: [] }) }));
+vi.mock('../core/embeddings.mjs', async original => ({ ...await original(), getEmbedding: async () => { throw new Error('fixture provider unavailable'); } }));
 import context from './context.mjs';
 const originalExitCode = process.exitCode;
 afterEach(() => { vi.restoreAllMocks(); process.exitCode = originalExitCode; });
@@ -39,13 +41,13 @@ describe('context CLI', () => {
     expect(text.length).toBeLessThan(512);
   });
   it('provides a local action capsule entrypoint', () => expect(typeof context).toBe('function'));
-  it('defaults to rules-only text and accounts for everything printed', async () => {
+  it('defaults to bounded task knowledge and accounts for everything printed', async () => {
     const log = vi.spyOn(console, 'log').mockImplementation(() => {});
     await context(['deployment', '--action', 'read']);
     const output = log.mock.calls.at(-1)[0];
     expect(output).toMatch(/^ready:true tokens:\d+ version:/);
     expect(output).toContain('Preserve records.');
-    expect(output).not.toContain('manual');
+    expect(output).toContain('manual');
     expect(Number(output.match(/tokens:(\d+)/)[1])).toBe(Math.ceil((output.length + 1) / 4));
   });
   it('puts the preflight rule on the second line, ahead of every rule body, and counts it', async () => {

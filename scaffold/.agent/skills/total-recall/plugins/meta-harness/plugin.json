@@ -308,7 +308,12 @@
             "flag": "--tier",
             "type": "string",
             "label": "Gate tier: fast | full | remote"
-          }
+          },
+          { "name": "cwd", "flag": "--cwd", "type": "string", "label": "Explicit workspace on the selected node" },
+          { "name": "node", "flag": "--node", "type": "string", "label": "Selected mesh node" },
+          { "name": "allowUnknownAuth", "flag": "--allow-unknown-auth", "type": "boolean", "label": "Explicitly allow a runner without a login probe" },
+          { "name": "background", "flag": "--background", "type": "boolean", "label": "Return the owned job and log for a long run" },
+          { "name": "timeoutMs", "flag": "--timeout-ms", "type": "number", "label": "Remote wall-clock limit in milliseconds" }
         ]
       },
       {
@@ -353,7 +358,12 @@
             "flag": "--allow-same-family",
             "type": "boolean",
             "label": "Accept a Verifier from the Implementer's model family"
-          }
+          },
+          { "name": "cwd", "flag": "--cwd", "type": "string", "label": "Explicit workspace on the selected node" },
+          { "name": "node", "flag": "--node", "type": "string", "label": "Selected mesh node" },
+          { "name": "allowUnknownAuth", "flag": "--allow-unknown-auth", "type": "boolean", "label": "Explicitly allow a runner without a login probe" },
+          { "name": "background", "flag": "--background", "type": "boolean", "label": "Return the owned job and log for a long run" },
+          { "name": "timeoutMs", "flag": "--timeout-ms", "type": "number", "label": "Remote wall-clock limit in milliseconds" }
         ],
         "timeout_ms": 600000
       },
@@ -368,7 +378,9 @@
             "flag": "--emit",
             "type": "boolean",
             "label": "Write proposals through the memory owner"
-          }
+          },
+          { "name": "void", "flag": "--void", "type": "string", "label": "Comma-separated receipt ids to void" },
+          { "name": "reason", "flag": "--reason", "type": "string", "label": "Why the receipts are void" }
         ]
       },
       {
@@ -467,7 +479,7 @@
           {
             "name": "action",
             "type": "string",
-            "label": "list | show | create | close | delete",
+            "label": "list | show | create | update | close | delete",
             "required": true,
             "positional": true
           },
@@ -476,7 +488,34 @@
             "type": "string",
             "label": "Thread ID or title",
             "positional": true
-          }
+          },
+          { "name": "title", "flag": "--title", "type": "string", "label": "Thread title" },
+          { "name": "summary", "flag": "--summary", "type": "string", "label": "Thread summary" },
+          { "name": "status", "flag": "--status", "type": "string", "label": "Lifecycle status or list filter" },
+          { "name": "platform", "flag": "--platform", "type": "string", "label": "Harness platform or list filter" },
+          { "name": "branch", "flag": "--branch", "type": "string", "label": "Deliverable branch" }
+        ]
+      },
+      {
+        "name": "process",
+        "description": "Manage owned agent processes through isolated dispatch and SSSS lifecycle records",
+        "effect": "write",
+        "output": "json",
+        "timeout_ms": 600000,
+        "args": [
+          { "name": "action", "type": "string", "positional": true, "label": "list | status | spawn | kill | logs" },
+          { "name": "target", "type": "string", "positional": true, "label": "Harness to spawn or managed process ID" },
+          { "name": "task", "type": "string", "positional": true, "label": "Task for a spawned agent" },
+          { "name": "node", "type": "string", "flag": "--node", "label": "Recorded mesh node" },
+          { "name": "cwd", "type": "string", "flag": "--cwd", "label": "Explicit workspace on the selected node" },
+          { "name": "name", "type": "string", "flag": "--name", "label": "Managed process label" },
+          { "name": "tools", "type": "string", "flag": "--tools", "label": "Supported tool restriction" },
+          { "name": "settingSources", "type": "string", "flag": "--setting-sources", "label": "Supported instruction setting sources" },
+          { "name": "model", "type": "string", "flag": "--model", "label": "Explicit configured model selection" },
+          { "name": "tail", "type": "number", "flag": "--tail", "label": "Log tail line count" },
+          { "name": "readOnly", "type": "boolean", "flag": "--read-only", "label": "Disable code writes" },
+          { "name": "noDetach", "type": "boolean", "flag": "--no-detach", "label": "Await the managed process result" },
+          { "name": "allowUnknownAuth", "type": "boolean", "flag": "--allow-unknown-auth", "label": "Explicitly allow an unknown login state" }
         ]
       },
       {
@@ -514,7 +553,11 @@
             "flag": "--thread",
             "type": "string",
             "label": "Thread to attach the review to"
-          }
+          },
+          { "name": "cwd", "flag": "--cwd", "type": "string", "label": "Explicit workspace on the selected node" },
+          { "name": "node", "flag": "--node", "type": "string", "label": "Selected mesh node" },
+          { "name": "allowUnknownAuth", "flag": "--allow-unknown-auth", "type": "boolean", "label": "Explicitly allow a runner without a login probe" },
+          { "name": "timeoutMs", "flag": "--timeout-ms", "type": "number", "label": "Remote wall-clock limit in milliseconds" }
         ],
         "timeout_ms": 600000
       }
@@ -526,6 +569,9 @@
       "documentation": "src/documentation.mjs",
       "agent-runtime": "src/runtime.mjs",
       "tracker": "src/tracker.mjs",
+      "harness-compat": "src/compat-harness.mjs",
+      "reasoning-runtime": "src/reasoning.mjs",
+      "process-manager": "src/process-manager.mjs",
       "gate-adapters": "src/gate-adapters/index.mjs"
     },
     "setup_command": "setup"

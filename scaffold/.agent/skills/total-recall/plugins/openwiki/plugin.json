@@ -5,6 +5,11 @@
   "version": "0.1.7",
   "description": "Multi-repo knowledge graph and documentation wiki engine for Total Recall.",
   "license": "MIT",
+  "runtime": {
+    "modules": {
+      "context-provider": "src/context-provider.mjs"
+    }
+  },
   "tasks": [
     {
       "intent": "Watch upstream OpenWiki repository and announce/propagate updates",
@@ -92,6 +97,79 @@
     "command": "openwiki",
     "handler": "./cli.mjs",
     "subcommands": [
+      {
+        "name": "context",
+        "description": "Retrieve task-relevant wiki and explicitly linked source evidence with provenance and freshness",
+        "effect": "read",
+        "output": "json",
+        "args": [
+          { "name": "task", "label": "Task description", "type": "string", "positional": true, "required": true },
+          { "name": "json", "label": "JSON output", "type": "boolean", "flag": "--json" }
+        ]
+      },
+      {
+        "name": "search",
+        "description": "Search evidence passages in workspace, registered-vault or mesh documentation hubs",
+        "effect": "read",
+        "output": "json",
+        "args": [
+          { "name": "query", "label": "Search terms", "type": "string", "positional": true, "required": true },
+          { "name": "allVaults", "label": "Search all registered vaults", "type": "boolean", "flag": "--all-vaults" },
+          { "name": "node", "label": "Mesh node", "type": "string", "flag": "--node" },
+          { "name": "limit", "label": "Maximum results", "type": "number", "flag": "--limit" },
+          { "name": "json", "label": "JSON output", "type": "boolean", "flag": "--json" }
+        ]
+      },
+      {
+        "name": "graph",
+        "description": "Extract documentation link topology as JSON, Mermaid or DOT",
+        "effect": "read",
+        "output": "json",
+        "args": [
+          { "name": "allVaults", "label": "Inspect all registered vaults", "type": "boolean", "flag": "--all-vaults" },
+          { "name": "node", "label": "Mesh node", "type": "string", "flag": "--node" },
+          { "name": "format", "label": "Graph format", "type": "choice", "options": ["json", "mermaid", "dot"], "flag": "--format" },
+          { "name": "json", "label": "JSON output", "type": "boolean", "flag": "--json" }
+        ]
+      },
+      {
+        "name": "generate",
+        "description": "Generate documentation for the selected registered repository or current workspace",
+        "effect": "write",
+        "output": "json",
+        "timeout_ms": 600000,
+        "args": [
+          { "name": "repo", "label": "Registered repository", "type": "string", "flag": "--repo" },
+          { "name": "node", "label": "Mesh node", "type": "string", "flag": "--node" },
+          { "name": "force", "label": "Regenerate existing pages", "type": "boolean", "flag": "--force" },
+          { "name": "dryRun", "label": "Describe generation without writing", "type": "boolean", "flag": "--dry-run" },
+          { "name": "json", "label": "JSON output", "type": "boolean", "flag": "--json" }
+        ]
+      },
+      {
+        "name": "token",
+        "description": "Inspect provider credential status or save a provider key through the shared auth owner",
+        "effect": "write",
+        "output": "json",
+        "args": [
+          { "name": "action", "label": "Credential action", "type": "choice", "options": ["status", "set"], "positional": true },
+          { "name": "provider", "label": "Credential provider", "type": "choice", "options": ["openrouter", "google"], "positional": true },
+          { "name": "value", "label": "Secret value through stdin", "type": "string", "secret": true },
+          { "name": "stdin", "label": "Read secret from stdin", "type": "boolean", "flag": "--stdin" },
+          { "name": "json", "label": "JSON output", "type": "boolean", "flag": "--json" }
+        ]
+      },
+      {
+        "name": "lint",
+        "description": "Inspect documentation links and orphaned hubs without rewriting files",
+        "effect": "read",
+        "output": "json",
+        "args": [
+          { "name": "allVaults", "label": "Inspect all registered vaults", "type": "boolean", "flag": "--all-vaults" },
+          { "name": "node", "label": "Mesh node", "type": "string", "flag": "--node" },
+          { "name": "json", "label": "JSON output", "type": "boolean", "flag": "--json" }
+        ]
+      },
       {
         "name": "status",
         "description": "Show which OpenWiki subcommands are implemented",

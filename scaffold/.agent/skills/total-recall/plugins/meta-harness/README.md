@@ -1,14 +1,16 @@
-# Command Fleet
+# Meta Harness
 
-All nine adapters share one plugin: Claude Code, Codex, Antigravity, Cursor,
-DSH, Grok, Muse, Pi and Hermes. `runtime <agent> ...` exposes their native runtime
-commands; DSH observations and Hermes gateway management live here as well.
+Built-in and validated custom adapters share one plugin. `runtime <agent> ...`
+exposes native runtime commands; DSH observations and Hermes gateway management
+live here as well. `meta-harness` is the primary namespace; `cli-agents` is an alias.
 
 `total-recall cli-agents setup` connects all nine native instruction surfaces.
 The declared setup operation also runs during daemon-owned plugin refresh.
-Every dispatched agent receives a freshly checked Total Recall context, complete
-core help, installed plugin operations and composed commands. Setup failure or
-an unready context stops dispatch.
+Every dispatched agent receives freshly assembled Total Recall task context and
+a preflight receipt. The configured context budget is honored. Complete CLI,
+plugin and composed-command inventories are supplied in a private temporary
+reference file, keeping their full metadata out of the inline prompt. That file
+is removed after execution. Setup failure or an unready context stops dispatch.
 
 `docs-refresh`, `docs-ensure`, `docs-status`, `docs-read` and `docs-search` manage
 downloaded official documentation rather than a list of links. Content is hashed,
@@ -63,3 +65,45 @@ A completed model turn is distinct from a completed plugin operation. Structured
 | Hermes | [Official command reference](https://github.com/NousResearch/hermes-agent/blob/main/website/docs/reference/cli-commands.md) |
 
 Cursor discovery uses `cursor-agent`; an ambiguous `agent` binary is not assumed to be Cursor. Missing installations are listed as unavailable. Unknown authentication requires explicit agent selection and remains unverified until a real run. Tests exercise literal stdin, bounded child-process cleanup, command admission, recorded SSH access, account checks and completed-result parsing. Run suites on the configured sanctioned test node.
+
+## Isolated task workflows
+
+```sh
+total-recall meta-harness route "describe the task" --json
+total-recall meta-harness route "describe the task" --execute --gate --background --json
+total-recall meta-harness coordinate "describe the task" --mode pipeline --execute --gate --background --json
+total-recall meta-harness review --staged --author <author-harness> --json
+```
+
+Pipeline stages use isolated branches and independent verification. Council
+assessments run concurrently; race candidates require a passing deterministic
+gate. Failed stages stop subsequent work and clean failed checkouts. Deliverable
+branches remain available for review and are never merged automatically. Empty
+diffs return `NO_DIFF`; unreadable reviews never become approvals. Unknown login
+state requires explicit `--allow-unknown-auth`.
+
+Single-agent remote commands use recorded mesh access and an explicit absolute
+workspace. Coordinated isolated work and gates reject unsupported remote placement;
+remote worktree/gate transport remains an acceptance gap.
+
+All agent dispatch paths, including agent-mediated plugin commands, append native
+SSSS execution receipts. Actual process exit and finish metadata are distinct from
+verification results; unavailable model metadata remains null. Thread operations
+include list, show, create, update, close and delete, using native SSSS state.
+
+Custom adapter declarations preserve scoped credentials, optional authentication
+probes and HTTPS documentation URLs. IDs and paths reject traversal and symbolic
+links. Credentials reach only the declaring runner through the auth store. A
+changed documentation URL invalidates old cache freshness.
+
+## Verification status
+
+The active five-file suite and evidence live in
+`docs/projects/in-progress/META_HARNESS_UNIFICATION/`. Completion requires current
+owner/core suites, plugin/scaffold validation, real dashboard inspection and
+recorded acceptance evidence. Fixture tests do not certify live accounts, remote
+execution or recurring maintenance. The operator requires completing verification
+before Meta Harness runs task work.
+
+Cloudroom setup material remains under `cloudroom/`. Its plugin implementation
+follows this foundation and requires its own current audit and plan.

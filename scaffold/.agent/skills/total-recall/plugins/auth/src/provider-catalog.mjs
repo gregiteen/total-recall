@@ -122,6 +122,7 @@ export const PROVIDER_CATALOG = [
           value_path: 'key',
           id_path: 'data.hash',
         },
+        list: { path: '/keys', items_path: 'data', page_size: 100 },
         revoke: {
           method: 'DELETE',
           path: (id) => `/keys/${id}`,

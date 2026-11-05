@@ -3,11 +3,7 @@
 import { getNodes } from './vault-cache.mjs';
 import crypto from 'node:crypto';
 import { selectRules, assembleContext, curatedRules, ruleFingerprint, RULE_CATEGORIES } from './context-policy.mjs';
-import {
-  getEmbedding,
-  cosineSimilarity,
-  loadEmbeddingsIndex,
-} from './embeddings.mjs';
+import { retrieveTaskKnowledge, summarizeRetrieval } from './task-context.mjs';
 import { inferMemoryLayer, memoryLayerRoutingWeight } from './memory-layers.mjs';
 
 // ─── Token Budget Defaults ──────────────────────────────────────────────────
@@ -68,8 +64,9 @@ function temporalScore(node) {
 
 export async function compileContext({
   query = '', vaultDir, derivedDir, budget = {}, consumer = 'api',
-  momentumSlugs = [], actions = [], projectRoot = process.cwd(), semantic = false,
-  nodes, contributions = [], versionInputs = '', includeKnowledge = false,
+  momentumSlugs = [], actions = [], projectRoot = process.cwd(), semantic = true,
+  nodes, contributions = [], versionInputs = '', includeKnowledge = true, indexScopes,
+  knowledgeOptions = {},
 } = {}) {
   const startTime = Date.now();
   const b = { ...DEFAULT_BUDGET, total: 4000, ...budget };
@@ -77,22 +74,8 @@ export async function compileContext({
   const rules = selectRules(curatedRules(allNodes), { actions, projectRoot });
   const required = rules.map(n => ({ id: `${n._layer || 'project'}:${n.slug}`, required: true,
     text: n._directive ? `[${n.slug}] ${n._directive}` : `## ${n.title || n.slug} [${n.slug}]\n\n${(n.body || n.content || '').trim()}` }));
-  let queryEmbedding = null, embeddingsIndex = {};
-  if (includeKnowledge && semantic && query) {
-    try { queryEmbedding = await getEmbedding(String(query)); embeddingsIndex = loadEmbeddingsIndex(derivedDir); } catch { /* local ranking remains usable */ }
-  }
-  const terms = String(query).toLowerCase().match(/[\p{L}\p{N}_-]+/gu) || [];
-  const selectedIds = new Set(rules.map(n => n.slug));
-  const candidates = (includeKnowledge ? allNodes : []).filter(n => n.status === 'active' && !n.tags?.includes('context:policy') && !selectedIds.has(n.slug) &&
-    !['invariants', 'preferences', 'anti-patterns'].includes(n.category)).map(n => {
-    const text = `${n.title || ''} ${n.body || n.content || ''}`.toLowerCase();
-    const overlap = terms.filter(term => text.includes(term)).length;
-    const sim = queryEmbedding && embeddingsIndex[n.slug] ? cosineSimilarity(queryEmbedding, embeddingsIndex[n.slug].embedding) : 0;
-    return { node: n, relevant: overlap > 0 || sim > .2 || momentumSlugs.includes(n.slug),
-      score: overlap + sim + temporalScore(n) * .01 + (momentumSlugs.includes(n.slug) ? .1 : 0) };
-  }).filter(candidate => candidate.relevant).sort((a, b) => b.score - a.score);
-  const optional = candidates.map(({ node: n }) => ({ id: `${n._layer || 'project'}:${n.slug}`,
-    text: `## ${n.title || n.slug} [${n.slug}]\n\n${(n.body || n.content || '').trim()}` }));
+  const knowledge = includeKnowledge ? await retrieveTaskKnowledge({ query, nodes: allNodes, derivedDir, indexScopes,
+    projectRoot, actions, semantic, ...knowledgeOptions }) : { contributions: [], summary: { mode: 'disabled', selected: 0 }, queryVector: null };
 
   // CLI Semantic Index recommendations: top task-matched runnable CLI verbs
   let cliVerbContribution = null;
@@ -119,7 +102,14 @@ export async function compileContext({
   }
 
   const cliContributions = cliVerbContribution ? [cliVerbContribution] : [];
-  const result = assembleContext([...required, ...cliContributions, ...optional, ...contributions], { total: b.total });
+  const result = assembleContext([...required, ...knowledge.contributions, ...cliContributions, ...contributions], { total: b.total });
+  const evidenceMissing = knowledge.contributions.some(item => !result.stats.contributions.some(placed => placed.id === item.id));
+  // Compaction may reclaim rule explanation space; never claim readiness after losing selected task evidence.
+  result.ready = result.ready && !evidenceMissing;
+  result.stats.evidence_overflow = evidenceMissing;
+  // The compaction path consumes the same retrieved evidence, never a second rules-only reconstruction.
+  result.taskKnowledge = knowledge;
+  result.stats.retrieval = knowledge.summary;
   result.stats.total_nodes = allNodes.length;
   result.stats.compile_ms = Date.now() - startTime;
   result.stats.consumer = consumer;
@@ -132,7 +122,7 @@ export async function compileContext({
   result.stats.version = crypto.createHash('sha256').update(JSON.stringify({
     policy: 2, projectRoot, actions, includeKnowledge, versionInputs, nodes: allNodes, capsule: result.stats.version,
   })).digest('hex');
-  result.stats.mode = queryEmbedding ? 'semantic' : 'local';
+  result.stats.mode = knowledge.summary.mode;
   result.stats.slots = { invariants: { nodes: rules.filter(n => n.category === 'invariants').length,
     tokens: result.stats.required_tokens } };
   result.stats.slots_filled = result.stats.contributions.length;
@@ -157,6 +147,7 @@ export function capsuleResponse(result, { total = 4000, debug = false, format = 
     version: result.stats.version, mode: result.stats.mode,
     token_measurement: 'estimated_chars_divided_by_four',
     required_count: result.stats.required_ids.length, body_tokens: estimateTokens(result.context),
+    retrieval: summarizeRetrieval(result.stats.retrieval),
   };
   const response = { ready: result.ready, context: result.context, stats };
   stats.budget = total;

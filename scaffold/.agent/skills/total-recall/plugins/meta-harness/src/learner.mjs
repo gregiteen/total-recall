@@ -5,12 +5,33 @@
 import { spawnSync } from 'node:child_process';
 import { computeEmpiricalScorecard } from '../capability/index.mjs';
 import { receiptsFile } from './paths.mjs';
+import { classifyFailure } from './worker.mjs';
 
 async function store() {
   const { PluginStateStore } = await import('./ssss-store.mjs');
   return new PluginStateStore(receiptsFile(), 'meta-harness');
 }
-export const readReceipts = async () => (await store()).read([]);
+/** Classify old failures with today's knowledge, so an early misreading cannot keep penalizing a harness. */
+export const readReceipts = async () => liveReceipts((await store()).read([])).map(run => (run.failureKind === 'agent' && run.error ? { ...run, ...withoutAgent(classifyFailure(run.error, new Date(run.timestamp)), run) } : run));
+const withoutAgent = (found, run) => (found.failureKind === 'agent' ? {} : { failureKind: found.failureKind, resetsAt: run.resetsAt || found.resetsAt || null });
+
+/** The ledger is append-only, so a wrong row is voided by a later entry, never rewritten. Both stay on record. */
+function liveReceipts(rows) {
+  const voided = new Set(rows.flatMap(row => row.voids || []));
+  return rows.filter(row => !row.voids && !voided.has(row.id));
+}
+
+export async function voidReceipts({ ids = [], reason = '' } = {}) {
+  if (!ids.length) throw new Error('--void needs at least one receipt id');
+  if (!String(reason).trim()) throw new Error('--void needs a --reason: a voided receipt stays on record with why');
+  const ledger = await store();
+  const live = new Set(liveReceipts(ledger.read([])).map(row => row.id));
+  const unknown = ids.filter(id => !live.has(id));
+  if (unknown.length) throw new Error(`No live receipt with id: ${unknown.join(', ')}`);
+  const entry = { id: `void-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`, timestamp: new Date().toISOString(), voids: ids, reason: String(reason) };
+  ledger.append(entry);
+  return { ok: true, voided: ids.length, id: entry.id, reason: entry.reason };
+}
 
 export async function recordRunReceipt(receipt = {}) {
   if (!receipt.harness) throw new Error('A run receipt must name its harness');
@@ -18,6 +39,9 @@ export async function recordRunReceipt(receipt = {}) {
     id: receipt.id || `run-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`,
     timestamp: new Date().toISOString(),
     harness: receipt.harness,
+    model: receipt.model ?? null,
+    exitCode: receipt.exitCode ?? null,
+    finishedReason: receipt.finishedReason ?? null,
     role: receipt.role || null,
     node: receipt.node || 'local',
     task: String(receipt.task || '').slice(0, 300),
@@ -85,8 +109,11 @@ export async function learnFromHistory({ emit = false, runner = spawnSync } = {}
   const proposals = proposalsFrom(scorecard, entries);
   const emitted = [];
   if (emit) for (const proposal of proposals) {
-    const result = runner(process.env.TOTAL_RECALL_BIN || 'total-recall', ['remember', 'facts', `${proposal.reason} ${proposal.recommendation}`, '--project', '--tags', `meta-harness,${proposal.id}`], { encoding: 'utf8', timeout: 30000 });
-    emitted.push({ id: proposal.id, ok: result.status === 0, error: result.status === 0 ? undefined : String(result.stderr || result.error || 'remember failed').slice(0, 300) });
+    const result = runner(process.env.TOTAL_RECALL_BIN || 'total-recall', ['remember', 'fact', `${proposal.reason} ${proposal.recommendation}`, '--project', '--slug', proposal.id, '--tags', `meta-harness,${proposal.id}`], { encoding: 'utf8', timeout: 30000 });
+    const output = `${result.stdout || ''}\n${result.stderr || ''}`;
+    // The slug is the proposal's identity, so an open proposal is reported once, however often learn runs.
+    const existing = result.status !== 0 && /already exists/i.test(output);
+    emitted.push({ id: proposal.id, ok: result.status === 0 || existing, ...(existing ? { existing: true } : {}), error: result.status === 0 || existing ? undefined : String(result.stderr || result.error || 'remember failed').slice(0, 300) });
   }
   return { ok: emitted.every(row => row.ok), totalHistoryRuns: entries.length, scorecard, walls: activeQuotaWalls(entries), credentialBlocks: activeCredentialBlocks(entries), proposals, ...(emit ? { emitted } : {}) };
 }

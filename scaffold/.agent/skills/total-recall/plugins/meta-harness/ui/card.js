@@ -37,6 +37,12 @@ export class CommandFleetCard extends HTMLElement {
     this.reviewVerdict = null;
     this.reviewing = false;
     this.reviewBase = 'main';
+    this.reviewAuthor = '';
+    this.coordinationInput = '';
+    this.coordinationMode = 'pipeline';
+    this.coordinationResult = null;
+    this.documentation = null;
+    this.changelog = null;
   }
 
   connectedCallback() {
@@ -56,13 +62,15 @@ export class CommandFleetCard extends HTMLElement {
       await this.refreshBenchmarks();
     } else if (screen === 'threads' && this.threads.length === 0) {
       await this.refreshThreads();
+    } else if (screen === 'docs') {
+      await this.refreshDocsPanel();
     }
   }
 
   async refreshFleet() {
     if (!this.host) return;
     try {
-      const res = await this.host.run('status', ['--json']);
+      const res = await this.host.run('status', ['--node', this.selectedNode, '--json']);
       let parsed = [];
       if (Array.isArray(res)) {
         parsed = res;
@@ -110,6 +118,7 @@ export class CommandFleetCard extends HTMLElement {
     if (this.screen === 'quotas') return this.refreshQuotas();
     if (this.screen === 'benchmarks') return this.refreshBenchmarks();
     if (this.screen === 'threads') return this.refreshThreads();
+    if (this.screen === 'docs') return this.refreshDocsPanel();
     return this.refreshFleet();
   }
 
@@ -144,12 +153,12 @@ export class CommandFleetCard extends HTMLElement {
     }
   }
 
-  async executeRoute(task) {
+  async executeRoute(task, execute = false) {
     if (!this.host || !task) return;
     this.executing = true;
     this.render();
     try {
-      const res = await this.host.run('route', [task, '--json']);
+      const res = await this.host.run('route', [task, '--node', this.selectedNode, ...(execute ? ['--execute', '--gate', '--background'] : []), '--json']);
       this.routeResult = typeof res === 'string' ? JSON.parse(res) : res;
     } catch (err) {
       this.routeResult = { ok: false, error: err.message };
@@ -182,7 +191,11 @@ export class CommandFleetCard extends HTMLElement {
     this.reviewing = true;
     this.render();
     try {
-      const res = await this.host.run('review', [`${base}...HEAD`, '--json']);
+      const thread = this.threads.find(item => item.id === this.selectedThreadId);
+      const implementer = thread?.turns?.findLast(turn => /implementer/i.test(turn.role || ''))?.agent;
+      const author = this.reviewAuthor || implementer || (thread?.platform !== 'universal' ? thread?.platform : null);
+      if (!author) throw new Error('Select the author before requesting independent review');
+      const res = await this.host.run('review', [`${base}...HEAD`, '--author', author, '--node', this.selectedNode, ...(thread ? ['--thread', thread.id] : []), '--json']);
       this.reviewVerdict = typeof res === 'string' ? JSON.parse(res) : res;
     } catch (err) {
       this.reviewVerdict = { ok: false, error: err.message };
@@ -216,7 +229,8 @@ export class CommandFleetCard extends HTMLElement {
     this.executing = true;
     this.render();
     try {
-      await this.host.run('docs-ensure', ['--json']);
+      await this.host.run('docs-ensure', [...(this.selectedAgent ? ['--agent', this.selectedAgent] : []), '--json']);
+      if (this.screen === 'docs') await this.refreshDocsPanel();
       await this.refreshFleet();
     } catch {
       await this.refreshFleet();
@@ -224,6 +238,36 @@ export class CommandFleetCard extends HTMLElement {
       this.executing = false;
       this.render();
     }
+  }
+
+  async executeCoordination(execute = false) {
+    if (!this.host || !this.coordinationInput.trim() || this.executing) return;
+    this.executing = true;
+    this.render();
+    try {
+      const value = await this.host.run('coordinate', [this.coordinationInput, '--mode', this.coordinationMode, '--node', this.selectedNode, ...(execute ? ['--execute', '--gate', '--background'] : []), '--json']);
+      this.coordinationResult = typeof value === 'string' ? JSON.parse(value) : value;
+    } catch (error) { this.coordinationResult = { ok: false, error: error.message }; }
+    finally { this.executing = false; this.render(); }
+  }
+
+  async refreshDocsPanel() {
+    if (!this.host) return;
+    this.loadError = null;
+    // docs-status exits 1 while any source is stale. That is a real status to show, not a failure to read it.
+    const asStatus = text => { try { const parsed = JSON.parse(String(text).trim()); return Array.isArray(parsed?.agents) ? parsed : null; } catch { return null; } };
+    try {
+      const value = await this.host.run('docs-status', ['--json']);
+      this.documentation = typeof value === 'string' ? JSON.parse(value) : value;
+    } catch (error) {
+      this.documentation = asStatus(error?.message);
+      if (!this.documentation) this.loadError = error?.message || 'Documentation status could not be read';
+    }
+    try {
+      const changelog = this.selectedAgent ? await this.host.run('changelog', [this.selectedAgent, '--json']) : null;
+      this.changelog = typeof changelog === 'string' ? JSON.parse(changelog) : changelog;
+    } catch (error) { this.changelog = null; this.loadError = this.loadError || error?.message || 'Changelog could not be read'; }
+    this.render();
   }
 
   render() {
@@ -332,6 +376,7 @@ export class CommandFleetCard extends HTMLElement {
         /* Screen Navigation Tabs */
         .tabs-bar {
           display: flex;
+          flex-wrap: wrap;
           gap: 8px;
           margin-bottom: 14px;
           border-bottom: 1px solid var(--border, var(--face-line));
@@ -625,8 +670,11 @@ export class CommandFleetCard extends HTMLElement {
 
         .input-row {
           display: flex;
+          flex-wrap: wrap;
+          align-items: center;
           gap: 8px;
         }
+        .input-row .task-input { min-width: 0; }
 
         .task-input {
           flex: 1;
@@ -831,6 +879,8 @@ export class CommandFleetCard extends HTMLElement {
         <button class="tab-btn" data-active="${this.screen === 'benchmarks'}" data-screen="benchmarks" type="button">Benchmarks</button>
         <button class="tab-btn" data-active="${this.screen === 'router'}" data-screen="router" type="button">Smart Router</button>
         <button class="tab-btn" data-active="${this.screen === 'threads'}" data-screen="threads" type="button">Threads & Review</button>
+        <button class="tab-btn" data-active="${this.screen === 'coordination'}" data-screen="coordination" type="button">Coordination</button>
+        <button class="tab-btn" data-active="${this.screen === 'docs'}" data-screen="docs" type="button">Docs & Changes</button>
       </div>
 
       <div class="node-bar">
@@ -1001,6 +1051,7 @@ export class CommandFleetCard extends HTMLElement {
           <div class="input-row">
             <input class="task-input" id="task-input" type="text" placeholder="Enter task to evaluate complexity and optimal harness..." value="${escapeHtml(this.routeInput)}" />
             <button class="btn-action" id="btn-route" type="button" ${this.executing ? 'disabled' : ''}>Evaluate Route</button>
+            <button class="btn-action" id="btn-route-run" type="button" ${this.executing ? 'disabled' : ''}>Run with gates</button>
           </div>
 
           ${this.routeResult ? `
@@ -1026,6 +1077,36 @@ export class CommandFleetCard extends HTMLElement {
               </div>
             </div>
           ` : ''}
+        </div>
+      ` : ''}
+
+      ${this.screen === 'coordination' ? `
+        <div class="router-panel">
+          <label for="coordination-task">Task</label>
+          <textarea class="task-input" id="coordination-task" rows="3">${escapeHtml(this.coordinationInput)}</textarea>
+          <div class="input-row">
+            <label for="coordination-mode">Workflow</label>
+            <select class="task-input" id="coordination-mode">${['pipeline', 'council', 'race'].map(mode => `<option value="${mode}" ${this.coordinationMode === mode ? 'selected' : ''}>${mode === 'pipeline' ? 'Plan, implement and verify' : mode === 'council' ? 'Parallel independent assessment' : 'Parallel verified candidates'}</option>`).join('')}</select>
+            <button class="btn-action" id="btn-coordinate-plan" ${this.executing ? 'disabled' : ''}>Preview plan</button>
+            <button class="btn-action" id="btn-coordinate-run" ${this.executing ? 'disabled' : ''}>Run with gates</button>
+          </div>
+          ${this.coordinationResult ? `<div class="inspector-panel">
+            <h4>${escapeHtml(this.coordinationResult.error || (this.coordinationResult.background ? 'Run started' : this.coordinationResult.ok ? 'Workflow ready' : 'Workflow failed'))}</h4>
+            ${this.coordinationResult.pid ? `<p>Process ${escapeHtml(this.coordinationResult.pid)}. Follow its progress in Threads.</p>` : ''}
+            ${(this.coordinationResult.stages || []).map(stage => `<div class="property-box"><strong>${escapeHtml(stage.role || stage.name || stage.agent)}</strong><span>${escapeHtml(stage.agent || DASH)} · ${stage.passed === true ? 'Passed' : stage.passed === false ? 'Failed' : 'Planned'}</span></div>`).join('')}
+            ${this.coordinationResult.branch ? `<p>Branch: ${escapeHtml(this.coordinationResult.branch)}</p>` : ''}
+          </div>` : '<p>Preview the assigned agents, then start isolated work with verification.</p>'}
+        </div>
+      ` : ''}
+
+      ${this.screen === 'docs' ? `
+        <div class="router-panel">
+          <h4>Documentation coverage</h4>
+          <div class="property-grid">${(this.documentation?.agents || []).map(agent => `<div class="property-box"><strong>${escapeHtml(agent.id)}</strong><span>${agent.fresh ? 'Current' : agent.complete ? 'Stale' : 'Unavailable'} · ${escapeHtml(agent.pages)} pages</span><span>${escapeHtml(agent.error || agent.checkedAt || DASH)}</span></div>`).join('') || '<p>No documentation report loaded.</p>'}</div>
+          <label for="docs-agent">Harness</label>
+          <select class="task-input" id="docs-agent">${this.agents.map(agent => `<option value="${escapeHtml(agent.id)}" ${this.selectedAgent === agent.id ? 'selected' : ''}>${escapeHtml(agent.name || agent.id)}</option>`).join('')}</select>
+          <button class="btn-action" id="btn-changelog">Read changes</button>
+          ${this.changelog ? `<div class="inspector-panel"><h4>Upstream changes</h4><pre style="white-space:pre-wrap;overflow-wrap:anywhere;max-height:260px;overflow:auto">${escapeHtml(this.changelog.error || this.changelog.changelog || this.changelog.content || this.changelog.output || this.changelog.note || 'No changelog content returned')}</pre></div>` : ''}
         </div>
       ` : ''}
 
@@ -1055,6 +1136,7 @@ export class CommandFleetCard extends HTMLElement {
               <p class="plugin-subtitle" style="margin:0 0 10px 0;">Audits branch diff against base using a strictly distinct model family to eliminate confirmation bias.</p>
               <div class="input-row">
                 <input class="task-input" id="review-base-input" type="text" placeholder="Base branch (default: main)" value="${escapeHtml(this.reviewBase)}" />
+                <select class="task-input" id="review-author" aria-label="Code author"><option value="">Author from selected thread</option>${this.agents.map(agent => `<option value="${escapeHtml(agent.id)}" ${this.reviewAuthor === agent.id ? 'selected' : ''}>${escapeHtml(agent.name || agent.id)}</option>`).join('')}</select>
                 <button class="btn-action" id="btn-run-review" type="button" ${this.reviewing ? 'disabled' : ''}>
                   ${this.reviewing ? 'Auditing...' : 'Run Review'}
                 </button>
@@ -1157,6 +1239,13 @@ export class CommandFleetCard extends HTMLElement {
     root.querySelector('#btn-route')?.addEventListener('click', () => {
       if (this.routeInput) this.executeRoute(this.routeInput);
     });
+    root.querySelector('#btn-route-run')?.addEventListener('click', () => this.executeRoute(this.routeInput, true));
+    root.querySelector('#coordination-task')?.addEventListener('input', event => { this.coordinationInput = event.target.value; });
+    root.querySelector('#coordination-mode')?.addEventListener('change', event => { this.coordinationMode = event.target.value; });
+    root.querySelector('#btn-coordinate-plan')?.addEventListener('click', () => this.executeCoordination());
+    root.querySelector('#btn-coordinate-run')?.addEventListener('click', () => this.executeCoordination(true));
+    root.querySelector('#docs-agent')?.addEventListener('change', event => { this.selectedAgent = event.target.value; });
+    root.querySelector('#btn-changelog')?.addEventListener('click', () => this.refreshDocsPanel());
 
     root.querySelectorAll('.thread-card-btn').forEach(btn => {
       btn.addEventListener('click', () => {
@@ -1175,6 +1264,7 @@ export class CommandFleetCard extends HTMLElement {
     root.querySelector('#btn-run-review')?.addEventListener('click', () => {
       this.executeReview(this.reviewBase);
     });
+    root.querySelector('#review-author')?.addEventListener('change', event => { this.reviewAuthor = event.target.value; });
   }
 }
 

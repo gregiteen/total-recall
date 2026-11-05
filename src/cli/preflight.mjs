@@ -77,13 +77,38 @@ async function ack(args) {
   console.log(`  receipt: ${result.file}`);
 }
 
-async function loadGateAdapters() {
-  let adapters;
-  try { adapters = await (await import('../core/plugin-runtime.mjs')).loadPluginModule('meta-harness', 'gate-adapters'); } catch { adapters = null; }
-  if (!adapters) {
-    try { adapters = await (await import('../core/plugin-runtime.mjs')).loadPluginModule('cli-agents', 'gate-adapters'); } catch { adapters = null; }
+/**
+ * Adapter loading never requires a fully valid manifest: an unrelated schema error in the
+ * owner plugin would otherwise deny every tool call, including the edit that repairs it.
+ * Returns the adapters, or why the owner could not supply them.
+ */
+async function loadGateAdapters(projectRoot = process.cwd()) {
+  const { loadPluginModule } = await import('../core/plugin-runtime.mjs');
+  const failures = [];
+  for (const owner of ['meta-harness', 'cli-agents']) {
+    try {
+      const adapters = await loadPluginModule(owner, 'gate-adapters', { requireValid: false, projectRoot });
+      if (adapters) return { adapters, failures };
+    } catch (err) { failures.push(`${owner}: ${err.message}`); }
   }
-  return adapters;
+  return { adapters: null, failures };
+}
+
+/**
+ * Core's own reading of a native hook payload, used only when the adapter owner cannot load
+ * (unparseable manifest, broken adapter code, plugin removed). The receipt still decides, so
+ * this keeps enforcement and repair alive; it never opens anything a receipt would not.
+ * Returns null for a payload it cannot read, which then fails closed.
+ */
+export function normalizeNativeCall(input) {
+  const name = input?.tool_name ?? input?.toolName;
+  if (typeof name !== 'string' || !name) return null;
+  const toolInput = (input.tool_input && typeof input.tool_input === 'object') ? input.tool_input : (input.toolInput && typeof input.toolInput === 'object' ? input.toolInput : {});
+  const cwd = typeof input.cwd === 'string' ? input.cwd : process.cwd();
+  const filePath = toolInput.file_path ?? toolInput.notebook_path ?? toolInput.path;
+  if (typeof toolInput.command === 'string') return { tool: 'shell', command: toolInput.command, cwd };
+  if (typeof filePath === 'string') return { tool: /read|glob|grep/i.test(name) ? 'read' : 'write', path: filePath, cwd };
+  return { tool: 'other', cwd };
 }
 
 /**
@@ -91,27 +116,45 @@ async function loadGateAdapters() {
  * failure, including one nobody anticipated, denies: most harnesses let the
  * action through when a hook crashes or exits with anything but 2.
  * An adapter returns `{ stdout, exitCode }` in its harness's native form.
+ * Every denial also names its reason on stderr: on exit 2 that is the channel harnesses
+ * read, and a denial nobody can read is a lockout.
  */
 async function gate(args) {
   process.exitCode = 2;
-  const deny = (rule, reason) => process.stdout.write(`${JSON.stringify({ decision: 'deny', rule, reason, fix: ACK_COMMAND })}\n`);
+  const explain = (reason, fix = ACK_COMMAND) => process.stderr.write(`${reason} Fix: ${fix}\n`);
+  const deny = (rule, reason) => {
+    process.stdout.write(`${JSON.stringify({ decision: 'deny', rule, reason, fix: ACK_COMMAND })}\n`);
+    explain(reason);
+  };
   try {
     let call;
     try { call = JSON.parse(readStdin() || '{}'); } catch (err) { return deny('gate-error', `TR-PREFLIGHT gate could not read its input: ${err.message}`); }
     if (!call || typeof call !== 'object' || Array.isArray(call)) return deny('gate-error', 'TR-PREFLIGHT gate input must be a JSON object.');
     const harness = flag(args, '--harness');
     if (harness) {
-      const adapters = await loadGateAdapters();
+      const { adapters, failures } = await loadGateAdapters(typeof call.cwd === 'string' ? call.cwd : process.cwd());
       const adapter = adapters?.get?.(harness);
-      if (!adapter) return deny('gate-error', `No gate adapter for harness "${harness}": adapters are owned by the meta-harness plugin and it does not provide one. The gate fails closed.`);
-      const out = await adapter.run({ stdin: call, decideWith: (c) => evaluate(c, { harness, readablePaths: adapter.readablePaths }) });
+      if (!adapter) {
+        const native = adapters ? null : normalizeNativeCall(call);
+        const cause = adapters
+          ? `No gate adapter for harness "${harness}": adapters are owned by the meta-harness plugin and it does not provide one.`
+          : `No gate adapter for harness "${harness}": the meta-harness plugin could not load (${failures.join('; ')}).`;
+        if (!native) return deny('gate-error', `${cause} The gate fails closed.`);
+        const answer = evaluate(native, { harness });
+        if (answer.decision === 'allow') { process.exitCode = 0; return; }
+        return explain(`${answer.reason} ${cause}`, answer.fix || ACK_COMMAND);
+      }
+      let last = null;
+      const out = await adapter.run({ stdin: call, decideWith: (c) => (last = evaluate(c, { harness, readablePaths: adapter.readablePaths })) });
       if (out?.stdout) process.stdout.write(out.stdout);
       process.exitCode = Number.isInteger(out?.exitCode) ? out.exitCode : 2;
+      if (process.exitCode !== 0) explain(last?.reason || `TR-PREFLIGHT gate: the ${harness} adapter denied this call.`, last?.fix || ACK_COMMAND);
       return;
     }
     const answer = evaluate(call, { harness: 'generic' });
     process.stdout.write(`${JSON.stringify(answer)}\n`);
     if (answer.decision === 'allow') process.exitCode = 0;
+    else explain(answer.reason, answer.fix || ACK_COMMAND);
   } catch (err) {
     deny('gate-error', `TR-PREFLIGHT gate error: ${err.message}. The gate fails closed.`);
   }
@@ -125,7 +168,7 @@ async function install(args) {
     process.exitCode = 1;
     return;
   }
-  const adapters = await loadGateAdapters();
+  const { adapters } = await loadGateAdapters();
   if (!adapters) {
     console.error('✖ Gate adapters are owned by the meta-harness (cli-agents) plugin and are not available.');
     process.exitCode = 1;
@@ -149,7 +192,7 @@ async function install(args) {
 
 async function verify(args) {
   const harness = flag(args, '--harness') || 'claude';
-  const adapters = await loadGateAdapters();
+  const { adapters } = await loadGateAdapters();
   if (!adapters) {
     console.error('✖ Gate adapters are owned by the meta-harness (cli-agents) plugin and are not available.');
     process.exitCode = 1;
@@ -177,7 +220,7 @@ async function verify(args) {
 }
 
 async function report(args) {
-  const adapters = await loadGateAdapters();
+  const { adapters } = await loadGateAdapters();
   if (!adapters) {
     console.error('✖ Gate adapters are owned by the meta-harness (cli-agents) plugin and are not available.');
     process.exitCode = 1;

@@ -11,6 +11,8 @@ vi.mock('../../core/vault-cache.mjs', () => ({ getNodes: () => [
 ] }));
 vi.mock('../../core/surface.mjs', () => ({ mergeGlobalRuleNodes: nodes => nodes, legacyRuleContributions: () => [] }));
 vi.mock('../../core/command-surface.mjs', () => ({ surfaceInputsHash: () => 'fixture' }));
+vi.mock('../../core/context-providers.mjs', () => ({ retrievePluginContext: async () => ({ candidates: [], diagnostics: [], coverage: [] }) }));
+vi.mock('../../core/embeddings.mjs', async original => ({ ...await original(), getEmbedding: async () => { throw new Error('fixture provider unavailable'); } }));
 vi.mock('./_shared.mjs', () => ({
   resolveVaultFromQuery: () => '/fixture/project/.agent/skills/total-recall/memory-vault',
   pathsForVault: () => ({ derivedDir: '/fixture/derived', skillsDir: '/fixture/project/.agent/skills' }),
@@ -22,19 +24,24 @@ const app = express();
 app.use(express.json());
 app.use(router);
 describe('context response contract (auth exercised by separate auth suites)', () => {
-  it('returns rules only and accounts for the complete serialized payload', async () => {
+  it('returns task knowledge by default and accounts for the complete serialized payload', async () => {
     const res = await request(app).post('/api/context').send({ query: 'deployment', actions: ['read'] });
     expect(res.status).toBe(200);
     expect(res.body.ready).toBe(true);
-    expect(res.body.context).not.toContain('manual');
+    expect(res.body.context).toContain('manual');
     expect(res.body.stats.required_ids).toBeUndefined();
     expect(res.body.stats.total_tokens).toBe(Math.ceil((res.text.length + 1) / 4));
   });
-  it('adds knowledge and debug inventories only when explicitly requested', async () => {
+  it('adds debug inventories only when explicitly requested', async () => {
     const res = await request(app).post('/api/context').send({ query: 'deployment', include_knowledge: true, debug: true });
     expect(res.body.context).toContain('manual');
     expect(res.body.stats.required_ids).toEqual(['project:r']);
     expect(res.body.stats.budget_used).toBe(res.body.stats.total_tokens);
+  });
+  it('keeps an explicit rules-only consumer available', async () => {
+    const res = await request(app).post('/api/context').send({ query: 'deployment', include_knowledge: false });
+    expect(res.body.context).not.toContain('manual');
+    expect(res.body.context).toContain('Keep records.');
   });
   it('preserves required instructions and reports complete-payload overflow', async () => {
     const res = await request(app).post('/api/context').send({ budget: { total: 1 } });

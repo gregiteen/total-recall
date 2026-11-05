@@ -23,6 +23,17 @@ describe('plugin-runner', () => {
     fs.rmSync(root, { recursive: true, force: true });
   });
 
+  it('returns the answer to a stdin request, which a secret never gets', async () => {
+    const source = "export async function run(argv) { let s = ''; for await (const c of process.stdin) s += c; console.log(JSON.stringify({ argv: argv.slice(3), got: s })); }";
+    const p = makePlugin(root, 'request', source);
+    const res = await runPluginCommand(p, { subcommand: 'dispatch', stdinRequest: '{"prompt":"task"}', cwd: root });
+    expect(res.ok).toBe(true);
+    expect(JSON.parse(res.output)).toEqual({ argv: ['dispatch', '--stdin'], got: '{"prompt":"task"}' });
+    await expect(runPluginCommand(p, { subcommand: 'dispatch', stdinRequest: '', cwd: root })).rejects.toThrow(/non-empty/);
+    await expect(runPluginCommand(p, { subcommand: 'dispatch', stdinRequest: 'x'.repeat(1024 * 1024 + 1), cwd: root })).rejects.toThrow(/at most/);
+    await expect(runPluginCommand(p, { subcommand: 'dispatch', stdinRequest: 'x', stdinText: 'y', cwd: root })).rejects.toThrow(/not both/);
+  });
+
   it('passes the documented argv shape and captures stdout', async () => {
     const p = makePlugin(root, 'echo', 'export async function run(argv) { console.log(JSON.stringify(argv.slice(2))); }');
     const res = await runPluginCommand(p, { subcommand: 'status', args: ['--json'], cwd: root });

@@ -11,6 +11,7 @@ vi.mock('../core/surface.mjs', () => ({ mergeGlobalRuleNodes: nodes => nodes, le
 vi.mock('../core/brain-registry.mjs', () => ({ isBrainEnabled: () => true }));
 vi.mock('../core/command-surface.mjs', () => ({ surfaceInputsHash: () => 'fixture' }));
 vi.mock('./config.mjs', () => ({ readConfigValue: () => 20000 }));
+vi.mock('../core/context-providers.mjs', () => ({ retrievePluginContext: async () => ({ candidates: [], diagnostics: [], coverage: [] }) }));
 import context, { CAPSULE_LIMIT } from './context.mjs';
 import { estimateTokens } from '../core/context-policy.mjs';
 

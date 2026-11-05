@@ -4,19 +4,33 @@
  * branch in its own worktree, and the Verifier inspects that exact commit from a different model
  * family. Nothing merges into the operator's branch; the branch is the deliverable.
  */
-import { ADAPTER_CATALOG, classifyTaskComplexity, synthesizeOneWayValve } from '../capability/index.mjs';
+import { recordRunReceipt } from './learner.mjs';
+import { classifyTaskComplexity, synthesizeOneWayValve } from '../capability/index.mjs';
 import { notifyAlert } from './alerts.mjs';
 import { dispatchWithReceipt } from './dispatch.mjs';
-import { resolvePool } from './pool.mjs';
+import { resolvePool, localExecutionNode } from './pool.mjs';
 import { createThread, appendThreadTurn, updateThread } from './threads.mjs';
 import { executeCodeReview } from './review.mjs';
 import { isGitRepo, isDirty, headCommit, createWorktree, removeWorktree, commitAll, diffBetween, linkDependencies, deleteBranch } from './worktree.mjs';
 import { lastJsonWith } from './json-reply.mjs';
 import { runQualityGate } from './gate.mjs';
+import { forwardRemoteOperation } from './remote-operation.mjs';
+
+const OPEN_THREADS = new Set();
+const MAX_BLUEPRINT = 20000;
+/** A stopped pipeline must not leave its thread reading as active. */
+export function failOpenThreads(summary = 'The run was stopped before it finished.') {
+  for (const id of OPEN_THREADS) { try { updateThread(id, { status: 'failed', summary }); } catch { /* the thread store reports its own failure */ } }
+  OPEN_THREADS.clear();
+}
 
 export function assignPipelineRoles(pool = [], options = {}) {
   const sorted = [...pool].sort((a, b) => b.qualityScore - a.qualityScore);
-  const findById = id => sorted.find(h => h.id === id) || (ADAPTER_CATALOG[id] ? { ...ADAPTER_CATALOG[id], id } : { id, name: id, family: 'custom' });
+  const findById = id => {
+    const harness = sorted.find(h => h.id === id);
+    if (!harness) throw new Error(`Selected harness ${id} is not ready for this task`);
+    return harness;
+  };
   // The session's own harness leads only when it can take work; TR_ACTIVE_HARNESS is advisory.
   const active = process.env.TR_ACTIVE_HARNESS;
   const orchestrator = options.orchestrator ? findById(options.orchestrator) : sorted.find(h => h.id === active) || sorted[0] || null;
@@ -78,13 +92,15 @@ async function runPipeline(task, poolInfo, options) {
 
   const verifier = roles.verifier || roles.implementer;
   const complexity = classifyTaskComplexity(task);
-  const thread = createThread({ title: task.slice(0, 80), task, platform: roles.orchestrator.id, model: roles.orchestrator.name, status: 'active' });
+  // Validate the repository before creating lifecycle state: an unborn repository has no usable base.
   const baseCommit = headCommit(cwd);
-  const branch = options.branch || `meta-harness/${thread.id}`;
   const warnings = isDirty(cwd) ? ['The working tree has uncommitted changes; the branch starts from the last commit and does not include them.'] : [];
+  const thread = createThread({ title: task.slice(0, 80), task, platform: roles.orchestrator.id, model: roles.orchestrator.name, status: 'active' });
+  OPEN_THREADS.add(thread.id);
+  const branch = options.branch || `meta-harness/${thread.id}`;
   const run = async (stage, harness, prompt, { workdir = cwd, permissions, role = stage.role } = {}) => {
     stage.status = 'running';
-    const result = await dispatchWithReceipt({ agent: harness.id, cwd: workdir, contextCwd: cwd, contextTask: task, prompt, permissions: permissions || stage.permissions, allowUnknownAuth: true }, { dispatchFn: options.dispatchFn, role, complexityScore: complexity.score });
+    const result = await dispatchWithReceipt({ agent: harness.id, node: 'local', cwd: workdir, contextCwd: cwd, contextTask: task, prompt, permissions: permissions || stage.permissions, allowUnknownAuth: options.allowUnknownAuth === true }, { dispatchFn: options.dispatchFn, role, complexityScore: complexity.score });
     stage.status = result.ok ? 'completed' : 'failed';
     stage.output = result.response || result.error || null;
     stage.failureKind = result.ok ? undefined : result.failureKind;
@@ -104,13 +120,15 @@ async function runPipeline(task, poolInfo, options) {
     }
     const architect = await run(stage('Architect'), roles.architect, `[ROLE: ARCHITECT]\nDo not change any file. Task:\n${task}\n\nExplorer digest:\n${digest || 'None.'}\n\nProduce a concise blueprint, the files to change, and how to verify the result.`);
     if (!architect.ok) { ok = false; return finish(); }
+    const blueprint = architect.response.length > MAX_BLUEPRINT ? `${architect.response.slice(0, MAX_BLUEPRINT)}\n[Blueprint shortened to ${MAX_BLUEPRINT} characters.]` : architect.response;
 
     implementerDir = createWorktree(cwd, { branch });
-    const implementer = await run(stage('Implementer'), roles.implementer, `[ROLE: IMPLEMENTER]\nWork only in this checkout. Implement the task and its tests. Do not commit; the harness commits your changes.\nTask:\n${task}\n\nBlueprint:\n${architect.response}`, { workdir: implementerDir });
+    const implementer = await run(stage('Implementer'), roles.implementer, `[ROLE: IMPLEMENTER]\nWork only in this checkout. Implement the task and its tests. Do not commit; the harness commits your changes.\nTask:\n${task}\n\nBlueprint:\n${blueprint}`, { workdir: implementerDir });
     if (!implementer.ok) { ok = false; return finish(); }
     commit = commitAll(implementerDir, `meta-harness: ${task.slice(0, 60)}\n\nImplementer: ${roles.implementer.id}`);
     if (!commit) {
       Object.assign(stage('Implementer'), { status: 'failed', failureKind: 'agent', output: 'The Implementer reported success but changed no files.' });
+      await recordRunReceipt({ harness: roles.implementer.id, role: 'Implementer', task, success: false, failureKind: 'no-change', error: 'The Implementer reported success but changed no files.' });
       ok = false; return finish();
     }
     stage('Implementer').commit = commit;
@@ -118,21 +136,21 @@ async function runPipeline(task, poolInfo, options) {
 
     if (options.gate) {
       linkDependencies(cwd, implementerDir);
-      gate = runQualityGate(implementerDir, options.gateOptions);
+      gate = await (options.gateFn || runQualityGate)(implementerDir, options.gateOptions);
       if (!gate.passed) { ok = false; stage('Verifier').status = 'skipped'; stage('Verifier').output = `Quality gate did not pass: ${gate.summary}`; return finish(); }
     }
 
     const diff = diffBetween(cwd, baseCommit, commit);
     const verifyDir = createWorktree(cwd, { ref: commit, prefix: 'meta-harness-verify-' });
     try {
-      const verification = await run(stage('Verifier'), verifier, `[ROLE: INDEPENDENT VERIFIER]\nYou did not write this code. Do not change any file. Run the checks you can and audit commit ${commit} for this task:\n${task}\n\nBlueprint:\n${architect.response}\n\nDiff${diff.length > 30000 ? ' (first 30000 characters; read the rest from this checkout)' : ''}:\n${diff.slice(0, 30000)}\n\nEnd your reply with exactly one JSON object: {"verdict":"PASS"|"FAIL","findings":["..."]}`, { workdir: verifyDir });
+      const verification = await run(stage('Verifier'), verifier, `[ROLE: INDEPENDENT VERIFIER]\nYou did not write this code. Do not change any file. Run the checks you can and audit commit ${commit} for this task:\n${task}\n\nBlueprint:\n${blueprint}\n\nDiff${diff.length > 30000 ? ' (first 30000 characters; read the rest from this checkout)' : ''}:\n${diff.slice(0, 30000)}\n\nEnd your reply with exactly one JSON object: {"verdict":"PASS"|"FAIL","findings":["..."]}`, { workdir: verifyDir });
       const parsed = verification.ok ? parseVerification(verification.response) : { parsed: false, verdict: 'NOT_RUN', findings: [] };
       Object.assign(stage('Verifier'), { commit, verdict: parsed.verdict, findings: parsed.findings, passed: parsed.verdict === 'PASS' });
-      if (parsed.verdict !== 'PASS') ok = false;
+      if (parsed.verdict !== 'PASS') { ok = false; return finish(); }
     } finally { removeWorktree(cwd, verifyDir); }
 
     if (options.autoReview) {
-      const review = await executeCodeReview({ cwd, author: roles.implementer.id, threadId: thread.id, task, target: `${baseCommit}...${commit}`, dispatchFn: options.dispatchFn, reviewer: options.reviewer });
+      const review = await executeCodeReview({ cwd, author: roles.implementer.id, threadId: thread.id, task, target: `${baseCommit}...${commit}`, dispatchFn: options.dispatchFn, reviewer: options.reviewer, allowUnknownAuth: options.allowUnknownAuth === true, availableHarnesses: options.availableHarnesses });
       stages.push({ role: 'Reviewer', harness: review.review?.reviewer || null, status: review.ok ? 'completed' : 'failed', verdict: review.review?.verdict || null, riskScore: review.review?.riskScore ?? null, output: review.review?.summary || review.error || null });
       if (!review.ok || review.review?.verdict !== 'APPROVE') ok = false;
     }
@@ -145,14 +163,16 @@ async function runPipeline(task, poolInfo, options) {
     return finish();
   } finally {
     removeWorktree(cwd, implementerDir);
-    if (implementerDir && !commit) deleteBranch(cwd, branch);
+    if (implementerDir && (!commit || !ok)) deleteBranch(cwd, branch);
   }
 
   function finish() {
     return (async () => {
-      updateThread(thread.id, { status: ok ? 'completed' : 'failed', ...(commit ? { branch } : {}) });
+      for (const item of stages) if (item.status === 'planned') item.status = 'skipped';
+      OPEN_THREADS.delete(thread.id);
+      updateThread(thread.id, { status: ok ? 'completed' : 'failed', branch: ok && commit ? branch : null, commit, baseCommit });
       const alert = await notifyAlert({ title: ok ? 'Meta Harness: pipeline passed' : 'Meta Harness: pipeline failed', message: `${task.slice(0, 80)}${commit ? ` (branch ${branch})` : ''}`, severity: ok ? 'info' : 'warning' });
-      return { ...base, ok, threadId: thread.id, branch: commit ? branch : null, commit, baseCommit, gate, warnings, durationMs: Date.now() - started, alert };
+      return { ...base, ok, threadId: thread.id, branch: ok && commit ? branch : null, commit, baseCommit, gate, warnings, durationMs: Date.now() - started, alert };
     })();
   }
 }
@@ -165,7 +185,7 @@ async function runCouncil(task, poolInfo, options) {
   if (!seats.length) throw new Error('No harness can take work right now');
   const cwd = options.cwd || process.cwd();
   const votes = await Promise.all(seats.map(async harness => {
-    const result = await dispatchWithReceipt({ agent: harness, cwd, contextTask: task, prompt: `[ROLE: COUNCIL MEMBER]\nDo not change any file. Assess this proposal, with its trade-offs and risks:\n${task}\n\nEnd your reply with exactly one JSON object: {"vote":"APPROVE"|"REJECT","reason":"..."}`, permissions: READ, allowUnknownAuth: true }, { dispatchFn: options.dispatchFn, role: 'Council' });
+    const result = await dispatchWithReceipt({ agent: harness, node: 'local', cwd, contextTask: task, prompt: `[ROLE: COUNCIL MEMBER]\nDo not change any file. Assess this proposal, with its trade-offs and risks:\n${task}\n\nEnd your reply with exactly one JSON object: {"vote":"APPROVE"|"REJECT","reason":"..."}`, permissions: READ, allowUnknownAuth: options.allowUnknownAuth === true }, { dispatchFn: options.dispatchFn, role: 'Council' });
     return { harness, ok: result.ok === true, ...(result.ok ? parseVote(result.response) : { vote: 'ABSTAIN', reason: null, error: result.error }), feedback: result.response || null };
   }));
   const count = vote => votes.filter(item => item.vote === vote).length;
@@ -178,20 +198,23 @@ async function runRace(task, poolInfo, options) {
   const seats = options.candidates || [...poolInfo.ready].sort((a, b) => b.qualityScore - a.qualityScore).slice(0, 2).map(h => h.id);
   if (options.execute !== true) return { ok: seats.length > 1, mode: 'race', task, executedLive: false, excluded: poolInfo.excluded, candidates: seats.map(harness => ({ harness, status: 'planned' })) };
   if (seats.length < 2) throw new Error('A race needs at least two harnesses that can take work');
+  if (!options.gate) return { ok: false, mode: 'race', task, executedLive: false, verification: 'unverified', gateApplied: false, error: 'A race requires a deterministic quality gate before any candidate can win.' };
   const cwd = options.cwd || process.cwd();
   if (!isGitRepo(cwd)) throw new Error('A race writes on separate branches, so it must run inside a git repository');
   const id = `race-${Date.now().toString(36)}`;
   const entries = await Promise.all(seats.map(async harness => {
     const branch = `meta-harness/${id}-${harness}`;
-    const directory = createWorktree(cwd, { branch });
+    let directory;
     let keep = false;
     try {
-      const result = await dispatchWithReceipt({ agent: harness, cwd: directory, contextCwd: cwd, contextTask: task, prompt: `[ROLE: IMPLEMENTER]\nWork only in this checkout. Implement the task and its tests. Do not commit.\nTask:\n${task}`, permissions: WRITE, allowUnknownAuth: true }, { dispatchFn: options.dispatchFn, role: 'Race' });
+      const started = Date.now();
+      directory = createWorktree(cwd, { branch });
+      const result = await dispatchWithReceipt({ agent: harness, node: 'local', cwd: directory, contextCwd: cwd, contextTask: task, prompt: `[ROLE: IMPLEMENTER]\nWork only in this checkout. Implement the task and its tests. Do not commit.\nTask:\n${task}`, permissions: WRITE, allowUnknownAuth: options.allowUnknownAuth === true }, { dispatchFn: options.dispatchFn, role: 'Race' });
       const commit = result.ok ? commitAll(directory, `meta-harness race: ${task.slice(0, 60)}\n\nAgent: ${harness}`) : null;
       if (commit && options.gate) linkDependencies(cwd, directory);
-      const gate = commit && options.gate ? runQualityGate(directory, options.gateOptions) : null;
-      keep = Boolean(commit) && (!gate || gate.passed);
-      return { harness, branch: keep ? branch : null, commit: keep ? commit : null, ok: keep, gate, durationMs: result.durationMs, error: result.ok ? (commit ? (keep ? undefined : 'The quality gate failed') : 'No files changed') : result.error };
+      const gate = commit ? await (options.gateFn || runQualityGate)(directory, options.gateOptions) : null;
+      keep = Boolean(commit) && gate?.passed === true;
+      return { harness, branch: keep ? branch : null, commit: keep ? commit : null, ok: keep, gate, completedAt: Date.now(), durationMs: Date.now() - started, error: result.ok ? (commit ? (keep ? undefined : 'The quality gate failed') : 'No files changed') : result.error };
     } catch (error) {
       return { harness, branch: null, commit: null, ok: false, gate: null, durationMs: null, error: String(error.message) };
     } finally {
@@ -199,15 +222,18 @@ async function runRace(task, poolInfo, options) {
       if (!keep) deleteBranch(cwd, branch);
     }
   }));
-  const finishers = entries.filter(entry => entry.ok).sort((a, b) => a.durationMs - b.durationMs);
-  return { ok: finishers.length > 0, mode: 'race', task, executedLive: true, gateApplied: Boolean(options.gate), winner: finishers[0]?.harness || null, excluded: poolInfo.excluded, candidates: entries };
+  const finishers = entries.filter(entry => entry.ok).sort((a, b) => a.completedAt - b.completedAt);
+  return { ok: finishers.length > 0, mode: 'race', task, executedLive: true, gateApplied: true, verification: finishers.length ? 'passed' : 'failed', winner: finishers[0]?.harness || null, excluded: poolInfo.excluded, candidates: entries };
 }
 
 export async function coordinateTask(taskDescription, options = {}) {
   const task = String(taskDescription || '').trim();
   if (!task) throw new Error('Task description is required for coordination');
+  const remote = await forwardRemoteOperation('coordinate', task, options);
+  if (remote) return remote;
   const mode = options.mode || 'pipeline';
   if (!['pipeline', 'orchestrate', 'council', 'race'].includes(mode)) throw new Error(`Unsupported coordination mode: ${mode}`);
+  localExecutionNode(options);
   const poolInfo = await resolvePool(options);
   if (mode === 'council') return runCouncil(task, poolInfo, options);
   if (mode === 'race') return runRace(task, poolInfo, options);

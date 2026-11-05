@@ -12,6 +12,7 @@
  *   npx total-recall auth secret usage-record --provider x --cost 0.01
  */
 
+import { exitAfterFlush } from './exit-after-flush.mjs';
 import {
   setSecret,
   getSecret,
@@ -242,6 +243,7 @@ function printHelp() {
                             [--dry-run] [--keys k1,k2] [--path <repo>]
       verify <name>        Compare the deployed file with the store by fingerprint
                             (match/differs/missing/duplicate; no values) [--keys] [--path]
+                            --find-fingerprint <fp> names every remote key holding that value
       import-pm2 <name>    Move named keys from a pm2 app's captured env into the store
                             --app <pm2 name> --keys k1,k2 [--apply] [--overwrite] [--repo r]
     merge-store <dir>     Fold a stray per-repo store into this one (dry run unless --apply).
@@ -251,6 +253,7 @@ function printHelp() {
       --bind-same         Also bind keys whose value already matches (only for an app's own store)
       --dates-from-source Restore an older value date for keys whose value is identical
     diff-env              Compare repo .env files against the store (no values printed)
+      --find-fingerprint <fp>  Instead, name every key holding that value
       --path <dir>        Single repo (default: every project-registry path)
       --filename .env     File to compare (default .env; server/<name> also checked)
       --strict            Exit 1 on any drift or unadopted key
@@ -299,6 +302,10 @@ function printHelp() {
       --print-only        Only print instructions
       --headless          Allow headless for verified recipes
     rotate-auto <key>     Rotate by whatever method the key's class supports
+    provider-keys <provider>  List the provider account's keys (no values) and which
+                           store names hold them; a key held by none is stale
+      --revoke <hash>     Revoke one key the store no longer holds
+      --json              Machine-readable output
     rotation-status       Rotation coverage for every key in the vault
       --json              Machine-readable output
     browser-logout        Delete TR's persistent browser profile (all sessions)
@@ -415,6 +422,7 @@ function parseArgs(args) {
       'meta',
       'rotate-browser',
       'rotate-auto',
+      'provider-keys',
       'rm',
       'generate',
       'account-sync',
@@ -609,6 +617,12 @@ function parseArgs(args) {
       case '--chrome':
         out.chrome = true;
         break;
+      case '--find-fingerprint':
+        out.findFingerprint = args[++i];
+        break;
+      case '--revoke':
+        out.revokeHash = args[++i];
+        break;
       case '--revoke-old':
         out.revokeOld = true;
         break;
@@ -722,7 +736,7 @@ export default async function secretCli(argv) {
     opts = parseArgs(remainingArgs);
   } catch (err) {
     console.error(`❌ ${err.message}`);
-    process.exit(1);
+    await exitAfterFlush(1);
   }
   if (opts.help || !opts.command) {
     printHelp();
@@ -734,23 +748,23 @@ export default async function secretCli(argv) {
   // one. Repo binding lives in each key's metadata (`meta <key> --repo`).
   if (layer === 'project') {
     console.error('❌ Secrets have one store; --project does not apply. Bind a key to a repo with `auth secret meta <key> --repo <name>`.');
-    process.exit(1);
+    await exitAfterFlush(1);
   }
   const brainDir = secretsStoreDir();
 
   if (opts.stdin && opts.command !== 'fingerprint') {
     if (!['set', 'rotate', 'rekey'].includes(opts.command)) {
       console.error('❌ --stdin is only valid with `set`, `rotate`, `rekey`, or `fingerprint`');
-      process.exit(1);
+      await exitAfterFlush(1);
     }
     if (opts.command !== 'rekey' && !opts.key) {
       console.error(`Usage: total-recall auth secret ${opts.command} <key> --stdin`);
-      process.exit(1);
+      await exitAfterFlush(1);
     }
     opts.value = readStdinValue();
     if (!opts.value) {
       console.error('❌ --stdin read an empty value');
-      process.exit(1);
+      await exitAfterFlush(1);
     }
   }
 
@@ -798,7 +812,7 @@ export default async function secretCli(argv) {
         console.error(
           '❌ No persistent master-password carrier found. Use --launch-agent <path>, --env-file <path> or --keychain <service>.',
         );
-        process.exit(1);
+        await exitAfterFlush(1);
       }
 
       const currentPasswords = [
@@ -808,12 +822,12 @@ export default async function secretCli(argv) {
       const oldPassword = currentPasswords[0] || process.env.TR_SECRETS_PASSWORD;
       if (!oldPassword) {
         console.error('❌ The current master password is unavailable from the selected carriers.');
-        process.exit(1);
+        await exitAfterFlush(1);
       }
       if (currentPasswords.some((value) => value !== oldPassword)) {
         console.error('❌ Selected credential carriers do not contain the same current master password.');
         console.error('   Every carrier must hold the same password before one can replace it.');
-        process.exit(1);
+        await exitAfterFlush(1);
       }
 
       const defaultBrainDirs = [
@@ -848,7 +862,7 @@ export default async function secretCli(argv) {
     if (opts.command === 'set') {
       if (!opts.key || opts.value == null) {
         console.error('Usage: total-recall auth secret set <key> <value>');
-        process.exit(1);
+        await exitAfterFlush(1);
       }
       const setKey = await resolveSecretKey(brainDir, opts.key, currentRepoName());
       await setSecret(brainDir, setKey, opts.value, {
@@ -877,7 +891,7 @@ export default async function secretCli(argv) {
     if (opts.command === 'generate') {
       if (!opts.key) {
         console.error('Usage: total-recall auth secret generate <key> [--bytes 32] [--format hex|base64|base64url]');
-        process.exit(1);
+        await exitAfterFlush(1);
       }
       const crypto = await import('node:crypto');
       const val = crypto.randomBytes(opts.bytes).toString(opts.format);
@@ -1005,7 +1019,7 @@ export default async function secretCli(argv) {
         if (r.usage) console.log(`     usage: ${JSON.stringify(r.usage)}`);
         if (r.subscription) console.log(`     subscription: ${JSON.stringify(r.subscription)}`);
         console.log('');
-        if (r.tracking_status === 'error') process.exit(1);
+        if (r.tracking_status === 'error') await exitAfterFlush(1);
         return;
       }
       console.log('\n  🔄 Live provider account/usage sync (all set secrets)…\n');
@@ -1025,7 +1039,7 @@ export default async function secretCli(argv) {
       console.log(
         `\n  tracking-health: healthy=${health.healthy} ok=${health.ok} exempt=${health.exempt} errors=${health.errors}\n`,
       );
-      if (!report.healthy) process.exit(1);
+      if (!report.healthy) await exitAfterFlush(1);
       return;
     }
 
@@ -1049,7 +1063,7 @@ export default async function secretCli(argv) {
         }
       }
       console.log('');
-      if (!health.healthy || !shared.healthy) process.exit(1);
+      if (!health.healthy || !shared.healthy) await exitAfterFlush(1);
       return;
     }
 
@@ -1095,14 +1109,14 @@ export default async function secretCli(argv) {
       } else {
         console.log('\n  No shared credential values detected.\n');
       }
-      if (!shared.healthy) process.exit(1);
+      if (!shared.healthy) await exitAfterFlush(1);
       return;
     }
 
     if (opts.command === 'meta') {
       if (!opts.key) {
         console.error('Usage: total-recall auth secret meta <key> [--repo ...] [--tier ...]');
-        process.exit(1);
+        await exitAfterFlush(1);
       }
       const patch = {};
       if (opts.repos.length) patch.repos = opts.repos;
@@ -1110,7 +1124,7 @@ export default async function secretCli(argv) {
         const row = (await listSecretsMeta(brainDir)).find((r) => r.key === opts.key);
         if (!row) {
           console.error(`❌ Secret not found: ${opts.key}`);
-          process.exit(1);
+          await exitAfterFlush(1);
         }
         patch.repos = (patch.repos || row.repos || []).filter((r) => !opts.unbind.includes(r));
       }
@@ -1174,7 +1188,7 @@ export default async function secretCli(argv) {
     if (opts.command === 'get') {
       if (!opts.key) {
         console.error('Usage: total-recall auth secret get <key>');
-        process.exit(1);
+        await exitAfterFlush(1);
       }
       const project_id = currentProjectId();
       const resolved = await resolveSecretKey(brainDir, opts.key, currentRepoName());
@@ -1185,7 +1199,7 @@ export default async function secretCli(argv) {
       }
       if (!r.found) {
         console.error(`  Secret not found: ${opts.key}`);
-        process.exit(1);
+        await exitAfterFlush(1);
       }
       // Print value only — user explicitly asked
       console.log(r.value);
@@ -1264,7 +1278,7 @@ export default async function secretCli(argv) {
       const value = opts.fromClipboard ? readSystemClipboard() : opts.stdin ? readStdinValue() : '';
       if (!value) {
         console.error('Usage: total-recall auth secret fingerprint --from-clipboard|--stdin [--expect-prefix <p>] [--not <KEY>] [--json]');
-        process.exit(1);
+        await exitAfterFlush(1);
       }
       const fp = secretValueFingerprint(value);
       const matches = (await listSecretsMeta(brainDir)).filter((row) => row.fingerprint_full === fp).map((row) => row.key);
@@ -1295,7 +1309,7 @@ export default async function secretCli(argv) {
             '  verify <name> [--keys k1,k2] [--path <repo>] [--json]\n' +
             '  import-pm2 <name> --app <pm2 name> --keys k1,k2 [--apply] [--overwrite] [--repo r] [--json]',
         );
-        process.exit(1);
+        await exitAfterFlush(1);
       }
 
       if (opts.subcommand === 'add') {
@@ -1303,7 +1317,7 @@ export default async function secretCli(argv) {
           console.error(
             'Usage: total-recall auth secret remote add <name> --host <host> --path </remote/dir> [--user root] [--port 22] [--filename .env] [--restart-cmd "..."]',
           );
-          process.exit(1);
+          await exitAfterFlush(1);
         }
         const { path: targetsPath } = addRemoteTarget(brainDir, {
           name: opts.key,
@@ -1343,7 +1357,7 @@ export default async function secretCli(argv) {
       if (opts.subcommand === 'remove' || opts.subcommand === 'rm') {
         if (!opts.key) {
           console.error('Usage: total-recall auth secret remote remove <name>');
-          process.exit(1);
+          await exitAfterFlush(1);
         }
         const r = removeRemoteTarget(brainDir, opts.key);
         console.log(r.removed ? `  ✅ Removed remote target: ${opts.key}` : `  Remote target not found: ${opts.key}`);
@@ -1353,7 +1367,7 @@ export default async function secretCli(argv) {
       if (opts.subcommand === 'deploy') {
         if (!opts.key) {
           console.error('Usage: total-recall auth secret remote deploy <name> [--dry-run] [--keys k1,k2]');
-          process.exit(1);
+          await exitAfterFlush(1);
         }
         const r = await deployEnvToRemote(brainDir, opts.key, {
           dryRun: opts.dryRun,
@@ -1376,10 +1390,11 @@ export default async function secretCli(argv) {
       if (opts.subcommand === 'verify') {
         if (!opts.key) {
           console.error('Usage: total-recall auth secret remote verify <name> [--keys k1,k2] [--path <repo>] [--json]');
-          process.exit(1);
+          await exitAfterFlush(1);
         }
         const r = await verifyRemote(brainDir, opts.key, {
           keys: opts.keys.length ? opts.keys : undefined,
+          findFingerprint: opts.findFingerprint,
           projectPath: opts.path ? path.resolve(opts.path) : undefined,
         });
         if (opts.json) console.log(JSON.stringify(r, null, 2));
@@ -1390,6 +1405,7 @@ export default async function secretCli(argv) {
             console.log(`  ${mark} ${row.key.padEnd(36)} ${row.status}${row.duplicates ? ` (+${row.duplicates} duplicate)` : ''}`);
           }
           console.log(`     ${r.remoteOnly.length} key(s) on the remote are not in the projection`);
+          if (r.holders) console.log(`     holders of that fingerprint: ${r.holders.join(', ') || 'none'}`);
           console.log(`     ${r.ok ? 'in sync' : 'DRIFT'} (values compared by fingerprint; none printed)\n`);
         }
         if (!r.ok) process.exitCode = 1;
@@ -1399,7 +1415,7 @@ export default async function secretCli(argv) {
       if (opts.subcommand === 'import-pm2') {
         if (!opts.key || !opts.app || !opts.keys.length) {
           console.error('Usage: total-recall auth secret remote import-pm2 <name> --app <pm2 name> --keys k1,k2 [--apply] [--overwrite] [--repo r] [--json]');
-          process.exit(1);
+          await exitAfterFlush(1);
         }
         const r = await importFromPm2(brainDir, opts.key, {
           app: opts.app,
@@ -1418,14 +1434,14 @@ export default async function secretCli(argv) {
       }
 
       console.error(`Unknown remote subcommand: ${opts.subcommand}`);
-      process.exit(1);
+      await exitAfterFlush(1);
     }
 
     if (opts.command === 'rotate') {
       if (!opts.key) {
         console.error('Usage: total-recall auth secret rotate <key> [--export-env|--export-all|--remote <name>]');
         console.error('       The new value is read from a prompt or stdin — never from argv.');
-        process.exit(1);
+        await exitAfterFlush(1);
       }
       // A credential passed as an argument is disclosed the moment it is typed:
       // argv is readable by any user via `ps`, is saved to shell history, and is
@@ -1439,7 +1455,7 @@ export default async function secretCli(argv) {
         opts.value = readSystemClipboard();
         if (!opts.value) {
           console.error('Error: clipboard is empty — copy the new credential first.');
-          process.exit(1);
+          await exitAfterFlush(1);
         }
         console.log(`  📋 Read ${opts.value.length} chars from the clipboard (value not shown).`);
       }
@@ -1455,7 +1471,7 @@ export default async function secretCli(argv) {
       }
       if (!opts.value) {
         console.error('Error: empty value — aborting rotation.');
-        process.exit(1);
+        await exitAfterFlush(1);
       }
       if (opts.remote) {
         await rotateSecret(brainDir, opts.key, opts.value, { provider: opts.provider, scope: opts.scope });
@@ -1508,7 +1524,7 @@ export default async function secretCli(argv) {
     if (opts.command === 'rotate-browser' || opts.command === 'rotate-auto') {
       if (!opts.key) {
         console.error(`Usage: total-recall auth secret ${opts.command} <key>`);
-        process.exit(1);
+        await exitAfterFlush(1);
       }
 
       if (opts.printOnly) {
@@ -1536,14 +1552,31 @@ export default async function secretCli(argv) {
       if (!r.ok) {
         console.error(`\n  ❌ ${r.error}`);
         if (r.console_url) console.error(`     Console: ${r.console_url}`);
-        process.exit(1);
+        await exitAfterFlush(1);
       }
       console.log(`\n  ✅ Rotated ${r.key}` + (r.method ? ` via ${r.method}` : ''));
       if (r.verified === true) console.log('     verified against provider API');
-      if (r.revoked) console.log(`     revoked ${r.revoked} deprecated credential(s) from provider console`);
+      if (r.revoked?.revoked === true) console.log('     revoked the previous key at the provider');
+      else if (r.revoked?.attempted) console.log(`  ⚠️  The previous key was NOT revoked (${r.revoked.status ? `HTTP ${r.revoked.status}` : r.revoked.error || 'provider refused'}); it is still live.`);
+      else if (r.revoked && typeof r.revoked === 'object') console.log(`  ⚠️  The previous key was NOT revoked and is still live: ${r.revoked.reason}`);
+      else if (typeof r.revoked === 'number' && r.revoked) console.log(`     revoked ${r.revoked} deprecated credential(s) from provider console`);
       if (r.supervised) console.log('     (supervised — recipe not yet auto-verified)');
       if (r.exports?.length) console.log(`     exported to ${r.exports.length} project(s)`);
       if (r.revoke_hint && !r.revoked) console.log(`\n  ⚠️  ${r.revoke_hint}`);
+      return;
+    }
+
+    if (opts.command === 'provider-keys') {
+      if (!opts.key) {
+        console.error('Usage: total-recall auth secret provider-keys <provider> [--revoke <hash>] [--json]');
+        process.exitCode = 1;
+        return;
+      }
+      const { manageProviderKeys } = await import('./secrets-rotate.mjs');
+      const result = await manageProviderKeys(brainDir, opts.key, { revoke: opts.revokeHash });
+      if (opts.json) console.log(JSON.stringify(result, null, 2));
+      else if (opts.revokeHash) console.log(`\n  ✅ Revoked ${result.name || result.label} (${result.revoked.slice(0, 12)})`);
+      else for (const item of result.keys) console.log(`  ${item.hash.slice(0, 12)}  ${String(item.name || item.label).padEnd(44)} ${item.disabled ? 'disabled' : 'active  '}  ${item.stored_as.length ? item.stored_as.join(',') : 'NOT IN STORE'}`);
       return;
     }
 
@@ -1582,12 +1615,12 @@ export default async function secretCli(argv) {
     if (opts.command === 'delete' || opts.command === 'rm') {
       if (!opts.key) {
         console.error('Usage: total-recall auth secret delete <key>');
-        process.exit(1);
+        await exitAfterFlush(1);
       }
       const r = await deleteSecret(brainDir, opts.key);
       if (!r.found) {
         console.error(`  Secret not found: ${opts.key}`);
-        process.exit(1);
+        await exitAfterFlush(1);
       }
       console.log(`  ✅ Deleted: ${opts.key}`);
       return;
@@ -1724,7 +1757,7 @@ export default async function secretCli(argv) {
     if (opts.command === 'merge-store') {
       if (!opts.key) {
         console.error('❌ Usage: auth secret merge-store <source brain dir> [--repo <name>] [--tags a,b] [--rename SRC=DEST] [--take K1,K2] [--apply] [--json]');
-        process.exit(1);
+        await exitAfterFlush(1);
       }
       const { mergeStore } = await import('./secrets-merge.mjs');
       const report = await mergeStore(brainDir, path.resolve(opts.key), {
@@ -1767,6 +1800,17 @@ export default async function secretCli(argv) {
       const files = resolveEnvFiles(roots, opts.filename ? [opts.filename] : ['.env']);
       if (!files.length) {
         console.log('\n  No .env files found for the configured projects.\n');
+        return;
+      }
+
+      if (opts.findFingerprint) {
+        const { holdersOfFingerprint, parseDotenv } = await import('./secrets-remote-deploy.mjs');
+        const found = files.flatMap((file) => {
+          const name = typeof file === 'string' ? file : file.path;
+          return holdersOfFingerprint(parseDotenv(fs.readFileSync(name, 'utf8')), opts.findFingerprint).map((key) => ({ file: name, key }));
+        });
+        for (const row of found) console.log(`  ${row.file}  ${row.key}`);
+        console.log(`  ${found.length} holder(s) of that fingerprint in ${files.length} file(s)`);
         return;
       }
 
@@ -1817,7 +1861,7 @@ export default async function secretCli(argv) {
       console.log('');
       if (opts.strict && (totals.drift > 0 || totals.only_env > 0)) {
         console.error('  diff-env --strict: store is not the source of truth for every key.');
-        process.exit(1);
+        await exitAfterFlush(1);
       }
       return;
     }
@@ -1830,7 +1874,7 @@ export default async function secretCli(argv) {
       if (opts.file) {
         if (!fs.existsSync(opts.file)) {
           console.error(`  File not found: ${opts.file}`);
-          process.exit(1);
+          await exitAfterFlush(1);
         }
         const text = fs.readFileSync(opts.file, 'utf8');
         const map = parseEnvText(text);
@@ -1940,16 +1984,16 @@ export default async function secretCli(argv) {
           console.error(`  ❌ LEAK in ${t.file}: keys ${r.keys.join(', ')}`);
         }
       }
-      if (bad) process.exit(1);
+      if (bad) await exitAfterFlush(1);
       console.log(`  ✅ No secret values found in ${texts.length} surface/openwiki file(s)`);
       return;
     }
 
     console.error(`Unknown secret command: ${opts.command}`);
     printHelp();
-    process.exit(1);
+    await exitAfterFlush(1);
   } catch (err) {
     console.error(`❌ ${err.message}`);
-    process.exit(1);
+    await exitAfterFlush(1);
   }
 }

@@ -21,6 +21,7 @@ export const MAX_OUTPUT_BYTES = 256 * 1024;
 // child processes use instead of the server's bound.
 export const CLI_MAX_OUTPUT_BYTES = 16 * 1024 * 1024;
 export const MAX_INPUT_BYTES = 64 * 1024;
+export const MAX_REQUEST_BYTES = 1024 * 1024;
 
 /** A credential is one declared string on stdin, never a command-line value. */
 export function validatePluginSecretInput(plugin, subcommand, input) {
@@ -41,11 +42,17 @@ export function validatePluginSecretInput(plugin, subcommand, input) {
  * @returns {Promise<{ ok: boolean, exitCode: number|null, signal: string|null, timedOut: boolean, truncated: boolean, output: string, durationMs: number }>}
  */
 export function runPluginCommand(plugin, options = {}) {
-  const { subcommand = '', args = [], cwd = process.cwd(), timeoutMs: requestedTimeoutMs, stdin = 'ignore', stdinText, composable = false, secretsBrainDir } = options;
+  const { subcommand = '', args = [], cwd = process.cwd(), timeoutMs: requestedTimeoutMs, stdin = 'ignore', stdinText, stdinRequest, composable = false, secretsBrainDir } = options;
   const maxOutputBytes = options.maxOutputBytes ?? (stdin === 'inherit' ? CLI_MAX_OUTPUT_BYTES : MAX_OUTPUT_BYTES);
   if (!Number.isInteger(maxOutputBytes) || maxOutputBytes < 1 || maxOutputBytes > CLI_MAX_OUTPUT_BYTES) return Promise.reject(new Error(`Plugin output limit must be 1..${CLI_MAX_OUTPUT_BYTES} bytes`));
+  if (stdinRequest !== undefined && stdinText !== undefined) return Promise.reject(new Error('Pass stdinText or stdinRequest, not both'));
   try { validatePluginSecretInput(plugin, subcommand, stdinText); }
   catch (err) { return Promise.reject(err); }
+  // stdinText is a credential, so its output is discarded. stdinRequest is an ordinary request whose answer the caller needs.
+  if (stdinRequest !== undefined && (typeof stdinRequest !== 'string' || !stdinRequest.length || Buffer.byteLength(stdinRequest, 'utf8') > MAX_REQUEST_BYTES)) {
+    return Promise.reject(new Error(`A stdin request must be a non-empty string of at most ${MAX_REQUEST_BYTES} bytes`));
+  }
+  const stdinPayload = stdinText ?? stdinRequest;
   const operation = subcommand || args[0];
   if (operation === 'on' || operation === 'off') {
     return setPluginActive(plugin.id, operation === 'on', { projectRoot: cwd }).then(result => ({
@@ -73,7 +80,7 @@ export function runPluginCommand(plugin, options = {}) {
 
   const command = plugin.manifest.cli.command || plugin.id;
   const safeArgs = (Array.isArray(args) ? args : []).map(String);
-  if (stdinText !== undefined && !safeArgs.includes('--stdin')) safeArgs.push('--stdin');
+  if (stdinPayload !== undefined && !safeArgs.includes('--stdin')) safeArgs.push('--stdin');
   const childArgv = [CHILD, handler, command, ...(subcommand ? [String(subcommand)] : []), ...safeArgs];
 
   return new Promise((resolve) => {
@@ -100,7 +107,7 @@ export function runPluginCommand(plugin, options = {}) {
         FORCE_COLOR: '0',
         NO_COLOR: '1'
       },
-      stdio: [stdinText !== undefined ? 'pipe' : stdin === 'inherit' ? 'inherit' : 'ignore', 'pipe', 'pipe']
+      stdio: [stdinPayload !== undefined ? 'pipe' : stdin === 'inherit' ? 'inherit' : 'ignore', 'pipe', 'pipe']
     });
 
     const collect = (buf,stream) => {
@@ -119,10 +126,10 @@ export function runPluginCommand(plugin, options = {}) {
     };
     child.stdout.on('data', buf=>collect(buf,stdoutChunks));
     child.stderr.on('data', buf=>collect(buf,stderrChunks));
-    if (stdinText !== undefined) {
+    if (stdinPayload !== undefined) {
       // A handler may exit without reading; EPIPE must not crash the server.
       child.stdin.on('error', () => {});
-      child.stdin.end(stdinText);
+      child.stdin.end(stdinPayload);
     }
 
     const timer = setTimeout(() => {
