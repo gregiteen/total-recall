@@ -1,3 +1,24 @@
+## 3.42.0 — 2026-11-05
+
+- Meta Harness owns harness, process and reasoning execution. `src/core/meta-harness.mjs`,
+  `agent-manager.mjs` and `runtime.mjs` now delegate to the plugin. Unknown auth needs an
+  explicit opt-in, failures exit nonzero and `--json` prints one result.
+- Task context retrieves supporting knowledge by default: hybrid vault search, explicit
+  related notes, and generic plugin context providers, including OpenWiki, under one token
+  budget. Mandatory rules are never dropped, and retrieval doubts appear as diagnostics.
+- Fix a preflight lockout. One invalid argument in an owner plugin's manifest denied every
+  tool call with no readable reason. The gate now loads its adapter from an invalid manifest,
+  reads the tool name itself if the owner cannot load, and explains each denial on stderr.
+- Fix `harness dispatch`, which failed on every real call. It used the runner's secret
+  channel, which discards output. The runner now has a separate `stdinRequest` channel.
+- Fix `init --project` copying nine plugins into the repository, which froze it on old
+  versions. Plugins stay in the shared folder. Repositories initialised earlier keep their
+  copies until `plugin copies --apply`, which removes only identical ones.
+- `decision` and `meta-harness` skills now ship from their owner plugins, not the scaffold.
+- Bundled plugins: Meta Harness routing, gated escalation, worktree isolation, whole-job
+  budgets and receipt voiding; OpenWiki's task context provider; auth `provider-keys` and
+  rotation fixes.
+
 ## 3.41.6 — 2026-11-04
 
 - Hermes fail-closed memory gatekeeper (`src/core/duplicate-guard.mjs`): pre-write token

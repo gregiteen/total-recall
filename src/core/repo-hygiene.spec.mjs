@@ -57,9 +57,8 @@ describe('open-source repo hygiene', () => {
     // The authoring skill directory is `plugin` (singular), matching the live
     // `.agents/skills/plugin` tree. The former `plugins` directory was removed
     // in aee2ad0; this allowlist was not updated with it.
+    // Plugin-owned skills ship from their owners, never from a second scaffold copy.
     expect([...skills].sort()).toEqual([
-      'decision',
-      'meta-harness',
       'plugin',
       'project-management',
       'start',
