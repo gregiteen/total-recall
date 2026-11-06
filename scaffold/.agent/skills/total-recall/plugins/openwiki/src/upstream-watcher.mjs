@@ -202,9 +202,10 @@ export async function checkUpstreamStatus({
  * @param {string} options.currentVersion Active version string
  * @param {string} [options.releaseNotesUrl] Optional release notes link
  * @param {boolean} [options.dryRun=false] When true, skips alert dispatch
- * @param {Function} [options.alertDispatcher] Optional alert dispatch stub
+ * @param {Function} [options.alertDispatcher] Alert-owner receipt transport
+ * @param {typeof spawnSync} [options.run] Alert-owner process transport
  * @param {string} [options.statePath] Custom state path
- * @returns {Promise<{ announced: boolean, title: string, message: string }>}
+ * @returns {Promise<object>} Announcement outcome; accepted is not delivery proof
  */
 export async function announceNewVersion({
   latestVersion,
@@ -212,46 +213,82 @@ export async function announceNewVersion({
   releaseNotesUrl = 'https://github.com/langchain-ai/openwiki',
   dryRun = false,
   alertDispatcher,
+  run = spawnSync,
   statePath = stateFile()
 } = {}) {
   const title = `OpenWiki Update: v${latestVersion} Available`;
-  const message = `Upstream OpenWiki published v${latestVersion} (currently recording v${currentVersion}). Documentation propagation is ready across registered user repositories.`;
+  const message = `Upstream OpenWiki published v${latestVersion}. The installed release is v${currentVersion}.`;
+  const eventId = `openwiki-release-${latestVersion}`;
 
-  if (!dryRun) {
+  if (dryRun) return { ok: true, announced: false, dryRun: true, title, message };
+
+  try {
+    let results;
     if (typeof alertDispatcher === 'function') {
-      try {
-        await alertDispatcher({ title, message, source: 'openwiki', severity: 'info' });
-      } catch {
-        // Dispatcher failure logged cleanly
-      }
+      results = await alertDispatcher({ title, message, source: 'openwiki', severity: 'info', eventId });
     } else {
-      // Dispatch via Total Recall alerts CLI
-      try {
-        spawnSync('npx', [
-          'total-recall', 'alerts', 'send',
-          '--title', title,
-          '--message', message,
-          '--source', 'openwiki',
-          '--severity', 'info'
-        ], { stdio: 'ignore', timeout: 15000 });
-      } catch {
-        // External alert execution failure
+      const result = run('total-recall', [
+        'alerts', 'send', '--title', title, '--message', message,
+        '--source', 'openwiki', '--severity', 'info', '--event-id', eventId
+      ], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], timeout: 15000, maxBuffer: 1024 * 1024 });
+      if (result.error || result.signal || result.status !== 0) {
+        throw new Error(`Alert owner failed (${result.error?.code || result.signal || `exit ${result.status}`})`);
       }
+      try { results = JSON.parse(result.stdout); }
+      catch { throw new Error('Alert owner returned an invalid JSON receipt'); }
     }
 
+    if (!Array.isArray(results) || results.length === 0 ||
+        results.some((result) => !result || result.event_id !== eventId || !result.channel ||
+          !(result.status === 'duplicate' || (result.status === 'accepted' && result.accepted === true)))) {
+      throw new Error('Alert owner did not accept every requested channel');
+    }
+    const receipts = results.map(({ channel, status, event_id, at }) => ({ channel, status, event_id, at }));
     const state = readUpstreamState({ statePath });
-    state.announcements.push({
-      version: latestVersion,
-      announcedAt: new Date().toISOString(),
-      releaseNotesUrl
-    });
-    saveUpstreamState(state, { statePath });
+    if (!state.announcements.some(announcement => announcement.version === latestVersion)) {
+      state.announcements.push({ version: latestVersion, announcedAt: new Date().toISOString(), releaseNotesUrl, receipts });
+      saveUpstreamState(state, { statePath });
+    }
+    return { ok: true, announced: receipts.some(receipt => receipt.status === 'accepted'), title, message, receipts };
+  } catch (error) {
+    return { ok: false, announced: false, title, message, error: error.message };
   }
+}
 
+/** Keep upstream observation, announcement and propagation as separate outcomes. */
+export async function watchUpstream({
+  checkOnly = false,
+  announce = true,
+  propagate = false,
+  statusChecker = checkUpstreamStatus,
+  announcer = announceNewVersion,
+  propagator = propagateUpdates,
+} = {}) {
+  let status, announcement = null, propagation = null;
+  try { status = await statusChecker(); }
+  catch (error) { status = { ok: false, updateAvailable: false, error: error.message }; }
+
+  if (!checkOnly && status.ok && status.updateAvailable) {
+    if (announce) {
+      try {
+        announcement = await announcer({
+          latestVersion: status.latestVersion,
+          currentVersion: status.currentVersion,
+          releaseNotesUrl: status.releaseNotesUrl,
+        });
+      } catch (error) {
+        announcement = { ok: false, announced: false, error: error.message };
+      }
+    }
+    if (propagate) {
+      try { propagation = await propagator({ force: true }); }
+      catch (error) { propagation = { ok: false, updatedCount: 0, error: error.message }; }
+    }
+  }
   return {
-    announced: !dryRun,
-    title,
-    message
+    ok: status.ok === true && (!announce || checkOnly || !status.updateAvailable || announcement?.ok === true) &&
+      (!propagate || checkOnly || !status.updateAvailable || propagation?.ok === true),
+    status, announcement, propagation,
   };
 }
 
@@ -278,13 +315,16 @@ export async function propagateUpdates({
 } = {}) {
   let projects;
   try {
-    projects = projectsReader();
+    projects = await projectsReader();
   } catch (err) {
     return { ok: false, error: err.message, updatedCount: 0, reports: [] };
   }
 
   if (repo) {
     projects = projects.filter(p => p.name === repo || p.root === repo);
+    if (!projects.length) {
+      return { ok: false, error: `No registered project matches ${repo}`, eligibleCount: 0, updatedCount: 0, reports: [] };
+    }
   }
 
   // Filter to repositories with existing openwiki directories
@@ -319,17 +359,24 @@ export async function propagateUpdates({
     };
   }
 
-  const { key, from } = keyResolver();
+  let key, from;
+  try {
+    ({ key, from } = await keyResolver());
+    if (!key) throw new Error('No model credential available from the Auth owner');
+  } catch (error) {
+    return { ok: false, error: error.message, eligibleCount: eligible.length, updatedCount: 0, reports: [] };
+  }
   const reports = [];
 
   for (const project of eligible) {
     try {
-      const outcome = refresher(project, {
+      const outcome = await refresher(project, {
         key,
         force,
         targetVersion
       });
       reports.push({
+        ...project,
         ...outcome,
         credential: from,
         generatorVersion: targetVersion
@@ -346,23 +393,26 @@ export async function propagateUpdates({
   }
 
   const failedCount = reports.filter(r => r.action === 'failed').length;
-  const updatedCount = reports.filter(r => r.action === 'refreshed' || r.action === 'partial').length;
-
-  // Record successful propagation in persistent state
-  saveUpstreamState({
-    ...state,
-    currentRecordedVersion: targetVersion,
-    lastPropagatedAt: new Date().toISOString()
-  }, { statePath });
+  const partialCount = reports.filter(r => r.action === 'partial').length;
+  const updatedCount = reports.filter(r => r.action === 'refreshed' || r.action === 'initialized').length;
+  const incompleteCount = reports.length - failedCount - partialCount - updatedCount;
 
   const receipt = formatPropagationReceipt({
     previousVersion: state.currentRecordedVersion,
     newVersion: targetVersion,
     totalProjects: eligible.length,
     updatedProjects: updatedCount,
-    failedProjects: failedCount,
-    ok: failedCount === 0
+    failedProjects: failedCount + partialCount + incompleteCount,
+    ok: updatedCount === eligible.length
   });
+
+  if (receipt.ok) {
+    saveUpstreamState({
+      ...readUpstreamState({ statePath }),
+      currentRecordedVersion: targetVersion,
+      lastPropagatedAt: receipt.timestamp
+    }, { statePath });
+  }
 
   return {
     ok: receipt.ok,
@@ -370,6 +420,8 @@ export async function propagateUpdates({
     eligibleCount: eligible.length,
     updatedCount,
     failedCount,
+    partialCount,
+    incompleteCount,
     reports
   };
 }

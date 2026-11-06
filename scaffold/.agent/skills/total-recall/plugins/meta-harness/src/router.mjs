@@ -21,6 +21,7 @@ import { getModelCatalog, joinHarnessModels } from './model-catalog.mjs';
 import { readReceipts, activeQuotaWalls, activeCredentialBlocks } from './learner.mjs';
 import { resolvePool, exclusionReason, isLocalExecutionNode } from './pool.mjs';
 import { readCodexRateLimits, measuredWalls } from './telemetry.mjs';
+import { derivedDir } from './paths.mjs';
 
 /**
  * Helper to safely query host Total Recall CLI without assumptions
@@ -54,70 +55,46 @@ function fleetTelemetry(run = runHostCli) {
   }
 }
 
-/**
- * Inspect Quota and Readiness status across harnesses and host compute.
- * Dynamically queries whatever host hardware, installed binaries, and auth stores the user has.
- * Never fabricates or hardcodes synthetic subscription percentages.
- */
-export async function inspectQuotas(options = {}) {
-  const quotas = {};
-  const remote = options.node && options.node !== 'local';
-  const fleet = (options.fleet || fleetTelemetry)();
-  const rowFor = node => fleet.nodes.find(row => [row.hostname, row.ip].includes(node) || String(row.hostname || '').split('.')[0] === node);
+const METERED_HARNESSES = new Set(['dsh', 'hermes', 'openclaw', 'pi', 'aider', 'goose', 'openhands', 'cline']);
+const METERED_TTL_MS = 5 * 60 * 1000;
+const meteredCacheFile = () => path.join(derivedDir(), 'metered-quota.json');
 
-  if (remote) {
-    const row = rowFor(options.node);
-    if (!row || row.freeMemGB === null) throw new Error(`No telemetry from mesh node ${options.node}${fleet.ok ? '' : `: ${fleet.error}`}`);
-    quotas.system = { ...row, node: options.node };
-  } else {
-    // os.freemem() on macOS excludes reclaimable memory, so the monitor's figure wins when it answered.
-    const totalMemBytes = os.totalmem(), freeMemBytes = os.freemem();
-    const self = fleet.nodes.find(row => row.self);
-    quotas.system = {
-      hostname: os.hostname(), platform: os.platform(), arch: os.arch(), cpuCores: os.cpus()?.length || 1,
-      loadAvg1m: parseFloat((os.loadavg()?.[0] || 0).toFixed(2)),
-      totalMemGB: parseFloat((totalMemBytes / 1024 ** 3).toFixed(2)), freeMemGB: parseFloat((freeMemBytes / 1024 ** 3).toFixed(2)),
-      memoryUtilizationPercent: Math.round(((totalMemBytes - freeMemBytes) / totalMemBytes) * 100), node: 'local',
-      ...(typeof self?.freeMemGB === 'number' ? { freeMemGB: self.freeMemGB, totalMemGB: self.totalMemGB, memoryUtilizationPercent: self.memoryUtilizationPercent } : {}),
-    };
+const FLEET_TTL_MS = 60 * 1000;
+const fleetCacheFile = () => path.join(derivedDir(), 'fleet-telemetry.json');
+
+/** Asking every machine takes seconds, so placement reuses an answer under a minute old. A failed read is not kept. */
+function cachedFleet() {
+  try {
+    const cached = JSON.parse(fs.readFileSync(fleetCacheFile(), 'utf8'));
+    if (Date.now() - cached.at < FLEET_TTL_MS) return cached.fleet;
+  } catch { /* no usable cache: read it */ }
+  const fleet = fleetTelemetry();
+  if (fleet.ok) {
+    try {
+      fs.mkdirSync(path.dirname(fleetCacheFile()), { recursive: true, mode: 0o700 });
+      fs.writeFileSync(fleetCacheFile(), JSON.stringify({ at: Date.now(), fleet }), { mode: 0o600 });
+    } catch { /* a cache that cannot be written only costs the next read */ }
   }
+  return fleet;
+}
 
-  // Harness state comes from the selected machine. Quota walls are this machine's receipts.
-  const inspected = remote ? await (options.inspectNodeFn || inspectNode)(options.node) : await (options.inspect || inspectAgents)({ env: process.env });
-  const codexLimits = remote ? null : readCodexRateLimits();
-  const walls = remote ? {} : { ...activeQuotaWalls(await readReceipts()), ...measuredWalls(codexLimits) };
-  const metered = new Set(['dsh', 'hermes', 'openclaw', 'pi', 'aider', 'goose', 'openhands', 'cline']);
+/** The balance changes slowly and costs two secret reads and two requests. The file holds figures, never a key. */
+async function cachedMeteredQuota(options) {
+  if (!options.meteredTtlMs) return readMeteredQuota(options);
+  try {
+    const cached = JSON.parse(fs.readFileSync(meteredCacheFile(), 'utf8'));
+    if (Date.now() - cached.at < options.meteredTtlMs) return cached.quota;
+  } catch { /* no usable cache: read it */ }
+  const quota = await readMeteredQuota(options);
+  try {
+    fs.mkdirSync(path.dirname(meteredCacheFile()), { recursive: true, mode: 0o700 });
+    fs.writeFileSync(meteredCacheFile(), JSON.stringify({ at: Date.now(), quota }), { mode: 0o600 });
+  } catch { /* a cache that cannot be written only costs the next read */ }
+  return quota;
+}
 
-  const blocks = remote ? {} : activeCredentialBlocks(await readReceipts());
-  for (const agent of inspected.agents || []) {
-    const wall = walls[agent.id];
-    const block = blocks[agent.id];
-    const reason = exclusionReason(agent, wall, block);
-    let status = 'ready';
-    if (!agent.installed) status = 'not_installed';
-    else if (agent.authenticated === false || block) status = 'needs_auth';
-    else if (agent.blockedBy) status = 'blocked';
-    else if (wall) status = 'exhausted';
-    else if (agent.authenticated === 'unknown') status = 'unverified';
-    const quota = {
-      installed: Boolean(agent.installed), version: agent.version || null,
-      billingModel: agent.id === 'ollama' ? 'local' : metered.has(agent.id) ? 'metered' : 'subscription',
-      rolling5hUsedPercent: null, weeklyUsedPercent: null, usagePercent: null,
-      quotaSource: 'none', quotaNote: reason || 'No usage figure is available from this harness', status,
-      ...(wall ? { resetsAt: wall.until, wallMessage: wall.message } : {}),
-    };
-    if (agent.id === 'codex' && codexLimits) {
-      quota.rolling5hUsedPercent = codexLimits.primary?.used_percent ?? null;
-      quota.weeklyUsedPercent = codexLimits.secondary?.used_percent ?? null;
-      if (codexLimits.primary || codexLimits.secondary) quota.usagePercent = Math.max(quota.rolling5hUsedPercent ?? 0, quota.weeklyUsedPercent ?? 0);
-      quota.quotaSource = 'codex-session-log';
-      quota.observedAt = codexLimits.observedAt;
-      if (!reason) quota.quotaNote = `Measured in the Codex session log at ${codexLimits.observedAt}`;
-    }
-    quotas[agent.id] = quota;
-  }
-
-  // Metered balance, from the provider
+/** Metered balance, from the provider. */
+async function readMeteredQuota(options) {
   let meteredQuota = { billingModel: 'metered', creditRemainingUSD: null, usageUSD: null, usageDailyUSD: null, usageWeeklyUSD: null, usagePercent: null, quotaNote: 'No OpenRouter key in the auth store', status: 'unconfigured' };
   try {
     const key = options.openRouterKey !== undefined ? options.openRouterKey : (runHostCli(['auth', 'secret', 'get', 'DEVELOPER_OPENROUTER_API_KEY']) || runHostCli(['auth', 'secret', 'get', 'OPENROUTER_API_KEY']));
@@ -153,6 +130,75 @@ export async function inspectQuotas(options = {}) {
   } catch (error) {
     meteredQuota.balanceError = `The OpenRouter balance could not be read: ${error.message}`;
   }
+  return meteredQuota;
+}
+
+/**
+ * Inspect Quota and Readiness status across harnesses and host compute.
+ * Dynamically queries whatever host hardware, installed binaries, and auth stores the user has.
+ * Never fabricates or hardcodes synthetic subscription percentages.
+ */
+export async function inspectQuotas(options = {}) {
+  const quotas = {};
+  const remote = options.node && options.node !== 'local';
+  const fleet = (options.fleet || fleetTelemetry)();
+  const rowFor = node => fleet.nodes.find(row => [row.hostname, row.ip].includes(node) || String(row.hostname || '').split('.')[0] === node);
+
+  if (remote) {
+    const row = rowFor(options.node);
+    if (!row || row.freeMemGB === null) throw new Error(`No telemetry from mesh node ${options.node}${fleet.ok ? '' : `: ${fleet.error}`}`);
+    quotas.system = { ...row, node: options.node };
+  } else {
+    // os.freemem() on macOS excludes reclaimable memory, so the monitor's figure wins when it answered.
+    const totalMemBytes = os.totalmem(), freeMemBytes = os.freemem();
+    const self = fleet.nodes.find(row => row.self);
+    quotas.system = {
+      hostname: os.hostname(), platform: os.platform(), arch: os.arch(), cpuCores: os.cpus()?.length || 1,
+      loadAvg1m: parseFloat((os.loadavg()?.[0] || 0).toFixed(2)),
+      totalMemGB: parseFloat((totalMemBytes / 1024 ** 3).toFixed(2)), freeMemGB: parseFloat((freeMemBytes / 1024 ** 3).toFixed(2)),
+      memoryUtilizationPercent: Math.round(((totalMemBytes - freeMemBytes) / totalMemBytes) * 100), node: 'local',
+      ...(typeof self?.freeMemGB === 'number' ? { freeMemGB: self.freeMemGB, totalMemGB: self.totalMemGB, memoryUtilizationPercent: self.memoryUtilizationPercent } : {}),
+    };
+  }
+
+  // Harness state comes from the selected machine. Quota walls are this machine's receipts.
+  const inspected = remote ? await (options.inspectNodeFn || inspectNode)(options.node) : await (options.inspect || inspectAgents)({ env: process.env });
+  const codexLimits = remote ? null : readCodexRateLimits();
+  const walls = remote ? {} : { ...activeQuotaWalls(await readReceipts()), ...measuredWalls(codexLimits) };
+  const metered = METERED_HARNESSES;
+
+  const blocks = remote ? {} : activeCredentialBlocks(await readReceipts());
+  for (const agent of inspected.agents || []) {
+    const wall = walls[agent.id];
+    const block = blocks[agent.id];
+    const reason = exclusionReason(agent, wall, block);
+    let status = 'ready';
+    if (!agent.installed) status = 'not_installed';
+    else if (agent.authenticated === false || block) status = 'needs_auth';
+    else if (agent.blockedBy) status = 'blocked';
+    else if (wall) status = 'exhausted';
+    else if (agent.authenticated === 'unknown') status = 'unverified';
+    const quota = {
+      installed: Boolean(agent.installed), version: agent.version || null,
+      billingModel: agent.id === 'ollama' ? 'local' : metered.has(agent.id) ? 'metered' : 'subscription',
+      rolling5hUsedPercent: null, weeklyUsedPercent: null, usagePercent: null,
+      quotaSource: 'none', quotaNote: reason || 'No usage figure is available from this harness', status,
+      ...(wall ? { resetsAt: wall.until, wallMessage: wall.message } : {}),
+    };
+    if (agent.id === 'codex' && codexLimits) {
+      quota.rolling5hUsedPercent = codexLimits.primary?.used_percent ?? null;
+      quota.weeklyUsedPercent = codexLimits.secondary?.used_percent ?? null;
+      if (codexLimits.primary || codexLimits.secondary) quota.usagePercent = Math.max(quota.rolling5hUsedPercent ?? 0, quota.weeklyUsedPercent ?? 0);
+      quota.quotaSource = 'codex-session-log';
+      quota.observedAt = codexLimits.observedAt;
+      if (!reason) quota.quotaNote = `Measured in the Codex session log at ${codexLimits.observedAt}`;
+    }
+    quotas[agent.id] = quota;
+  }
+
+  const meteredQuota = options.skipMetered
+    ? { billingModel: 'metered', status: 'not-read', quotaNote: 'Not read: no metered harness is in this route pool' }
+    : await cachedMeteredQuota(options);
   quotas.metered = meteredQuota;
   if (meteredQuota.status === 'exhausted') for (const id of ['dsh', 'hermes', 'pi']) {
     if (quotas[id]?.installed && !['needs_auth', 'blocked'].includes(quotas[id].status)) Object.assign(quotas[id], { status: 'exhausted', quotaNote: `Bills OpenRouter. ${meteredQuota.quotaNote}` });
@@ -210,7 +256,17 @@ export async function routeTask(taskDescription, options = {}) {
   const remote = options.node && !isLocalExecutionNode(options.node);
   const inspected = remote ? (options.inspectNodeFn || inspectNode)(options.node) : null;
   const scoped = remote ? { ...options, inspectNodeFn: () => inspected, inspect: () => inspected } : options;
-  const [quotaReport, pool, receipts] = await Promise.all([inspectQuotas(scoped), resolvePool(scoped), readReceipts()]);
+  // One inspection serves the pool and the quota report. Read only what this decision uses:
+  // fleet telemetry places local work, and the balance matters only to a metered harness.
+  const shared = scoped.inspect ? null : inspectAgents({ env: process.env });
+  const lean = shared ? { ...scoped, inspect: () => shared } : scoped;
+  const [pool, receipts] = await Promise.all([resolvePool(lean), readReceipts()]);
+  const quotaReport = await inspectQuotas({
+    ...lean,
+    meteredTtlMs: METERED_TTL_MS,
+    skipMetered: lean.openRouterKey === undefined && !pool.ready.some(h => METERED_HARNESSES.has(h.id)),
+    ...(remote || lean.fleet ? {} : { fleet: complexity.tier === 'local' ? cachedFleet : () => ({ ok: false, error: 'Not read: this route places no local work', nodes: [] }) }),
+  });
   const quotas = quotaReport.quotas;
   const routing = selectOptimalHarness(taskDescription, pool.ready.map(h => h.id), quotas, { ...options, tierOverride: complexity.tier, empiricalScorecard: computeEmpiricalScorecard(receipts) });
   const selectedQuota = quotas[routing.selected] || {};

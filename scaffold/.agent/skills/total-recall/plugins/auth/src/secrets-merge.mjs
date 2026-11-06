@@ -10,7 +10,7 @@
  * app-specific name (`rename`). Values are never returned or logged.
  */
 import crypto from 'node:crypto';
-import { loadSecrets, saveSecrets, ensureMeta, appendAudit, META_KEY } from './secrets-gateway.mjs';
+import { loadSecrets, saveSecrets, ensureMeta, appendAuditAsync, META_KEY } from './secrets-gateway.mjs';
 import { mergeSecretMeta, normalizeReposBinding, normalizeTags } from './secrets-store.mjs';
 
 const KEY_PATTERN = /^[a-zA-Z][a-zA-Z0-9_.-]*$/;
@@ -123,7 +123,7 @@ export async function mergeStore(targetDir, sourceDir, opts = {}) {
   if (opts.apply) {
     await saveSecrets(targetDir, target);
     for (const row of [...report.imported, ...report.renamed, ...report.taken]) {
-      appendAudit(targetDir, { action: 'merge', key: row.key || row.to, from_key: row.from || null, actor: opts.actor || 'cli' });
+      await appendAuditAsync(targetDir, { action: 'merge', key: row.key || row.to, from_key: row.from || null, actor: opts.actor || 'cli' });
     }
     report.applied = true;
   }

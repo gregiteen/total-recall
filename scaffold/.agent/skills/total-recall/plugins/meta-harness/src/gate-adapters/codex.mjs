@@ -6,11 +6,18 @@ import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 
+import { hasGate, mergeGate, readJsonFile, readJsonQuietly, writeJsonFile } from './hook-files.mjs';
+
 const ACK_COMMAND = 'total-recall tr-preflight --ack --task "<task>" --action read,edit,test';
 
 export const codexAdapter = {
   id: 'codex',
   level: 'enforced',
+  warnings: {
+    delivery: 'documented',
+    via: 'hookSpecificOutput.additionalContext',
+    source: 'https://learn.chatgpt.com/docs/hooks.md',
+  },
   source: {
     url: 'https://learn.chatgpt.com/docs/hooks',
     retrieved: '2026-11-04',
@@ -37,9 +44,18 @@ export const codexAdapter = {
     } else if (toolName === 'apply_patch' || toolName === 'Edit' || toolName === 'Write') {
       tool = 'write';
       filePath = toolInput.path || toolInput.file_path || '';
-    } else if (toolName === 'read_file' || toolName === 'Read' || /^(Glob|Grep)$/.test(toolName)) {
+    } else if (toolName === 'read_file' || toolName === 'view_image' || toolName === 'Read' || /^(Glob|Grep)$/.test(toolName)) {
       tool = 'read';
       filePath = toolInput.path || toolInput.file_path || '';
+    } else if (toolName === 'spawn_agent' || toolName === 'Agent' || /^collaboration/.test(toolName)) {
+      // Real sessions report these with the dot removed, such as collaborationsend_message.
+      tool = 'agent';
+    } else if (/^mcp__/.test(toolName)) {
+      tool = 'mcp';
+    } else if (/^web/.test(toolName)) {
+      tool = 'web';
+    } else if (toolName === 'update_plan' || /^clock/.test(toolName)) {
+      tool = 'meta';
     }
 
     return {
@@ -54,6 +70,10 @@ export const codexAdapter = {
 
   emit(decision, event, cwd = process.cwd()) {
     if (decision?.decision === 'allow') {
+      if (decision.warning) {
+        const payload = { hookSpecificOutput: { hookEventName: 'PreToolUse', additionalContext: decision.warning } };
+        return { stdout: `${JSON.stringify(payload)}\n`, exitCode: 0 };
+      }
       return { stdout: '', exitCode: 0 };
     }
 
@@ -82,104 +102,26 @@ export const codexAdapter = {
   },
 
   install({ home = os.homedir(), dryRun = false, remove = false, off = false } = {}) {
-    const isRemove = remove || off;
-    const codexDir = path.join(home, '.codex');
-    const hooksPath = path.join(codexDir, 'hooks.json');
-    const legacyGate = path.join(codexDir, 'hooks', 'total-recall-gate.mjs');
-    const added = [];
-    const removed = [];
-
-    let hooksConfig = { hooks: {} };
-    if (fs.existsSync(hooksPath)) {
-      try {
-        hooksConfig = JSON.parse(fs.readFileSync(hooksPath, 'utf8') || '{}');
-      } catch (err) {
-        throw new Error(`${hooksPath} is not valid JSON; fix it before installing hooks: ${err.message}`);
-      }
-    }
-    hooksConfig.hooks = hooksConfig.hooks || {};
-    hooksConfig.hooks.PreToolUse = hooksConfig.hooks.PreToolUse || [];
-
-    if (isRemove) {
-      const beforeLen = hooksConfig.hooks.PreToolUse.length;
-      hooksConfig.hooks.PreToolUse = hooksConfig.hooks.PreToolUse.filter(e =>
-        !String(e.command || '').includes('preflight') && !String(e.command || '').includes('total-recall-gate')
-      );
-      if (hooksConfig.hooks.PreToolUse.length < beforeLen) {
-        removed.push('managed PreToolUse gate');
-      }
-      if (!dryRun && fs.existsSync(hooksPath)) {
-        fs.writeFileSync(hooksPath, `${JSON.stringify(hooksConfig, null, 2)}\n`);
-      }
-      return { settings: hooksPath, added: [], removed };
-    }
-
-    // Remove legacy unmanaged gate entries (F-011)
-    const beforeLen = hooksConfig.hooks.PreToolUse.length;
-    hooksConfig.hooks.PreToolUse = hooksConfig.hooks.PreToolUse.filter(e => {
-      const cmd = String(e.command || '');
-      return !cmd.includes('total-recall-gate.mjs');
-    });
-    if (hooksConfig.hooks.PreToolUse.length < beforeLen) {
-      removed.push('legacy hand-made gate hook');
-    }
-
-    const gateCommand = 'total-recall preflight gate --harness codex';
-    const hasPreTool = hooksConfig.hooks.PreToolUse.some(e =>
-      String(e.command || '').includes('preflight gate --harness codex')
-    );
-
-    if (!hasPreTool) {
-      hooksConfig.hooks.PreToolUse.push({
-        matcher: '*',
-        command: gateCommand,
-        timeout: 10
-      });
-      added.push('managed PreToolUse gate');
-    }
-
-    if (!dryRun && (added.length || removed.length)) {
-      fs.mkdirSync(codexDir, { recursive: true });
-      if (fs.existsSync(hooksPath)) {
-        fs.copyFileSync(hooksPath, `${hooksPath}.bak-total-recall`);
-      }
-      fs.writeFileSync(hooksPath, `${JSON.stringify(hooksConfig, null, 2)}\n`);
-    }
-
-    return { settings: hooksPath, added, removed };
+    const hooksPath = path.join(home, '.codex', 'hooks.json');
+    const config = readJsonFile(hooksPath, { hooks: {} });
+    config.hooks = config.hooks || {};
+    // A hand-made gate from an earlier release stays until this one is trusted in /hooks,
+    // because Codex skips a new hook until then.
+    const { groups, added, removed } = mergeGate(config.hooks.PreToolUse, 'codex', { remove: remove || off });
+    config.hooks.PreToolUse = groups;
+    if (!dryRun && (added.length || removed.length)) writeJsonFile(hooksPath, config);
+    return { settings: hooksPath, added, removed, note: this.limits[0] };
   },
 
   verify({ home = os.homedir() } = {}) {
-    const hooksPath = path.join(home, '.codex', 'hooks.json');
-    let installed = false;
-    if (fs.existsSync(hooksPath)) {
-      try {
-        const config = JSON.parse(fs.readFileSync(hooksPath, 'utf8') || '{}');
-        const preHooks = config.hooks?.PreToolUse || [];
-        installed = preHooks.some(e => String(e.command || '').includes('preflight gate --harness codex'));
-      } catch { /* unparseable */ }
-    }
-
-    const syntheticDeniedCall = {
-      hook_event_name: 'PreToolUse',
-      tool_name: 'exec_command',
-      tool_input: { cmd: 'rm -rf /tmp/foo' },
-      cwd: '/nonexistent-directory-without-receipt'
-    };
-
-    const out = this.emit(
-      { decision: 'deny', reason: 'receipt missing', fix: ACK_COMMAND },
-      'PreToolUse',
-      syntheticDeniedCall.cwd
-    );
-
-    const exercised = out.exitCode === 2 && (out.stdout.includes('"decision":"block"') || out.stdout.includes('"permissionDecision":"deny"'));
-
+    const installed = hasGate(readJsonQuietly(path.join(home, '.codex', 'hooks.json')).hooks?.PreToolUse, 'codex');
+    const out = this.emit({ decision: 'deny', reason: 'receipt missing', fix: ACK_COMMAND }, 'PreToolUse', '/nonexistent-directory-without-receipt');
     return {
       installed,
-      exercised,
-      level: 'enforced',
-      native: out.stdout.trim()
+      exercised: out.exitCode === 2 && out.stdout.includes('"permissionDecision":"deny"'),
+      level: this.level,
+      native: out.stdout.trim(),
+      note: 'Codex skips a new or changed hook until it is trusted in /hooks.'
     };
   }
 };

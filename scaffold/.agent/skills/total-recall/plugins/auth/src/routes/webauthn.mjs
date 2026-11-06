@@ -6,7 +6,7 @@ const { requireAuth, requireScope, mintStepUpToken, verifyDashboardPassword } = 
 const router = express.Router();
 
 function brainDir() {
-  return process.env.TR_SECRETS_BRAIN || BRAIN_DIR;
+  return BRAIN_DIR;
 }
 
 router.get('/api/webauthn/status', requireAuth, requireScope('keys:read', 'config:read'), (req, res) => {

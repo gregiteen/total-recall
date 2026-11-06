@@ -2,7 +2,7 @@
 /**
  * code-quality / report.mjs — read the last check report and pick the next work.
  *
- * This never runs a checker and never spawns anything. It reads
+ * This never runs a checker. It reads
  * reports/latest.json, tells you whether that report still describes your
  * working tree, and orders the remaining findings so you know what to fix next.
  *
@@ -13,7 +13,8 @@
  *   report.mjs file <pattern>  everything matching one path
  *   report.mjs count           totals per code and per check
  *   report.mjs raw <checkId>   raw tool output for one check
- *   report.mjs json            machine-readable view with honest status (feeds the UI)
+ *   report.mjs [json|--json]   machine-readable view with honest status (feeds the UI)
+ *   report.mjs --review-diagnostics [--json]  cached gate and finding details
  */
 
 import { readFileSync, existsSync, statSync } from 'node:fs';
@@ -21,6 +22,7 @@ import { execFileSync } from 'node:child_process';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { stateDir } from './state.mjs';
+import { printCachedReport, wantsStructuredReport } from './report-data.mjs';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -32,13 +34,9 @@ const CHECK_CMD = `node ${path.relative(process.cwd(), path.join(__dirname, 'che
 const [mode = 'worst', arg] = process.argv.slice(2);
 const MAX_SHOWN = 150;
 
-// `json` is the data feed for the plugin's report UI: the same report, with an
-// honest status, as machine-readable JSON. Exit 0 only when status is clean.
-if (mode === 'json') {
-  const { buildReportView } = await import('./report-data.mjs');
-  const view = buildReportView(REPORT_JSON);
-  console.log(JSON.stringify(view, null, 2));
-  process.exit(view.clean ? 0 : 1);
+// Flush machine output before exiting so piped JSON remains complete.
+if (wantsStructuredReport(process.argv.slice(2))) {
+  process.exit(await printCachedReport(process.argv.slice(2), REPORT_JSON));
 }
 
 if (!existsSync(REPORT_JSON)) {

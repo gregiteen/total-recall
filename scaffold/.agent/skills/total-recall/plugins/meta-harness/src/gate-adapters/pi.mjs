@@ -6,11 +6,41 @@ import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 
+import { removeDeadGateFile } from './hook-files.mjs';
+
 const ACK_COMMAND = 'total-recall tr-preflight --ack --task "<task>" --action read,edit,test';
+
+/**
+ * Pi loads extensions as modules, so the gate is a small one that asks Total Recall. Text
+ * after a tool_call cannot carry a warning, so it goes through pi.sendMessage. Anything that
+ * goes wrong blocks, as the gate does in every harness.
+ */
+export const PI_EXTENSION = `// Total Recall preflight gate. Written by \`total-recall preflight install\`.
+import { spawnSync } from 'node:child_process';
+
+export default function totalRecallGate(pi) {
+  pi.on('tool_call', async (event, ctx) => {
+    const input = JSON.stringify({ event: 'tool_call', toolName: event.toolName, input: event.input, cwd: ctx.cwd, sessionId: ctx.sessionManager?.getSessionId?.() });
+    const result = spawnSync('total-recall', ['preflight', 'gate', '--harness', 'pi'], { input, encoding: 'utf8', timeout: 10000 });
+    let answer = {};
+    try { answer = JSON.parse(result.stdout || '{}'); } catch { /* handled below */ }
+    if (result.status === 0 && !answer.block) {
+      if (answer.warning) pi.sendMessage({ customType: 'total-recall-note', content: answer.warning, display: true }, { deliverAs: 'steer' });
+      return undefined;
+    }
+    return { block: true, reason: answer.reason || result.stderr || 'The Total Recall gate could not run.' };
+  });
+}
+`;
 
 export const piAdapter = {
   id: 'pi',
   level: 'enforced (unverified live)',
+  warnings: {
+    delivery: 'documented',
+    via: 'pi.sendMessage, from the installed extension',
+    source: 'https://raw.githubusercontent.com/badlogic/pi-mono/main/packages/coding-agent/docs/extensions.md',
+  },
   source: {
     url: 'https://raw.githubusercontent.com/badlogic/pi-mono/main/packages/coding-agent/docs/extensions.md',
     retrieved: '2026-11-04',
@@ -31,13 +61,13 @@ export const piAdapter = {
     let command;
     let filePath;
 
-    if (toolName === 'execute' || toolName === 'Bash' || toolName === 'shell') {
+    if (toolName === 'bash' || toolName === 'execute' || toolName === 'Bash' || toolName === 'shell') {
       tool = 'shell';
       command = toolInput.command || toolInput.cmd || '';
     } else if (toolName === 'edit' || toolName === 'write' || toolName === 'patch') {
       tool = 'write';
       filePath = toolInput.path || toolInput.file || '';
-    } else if (toolName === 'read') {
+    } else if (/^(read|grep|find|ls)$/.test(toolName)) {
       tool = 'read';
       filePath = toolInput.path || toolInput.file || '';
     }
@@ -54,7 +84,7 @@ export const piAdapter = {
 
   emit(decision, event, cwd = process.cwd()) {
     if (decision?.decision === 'allow') {
-      const payload = { block: false };
+      const payload = decision.warning ? { block: false, warning: decision.warning } : { block: false };
       return { stdout: `${JSON.stringify(payload)}\n`, exitCode: 0 };
     }
 
@@ -78,49 +108,36 @@ export const piAdapter = {
     return this.emit(decision, parsed.event, parsed.cwd);
   },
 
-  install({ home = os.homedir(), dryRun = false } = {}) {
+  install({ home = os.homedir(), dryRun = false, remove = false, off = false } = {}) {
     const piDir = path.join(home, '.pi', 'agent', 'extensions');
-    const hookPath = path.join(piDir, 'total-recall-preflight.json');
+    const extensionPath = path.join(piDir, 'total-recall-preflight.ts');
+    const removed = removeDeadGateFile(path.join(piDir, 'total-recall-preflight.json'), 'pi', { dryRun });
     const added = [];
-
-    const hookDef = {
-      name: 'total-recall-preflight',
-      command: 'total-recall preflight gate --harness pi',
-      timeout: 5
-    };
-
-    if (!dryRun) {
-      fs.mkdirSync(piDir, { recursive: true });
-      fs.writeFileSync(hookPath, `${JSON.stringify(hookDef, null, 2)}\n`);
-      added.push('managed Pi extension gate');
+    if (remove || off) {
+      if (fs.existsSync(extensionPath)) {
+        if (!dryRun) fs.rmSync(extensionPath);
+        removed.push('managed tool_call extension');
+      }
+      return { settings: extensionPath, added, removed };
     }
-
-    return { settings: hookPath, added };
+    const current = fs.existsSync(extensionPath) ? fs.readFileSync(extensionPath, 'utf8') : null;
+    if (current !== PI_EXTENSION) {
+      if (!dryRun) {
+        fs.mkdirSync(piDir, { recursive: true });
+        fs.writeFileSync(extensionPath, PI_EXTENSION);
+      }
+      added.push('managed tool_call extension');
+    }
+    return { settings: extensionPath, added, removed };
   },
 
   verify({ home = os.homedir() } = {}) {
-    const hookPath = path.join(home, '.pi', 'agent', 'extensions', 'total-recall-preflight.json');
-    const installed = fs.existsSync(hookPath);
-
-    const syntheticDeniedCall = {
-      event: 'tool_call',
-      toolName: 'execute',
-      input: { command: 'rm -rf /tmp/foo' },
-      cwd: '/nonexistent-directory-without-receipt'
-    };
-
-    const out = this.emit(
-      { decision: 'deny', reason: 'receipt missing', fix: ACK_COMMAND },
-      'tool_call',
-      syntheticDeniedCall.cwd
-    );
-
-    const exercised = out.exitCode === 2 && out.stdout.includes('"block":true');
-
+    const installed = fs.existsSync(path.join(home, '.pi', 'agent', 'extensions', 'total-recall-preflight.ts'));
+    const out = this.emit({ decision: 'deny', reason: 'receipt missing', fix: ACK_COMMAND }, 'tool_call', '/nonexistent-directory-without-receipt');
     return {
       installed,
-      exercised,
-      level: 'enforced (unverified live)',
+      exercised: out.exitCode === 2 && out.stdout.includes('"block":true'),
+      level: this.level,
       native: out.stdout.trim()
     };
   }

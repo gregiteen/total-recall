@@ -1,9 +1,32 @@
 {
   "id": "meta-harness",
   "name": "Meta Harness",
-  "version": "0.3.0",
+  "version": "0.3.4",
   "description": "Discover, configure, document, track, and run coding agent harnesses through Total Recall across mesh nodes.",
+  "gate": {
+    "tasks": ["Run work in another agent harness", "Choose which harness takes a task", "Check harness versions, sign-in and quota", "Read a harness's official documentation"],
+    "router": {
+      "pattern": "(meta-harness|cli-agents)\\s+(route|coordinate|orchestrate|dispatch)",
+      "use": "total-recall meta-harness route \"<task>\" --json"
+    },
+    "owned_commands": [
+      { "pattern": "claude\\s+[^;&|]*(-p|--print)\\b", "use": "total-recall meta-harness route \"<task>\" --execute --json" },
+      { "pattern": "codex\\s+exec\\b", "use": "total-recall meta-harness route \"<task>\" --execute --json" },
+      { "pattern": "agy\\s+[^;&|]*(-p|--print)\\b", "use": "total-recall meta-harness route \"<task>\" --execute --json" },
+      { "pattern": "cursor-agent\\s", "use": "total-recall meta-harness route \"<task>\" --execute --json" },
+      { "pattern": "dsh\\s+[^;&|]*--profile\\s+headless\\b", "use": "total-recall meta-harness route \"<task>\" --execute --json" },
+      { "pattern": "grok\\s+[^;&|]*-p\\b", "use": "total-recall meta-harness route \"<task>\" --execute --json" },
+      { "pattern": "pi\\s+[^;&|]*--print\\b", "use": "total-recall meta-harness route \"<task>\" --execute --json" },
+      { "pattern": "hermes\\s+chat\\b", "use": "total-recall meta-harness route \"<task>\" --execute --json" },
+      { "pattern": "openclaw\\s+agent\\b", "use": "total-recall meta-harness route \"<task>\" --execute --json" },
+      { "pattern": "aider\\s+[^;&|]*--message\\b", "use": "total-recall meta-harness route \"<task>\" --execute --json" },
+      { "pattern": "goose\\s+run\\b", "use": "total-recall meta-harness route \"<task>\" --execute --json" },
+      { "pattern": "cline\\s+task\\b", "use": "total-recall meta-harness route \"<task>\" --execute --json" },
+      { "pattern": "muse\\s+exec\\b", "use": "total-recall meta-harness route \"<task>\" --execute --json" }
+    ]
+  },
   "cli": {
+    "answers_help": true,
     "command": "meta-harness",
     "alias": "cli-agents",
     "handler": "cli.mjs",
@@ -81,7 +104,7 @@
         "effect": "write",
         "output": "json",
         "args": [],
-        "timeout_ms": 120000
+        "timeout_ms": 600000
       },
       {
         "name": "docs-status",

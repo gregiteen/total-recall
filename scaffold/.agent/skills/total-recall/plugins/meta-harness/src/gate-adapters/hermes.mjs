@@ -6,11 +6,36 @@ import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 
+import { gateCommandWithPath, removeDeadGateFile } from './hook-files.mjs';
+
 const ACK_COMMAND = 'total-recall tr-preflight --ack --task "<task>" --action read,edit,test';
+
+const GATE = 'preflight gate --harness hermes';
+const ENTRY = (command) => `    - matcher: ".*"
+      command: "${command}"
+      timeout: 10
+      fail_closed: true
+`;
+const ENTRY_LINES = new RegExp(`    - matcher: ".*"\\n      command: "[^"\\n]*${GATE}"\\n      timeout: 10\\n      fail_closed: true\\n`);
+
+/** Hermes reads shell hooks from config.yaml, so the gate goes there, beside any others. */
+function withGate(text) {
+  const entry = ENTRY(gateCommandWithPath('hermes'));
+  if (/^  pre_tool_call:[ \t]*\n/m.test(text)) return text.replace(/^  pre_tool_call:[ \t]*\n/m, (line) => `${line}${entry}`);
+  if (/^hooks:[ \t]*\n/m.test(text)) return text.replace(/^hooks:[ \t]*\n/m, (line) => `${line}  pre_tool_call:\n${entry}`);
+  if (/^hooks:/m.test(text)) throw new Error('config.yaml sets hooks: on one line; expand it before installing the gate');
+  return `${text.replace(/\n*$/, text ? '\n' : '')}\nhooks:\n  pre_tool_call:\n${entry}`;
+}
 
 export const hermesAdapter = {
   id: 'hermes',
   level: 'enforced',
+  warnings: {
+    delivery: 'none',
+    via: null,
+    source: 'https://hermes-agent.nousresearch.com/docs/user-guide/features/hooks',
+    why: 'pre_tool_call has no text field that lets the tool run. pre_llm_call adds context for the next turn, and is a different hook.',
+  },
   source: {
     url: 'https://hermes-agent.nousresearch.com/docs/user-guide/features/hooks',
     retrieved: '2026-11-04',
@@ -34,12 +59,18 @@ export const hermesAdapter = {
     if (toolName === 'terminal' || toolName === 'Bash' || toolName === 'shell' || toolName === 'exec') {
       tool = 'shell';
       command = toolInput.command || toolInput.cmd || '';
-    } else if (toolName === 'write_file' || toolName === 'Edit' || toolName === 'Write') {
+    } else if (toolName === 'write_file' || toolName === 'patch' || toolName === 'Edit' || toolName === 'Write') {
       tool = 'write';
       filePath = toolInput.path || toolInput.file_path || '';
-    } else if (toolName === 'read_file' || toolName === 'Read') {
+    } else if (toolName === 'read_file' || toolName === 'search_files' || toolName === 'session_search' || toolName === 'Read') {
       tool = 'read';
       filePath = toolInput.path || toolInput.file_path || '';
+    } else if (toolName === 'delegate_task') {
+      tool = 'agent';
+    } else if (/^(web_search|web_extract|x_search)$/.test(toolName)) {
+      tool = 'web';
+    } else if (/^(clarify|todo)$/.test(toolName)) {
+      tool = 'meta';
     }
 
     return {
@@ -79,92 +110,37 @@ export const hermesAdapter = {
   },
 
   install({ home = os.homedir(), dryRun = false, remove = false, off = false } = {}) {
-    const isRemove = remove || off;
     const hermesDir = path.join(home, '.hermes');
-    const hooksPath = path.join(hermesDir, 'hooks.json');
+    const configPath = path.join(hermesDir, 'config.yaml');
+    const removed = removeDeadGateFile(path.join(hermesDir, 'hooks.json'), 'hermes', { dryRun });
     const added = [];
-    const removed = [];
-
-    let hooksConfig = { hooks: {} };
-    if (fs.existsSync(hooksPath)) {
-      try {
-        hooksConfig = JSON.parse(fs.readFileSync(hooksPath, 'utf8') || '{}');
-      } catch (err) {
-        throw new Error(`${hooksPath} is not valid JSON; fix it before installing hooks: ${err.message}`);
-      }
-    }
-    hooksConfig.hooks = hooksConfig.hooks || {};
-    hooksConfig.hooks.pre_tool_call = hooksConfig.hooks.pre_tool_call || [];
-
-    if (isRemove) {
-      const beforeLen = hooksConfig.hooks.pre_tool_call.length;
-      hooksConfig.hooks.pre_tool_call = hooksConfig.hooks.pre_tool_call.filter(e =>
-        !String(e.command || '').includes('preflight')
-      );
-      if (hooksConfig.hooks.pre_tool_call.length < beforeLen) {
+    const text = fs.existsSync(configPath) ? fs.readFileSync(configPath, 'utf8') : '';
+    const present = text.includes(GATE);
+    if (remove || off) {
+      if (present) {
+        if (!dryRun) fs.writeFileSync(configPath, text.replace(ENTRY_LINES, ''));
         removed.push('managed pre_tool_call gate');
       }
-      if (!dryRun && fs.existsSync(hooksPath)) {
-        fs.writeFileSync(hooksPath, `${JSON.stringify(hooksConfig, null, 2)}\n`);
-      }
-      return { settings: hooksPath, added: [], removed };
+      return { settings: configPath, added, removed };
     }
-
-    const gateCommand = 'total-recall preflight gate --harness hermes';
-    const hasPreTool = hooksConfig.hooks.pre_tool_call.some(e =>
-      String(e.command || '').includes('preflight gate --harness hermes')
-    );
-
-    if (!hasPreTool) {
-      hooksConfig.hooks.pre_tool_call.push({
-        matcher: '*',
-        command: gateCommand,
-        timeout: 10
-      });
+    if (!present) {
+      if (!dryRun) {
+        fs.mkdirSync(hermesDir, { recursive: true });
+        if (text) fs.copyFileSync(configPath, `${configPath}.bak-total-recall`);
+        fs.writeFileSync(configPath, withGate(text));
+      }
       added.push('managed pre_tool_call gate');
     }
-
-    if (!dryRun && added.length) {
-      fs.mkdirSync(hermesDir, { recursive: true });
-      if (fs.existsSync(hooksPath)) {
-        fs.copyFileSync(hooksPath, `${hooksPath}.bak-total-recall`);
-      }
-      fs.writeFileSync(hooksPath, `${JSON.stringify(hooksConfig, null, 2)}\n`);
-    }
-
-    return { settings: hooksPath, added };
+    return { settings: configPath, added, removed, note: 'Hermes asks to approve a new hook on first use, unless hooks_auto_accept is on.' };
   },
 
   verify({ home = os.homedir() } = {}) {
-    const hooksPath = path.join(home, '.hermes', 'hooks.json');
-    let installed = false;
-    if (fs.existsSync(hooksPath)) {
-      try {
-        const config = JSON.parse(fs.readFileSync(hooksPath, 'utf8') || '{}');
-        const preHooks = config.hooks?.pre_tool_call || [];
-        installed = preHooks.some(e => String(e.command || '').includes('preflight gate --harness hermes'));
-      } catch { /* unparseable */ }
-    }
-
-    const syntheticDeniedCall = {
-      event: 'pre_tool_call',
-      tool_name: 'terminal',
-      tool_input: { command: 'rm -rf /tmp/foo' },
-      cwd: '/nonexistent-directory-without-receipt'
-    };
-
-    const out = this.emit(
-      { decision: 'deny', reason: 'receipt missing', fix: ACK_COMMAND },
-      'pre_tool_call',
-      syntheticDeniedCall.cwd
-    );
-
-    const exercised = out.exitCode === 2 && out.stdout.includes('"action":"block"');
-
+    const installed = fs.existsSync(path.join(home, '.hermes', 'config.yaml')) && fs.readFileSync(path.join(home, '.hermes', 'config.yaml'), 'utf8').includes(GATE);
+    const out = this.emit({ decision: 'deny', reason: 'receipt missing', fix: ACK_COMMAND }, 'pre_tool_call', '/nonexistent-directory-without-receipt');
     return {
       installed,
-      exercised,
-      level: 'enforced',
+      exercised: out.exitCode === 2 && out.stdout.includes('"action":"block"'),
+      level: this.level,
       native: out.stdout.trim()
     };
   }

@@ -6,12 +6,31 @@ import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 
+import { hasGate, mergeGate, readJsonFile, readJsonQuietly, removeDeadGateFile, writeJsonFile } from './hook-files.mjs';
+
 const ACK_COMMAND = 'total-recall tr-preflight --ack --task "<task>" --action read,edit,test';
+
+/** Devin's documented tool names. Anything else counts as a working tool. */
+const TOOL_CLASSES = {
+  exec: 'shell', Bash: 'shell', shell: 'shell',
+  read: 'read', notebook_read: 'read', grep: 'read', glob: 'read', get_output: 'read',
+  write: 'write', edit: 'write', apply_patch: 'write', notebook_edit: 'write',
+  webfetch: 'web',
+  run_subagent: 'agent', read_subagent: 'agent',
+  todo_write: 'meta', exit_plan_mode: 'meta', skill: 'meta', request_scope: 'meta',
+  mcp_list_servers: 'meta', mcp_list_tools: 'meta', mcp_call_tool: 'mcp', mcp_read_resource: 'mcp',
+};
 
 export const devinAdapter = {
   id: 'devin',
   aliases: ['windsurf'],
   level: 'enforced (unverified live)',
+  warnings: {
+    delivery: 'none',
+    via: null,
+    source: 'https://docs.devin.ai/cli/extensibility/hooks/lifecycle-hooks',
+    why: 'additionalContext is documented only for UserPromptSubmit and SessionStart.',
+  },
   source: {
     url: 'https://docs.devin.ai/cli/extensibility/hooks/lifecycle-hooks',
     retrieved: '2026-11-04',
@@ -23,25 +42,17 @@ export const devinAdapter = {
   ],
 
   parse(input = {}) {
-    const event = input.event || input.hookEventName || 'PreToolUse';
+    const event = input.hook_event_name || input.event || input.hookEventName || 'PreToolUse';
     const toolName = input.tool || input.toolName || input.tool_name || '';
-    const toolInput = input.toolInput || input.input || {};
+    const toolInput = input.tool_input || input.toolInput || input.input || {};
     const cwd = input.cwd || process.cwd();
 
-    let tool = 'other';
+    const tool = /^mcp__/.test(toolName) ? 'mcp' : (TOOL_CLASSES[toolName] || 'other');
     let command;
     let filePath;
 
-    if (toolName === 'exec' || toolName === 'Bash' || toolName === 'shell') {
-      tool = 'shell';
-      command = toolInput.cmd || toolInput.command || '';
-    } else if (toolName === 'edit' || toolName === 'write') {
-      tool = 'write';
-      filePath = toolInput.path || toolInput.file || '';
-    } else if (toolName === 'read') {
-      tool = 'read';
-      filePath = toolInput.path || toolInput.file || '';
-    }
+    if (tool === 'shell') command = toolInput.cmd || toolInput.command || '';
+    else if (tool === 'write' || tool === 'read') filePath = toolInput.file_path || toolInput.path || toolInput.file || '';
 
     return {
       event,
@@ -78,77 +89,25 @@ export const devinAdapter = {
     return this.emit(decision, parsed.event, parsed.cwd);
   },
 
-  install({ home = os.homedir(), dryRun = false } = {}) {
+  install({ home = os.homedir(), dryRun = false, remove = false, off = false } = {}) {
     const devinDir = path.join(home, '.config', 'devin');
-    const hooksPath = path.join(devinDir, 'hooks.json');
-    const added = [];
-
-    let config = { hooks: {} };
-    if (fs.existsSync(hooksPath)) {
-      try {
-        config = JSON.parse(fs.readFileSync(hooksPath, 'utf8') || '{}');
-      } catch (err) {
-        throw new Error(`${hooksPath} is not valid JSON; fix it before installing hooks: ${err.message}`);
-      }
-    }
+    const configPath = path.join(devinDir, 'config.json');
+    const config = readJsonFile(configPath, {});
     config.hooks = config.hooks || {};
-    config.hooks.PreToolUse = config.hooks.PreToolUse || [];
-
-    const gateCommand = 'total-recall preflight gate --harness devin';
-    const hasHook = config.hooks.PreToolUse.some(e =>
-      String(e.command || '').includes('preflight gate --harness devin')
-    );
-
-    if (!hasHook) {
-      config.hooks.PreToolUse.push({
-        matcher: '*',
-        command: gateCommand,
-        timeout: 10
-      });
-      added.push('managed PreToolUse gate');
-    }
-
-    if (!dryRun && added.length) {
-      fs.mkdirSync(devinDir, { recursive: true });
-      if (fs.existsSync(hooksPath)) {
-        fs.copyFileSync(hooksPath, `${hooksPath}.bak-total-recall`);
-      }
-      fs.writeFileSync(hooksPath, `${JSON.stringify(config, null, 2)}\n`);
-    }
-
-    return { settings: hooksPath, added };
+    const { groups, added, removed } = mergeGate(config.hooks.PreToolUse, 'devin', { remove: remove || off });
+    config.hooks.PreToolUse = groups;
+    if (!dryRun && (added.length || removed.length)) writeJsonFile(configPath, config);
+    removed.push(...removeDeadGateFile(path.join(devinDir, 'hooks.json'), 'devin', { dryRun }));
+    return { settings: configPath, added, removed };
   },
 
   verify({ home = os.homedir() } = {}) {
-    const hooksPath = path.join(home, '.config', 'devin', 'hooks.json');
-    let installed = false;
-    if (fs.existsSync(hooksPath)) {
-      try {
-        const config = JSON.parse(fs.readFileSync(hooksPath, 'utf8') || '{}');
-        const preHooks = config.hooks?.PreToolUse || [];
-        installed = preHooks.some(e => String(e.command || '').includes('preflight gate --harness devin'));
-      } catch { /* unparseable */ }
-    }
-
-    const syntheticDeniedCall = {
-      event: 'PreToolUse',
-      tool: 'exec',
-      toolInput: { cmd: 'rm -rf /tmp/foo' },
-      cwd: '/nonexistent-directory-without-receipt'
-    };
-
-    const out = this.emit(
-      { decision: 'deny', reason: 'receipt missing', fix: ACK_COMMAND },
-      'PreToolUse',
-      syntheticDeniedCall.cwd
-    );
-
-    const exercised = out.exitCode === 2 && out.stdout.includes('"decision":"deny"');
-
+    const installed = hasGate(readJsonQuietly(path.join(home, '.config', 'devin', 'config.json')).hooks?.PreToolUse, 'devin');
+    const out = this.emit({ decision: 'deny', reason: 'receipt missing', fix: ACK_COMMAND }, 'PreToolUse', '/nonexistent-directory-without-receipt');
     return {
       installed,
-      exercised,
-      level: 'enforced (unverified live)',
+      exercised: out.exitCode === 2 && out.stdout.includes('"decision":"deny"'),
+      level: this.level,
       native: out.stdout.trim()
     };
   }

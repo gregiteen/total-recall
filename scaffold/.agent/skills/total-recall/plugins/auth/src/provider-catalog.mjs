@@ -28,6 +28,9 @@
  *       create: { method?: string, path: string, body?: (label: string) => object, value_path: string, id_path?: string },
  *       revoke?: { method?: string, path: (id: string, hash: string) => string },
  *     },
+ *     // A provider with no key-management API, where a token can still end itself. `probe_url`
+ *     // answers 401 for a dead token, which is the only accepted proof it was revoked.
+ *     self_revoke?: { url: string, param: string, probe_url: string },
  *   },
  *   default_monthly_cap_usd?: number | null,
  *   tiers?: { id: string, label: string, monthly_usd?: number | null }[],
@@ -230,6 +233,16 @@ export const PROVIDER_CATALOG = [
       auth: 'bearer',
       header: 'Authorization: Bearer <token>',
       env_keys: ['DIGITALOCEAN_API_TOKEN'],
+    },
+    // Tokens are minted in the console only. docs.digitalocean.com/reference/api/oauth documents the
+    // revoke endpoint for OAuth tokens and is silent on personal tokens, so every use proves its result.
+    rotation: {
+      class: 'provider_browser',
+      self_revoke: {
+        url: 'https://cloud.digitalocean.com/v1/oauth/revoke',
+        param: 'token',
+        probe_url: 'https://api.digitalocean.com/v2/account',
+      },
     },
     default_monthly_cap_usd: null,
     tiers: [{ id: 'payg', label: 'Pay as you go', monthly_usd: null }],

@@ -20,7 +20,7 @@ Fleet assessment requires the installed mesh plugin and an installed security pl
 
 Permission repair changes only recognized, locally owned SSH metadata and verifies results. Firewall rules, SSH daemon configuration and encryption changes are presented as remediation requiring preserved administrative access and rollback planning.
 
-Auth owns credentials. Machine audits need no security master key. For signing/encryption, store at least 32 bytes of random SECURITY_MASTER_KEY material through auth or `security token set --stdin`. Encryption accepts plaintext through `encrypt --stdin`; no passphrases or plaintext in argv. There are no embedded default keys or provider environment fallbacks. Explicit decryption emits plaintext and must be routed to the intended secure consumer, never an audit log.
+Auth owns credentials. Machine audits need no security master key. For signing/encryption, store at least 32 bytes of random SECURITY_MASTER_KEY material through auth or `security token set --stdin`. Encryption accepts plaintext through `encrypt --stdin`. Decryption displays plaintext only in an interactive terminal.
 
 Source scans report locations and rule IDs without matched secrets. Heuristic findings require source review; they are not proof of complete vulnerability coverage. Auth declarations alone do not establish runtime enforcement. Plugin audits never rewrite manifests to fabricate hardening.
 
@@ -50,18 +50,29 @@ The device command returns a guide with unverified checks. Submit observations u
 Official contracts: [Windows active firewall policy](https://learn.microsoft.com/en-us/powershell/module/netsecurity/get-netfirewallprofile), [BitLocker posture](https://learn.microsoft.com/en-us/powershell/module/bitlocker/get-bitlockervolume), [ADB authorization](https://developer.android.com/tools/adb), [Android boot state](https://source.android.com/docs/core/architecture/bootloader/locking_unlocking), [ChromeOS support expiration](https://support.google.com/chromebook/answer/9367166), [ChromeOS Flex differences](https://support.google.com/chrome/a/answer/11542901), [Apple personal safety](https://support.apple.com/guide/personal-safety/welcome/web).
 
 
-Scanner coverage now includes JavaScript/TypeScript, Python and shell/PowerShell source. Dynamic credential reads, synthetic provider/signing defaults and linked uninspected source produce redacted review findings. Coverage limits fail explicitly; source review does not establish runtime enforcement. `security --help` lists actual commands. Latest scanner/device suite: 28 tests passed on sanctioned node, exit 0. All-plugin audit remains failed while CRM credential paths are unresolved.
+Scanner coverage includes JavaScript, TypeScript, Python, shell and PowerShell source. Dynamic credential reads, synthetic signing defaults and uninspected links produce redacted review findings. Coverage limits produce an explicit review result. Run `security --help` for the available operations and see the owner tracker for dated suite and fleet evidence.
 
-## Use it two ways
+## Website and installation scope
 
-This plugin is a reusable brick, so a new project does not start from zero.
+Install the integration with `total-recall plugin install <git URL of this repository>`. `security site-audit https://your-site.example --json` grades the observed HTTPS response headers and exits nonzero when review is required. `security site-shield` emits a header-only Helmet snippet. The installed website module also exports `createSiteShield` for real server enforcement.
 
-**Add it to a project (for apps you build and ship).** From the project directory:
+Mount the middleware after trusted session/proxy resolution and before application routes. Configure the public `origin` and `getSessionId(req)` from the application's authenticated session. Use `getClientId(req)` only with a trusted proxy boundary and optional `getBotSignals(req)` for server-validated timing or a honeypot field. Send the token returned from authenticated `GET /_security/csrf` as `X-CSRF-Token` on writes. Public writes that receive a challenge can solve it and retry the same URL with `X-TR-Proof: salt:difficulty:expires:signature:nonce`. Challenge replay state and rate limits are process-local. Use a single process for this contract and verify session, TLS and proxy behavior in the consumer.
 
-```sh
-total-recall plugin vendor https://github.com/gregiteen/tr-plugin-security.git 
+`security plugins` reads the installed host registry and assesses source coverage and security declarations. [OWASP CSRF guidance](https://cheatsheetseries.owasp.org/cheatsheets/Cross-Site_Request_Forgery_Prevention_Cheat_Sheet.html), [Node HTTP](https://nodejs.org/api/http.html).
+
+The [Security project tracker](docs/projects/in-progress/SECURITY_CARD/SECURITY_CARD_PROJECT_TRACKER.md) records scanner coverage, runtime enforcement and card acceptance separately. The manifest does not declare a standalone application brick.
+
+## Using this from an agent
+
+Send security audits here: a machine, its network exposure, the mesh fleet, installed plugins, or a source folder. Only probe a website you are authorized to test. Firewall, SSH daemon and encryption changes stay manual unless the operator asks.
+
+```bash
+total-recall security machine --json
+total-recall security network --json
+total-recall security fleet --json
+total-recall security plugins --json
+total-recall security scan <source-directory> --json
+total-recall security harden --json
 ```
 
-This copies the plugin's source, skills, tests and docs into `bricks/security` and records it in `tr-bricks.json`. Your project then owns that code: edit it, test it in your own gates, and ship it with no runtime dependency on this plugin or on Total Recall. Combine as many bricks as the project needs. List them with `total-recall plugin bricks`.
-
-**Use it directly with Total Recall (for your own machines and workflow).** Install it with `total-recall plugin install https://github.com/gregiteen/tr-plugin-security.git` and run `total-recall security`. Manage its credentials with `total-recall auth secret` and its skills with `total-recall skill`.
+Raw commands this plugin owns: `nmap` and `lynis`.

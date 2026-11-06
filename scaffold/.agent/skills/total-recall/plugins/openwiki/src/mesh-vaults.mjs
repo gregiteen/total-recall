@@ -134,23 +134,39 @@ export function execOnMeshNode(nodeTarget, commandStr, { timeoutMs = 25000 } = {
 /**
  * Scans a directory for OpenWiki markdown hub files.
  */
-export function scanDirectoryHubs(targetDir, { label = '', repoName = '' } = {}) {
+export function scanDirectoryHubs(targetDir, { label = '', repoName = '', nested = false } = {}) {
   const hubs = [];
   if (!fs.existsSync(targetDir)) return hubs;
+  if (nested && fs.lstatSync(targetDir).isSymbolicLink()) return hubs;
 
-  try {
-    const entries = fs.readdirSync(targetDir, { withFileTypes: true });
+  const pending = [{ directory: targetDir, depth: 0 }];
+  let bytes = 0, scannedDirectories = 0;
+  while (pending.length && (!nested || (hubs.length < 256 && scannedDirectories < 256))) {
+    const { directory, depth } = pending.shift();
+    scannedDirectories++;
+    let entries;
+    try { entries = fs.readdirSync(directory, { withFileTypes: true }).sort((a, b) => a.name.localeCompare(b.name)); }
+    catch { continue; }
     for (const ent of entries) {
+      if (nested && hubs.length >= 256) break;
+      const fullPath = path.join(directory, ent.name);
+      if (nested && depth < 8 && ent.isDirectory() && !ent.name.startsWith('.')) {
+        pending.push({ directory: fullPath, depth: depth + 1 });
+      }
       if (ent.isFile() && ent.name.endsWith('.md')) {
-        const fullPath = path.join(targetDir, ent.name);
         try {
+          if (nested) {
+            const size = fs.statSync(fullPath).size;
+            if (size > 512 * 1024 || bytes + size > 4 * 1024 * 1024) continue;
+            bytes += size;
+          }
           const content = fs.readFileSync(fullPath, 'utf8');
           const titleMatch = content.match(/^#\s+(.+)$/m);
           const title = titleMatch ? titleMatch[1].trim() : ent.name.replace(/\.md$/, '');
           const lines = content.split('\n').length;
           hubs.push({
             title,
-            fileName: ent.name,
+            fileName: path.relative(targetDir, fullPath),
             path: fullPath,
             repoName: repoName || path.basename(path.dirname(targetDir)),
             sourceType: label || 'openwiki',
@@ -162,8 +178,6 @@ export function scanDirectoryHubs(targetDir, { label = '', repoName = '' } = {})
         }
       }
     }
-  } catch {
-    // directory read error
   }
 
   return hubs;
@@ -180,6 +194,7 @@ export async function discoverAllHubs({
   allVaults = false,
   node = null,
   cwd = process.cwd(),
+  nested = false,
 } = {}) {
   // If target is a remote mesh node, delegate through mesh
   if (node && node !== 'local' && node !== 'self') {
@@ -214,6 +229,7 @@ export async function discoverAllHubs({
   const localHubs = scanDirectoryHubs(localOpenWiki, {
     label: 'current-workspace',
     repoName: path.basename(cwd),
+    nested,
   });
   allHubs.push(...localHubs);
 

@@ -110,7 +110,7 @@ export async function spawnAgent(harness, task, options = {}, dependencies = {})
   const logFd = fs.openSync(logFile, 'ax', 0o600);
   updateAgentRecord(id, { harness, name: options.name || `${harness} Worker`, task, cwd, logFile,
     status: 'starting', startedAt: new Date().toISOString(), tools: normalizeToolSelection(options.tools) ?? 'default', detached: options.detach !== false });
-  const env = { ...agentEnvironment(process.env) };
+  const env = { ...agentEnvironment(process.env), TR_META_HARNESS_RUN: '1' };
   for (const key of ['AGENT_DIR', 'TR_SECRETS_BRAIN', 'TR_PACKAGE_ROOT', 'TOTAL_RECALL_BIN']) if (process.env[key]) env[key] = process.env[key];
   let child, completion;
   try {

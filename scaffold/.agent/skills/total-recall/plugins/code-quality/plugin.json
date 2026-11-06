@@ -2,20 +2,24 @@
   "$schema": "https://github.com/gregiteen/total-recall/blob/main/metadata.plugin.schema.json",
   "id": "code-quality",
   "name": "Code Quality Gates",
-  "version": "0.2.2",
+  "version": "0.2.4",
   "description": "Fail-closed deterministic code-quality gates, lint rules, and test compliance reporting.",
   "author": "Total Recall contributors",
   "license": "MIT",
   "use_cases": [
     "software-development"
   ],
+  "gate": {
+    "tasks": ["Run this repository's quality gates", "Read the latest gate report", "Set up or change a repository's gates"],
+    "owned_commands": []
+  },
   "cli": {
     "command": "code-quality",
     "handler": "./cli.mjs",
     "subcommands": [
       {
         "name": "report",
-        "description": "Print the latest gate report (views: worst, type, file, count, raw, json); never starts a check",
+        "description": "Read the latest gate report or --review-diagnostics, with --json for machine output. Never starts a check",
         "effect": "read"
       },
       {

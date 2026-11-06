@@ -90,7 +90,7 @@ export class EmbeddingsCard extends HTMLElement {
     if (!root) return;
 
     const cov = this.coverage;
-    const rawPct = cov?.percentage !== undefined ? Number(cov.percentage) : null;
+    const rawPct = cov?.percentage !== undefined ? Number(cov.percentage) : (cov?.percent !== undefined ? Number(cov.percent) : null);
     const pct = rawPct !== null && !isNaN(rawPct) ? Math.min(100, Math.max(0, Math.round(rawPct))) : null;
 
     // SVG arc stroke dash calculation
@@ -98,10 +98,11 @@ export class EmbeddingsCard extends HTMLElement {
     const circumference = 2 * Math.PI * radius;
     const offset = pct !== null ? circumference - (pct / 100) * circumference : circumference;
 
-    const embeddedNodes = cov?.embeddedNodes !== undefined ? cov.embeddedNodes : (cov?.embedded || DASH);
-    const totalNodes = cov?.totalNodes !== undefined ? cov.totalNodes : (cov?.total || DASH);
-    const activeModel = cov?.model || this.selectedModel;
-    const dimensions = cov?.dimensions || 768;
+    // Uncomputed counts arrive as null; render the fail-closed dash, not "null".
+    const embeddedNodes = cov?.embeddedNodes ?? cov?.embedded ?? DASH;
+    const totalNodes = cov?.totalNodes ?? cov?.vault_nodes ?? cov?.total ?? DASH;
+    const activeModel = cov?.model || cov?.selected_model || this.selectedModel;
+    const dimensions = cov?.dimensions || cov?.embedding_dims || 768;
 
     root.innerHTML = `
       <style>
@@ -407,9 +408,9 @@ export class EmbeddingsCard extends HTMLElement {
 
       <div class="header">
         <div class="brand-group">
-          <div class="wordmark-badge">[VECTOR//SPACE]</div>
+          <div class="wordmark-badge">EMBEDDINGS</div>
           <div class="title-meta">
-            <h3 class="plugin-title">Vector Space & Coverage</h3>
+            <h3 class="plugin-title">Embeddings</h3>
             <p class="plugin-subtitle">On-device semantic memory coverage and local model runner</p>
           </div>
         </div>

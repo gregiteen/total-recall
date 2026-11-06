@@ -3,7 +3,7 @@ import crypto from 'node:crypto';
 import { getLeaderInfo, isLeader } from './leader-election.mjs';
 import { logger } from './logger.mjs';
 import { brainDir } from './config.mjs';
-import { resolveSecretsPath, loadSecrets, saveSecrets, ensureMeta, appendAudit, META_KEY } from './secrets-store.mjs';
+import { resolveSecretsPath, loadSecrets, saveSecrets, ensureMeta, appendAuditAsync, META_KEY } from './secrets-store.mjs';
 import { projectGithubLogin } from './login-projections.mjs';
 
 const REQUEST_TIMEOUT_MS = 10_000;
@@ -89,7 +89,7 @@ export async function syncGrantedSecrets(leaderIp, { dir = brainDir, fetchImpl =
   secrets[META_KEY].mesh_granted = Object.keys(fetched);
   secrets[META_KEY].mesh_synced = [...new Set([...previouslySynced.filter((key) => key in fetched), ...created])];
   await saveSecrets(dir, secrets);
-  appendAudit(dir, { action: 'mesh_grant_sync', key: `(${keys.length} granted, ${removed.length} revoked)`, actor: 'mesh-sync' });
+  await appendAuditAsync(dir, { action: 'mesh_grant_sync', key: `(${keys.length} granted, ${removed.length} revoked)`, actor: 'mesh-sync' });
   return { granted: keys.length, updated, removed: removed.length };
 }
 
@@ -97,7 +97,7 @@ export async function syncGrantedSecrets(leaderIp, { dir = brainDir, fetchImpl =
 export async function projectLogins({ dir = brainDir, run } = {}) {
   const secrets = await loadSecrets(dir);
   const github = await projectGithubLogin({ token: secrets.github_token || secrets.GITHUB_TOKEN, run });
-  if (github.status === 'logged-in') appendAudit(dir, { action: 'login_projection', key: 'github_token -> gh', actor: 'mesh-sync' });
+  if (github.status === 'logged-in') await appendAuditAsync(dir, { action: 'login_projection', key: 'github_token -> gh', actor: 'mesh-sync' });
   if (github.status === 'failed') logger.error('secrets-sync', 'gh login from github_token failed', { error: github.error });
   return { github };
 }

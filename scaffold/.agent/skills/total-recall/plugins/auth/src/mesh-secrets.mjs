@@ -17,7 +17,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { identifyCaller, isKeyAllowed, allowedKeys, loadPolicy } from './mesh-identity.mjs';
-import { getSecret, appendAudit } from './secrets-store.mjs';
+import { getSecret, appendAuditAsync } from './secrets-store.mjs';
 
 export const SOFT_TTL_MS = 5 * 60_000;
 const KEY_FILE = 'mesh-cache.key';
@@ -45,11 +45,8 @@ export function expandRepoGrants(policy, rows) {
 }
 
 function audit(brainDir, event) {
-  try {
-    appendAudit(brainDir, event);
-  } catch {
-    // Auditing must never turn a refusal into a crash.
-  }
+  // Auditing must never turn a refusal into a crash.
+  appendAuditAsync(brainDir, event).catch(() => {});
 }
 
 /** Express middleware: attach `req.meshIdentity` or refuse. */

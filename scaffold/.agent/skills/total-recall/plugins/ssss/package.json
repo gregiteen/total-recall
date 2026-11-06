@@ -1,0 +1,25 @@
+{
+  "name": "tr-plugin-ssss",
+  "version": "0.1.1",
+  "private": true,
+  "type": "module",
+  "description": "Canonical SSSS distribution, scaffolding and validation for Total Recall installations.",
+  "files": [
+    "assets/",
+    "capability/",
+    "runtime/",
+    "ui/",
+    "scripts/",
+    "cli.mjs",
+    "plugin.json"
+  ],
+  "scripts": {
+    "test": "node scripts/refresh-scaffold.mjs --check && node --test test/*.test.mjs",
+    "scaffold:refresh": "node scripts/refresh-scaffold.mjs",
+    "check:ssss-conformance": "node cli.mjs conformance"
+  },
+  "dependencies": {
+    "@gregiteen/ssss-cli": "0.14.4"
+  },
+  "license": "MIT"
+}

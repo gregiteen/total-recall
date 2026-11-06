@@ -2,9 +2,10 @@
   "$schema": "https://github.com/gregiteen/total-recall/blob/main/metadata.plugin.schema.json",
   "id": "security",
   "name": "Security Assessments",
-  "version": "0.3.3",
+  "version": "0.3.5",
   "description": "Machine and device security assessments for macOS, Linux, Windows, Android, Chromebook, iPhone and iPad, with explicit measured and manual coverage.",
   "license": "MIT",
+  "requires": [{ "id": "auth", "range": ">=1.2.1" }],
   "branding": {
     "name": "Security Assessments",
     "color": "#f43f5e",
@@ -88,6 +89,13 @@
       "description": "Provider challenge verification credential; managed exclusively by auth"
     }
   ],
+  "gate": {
+    "tasks": ["Audit a machine, network or the fleet", "Scan installed plugins or a source folder", "Harden SSH permissions", "Audit or protect a website you are authorized to test"],
+    "owned_commands": [
+      { "pattern": "nmap\\s", "use": "total-recall security network --json" },
+      { "pattern": "lynis\\s", "use": "total-recall security machine --json" }
+    ]
+  },
   "cli": {
     "command": "security",
     "handler": "./cli.mjs",
@@ -167,8 +175,9 @@
       },
       {
         "name": "decrypt",
-        "description": "Decrypt AES-256-GCM envelope payload",
-        "effect": "read"
+        "description": "Decrypt an AES-256-GCM envelope and display plaintext in an interactive terminal",
+        "effect": "read",
+        "output": "text"
       },
       {
         "name": "probe",
@@ -197,8 +206,8 @@
       },
       {
         "name": "site-shield",
-        "description": "Generate application middleware for review; does not claim installation",
-        "effect": "write"
+        "description": "Print a security-header middleware snippet and identify its coverage",
+        "effect": "read"
       }
     ]
   },

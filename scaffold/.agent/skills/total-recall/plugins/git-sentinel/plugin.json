@@ -1,15 +1,26 @@
 {
   "$schema": "https://github.com/gregiteen/total-recall/blob/main/metadata.plugin.schema.json",
   "id": "git-sentinel",
-  "name": "Git Hygiene",
-  "version": "1.1.2",
+  "name": "Git Sentinel",
+  "version": "1.1.4",
   "description": "Worktree hygiene, branch inspection, unpushed commits, and stash tracker.",
   "author": "Total Recall",
   "license": "MIT",
   "use_cases": [
     "software-development"
   ],
+  "gate": {
+    "tasks": ["Check a repository's state before committing or pushing", "Review what changed in a working tree", "Read the commit identity"],
+    "owned_commands": [
+      { "pattern": "git(\\s+-C\\s+\\S+)?\\s+status\\b", "use": "total-recall git-sentinel audit" },
+      { "pattern": "git(\\s+-C\\s+\\S+)?\\s+stash\\s+list\\b", "use": "total-recall git-sentinel audit" },
+      { "pattern": "git(\\s+-C\\s+\\S+)?\\s+diff\\s+--stat\\b", "use": "total-recall git-sentinel diff" },
+      { "pattern": "git(\\s+-C\\s+\\S+)?\\s+config\\s+(--get\\s+)?user\\.(name|email)\\s*($|[;&|])", "use": "total-recall git-sentinel identity" },
+      { "pattern": "git(\\s+-C\\s+\\S+)?\\s+log\\b[^;&|]*%a[en]", "use": "total-recall git-sentinel identity" }
+    ]
+  },
   "cli": {
+    "answers_help": true,
     "command": "git-sentinel",
     "handler": "./cli.mjs",
     "subcommands": [
@@ -20,7 +31,27 @@
       },
       {
         "name": "diff",
-        "description": "Show a diffstat of unstaged changes",
+        "description": "Read a stat or patch for unstaged, staged or base-relative changes",
+        "effect": "read",
+        "args": [
+          { "name": "patch", "flag": "--patch", "type": "boolean", "label": "Show patch" },
+          { "name": "cached", "flag": "--cached", "type": "boolean", "label": "Use staged changes" },
+          { "name": "base", "flag": "--base", "type": "string", "label": "Base ref" }
+        ]
+      },
+      { "name": "worktree-list", "description": "Read registered worktrees for the current repository", "effect": "read" },
+      { "name": "worktree-create", "description": "Create a detached worktree at a specified path and base ref", "effect": "write", "args": [
+        { "name": "path", "type": "string", "label": "Worktree path", "required": true, "positional": true },
+        { "name": "base", "flag": "--base", "type": "string", "label": "Base ref" }
+      ] },
+      { "name": "worktree-remove", "description": "Remove an owned linked worktree, with explicit force for dirty content", "effect": "destructive", "args": [
+        { "name": "path", "type": "string", "label": "Worktree path", "required": true, "positional": true },
+        { "name": "force", "flag": "--force", "type": "boolean", "label": "Allow removal of dirty content" }
+      ] },
+      { "name": "worktree", "description": "Compatibility form: worktree list, create or remove", "effect": "destructive" },
+      {
+        "name": "identity",
+        "description": "Show who commits here and which identities the history publishes; exits 1 on a missing or machine-derived identity (--json for machine output)",
         "effect": "read"
       }
     ]

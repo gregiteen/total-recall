@@ -21,6 +21,7 @@ npx total-recall plugin install git-sentinel
 npx total-recall git-sentinel audit          # human summary
 npx total-recall git-sentinel audit --json   # machine output for agents
 npx total-recall git-sentinel diff           # diffstat of unstaged changes
+npx total-recall git-sentinel identity --json # current commit identity and local history audit
 ```
 
 ## Share with your other nodes
@@ -31,16 +32,22 @@ npx total-recall plugin share git-sentinel
 npx total-recall plugin install peer:<this-node>/git-sentinel
 ```
 
-## Use it two ways
+## Capability scope
 
-This plugin is a reusable brick, so a new project does not start from zero.
+The plugin runs against the Git worktree selected by the installed Total Recall CLI. Use `diff --patch`, `--cached` and `--base <ref>` for actual Git comparisons. Worktree listing is read-only, creation makes a detached worktree, and removal requires a registered linked worktree. Dirty removal requires `--force`. See the [Git Sentinel project tracker](docs/projects/in-progress/GIT_SENTINEL_CARD/GIT_SENTINEL_CARD_PROJECT_TRACKER.md).
 
-**Add it to a project (for apps you build and ship).** From the project directory:
+## Using this from an agent
 
-```sh
-total-recall plugin vendor https://github.com/gregiteen/tr-plugin-git-sentinel.git 
+Use the read operations for worktree state, changes, upstream comparison, stashes and commit identity. Worktree creation and removal have separate operation effects.
+
+```bash
+total-recall git-sentinel audit --json
+total-recall git-sentinel diff --json
+total-recall git-sentinel diff --patch --cached --json
+total-recall git-sentinel identity --json
+total-recall git-sentinel worktree-list --json
+total-recall git-sentinel worktree-create <path> --base <ref> --json
+total-recall git-sentinel worktree-remove <path> --json
 ```
 
-This copies the plugin's source, skills, tests and docs into `bricks/git-sentinel` and records it in `tr-bricks.json`. Your project then owns that code: edit it, test it in your own gates, and ship it with no runtime dependency on this plugin or on Total Recall. Combine as many bricks as the project needs. List them with `total-recall plugin bricks`.
-
-**Use it directly with Total Recall (for your own machines and workflow).** Install it with `total-recall plugin install https://github.com/gregiteen/tr-plugin-git-sentinel.git` and run `total-recall git-sentinel`. Manage its credentials with `total-recall auth secret` and its skills with `total-recall skill`.
+Raw commands this plugin owns: `git status`, `git stash list`, `git diff --stat`, `git config user.*` and author lookups through `git log`.

@@ -2,7 +2,7 @@
 
 Total Recall composable CLI plugin: create, compose, register, test and safely run custom verbs; every command listed in the instruction surfaces.
 
-## Status: v0.2.0 — Implementation in progress
+## Status — Implementation in progress
 
 See `docs/projects/in-progress/` for the audit, PRD, architecture, development plan and tracker.
 
@@ -49,25 +49,25 @@ node --test test/*.test.mjs
 
 Existing test files cover: CRUD operations, shadow detection, risk gate, native-only command validation, registry round-trip, history, composition contract, and scope resolution.
 
-## Readiness reconciliation — 2026-09-30
+## Current readiness
 
-[Canonical correction plan](docs/projects/in-progress/COMPOSABLE_CLI_PLUGIN/COMPOSABLE_CLI_PLUGIN_PROJECT_TRACKER.md). No fresh suite was run against this external repository HEAD during the documentation review. Run `npm test` and configured gates on the Mac mini in a bounded background job. The Total Recall central preview is unwired static UI and is not an operational demonstration of this plugin.
+The [Composable CLI tracker](docs/projects/in-progress/COMPOSABLE_CLI_CARD/COMPOSABLE_CLI_CARD_PROJECT_TRACKER.md) holds the current backend and card work. The earlier [extraction project](docs/projects/archived/COMPOSABLE_CLI_PLUGIN/COMPOSABLE_CLI_PLUGIN_PROJECT_TRACKER.md) is historical. The current rollback code recomputes the restored source digest. Test discovery, promotion registration, scope/effects and native state still require end-to-end verification.
 
-- **PIC-042:** src/registry.mjs rollback restores a code snapshot but its fm rewrite preserves the old code_sha256 (line 230); writes bypass the host SSSS operation path.
-- **PIC-043:** cli.mjs:256 test only prints a filename; promote at line 271 copies files without registering a plugin manifest command. Central ComposableCLIPreview.tsx:122 is a read-only terminal.
+## Install in Total Recall
 
-Durable capability state must use validated SSSS operations. Delivery requires a real clean-install command/UI walkthrough, explicit unavailable/error states and actual result provenance. Tests may use synthetic fixtures; shipped capability behavior may not.
+Install with `total-recall plugin install <git URL of this repository>`. The manifest declares Total Recall commands and does not declare an independent application brick.
 
-## Use it two ways
+`composable-cli test-path <name> --json` locates a test in the selected scope. `composable-cli test <name> --json` executes the test in a bounded Node subprocess and returns its exit status and output. Tests are executable code. `composable-cli promote <name> --to-plugin <dir>` registers a digest-matching inline read or write command in the target manifest. Gated commands require a destination integration that preserves their confirmation boundary.
 
-This plugin is a reusable brick, so a new project does not start from zero.
+## Using this from an agent
 
-**Add it to a project (for apps you build and ship).** From the project directory:
+Send work here when you repeat a sequence and it should become a command, or to list, test or roll back one that exists.
 
-```sh
-total-recall plugin vendor https://github.com/gregiteen/tr-plugin-composable-cli.git 
+```bash
+total-recall composable-cli library --json
+total-recall composable-cli create <name> "<code>"
+total-recall composable-cli test <name>
+total-recall composable-cli rollback <name>
 ```
 
-This copies the plugin's source, skills, tests and docs into `bricks/composable-cli` and records it in `tr-bricks.json`. Your project then owns that code: edit it, test it in your own gates, and ship it with no runtime dependency on this plugin or on Total Recall. Combine as many bricks as the project needs. List them with `total-recall plugin bricks`.
-
-**Use it directly with Total Recall (for your own machines and workflow).** Install it with `total-recall plugin install https://github.com/gregiteen/tr-plugin-composable-cli.git` and run `total-recall composable-cli`. Manage its credentials with `total-recall auth secret` and its skills with `total-recall skill`.
+This plugin owns no raw commands.

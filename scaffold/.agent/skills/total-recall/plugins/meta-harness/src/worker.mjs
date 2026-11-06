@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
+import { createInterface } from 'node:readline';
 
 /** These adapters can be told not to write. Any other runs read-only work only inside a disposable checkout. */
 export const READ_ONLY_ADAPTERS = ['codex', 'claude', 'agy', 'muse', 'pi'];
@@ -131,7 +132,7 @@ export function stopActiveProcesses(signal = 'SIGTERM') {
   return ACTIVE_GROUPS.size;
 }
 
-export function runProcess(binary, args, { cwd, input = '', timeoutMs = 300000, env = agentEnvironment(), maxBytes = 2 * 1024 * 1024 } = {}) {
+export function runProcess(binary, args, { cwd, input = '', timeoutMs = 300000, env = agentEnvironment(), maxBytes = 2 * 1024 * 1024, codexJsonl = false } = {}) {
   return new Promise(resolve => {
     let stdout = '', stderr = '', bytes = 0, reason = null, child, timer, escalation, settled = false;
     const kill = signal => { try { if (process.platform !== 'win32') process.kill(-child.pid, signal); else child.kill(signal); } catch {} };
@@ -153,11 +154,31 @@ export function runProcess(binary, args, { cwd, input = '', timeoutMs = 300000, 
     timer = setTimeout(() => stop('timeout'), timeoutMs);
     child.on('error', () => { reason = 'spawn-error'; finish(null); });
     child.stdin.on('error', () => {});
-    for (const [stream, output] of [[child.stdout, true], [child.stderr, false]]) stream.on('data', chunk => {
+    const collect = (chunk, output) => {
       const part = chunk.subarray(0, Math.max(0, maxBytes - bytes)).toString(); bytes += chunk.length;
       if (output) stdout += part; else stderr += part;
       if (bytes > maxBytes) stop('output-limit');
-    });
+    };
+    if (codexJsonl) {
+      let transportBytes = 0;
+      const lines = createInterface({ input: child.stdout, crlfDelay: Infinity });
+      child.stdout.prependListener('data', chunk => {
+        transportBytes += Buffer.byteLength(chunk);
+        if (transportBytes > 32 * 1024 * 1024) {
+          lines.close();
+          stop('output-limit');
+        }
+      });
+      lines.on('line', line => {
+        if (reason || !line.trim()) return;
+        let frame;
+        try { frame = JSON.parse(line); } catch { /* Keep malformed data so validation fails. */ }
+        if (typeof frame?.type === 'string' && frame.type.startsWith('item.') &&
+            frame.item?.type !== 'agent_message' && !frameError(frame)) return;
+        collect(Buffer.from(line + '\n'), true);
+      });
+    } else child.stdout.on('data', chunk => collect(chunk, true));
+    child.stderr.on('data', chunk => collect(chunk, false));
     child.on('close', finish); child.stdin.end(input);
   });
 }
@@ -221,6 +242,9 @@ export function parseAgentResult(id, result) {
   if (failed) return { ...agentFailure(frameError(failed) || frameReason(failed), stderr), ...metadata };
   if (result.exitCode !== 0) return agentFailure(null, stderr || `Agent process exited ${result.exitCode}`);
   if (!frames.length) return { ok: false, error: 'Agent returned no result', failureKind: 'agent' };
+  if (id === 'claude' && Array.isArray(last.permission_denials) && last.permission_denials.length) {
+    return { ok: false, failureKind: 'permission', error: `Claude denied ${last.permission_denials.length} tool call(s)`, ...metadata };
+  }
   let text;
   if (id === 'codex' && last.type === 'turn.completed') text = frames.filter(frame => frame.type === 'item.completed' && frame.item?.type === 'agent_message').map(frame => frame.item.text).join('\n');
   if (['claude', 'cursor', 'grok'].includes(id) && last.type === 'result' && last.subtype === 'success') text = last.result;
@@ -277,9 +301,9 @@ export async function totalRecallBootstrap(request, { probe = runProcess, env = 
 
 /** Authentication is `true` or `false` only when a real probe says so. Everything else stays 'unknown' until a run proves it. */
 export async function inspectAgents({ probe = runProcess, env = process.env, ids } = {}) {
-  const agents = [];
-  for (const adapter of getActiveAdapters()) {
-    if (ids && !ids.includes(adapter.id)) continue;
+  const selected = getActiveAdapters().filter(adapter => !ids || ids.includes(adapter.id));
+  // Probes run together: this is on the path of every route, and each harness answers on its own.
+  const agents = await Promise.all(selected.map(async adapter => {
     const binary = findBinary(adapter.binary, env);
     const item = { id: adapter.id, name: adapter.name, installed: Boolean(binary), authenticated: binary ? 'unknown' : false, executionVerified: false, docs: adapter.docs };
     if (binary) {
@@ -307,8 +331,8 @@ export async function inspectAgents({ probe = runProcess, env = process.env, ids
         item.authenticated = auth.reason ? 'unknown' : auth.exitCode === 0;
       }
     }
-    agents.push(item);
-  }
+    return item;
+  }));
   return { agents, evidence: 'Version and login probes only; actual execution requires a completed run' };
 }
 
@@ -346,7 +370,7 @@ export async function dispatchAgent(request, { probe = runProcess, env = process
     if (adapter.id === 'ollama') throw new Error('Select the local chat model through its configured runtime');
     args.push('--model', request.model);
   }
-  if (request.tools !== undefined || request.settingSources !== undefined) {
+  if (request.tools !== undefined || request.settingSources !== undefined || request.allowedTools !== undefined) {
     if (adapter.id !== 'claude') throw notReady(`${adapter.name} cannot enforce the requested tools/settings restriction`);
     const tools = request.tools;
     if (tools !== undefined) {
@@ -356,6 +380,15 @@ export async function dispatchAgent(request, { probe = runProcess, env = process
     if (request.settingSources !== undefined) {
       if (typeof request.settingSources !== 'string' || request.settingSources.split(',').some(source => !['', 'user', 'project', 'local'].includes(source))) throw new Error('Invalid setting sources');
       args.push('--setting-sources', request.settingSources);
+    }
+    if (request.allowedTools !== undefined) {
+      const allowed = request.allowedTools;
+      if (request.permissions?.write !== true || !Array.isArray(allowed) || !allowed.length || allowed.length > 32 ||
+          allowed.some(rule => typeof rule !== 'string' || rule.length > 512 ||
+            !/^(?:Read|Glob|Grep|Bash\([\w./-]+(?: [^(),\r\n]*)?\))$/.test(rule))) {
+        throw new Error('Claude allowedTools requires explicit write permission and scoped tool rules');
+      }
+      args.push('--allowedTools', allowed.join(','));
     }
   }
   const allowWrites = request.permissions?.write === true;
@@ -371,7 +404,7 @@ export async function dispatchAgent(request, { probe = runProcess, env = process
     if (adapter.input === 'file') args.push('--prompt-file', file);
     else args.push(`Read ${file} completely before taking action. It contains the required Total Recall task context, CLI reference location, official documentation location and the requested task. Carry out that task using the supplied context.`);
   }
-  const execution = await probe(binary, args, { cwd: request.cwd, input, timeoutMs: request.timeoutMs || 900000, env: { ...agentEnvironment(env), ...credentials } });
+  const execution = await probe(binary, args, { cwd: request.cwd, input, timeoutMs: request.timeoutMs || 900000, codexJsonl: adapter.id === 'codex', env: { ...agentEnvironment(env), ...credentials, TR_META_HARNESS_RUN: '1' } });
   const parsed = parseAgentResult(adapter.id, execution);
   const frames = parsed.events || [];
   return { agent: adapter.id, ...parsed, exitCode: execution.exitCode ?? null,

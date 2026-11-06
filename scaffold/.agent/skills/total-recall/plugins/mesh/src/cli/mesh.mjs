@@ -53,7 +53,7 @@ function printHelp() {
     ssh <node> [cmd…]      Open a session using the node's recorded access
     exec <node> <cmd…>     Execute a command on a node non-interactively (--json)
     leader [--json]        Show the elected leader and its server port
-    leader pin <ip> [--port <n>]
+    leader-pin <ip> [--port <n>] [--json]
                            Pin the leader node and the port its server answers on
     access <node>          Show resolved access for a node
     access <node> --user <u> [--port <n>] [--host <h>] [--identity <path>]
@@ -71,7 +71,7 @@ function printHelp() {
                              --status   show current enrollment state
                              --server   control-server URL
                              --force    re-enroll even if already connected
-    preauthkey             Mint an enrollment key for 'tailscale up --authkey'
+    preauthkey             Mint an enrollment key in an interactive terminal
                              --reusable   usable by more than one node
                              --ephemeral  node is removed when it goes offline
     policy get             Show the current ACL policy
@@ -110,9 +110,12 @@ function printHelp() {
 `);
 }
 
-function fail(message, hint) {
-  console.error(`❌ ${message}`);
-  if (hint) console.error(`   ${hint}`);
+function fail(message, hint, json = false) {
+  if (json) console.log(JSON.stringify({ ok: false, error: message, ...(hint ? { hint } : {}) }));
+  else {
+    console.error(`❌ ${message}`);
+    if (hint) console.error(`   ${hint}`);
+  }
   process.exitCode = 1;
 }
 
@@ -588,6 +591,10 @@ export default async function meshCli(argv = []) {
     // copy-pasteable command, which matters most on a machine you are standing
     // in front of precisely because you cannot reach it yet.
     if (command === 'preauthkey') {
+      if (args.includes('--json') || !process.stdout.isTTY) {
+        fail('Enrollment keys can only be issued to an interactive terminal.', undefined, args.includes('--json'));
+        return;
+      }
       const reusable = args.includes('--reusable');
       const ephemeral = args.includes('--ephemeral');
       const { key, expiration } = await createHeadscalePreAuthKey(
@@ -599,20 +606,30 @@ export default async function meshCli(argv = []) {
       return;
     }
 
-    if (command === 'leader') {
-      const { getLeaderInfo, isLeader, setLeaderPin } = await import('../core/leader-election.mjs');
-      if (args[0] === 'pin') {
-        const ip = args[1];
-        const portIndex = args.indexOf('--port');
-        const port = portIndex >= 0 ? args[portIndex + 1] : undefined;
-        if (!ip || ip.startsWith('-')) {
-          fail('Usage: total-recall mesh leader pin <mesh-ip> [--port <leader server port>]');
-          return;
-        }
-        const pinned = setLeaderPin({ ip, port });
-        console.log(`Leader pinned to ${pinned.leaderIp}${pinned.leaderPort ? `:${pinned.leaderPort}` : ''} in ${pinned.file}`);
+    if (command === 'leader-pin') {
+      const json = args.includes('--json');
+      const [ip, flag, port, ...extra] = args.filter(arg => arg !== '--json');
+      if (!ip || ip.startsWith('-') || (flag !== undefined && (flag !== '--port' || !port)) || extra.length) {
+        fail('Usage: total-recall mesh leader-pin <mesh-ip> [--port <leader server port>]', undefined, json);
         return;
       }
+      const { setLeaderPin } = await import('../core/leader-election.mjs');
+      try {
+        const pinned = setLeaderPin({ ip, port });
+        if (json) console.log(JSON.stringify({ ok: true, leaderIp: pinned.leaderIp, leaderPort: pinned.leaderPort ?? null }));
+        else console.log(`Leader pinned to ${pinned.leaderIp}${pinned.leaderPort ? `:${pinned.leaderPort}` : ''} in ${pinned.file}`);
+      } catch (error) {
+        fail(error.message, undefined, json);
+      }
+      return;
+    }
+
+    if (command === 'leader') {
+      if (args.some(arg => arg !== '--json')) {
+        fail('Leader status accepts only --json. To change the pin, use mesh leader-pin.', undefined, args.includes('--json'));
+        return;
+      }
+      const { getLeaderInfo, isLeader } = await import('../core/leader-election.mjs');
       const leaderInfo = await getLeaderInfo();
       const thisIsLeader = await isLeader();
       if (args.includes('--json')) {

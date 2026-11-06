@@ -20,7 +20,7 @@
  */
 
 import { throttledFetch } from './throttled-fetch.mjs';
-import { getSecret, listSecretsMeta, updateSecretMeta, recordUsage } from './secrets-store.mjs';
+import { getSecret, listSecretsMeta, updateSecretMeta, recordUsageAsync } from './secrets-store.mjs';
 import { logger } from './logger.mjs';
 import { providerForKeyName } from './provider-catalog.mjs';
 
@@ -1003,7 +1003,7 @@ export async function syncSecretAccount(brainDir, key, opts = {}) {
     try {
       const cost = Number(result.usage.credits_used_daily || 0);
       if (cost > 0) {
-        recordUsage(brainDir, {
+        await recordUsageAsync(brainDir, {
           key_ref: key,
           provider: result.provider,
           cost_usd: cost,

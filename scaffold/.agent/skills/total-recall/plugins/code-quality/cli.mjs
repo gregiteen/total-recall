@@ -16,6 +16,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { CORE_DIR, findSkillDir, runCore } from './commands/run-core.mjs';
+import { printCachedReport, wantsStructuredReport } from './core/report-data.mjs';
 
 const SHORTHAND = new Set(['get', 'set', 'unset', 'validate', 'schema', 'rebuild', 'import', 'check']);
 
@@ -57,6 +58,14 @@ export async function run(argv = []) {
 
   if (verb === 'report') {
     try {
+      if (rest.includes('--help') || rest.includes('-h')) {
+        console.log('Usage: total-recall code-quality report [worst|type|file|count|raw|json|--json|--review-diagnostics [--json]]');
+        return;
+      }
+      if (wantsStructuredReport(rest)) {
+        process.exitCode = (await printCachedReport(rest, path.join(findSkillDir(), 'reports', 'latest.json'))) || undefined;
+        return;
+      }
       const { exitCode } = runCore('report.mjs', rest);
       if (exitCode) process.exitCode = exitCode;
     } catch (err) {

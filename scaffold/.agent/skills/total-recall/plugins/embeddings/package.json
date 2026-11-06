@@ -1,6 +1,6 @@
 {
   "name": "tr-plugin-embeddings",
-  "version": "0.1.0",
+  "version": "0.1.2",
   "type": "module",
   "description": "Local embedding model management: provider/model status, benchmark, index build and coverage",
   "scripts": {

@@ -14,7 +14,7 @@ import { spawnSync } from 'node:child_process';
 import { encryptSecrets, decryptSecrets, encryptSecretsSync, decryptSecretsSync } from './crypto.mjs';
 import { DEFAULT_KEYCHAIN_SERVICE, readKeychainPassword } from './secrets-keychain.mjs';
 import { writeFileSecure, appendFileSecure } from './secure-file.mjs';
-import { appendAuthMetadata } from './metadata-state.mjs';
+import { appendAuthMetadata, appendAuthMetadataAsync } from './metadata-state.mjs';
 
 export const META_KEY = '__tr_secrets_meta';
 
@@ -238,7 +238,7 @@ export async function replaceSecretsBufferAtomic(brainDir, buffer, { actor = 'me
   fs.mkdirSync(path.dirname(filePath), { recursive: true });
   if (onlyIfMissing) {
     installMissingSecretsBuffer(filePath, buffer);
-    appendAudit(brainDir, { action, key: '(encrypted-store)', actor });
+    await appendAuditAsync(brainDir, { action, key: '(encrypted-store)', actor });
     return { success: true, path: filePath };
   }
   const tempPath = `${filePath}.${process.pid}.${crypto.randomUUID()}.tmp`;
@@ -249,7 +249,7 @@ export async function replaceSecretsBufferAtomic(brainDir, buffer, { actor = 'me
   } finally {
     if (fs.existsSync(tempPath)) fs.rmSync(tempPath, { force: true });
   }
-  appendAudit(brainDir, { action, key: '(encrypted-store)', actor });
+  await appendAuditAsync(brainDir, { action, key: '(encrypted-store)', actor });
   return { success: true, path: filePath };
 }
 
@@ -270,4 +270,11 @@ export function appendAudit(brainDir, event) {
     // never include values
   };
   appendAuthMetadata(auditPath, row);
+}
+
+/** appendAudit for async callers: it never blocks the server's event loop. */
+export async function appendAuditAsync(brainDir, event) {
+  const auditPath = resolveAuditPath(brainDir);
+  fs.mkdirSync(path.dirname(auditPath), { recursive: true });
+  await appendAuthMetadataAsync(auditPath, { ts: new Date().toISOString(), ...event });
 }

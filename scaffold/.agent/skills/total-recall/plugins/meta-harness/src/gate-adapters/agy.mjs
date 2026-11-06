@@ -6,12 +6,21 @@ import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 
+import { hasGate, mergeGate, readJsonFile, readJsonQuietly, writeJsonFile } from './hook-files.mjs';
+
 const ACK_COMMAND = 'total-recall tr-preflight --ack --task "<task>" --action read,edit,test';
+
+const HOOK_NAME = 'total-recall-preflight';
 
 export const agyAdapter = {
   id: 'agy',
   aliases: ['antigravity'],
   level: 'enforced',
+  warnings: {
+    delivery: 'documented',
+    via: 'reason',
+    source: 'agy-customizations/docs/hooks.md, bundled with the CLI',
+  },
   source: {
     url: 'https://antigravity.google/docs/hooks?tab=cli',
     retrieved: '2026-11-04',
@@ -40,7 +49,7 @@ export const agyAdapter = {
     if (name === 'run_command' || name === 'Bash') {
       tool = 'shell';
       command = args.CommandLine || args.command || '';
-    } else if (name === 'read_file' || /^(Read|Glob|Grep)$/.test(name)) {
+    } else if (name === 'read_file' || name === 'view_file' || /^(Read|Glob|Grep)$/.test(name)) {
       tool = 'read';
       filePath = args.Path || args.file_path || args.path || '';
     } else if (name === 'write_file' || name === 'edit_file' || /^(Edit|Write)$/.test(name)) {
@@ -66,7 +75,11 @@ export const agyAdapter = {
 
   emit(decision, event, cwd = process.cwd()) {
     if (decision?.decision === 'allow') {
-      const payload = { decision: 'allow' };
+      // `allow` means automatic approval here, and the gate must not approve commands or edits.
+      // `ask` leaves the user's normal prompt and "Always Allow" choices in charge. A run Meta
+      // Harness started has already chosen its permission mode, and reads need no approval.
+      const answer = process.env.TR_META_HARNESS_RUN || decision.readOnly ? 'allow' : 'ask';
+      const payload = decision.warning ? { decision: answer, reason: decision.warning } : { decision: answer };
       return { stdout: `${JSON.stringify(payload)}\n`, exitCode: 0 };
     }
 
@@ -87,98 +100,37 @@ export const agyAdapter = {
       path: parsed.path,
       cwd: parsed.cwd
     });
-    return this.emit(decision, parsed.event, parsed.cwd);
+    return this.emit({ ...decision, readOnly: ['read', 'search', 'web', 'meta', 'ui', 'agent'].includes(parsed.tool) }, parsed.event, parsed.cwd);
   },
 
   install({ home = os.homedir(), dryRun = false, remove = false, off = false } = {}) {
-    const isRemove = remove || off;
-    const geminiDir = path.join(home, '.gemini', 'config');
-    const hooksPath = path.join(geminiDir, 'hooks.json');
-    const added = [];
-    const removed = [];
-
-    let config = { hooks: {} };
-    if (fs.existsSync(hooksPath)) {
-      try {
-        config = JSON.parse(fs.readFileSync(hooksPath, 'utf8') || '{}');
-      } catch (err) {
-        throw new Error(`${hooksPath} is not valid JSON; fix it before installing hooks: ${err.message}`);
-      }
+    const hooksPath = path.join(home, '.gemini', 'config', 'hooks.json');
+    const config = readJsonFile(hooksPath, {});
+    // Top-level keys are hook names. Earlier installs wrote a hook called "hooks" with entries
+    // Antigravity skips.
+    const stale = mergeGate(config.hooks?.PreToolUse, 'agy', { remove: true });
+    const removed = stale.removed;
+    if (config.hooks) {
+      config.hooks.PreToolUse = stale.groups;
+      if (!config.hooks.PreToolUse.length) delete config.hooks.PreToolUse;
+      if (!Object.keys(config.hooks).length) delete config.hooks;
     }
-    config.hooks = config.hooks || {};
-    config.hooks.PreToolUse = config.hooks.PreToolUse || [];
-
-    if (isRemove) {
-      const beforeLen = config.hooks.PreToolUse.length;
-      config.hooks.PreToolUse = config.hooks.PreToolUse.filter(e =>
-        !String(e.command || '').includes('preflight')
-      );
-      if (config.hooks.PreToolUse.length < beforeLen) {
-        removed.push('managed PreToolUse gate');
-      }
-      if (!dryRun && fs.existsSync(hooksPath)) {
-        fs.writeFileSync(hooksPath, `${JSON.stringify(config, null, 2)}\n`);
-      }
-      return { settings: hooksPath, added: [], removed };
-    }
-
-    const gateCommand = 'total-recall preflight gate --harness agy';
-    const hasPreTool = config.hooks.PreToolUse.some(e =>
-      String(e.command || '').includes('preflight gate --harness agy')
-    );
-
-    if (!hasPreTool) {
-      config.hooks.PreToolUse.push({
-        matcher: '*',
-        command: gateCommand,
-        timeout: 10
-      });
-      added.push('managed PreToolUse gate');
-    }
-
-    if (!dryRun && added.length) {
-      fs.mkdirSync(geminiDir, { recursive: true });
-      if (fs.existsSync(hooksPath)) {
-        fs.copyFileSync(hooksPath, `${hooksPath}.bak-total-recall`);
-      }
-      fs.writeFileSync(hooksPath, `${JSON.stringify(config, null, 2)}\n`);
-    }
-
-    return { settings: hooksPath, added };
+    const current = config[HOOK_NAME]?.PreToolUse;
+    const { groups, added, removed: gone } = mergeGate(current, 'agy', { remove: remove || off });
+    removed.push(...gone);
+    if (groups.length) config[HOOK_NAME] = { ...(config[HOOK_NAME] || {}), PreToolUse: groups };
+    else delete config[HOOK_NAME];
+    if (!dryRun && (added.length || removed.length)) writeJsonFile(hooksPath, config);
+    return { settings: hooksPath, added, removed };
   },
 
   verify({ home = os.homedir() } = {}) {
-    const hooksPath = path.join(home, '.gemini', 'config', 'hooks.json');
-    let installed = false;
-    if (fs.existsSync(hooksPath)) {
-      try {
-        const config = JSON.parse(fs.readFileSync(hooksPath, 'utf8') || '{}');
-        const preHooks = config.hooks?.PreToolUse || [];
-        installed = preHooks.some(e => String(e.command || '').includes('preflight gate --harness agy'));
-      } catch { /* unparseable */ }
-    }
-
-    const syntheticDeniedCall = {
-      event: 'PreToolUse',
-      toolCall: {
-        name: 'run_command',
-        args: { CommandLine: 'rm -rf /tmp/foo' }
-      },
-      cwd: '/nonexistent-directory-without-receipt'
-    };
-
-    const out = this.emit(
-      { decision: 'deny', reason: 'receipt missing', fix: ACK_COMMAND },
-      'PreToolUse',
-      syntheticDeniedCall.cwd
-    );
-
-    const exercised = out.exitCode === 2 && out.stdout.includes('"decision":"deny"');
-
+    const installed = hasGate(readJsonQuietly(path.join(home, '.gemini', 'config', 'hooks.json'))[HOOK_NAME]?.PreToolUse, 'agy');
+    const out = this.emit({ decision: 'deny', reason: 'receipt missing', fix: ACK_COMMAND }, 'PreToolUse', '/nonexistent-directory-without-receipt');
     return {
       installed,
-      exercised,
-      level: 'enforced',
+      exercised: out.exitCode === 2 && out.stdout.includes('"decision":"deny"'),
+      level: this.level,
       native: out.stdout.trim()
     };
   }

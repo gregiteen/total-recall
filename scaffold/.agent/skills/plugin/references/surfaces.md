@@ -14,7 +14,7 @@ Every surface a plugin can declare, with the exact fields for each.
   "name": "Host Telemetry",
   "version": "1.0.0",
   "description": "One concrete sentence saying what this adds.",
-  "author": "Greg",
+  "author": "Your Name",
   "license": "MIT",
   "use_cases": ["operations", "self-hosting"]
 }
@@ -173,6 +173,31 @@ Keys are camelCase and may not contain `password`, `secret`, `apiKey` or `token`
 ```
 
 `command` must be a declared `read` subcommand. `refresh_seconds` is 5–86400.
+
+## Gate — how work reaches your plugin
+
+Every plugin declares this, even one with nothing to claim. Write it by hand from what your plugin actually does.
+
+```json
+"gate": {
+  "tasks": ["Run a command on another machine", "Enroll a machine in the mesh"],
+  "owned_commands": [
+    { "pattern": "ssh\\s", "use": "total-recall mesh exec <node> \"<command>\"" }
+  ]
+}
+```
+
+`tasks` are short phrases for the work that belongs here. Agents read them in the instruction table.
+
+`owned_commands` lists raw shell commands your plugin replaces. Use `[]` if it replaces none, which is common. `pattern` is a regular expression matched at the start of a shell command, and text in quotes or a heredoc never matches. `use` is a real command in your CLI, starting with `total-recall <your namespace>`. Before blocking, the gate runs your `--help` if `cli.answers_help` is set, or otherwise the read-only command named by `status.command`. A plugin with neither is never blocked on.
+
+Add a README section named `## Using this from an agent` that says what to send here, which commands to run, and what your plugin owns. `total-recall preflight coverage` lists any plugin that is missing these.
+
+The gate warns by default. See `docs/guides/preflight-gate.md`.
+
+`--help` never runs your plugin by default: core answers from your manifest, so keep each subcommand's `description`, `args` and `effect` accurate. If every command in your plugin answers `--help` itself and does no work, set `cli.answers_help` to `true`, and prove it with `node scripts/audit-help.mjs`.
+
+A default plugin reaches existing installs only when its version goes up, so raise `version` in `plugin.json` and `package.json` with every change. `npm run check:plugin-versions` fails a release that forgets.
 
 ## Branding
 

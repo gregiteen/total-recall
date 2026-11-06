@@ -1,0 +1,9 @@
+{
+  "id": "total-recall-gate",
+  "name": "Total Recall Gate",
+  "description": "Asks Total Recall whether each tool call may run.",
+  "categories": ["other"],
+  "activation": { "onStartup": true },
+  "contracts": { "agentToolResultMiddleware": ["openclaw", "codex", "agentsapi"] },
+  "configSchema": { "type": "object", "additionalProperties": false }
+}

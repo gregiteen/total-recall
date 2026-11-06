@@ -20,11 +20,16 @@ export function createGoogleOAuth({ brainDir, load = loadSecretsSync, save = sav
   const refreshes = new Map();
   const config = () => {
     const values = load(brainDir);
-    if (!values.GOOGLE_CLIENT_ID || !values.GOOGLE_CLIENT_SECRET) throw new Error('Google OAuth is not configured');
+    if (![values.GOOGLE_CLIENT_ID, values.GOOGLE_CLIENT_SECRET].every(value => typeof value === 'string' && value.trim())) throw new Error('Google OAuth is not configured');
     const redirect = new URL(values.GOOGLE_REDIRECT_URI || '');
     if ((redirect.protocol !== 'https:' && !(redirect.protocol === 'http:' && ['localhost', '127.0.0.1', '[::1]'].includes(redirect.hostname))) || redirect.username || redirect.password || redirect.search || redirect.hash || redirect.pathname !== '/auth/google/callback') throw new Error('Configure a trusted GOOGLE_REDIRECT_URI ending in /auth/google/callback');
+    const configured = values.GOOGLE_ALLOWED_EMAILS;
+    const emails = Array.isArray(configured) ? configured : typeof configured === 'string' ? configured.split(',') : [];
+    const allowedEmails = new Set(emails.map(email => typeof email === 'string' ? email.trim().toLowerCase() : '').filter(Boolean));
+    if (!allowedEmails.size || [...allowedEmails].some(email => !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))) throw new Error('Configure a non-empty GOOGLE_ALLOWED_EMAILS dashboard allowlist');
     const scope = values.GOOGLE_SCOPES || 'openid email profile';
-    return { clientId: values.GOOGLE_CLIENT_ID, clientSecret: values.GOOGLE_CLIENT_SECRET, redirectUri: redirect.href, scope };
+    if (typeof scope !== 'string' || !['openid', 'email'].every(value => scope.split(/\s+/).includes(value))) throw new Error('Google OAuth requires openid and email scopes');
+    return { clientId: values.GOOGLE_CLIENT_ID, clientSecret: values.GOOGLE_CLIENT_SECRET, redirectUri: redirect.href, scope, allowedEmails };
   };
   const status = () => {
     const rows = state.read({}); assertNoSecretValues(rows);
@@ -95,9 +100,7 @@ export function createGoogleOAuth({ brainDir, load = loadSecretsSync, save = sav
       const user = await response.json();
       const id = subject(user.sub);
       if (user.email_verified !== true || typeof user.email !== 'string' || !user.email.includes('@')) throw new Error('Google identity is not verified');
-      const allowed = load(brainDir).GOOGLE_ALLOWED_EMAILS;
-      const emails = Array.isArray(allowed) ? allowed : typeof allowed === 'string' ? allowed.split(',') : [];
-      if (emails.length > 0 && !emails.some(email => typeof email === 'string' && email.trim().toLowerCase() === user.email.toLowerCase())) throw new Error('Google account is not authorized for this dashboard');
+      if (!config().allowedEmails.has(user.email.toLowerCase())) throw new Error('Google account is not authorized for this dashboard');
       commit(id, { ...tokens, email: user.email, name: typeof user.name === 'string' ? user.name : '' }, 'connected');
       return { sub: id, email: user.email, name: typeof user.name === 'string' ? user.name : '' };
     },

@@ -22,22 +22,15 @@ The card displays requested results only. The panel performs browser credential 
 
 Integration and whole-ecosystem migration remain in progress. Fixture tests do not prove a physical passkey, OAuth provider login or fleet deployment.
 
-## Use it two ways
+## Install in Total Recall
 
-This plugin is a reusable brick, so a new project does not start from zero.
+Install the source through `total-recall plugin install ./tr-plugin-auth`. Use `total-recall auth --help` to discover the supported command groups. Auth uses the Total Recall host's native state and request contracts. The manifest does not declare a standalone application brick.
 
-**Add it to a project (for apps you build and ship).** From the project directory:
+Current integration work and its evidence are tracked in the [Auth project tracker](docs/projects/in-progress/AUTH_CARD/AUTH_CARD_PROJECT_TRACKER.md).
 
-```sh
-total-recall plugin vendor ./tr-plugin-auth 
-```
-
-This copies the plugin's source, skills, tests and docs into `bricks/auth` and records it in `tr-bricks.json`. Your project then owns that code: edit it, test it in your own gates, and ship it with no runtime dependency on this plugin or on Total Recall. Combine as many bricks as the project needs. List them with `total-recall plugin bricks`.
-
-**Use it directly with Total Recall (for your own machines and workflow).** Install it with `total-recall plugin install ./tr-plugin-auth` and run `total-recall auth`. Manage its credentials with `total-recall auth secret` and its skills with `total-recall skill`.
 ### Google connections and scoped access keys
 
-Google OAuth credentials use the selected auth brain's encrypted store. Configure `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, a registered `GOOGLE_REDIRECT_URI` ending in `/auth/google/callback`, and `GOOGLE_ALLOWED_EMAILS` (comma-separated dashboard account allowlist) through `auth secret set --stdin`. The CLI's connection link opens the server initiation endpoint so the browser receives an HttpOnly state cookie. Callbacks require browser-bound one-use state, PKCE and a verified authorized identity; failed profile lookup never creates a placeholder session.
+Google OAuth credentials use the host Auth store. Configure `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, a registered `GOOGLE_REDIRECT_URI` ending in `/auth/google/callback`, and a non-empty `GOOGLE_ALLOWED_EMAILS` dashboard allowlist through `auth secret set --stdin`. The CLI opens the server initiation endpoint so the browser receives an HttpOnly state cookie. Callbacks require browser-bound one-use state, PKCE and a verified identity on the current allowlist. Discovery reports local configuration only. A signed dashboard session is required for dashboard password changes.
 
 `auth google accounts --json` returns secret-free connection metadata. `auth google refresh <subject> --json` refreshes expired access while preserving an existing refresh token when Google omits it; revoked grants require reconnection. `auth google disconnect <subject> --json` confirms provider revocation before dropping credentials. Transient failures retain the connection. OAuth API tokens and signed dashboard sessions have separate lifetimes; refreshing Google access does not extend the dashboard login session.
 
@@ -56,3 +49,19 @@ directory never selects a second store. `TR_SECRETS_BRAIN` is the operational
 override; `_TR_TEST_BRAIN_DIR` and `_TR_TEST_AGENT_DIR` preserve disposable test
 isolation. Resolving this path performs no credential read or initialization.
 Explicit low-level store APIs retain their existing selected-store semantics.
+
+## Using this from an agent
+
+Send anything involving a credential here: reading, storing or rotating a secret, issuing API keys, passkeys, passwords and sign-in sessions. There is one store per machine, so search it before asking anyone for a key, and never print a value.
+
+```bash
+total-recall auth secret list --json
+total-recall auth secret get <KEY>
+total-recall auth secret set <KEY> --stdin
+total-recall auth secret rotate-auto <KEY>
+total-recall auth secret revoke <KEY> --yes
+```
+
+`revoke` ends a key at its provider using the key itself, where the provider's catalog entry declares how. It removes the store entry only once the provider rejects the key, and refuses a value another store key shares. Without `--yes` it reports the plan and sends nothing.
+
+Raw command this plugin owns: `security find-generic-password`.

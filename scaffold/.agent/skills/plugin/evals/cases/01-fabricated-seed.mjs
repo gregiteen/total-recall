@@ -10,7 +10,7 @@ export class SeededCard extends HTMLElement {
   constructor() {
     super();
     this.sample = {
-      hostname: 'Gregorys-Mac-mini.local',
+      hostname: 'build-box.local',
       platform: 'darwin',
       uptimeSeconds: 566924,
       loadAvg: [3.34, 3.76, 5.00],

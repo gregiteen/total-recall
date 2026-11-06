@@ -306,6 +306,11 @@ function printHelp() {
                            store names hold them; a key held by none is stale
       --revoke <hash>     Revoke one key the store no longer holds
       --json              Machine-readable output
+    revoke <key>          End a stored key at its provider, using the key itself. Shows the
+                           plan unless --yes is given. The store entry is removed only once
+                           the provider rejects the key; a value another key shares is refused.
+      --yes               Revoke it
+      --json              Machine-readable output
     rotation-status       Rotation coverage for every key in the vault
       --json              Machine-readable output
     browser-logout        Delete TR's persistent browser profile (all sessions)
@@ -423,6 +428,7 @@ function parseArgs(args) {
       'rotate-browser',
       'rotate-auto',
       'provider-keys',
+      'revoke',
       'rm',
       'generate',
       'account-sync',
@@ -623,6 +629,9 @@ function parseArgs(args) {
       case '--revoke':
         out.revokeHash = args[++i];
         break;
+      case '--yes':
+        out.yes = true;
+        break;
       case '--revoke-old':
         out.revokeOld = true;
         break;
@@ -698,6 +707,7 @@ function parseArgs(args) {
           out.keys.push(a);
         } else if (!a.startsWith('--') && !out.key) out.key = a;
         else if (!a.startsWith('--') && !out.value) out.value = a;
+        else if (a.startsWith('--') && out.command === 'revoke') out.unknownOption = a;
     }
     i++;
   }
@@ -1609,6 +1619,21 @@ export default async function secretCli(argv) {
       const { clearProfile } = await import('./browser-session.mjs');
       const r = clearProfile(brainDir);
       console.log(r.removed ? `  ✅ Cleared browser profile: ${r.path}` : `  (no profile at ${r.path})`);
+      return;
+    }
+
+    if (opts.command === 'revoke') {
+      if (opts.unknownOption || !opts.key) {
+        console.error(opts.unknownOption ? `  Unknown option for revoke: ${opts.unknownOption}` : 'Usage: total-recall auth secret revoke <key> [--yes] [--json]');
+        await exitAfterFlush(1);
+      }
+      const { revokeStoredSecret } = await import('./provider-token-revoke.mjs');
+      const result = await revokeStoredSecret(brainDir, opts.key, { yes: opts.yes === true });
+      if (opts.json) console.log(JSON.stringify(result, null, 2));
+      else if (result.planned) console.log(`\n  Would revoke ${result.key} (${result.fingerprint}) at ${result.provider}, prove the provider rejects it, then remove it from the store.\n  Run again with --yes to do it.\n`);
+      else if (result.revoked) console.log(`\n  ✅ ${result.key} (${result.fingerprint}): ${result.provider} now rejects it, and it is gone from the store.\n`);
+      else console.error(`\n  ❌ ${result.key} (${result.fingerprint}) still authenticates (revoke request ${result.request_status ?? 'failed'}, check ${result.probe_status ?? 'unreachable'}). It stays in the store.${result.console_url ? `\n     Delete it at ${result.console_url}` : ''}\n`);
+      if (!result.ok) await exitAfterFlush(1);
       return;
     }
 

@@ -17,6 +17,14 @@ import { readFileSync, existsSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+const SSSS_VERIFICATION_NAME = /^ssss:(?:validate|verify|check|conformance|test|lint)(?::[a-z0-9_-]+)*$/;
+
+function isSsssVerificationScript([name, command]) {
+  if (!SSSS_VERIFICATION_NAME.test(name) || typeof command !== 'string' || !command.trim()) return false;
+  const launcher = /^(?:(?:npx|pnpm exec|npm exec --)\s+)?ssss(?:\s+(?:help|version)(?:\s+.*)?)?$/;
+  return !launcher.test(command.trim()) && !/(?:^|\s)(?:--help|-h|--version|-v)(?:\s|$)/.test(command);
+}
+
 export function detectFacts(repoRoot) {
   const has = (p) => existsSync(path.join(repoRoot, p));
   const readText = (p) => { try { return readFileSync(path.join(repoRoot, p), 'utf8'); } catch { return ''; } };
@@ -38,7 +46,7 @@ export function detectFacts(repoRoot) {
     flake8: has('.flake8') || has('setup.cfg') || has('tox.ini'),
     mypy: has('mypy.ini') || has('.mypy_cache'),
     black: /\[tool\.black\]/.test(readText('pyproject.toml')),
-    ssssScripts: Object.keys(scripts).filter((k) => k.startsWith('ssss')),
+    ssssScripts: Object.entries(scripts).filter(isSsssVerificationScript).map(([name]) => name),
   };
 }
 

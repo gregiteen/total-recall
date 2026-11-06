@@ -57,6 +57,48 @@ export function install(harnessId, opts = {}) {
   return adapter.install(opts);
 }
 
+const BINARIES = { claude: 'claude', agy: 'agy', codex: 'codex', dsh: 'dsh', hermes: 'hermes', openclaw: 'openclaw', cursor: 'cursor-agent', devin: 'devin', grok: 'grok', cline: 'cline', pi: 'pi' };
+
+/**
+ * Install the gate for every harness present on this machine. Safe to run repeatedly.
+ * A harness that fails is reported, never skipped silently. The worker is imported here
+ * because the preflight gate loads this module on every tool call.
+ */
+export async function installAll({ home, env = process.env, dryRun = false } = {}) {
+  const { findBinary } = await import('../worker.mjs');
+  const rows = [];
+  for (const adapter of list()) {
+    const binary = BINARIES[adapter.id] || adapter.id;
+    if (!findBinary(binary, env)) { rows.push({ harness: adapter.id, status: 'not-present' }); continue; }
+    try {
+      const result = adapter.install({ ...(home ? { home } : {}), dryRun });
+      if (result.unsupported) rows.push({ harness: adapter.id, status: 'unsupported', reason: result.unsupported });
+      else rows.push({ harness: adapter.id, status: dryRun ? 'would-install' : 'installed', settings: result.settings, ...(result.note ? { note: result.note } : {}) });
+    } catch (err) {
+      rows.push({ harness: adapter.id, status: 'failed', error: err.message });
+    }
+  }
+  return { ok: rows.every((row) => row.status !== 'failed'), rows };
+}
+
+/**
+ * Take the gate out of every harness, for `total-recall uninstall` only. A fail-closed hook that
+ * outlives Total Recall would deny every call in that harness. A harness that fails is reported.
+ */
+export function removeAll({ home, env, dryRun = false } = {}) {
+  const rows = [];
+  for (const adapter of list()) {
+    try {
+      const result = adapter.install({ ...(home ? { home } : {}), ...(env ? { env } : {}), dryRun, remove: true });
+      const removed = result.removed || [];
+      rows.push({ harness: adapter.id, status: removed.length ? 'removed' : 'absent', removed, ...(result.note ? { note: result.note } : {}) });
+    } catch (err) {
+      rows.push({ harness: adapter.id, status: 'failed', error: err.message });
+    }
+  }
+  return { ok: rows.every((row) => row.status !== 'failed'), rows };
+}
+
 export function verify(harnessId, opts = {}) {
   const adapter = get(harnessId);
   if (!adapter) throw new Error(`Unknown harness adapter: ${harnessId}`);
@@ -70,6 +112,8 @@ export default {
   get,
   list,
   install,
+  installAll,
+  removeAll,
   verify,
   adapters: {
     claude: claudeAdapter,

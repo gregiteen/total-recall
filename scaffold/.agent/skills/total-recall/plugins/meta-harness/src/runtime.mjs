@@ -26,7 +26,7 @@ export async function manageRuntime(agent, args = [], { env = process.env, probe
     if (!binary) throw new Error('Total Recall auth CLI is unavailable');
     const home = env.HERMES_HOME || path.join(env.HOME || os.homedir(), '.hermes');
     fs.mkdirSync(home, { recursive:true, mode:0o700 });
-    const result = await probe(binary, ['auth','secret','export-env','--path',home,'--keys','OPENROUTER_API_KEY,TELEGRAM_BOT_TOKEN,TELEGRAM_ALLOWED_USERS'], { cwd, timeoutMs:30000, env:agentEnvironment(env) });
+    const result = await probe(binary, ['auth','secret','export-env','--path',home,'--keys','OPENROUTER_API_KEY,HERMES_TELEGRAM_BOT_TOKEN,TELEGRAM_ALLOWED_USERS','--rename','HERMES_TELEGRAM_BOT_TOKEN=TELEGRAM_BOT_TOKEN','--no-example'], { cwd:home, timeoutMs:30000, env:agentEnvironment(env) });
     return { ok:result.exitCode===0 && !result.reason, agent, authority:'auth', exitCode:result.exitCode, output:result.stdout, error:result.reason || (result.exitCode ? 'Auth projection failed' : undefined) };
   }
   const binary = findBinary(adapter.binary, env);

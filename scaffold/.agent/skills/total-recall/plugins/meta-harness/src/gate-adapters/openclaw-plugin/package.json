@@ -1,0 +1,15 @@
+{
+  "name": "total-recall-gate",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Total Recall preflight gate for OpenClaw.",
+  "license": "MIT",
+  "openclaw": {
+    "extensions": ["./index.js"],
+    "compat": {
+      "pluginApi": ">=2026.11.1",
+      "minGatewayVersion": "2026.11.1"
+    }
+  }
+}

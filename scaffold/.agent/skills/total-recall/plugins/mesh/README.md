@@ -27,24 +27,14 @@ Peers install it with `npx total-recall plugin install peer:<this-node>/mesh`.
 - **Version**: 0.1.0
 - **SSSS Category**: `mesh-nodes`
 - **CLI Command**: `npx total-recall mesh`
-- **UI**: `ui/panel.js` custom element with DESIGN.md tokens
+- **UI**: `ui/card.js` is the declared card component and uses `ui/DESIGN.md` tokens.
 - **API key**: paste it in the plugin UI (`save-token` event) or pipe it to `npx total-recall mesh token set --stdin`; stored as `HEADSCALE_API_KEY` in the secrets store
 
-## Use it two ways
+## Install and vendor
 
-This plugin is a reusable brick, so a new project does not start from zero.
+Install the full integration with `total-recall plugin install <git URL of this repository>`. The declared standalone artifact is the control and SSH helper capability under `capability/`. The manifest lists its exports and [the capability entry](capability/index.mjs) exposes them. A consumer integration guide and independent proof remain open. The Total Recall card, host routes and auth/grant integration belong to the installed plugin.
 
-**Add it to a project (for apps you build and ship).** From the project directory:
-
-```sh
-total-recall plugin vendor https://github.com/gregiteen/tr-plugin-mesh.git 
-```
-
-This copies the plugin's source, skills, tests and docs into `bricks/mesh` and records it in `tr-bricks.json`. Your project then owns that code: edit it, test it in your own gates, and ship it with no runtime dependency on this plugin or on Total Recall. Combine as many bricks as the project needs. List them with `total-recall plugin bricks`.
-
-**Use it directly with Total Recall (for your own machines and workflow).** Install it with `total-recall plugin install https://github.com/gregiteen/tr-plugin-mesh.git` and run `total-recall mesh`. Manage its credentials with `total-recall auth secret` and its skills with `total-recall skill`.
-
-Native-only state: new installations use validated SSSS records and the shared auth owner. Legacy imports and compatibility fallback formats are not supported.
+The [Mesh project tracker](docs/projects/in-progress/MESH_CARD/MESH_CARD_PROJECT_TRACKER.md) separates runtime transport and authorization work from card checks.
 
 ## Mesh screens and integration declarations
 
@@ -55,3 +45,20 @@ The card defines Machines, Flows, Placement, Boundary and Join. Machines separat
 The dashboard supplies frozen `host.operations`. Read-only cards show CLI handoffs for login administration and re-enrollment. A writable host may expose those declared actions; re-enrollment then requires target-specific confirmation. Enrollment keys never enter the card.
 
 Auth's `host-secrets-store` runtime supplies the single host-store selector for control credentials and mesh-sync authentication. Project `AGENT_DIR`/`TR_BRAIN` cannot divert these reads. Native SSSS audit contention is serialized by the generic host; errors still fail closed. The corresponding source runtime must be installed; missing modules never select a fallback implementation.
+
+## Using this from an agent
+
+Send anything that reaches another machine here: running a command, copying a file, checking which machines are up, enrollment and access policy. Commands stop after about 30 seconds, so run long jobs in the background and check on them.
+
+```bash
+total-recall mesh nodes
+total-recall mesh status
+total-recall mesh leader --json
+total-recall mesh leader-pin <mesh-ip> --port <port> --json
+total-recall mesh exec <node> "<command>"
+total-recall mesh file put <node> <source> <destination>
+```
+
+`leader` reads election state. Use the declared `leader-pin` write operation to change it. Issue enrollment keys with `mesh preauthkey` in an interactive terminal. Enrollment keys are unavailable through JSON or captured output.
+
+Raw commands this plugin owns: `ssh`, `scp`, `tailscale status` and `tailscale ping`.

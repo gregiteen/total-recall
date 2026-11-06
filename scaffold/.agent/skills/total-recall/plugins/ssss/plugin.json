@@ -1,0 +1,81 @@
+{
+  "$schema": "https://github.com/gregiteen/total-recall/blob/main/metadata.plugin.schema.json",
+  "id": "ssss",
+  "name": "SSSS",
+  "version": "0.1.1",
+  "description": "Canonical SSSS distribution, scaffolding and validation for Total Recall installations.",
+  "license": "MIT",
+  "use_cases": ["software-development", "state-conformance"],
+  "distribution": { "tier": "core", "license": "open" },
+  "gate": {
+    "tasks": ["Validate SSSS documents and registries", "Scaffold a standalone SSSS project", "Run the SSSS conformance suites", "Restore a missing SSSS skill or scaffold"],
+    "owned_commands": [
+      { "pattern": "npx\\s+(--yes\\s+)?@gregiteen/ssss-cli\\s+new\\b", "use": "total-recall ssss scaffold --directory <folder> --json" }
+    ]
+  },
+  "cli": {
+    "answers_help": true,
+    "command": "ssss",
+    "handler": "cli.mjs",
+    "subcommands": [
+      {
+        "name": "status", "description": "Inspect the installed engine, skill and full scaffold",
+        "effect": "read", "output": "json",
+        "args": [{"name":"scope","flag":"--scope","label":"Brain scope","type":"choice","options":["auto","project","global"]}]
+      },
+      {
+        "name": "repair", "description": "Restore missing or previously repinned managed SSSS installation files",
+        "effect": "write", "output": "json",
+        "args": [{"name":"scope","flag":"--scope","label":"Brain scope","type":"choice","options":["auto","project","global"]}]
+      },
+      {
+        "name": "validate", "description": "Validate a document against the effective SSSS registry",
+        "effect": "read", "output": "json",
+        "args": [
+          {"name":"file","flag":"--file","label":"Document path","type":"string","required":true},
+          {"name":"extension","flag":"--extension","label":"Extension registry path","type":"string"}
+        ]
+      },
+      {
+        "name": "registry", "description": "Verify the effective registry against a lock file",
+        "effect": "read", "output": "json",
+        "args": [
+          {"name":"lock","flag":"--lock","label":"Registry lock path","type":"string","required":true},
+          {"name":"extension","flag":"--extension","label":"Extension registry path","type":"string"}
+        ]
+      },
+      {
+        "name": "scaffold", "description": "Create a complete canonical SSSS project",
+        "effect": "write", "output": "json",
+        "args": [
+          {"name":"directory","flag":"--directory","label":"New project directory","type":"string","required":true},
+          {"name":"extension","flag":"--extension","label":"Extension registry name","type":"string"},
+          {"name":"withTotalRecall","flag":"--with-total-recall","label":"Include Total Recall wiring","type":"boolean"}
+        ]
+      },
+      {
+        "name": "conformance", "description": "Run the canonical reference engine conformance suite",
+        "effect": "read", "output": "json"
+      }
+    ]
+  },
+  "status": { "command": "status", "refresh_seconds": 60 },
+  "runtime": { "modules": {
+    "installation": "runtime/installation.cjs",
+    "project-scaffold": "runtime/project-scaffold.mjs"
+  } },
+  "capability": {
+    "entry": "capability/index.mjs",
+    "exports": ["canonicalToolchain", "scaffoldProject", "validateDocument", "verifyRegistry", "runConformance"]
+  },
+  "branding": {
+    "name": "SSSS", "color": "#b98439", "accent": "#f4c97a", "font": "ibm-plex",
+    "density": "compact", "radius": "sm", "header": "ledger-rule", "logo": "ui/logo.svg"
+  },
+  "ui": {
+    "design_tokens": "ui/DESIGN.md",
+    "elements": [
+      {"id":"card","kind":"card","tag":"tr-ssss-card","module":"ui/card.js","description":"SSSS installation and contract workbench"}
+    ]
+  }
+}

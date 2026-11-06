@@ -177,13 +177,14 @@ export function resolveKey({ provider = null, keys = null, run = spawnSync } = {
  * cache, so use that before going to the network, and only reach for `--yes`
  * when nothing cached exists.
  */
-export function resolveGenerator({ pluginRoot = null, run = spawnSync, env = process.env, home = os.homedir(), targetVersion = null } = {}) {
+export function resolveGenerator({ pluginRoot = null, run = spawnSync, env = process.env, home = os.homedir(), targetVersion = null, requireBundled = false } = {}) {
   const root = pluginRoot !== null ? pluginRoot : PLUGIN_ROOT;
   if (root) {
     const bundled = path.join(root, 'vendor', 'openwiki.mjs');
     if (fs.existsSync(bundled)) {
       return { command: process.execPath, args: [bundled], via: 'bundled plugin generator' };
     }
+    if (requireBundled) return { command: null, args: [], via: null };
     const candidate = path.join(root, 'node_modules', '.bin', 'openwiki');
     if (fs.existsSync(candidate)) return { command: candidate, args: [], via: 'plugin local node_modules/.bin' };
   }
@@ -260,9 +261,10 @@ export function refreshProject(project, {
 
   let command = binary, args = binaryArgs, via = binary ? 'explicit' : null;
   if (!command) {
-    const resolved = resolveGenerator({ run, targetVersion, pluginRoot });
+    const resolved = resolveGenerator({ run, targetVersion, pluginRoot, requireBundled: uninitialized });
     if (!resolved.command) {
-      return { ...project, action: 'failed', reason: 'no openwiki generator available (no local .bin, no PATH entry, no npx)', ...before };
+      const reason = uninitialized ? 'OpenWiki initialization requires the bundled plugin generator' : 'no openwiki generator available (no local .bin, no PATH entry, no npx)';
+      return { ...project, action: 'failed', reason, ...before };
     }
     ({ command, args, via } = resolved);
   }
@@ -310,19 +312,6 @@ export function refreshProject(project, {
     timeout: timeoutMs,
   });
 
-  // OpenWiki generator may drop GitHub workflow files; our system strictly forbids GitHub Actions.
-  const workflowDir = path.join(project.root, '.github', 'workflows');
-  const workflowFile = path.join(workflowDir, 'openwiki-update.yml');
-  if (fs.existsSync(workflowFile)) {
-    try { fs.unlinkSync(workflowFile); } catch {}
-  }
-  if (fs.existsSync(workflowDir)) {
-    try {
-      const remaining = fs.readdirSync(workflowDir);
-      if (remaining.length === 0) fs.rmdirSync(workflowDir);
-    } catch {}
-  }
-
   const after = staleness(project.root, { git: run });
   const exitCode = result.error ? (result.error.code || 1) : result.status;
   const advanced = after.generatedAt !== before.generatedAt || (uninitialized && hasWiki(project.root));
@@ -366,9 +355,10 @@ export async function refreshProjectAsync(project, {
   const uninitialized = !hasWiki(project.root);
   let command = binary, args = binaryArgs, via = binary ? 'explicit' : null;
   if (!command) {
-    const resolved = resolveGenerator({ run: spawnSync, targetVersion, pluginRoot });
+    const resolved = resolveGenerator({ run: spawnSync, targetVersion, pluginRoot, requireBundled: uninitialized });
     if (!resolved.command) {
-      return { ...project, action: 'failed', reason: 'no openwiki generator available (no local .bin, no PATH entry, no npx)', ...before };
+      const reason = uninitialized ? 'OpenWiki initialization requires the bundled plugin generator' : 'no openwiki generator available (no local .bin, no PATH entry, no npx)';
+      return { ...project, action: 'failed', reason, ...before };
     }
     ({ command, args, via } = resolved);
   }
@@ -421,19 +411,6 @@ export async function refreshProjectAsync(project, {
     proc.on('error', (err) => resolve({ error: err, status: 1, stdout, stderr }));
     proc.on('close', (status) => resolve({ status: status ?? 0, stdout, stderr }));
   });
-
-  // OpenWiki generator may drop GitHub workflow files; our system strictly forbids GitHub Actions.
-  const workflowDir = path.join(project.root, '.github', 'workflows');
-  const workflowFile = path.join(workflowDir, 'openwiki-update.yml');
-  if (fs.existsSync(workflowFile)) {
-    try { fs.unlinkSync(workflowFile); } catch {}
-  }
-  if (fs.existsSync(workflowDir)) {
-    try {
-      const remaining = fs.readdirSync(workflowDir);
-      if (remaining.length === 0) fs.rmdirSync(workflowDir);
-    } catch {}
-  }
 
   const after = staleness(project.root, { git: spawnSync });
   const exitCode = result.error ? (result.error.code || 1) : result.status;

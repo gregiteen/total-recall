@@ -1,9 +1,12 @@
 #!/usr/bin/env node
 import { execFileSync } from 'node:child_process';
+import { realpathSync } from 'node:fs';
+import path from 'node:path';
+import { parseArgs } from 'node:util';
 
 const GIT_TIMEOUT_MS = 15000;
 const GIT_MAX_BUFFER = 64 * 1024 * 1024;
-const VERBS = ['audit', 'diff', 'help'];
+const VERBS = ['audit', 'diff', 'identity', 'worktree-list', 'worktree-create', 'worktree-remove', 'help'];
 
 /**
  * Run git without throwing. Never trims stdout (porcelain rows begin with
@@ -161,8 +164,105 @@ export function collectAudit(cwd = process.cwd()) {
   return { ok: !essentialFailed, report, errors };
 }
 
+/** Git falls back to user@hostname when no email is configured, which publishes the machine name. */
+const MACHINE_EMAIL = /@[^@\s]+\.(local|lan|home|internal)$|@localhost$/i;
+
+/**
+ * Who commits in this repository, and which identities its history already publishes.
+ * Unknown values are null, never empty.
+ */
+export function collectIdentity(cwd = process.cwd()) {
+  const read = (key) => {
+    const row = git(['config', '--show-origin', '--get', key], cwd);
+    if (!row.ok) return { value: null, source: null };
+    const [source, ...value] = row.stdout.trim().split('\t');
+    return { value: value.join('\t') || null, source };
+  };
+  const name = read('user.name');
+  const email = read('user.email');
+  const findings = [];
+  if (!name.value) findings.push('user.name is not configured, so git guesses the author name');
+  if (!email.value) findings.push('user.email is not configured, so git guesses the address from this machine');
+  else if (MACHINE_EMAIL.test(email.value)) findings.push(`user.email ${email.value} names a machine`);
+
+  const log = git(['log', '--format=%ae'], cwd);
+  let history = null;
+  if (log.ok) {
+    const counts = new Map();
+    for (const row of log.stdout.split('\n').filter(Boolean)) counts.set(row, (counts.get(row) || 0) + 1);
+    history = [...counts].sort((a, b) => b[1] - a[1])
+      .map(([address, commits]) => ({ email: address, commits, machine: MACHINE_EMAIL.test(address) }));
+  }
+  const machineCommits = history ? history.filter((row) => row.machine).reduce((sum, row) => sum + row.commits, 0) : null;
+  return { name, email, ok: findings.length === 0, findings, history, machineCommits };
+}
+
+function printIdentity(r) {
+  console.log('\n  Git Hygiene — Commit Identity\n');
+  console.log(`  user.name:          ${r.name.value ?? 'not configured'}${r.name.source ? ` (${r.name.source})` : ''}`);
+  console.log(`  user.email:         ${r.email.value ?? 'not configured'}${r.email.source ? ` (${r.email.source})` : ''}`);
+  for (const finding of r.findings) console.log(`  \x1b[31m${finding}\x1b[0m`);
+  if (r.history === null) console.log('  History:            unknown (git log failed)');
+  else {
+    console.log('  History:');
+    for (const row of r.history) console.log(`    ${String(row.commits).padStart(5)}  ${row.email}${row.machine ? '  \x1b[33mmachine address\x1b[0m' : ''}`);
+  }
+  console.log('');
+}
+
 function usage() {
-  return 'Usage: total-recall git-sentinel [audit|diff|help] [--json]';
+  return `Usage: total-recall git-sentinel [operation] [--json]
+  audit | identity
+  diff [--patch] [--cached] [--base <ref>]
+  worktree list
+  worktree create <path> [--base <ref>]
+  worktree remove <path> [--force]
+  worktree-list | worktree-create | worktree-remove (separate operation effects)`;
+}
+
+function gitResult(args, cwd) {
+  const result = git(args, cwd);
+  if (!result.ok) throw new Error(result.missing ? 'Git executable not found' : result.stderr.trim() || `Git ${args[0]} failed`);
+  return result.stdout;
+}
+
+function resolveCommit(ref, cwd) {
+  return gitResult(['rev-parse', '--verify', '--end-of-options', `${ref}^{commit}`], cwd).trim();
+}
+
+function worktrees(cwd) {
+  return gitResult(['worktree', 'list', '--porcelain', '-z'], cwd).split('\0\0').filter(Boolean).map(record => {
+    const tree = {};
+    for (const row of record.split('\0')) {
+      const [key, ...words] = row.split(' ');
+      const value = words.join(' ');
+      if (key === 'worktree') tree.path = value;
+      else if (key === 'HEAD') tree.head = value;
+      else if (key === 'branch') tree.branch = value;
+      else if (['bare', 'detached', 'locked', 'prunable'].includes(key)) tree[key] = value || true;
+    }
+    if (!tree.path) throw new Error('Git worktree listing omitted a path');
+    return tree;
+  });
+}
+
+function worktreeOperation(action, values, target, cwd) {
+  if (action === 'worktree-list') return { ok: true, worktrees: worktrees(cwd) };
+  const targetPath = path.resolve(cwd, target);
+  if (action === 'worktree-create') {
+    const commit = resolveCommit(values.base ?? 'HEAD', cwd);
+    gitResult(['worktree', 'add', '--detach', '--', targetPath, commit], cwd);
+    return { ok: true, path: realpathSync(targetPath), head: commit, detached: true };
+  }
+
+  const real = realpathSync(targetPath);
+  const registered = worktrees(cwd);
+  if (!registered.some(tree => tree.path === real)) throw new Error('Target is not a registered worktree of this repository');
+  if (registered[0]?.path === real) throw new Error('Refusing to remove the main worktree');
+  const current = realpathSync(cwd);
+  if (real === current || current.startsWith(real + path.sep)) throw new Error('Refusing to remove the current worktree');
+  gitResult(['worktree', 'remove', ...(values.force ? ['--force'] : []), '--', real], cwd);
+  return { ok: true, path: real, removed: true };
 }
 
 function fmt(value, known) {
@@ -209,7 +309,12 @@ export async function run(argv = []) {
   const clean = Array.isArray(argv) ? argv.slice(3) : [];
   const isJson = clean.includes('--json');
   const wantsHelp = clean.includes('--help') || clean.includes('-h');
-  const action = clean.find((a) => !a.startsWith('-')) || 'audit';
+  let [action = 'audit', ...args] = clean.filter(arg => arg !== '--json');
+  if (action === 'worktree') {
+    const [verb = 'list', ...rest] = args;
+    action = `worktree-${verb}`;
+    args = rest;
+  }
   const fail = (message, code = 1, extra = {}) => {
     process.exitCode = code;
     if (isJson) console.log(JSON.stringify({ ok: false, error: message, ...extra }, null, 2));
@@ -225,24 +330,54 @@ export async function run(argv = []) {
     return;
   }
 
+  const options = action === 'diff' ? { patch: { type: 'boolean' }, cached: { type: 'boolean' }, base: { type: 'string' } }
+    : action === 'worktree-create' ? { base: { type: 'string' } }
+    : action === 'worktree-remove' ? { force: { type: 'boolean' } } : {};
+  const targetRequired = action === 'worktree-create' || action === 'worktree-remove';
+  let parsed;
+  try {
+    parsed = parseArgs({ args, options, allowPositionals: targetRequired });
+    if (targetRequired && parsed.positionals.length !== 1) throw new Error('Supply exactly one worktree path');
+  } catch (error) {
+    fail(error.message, 2);
+    return;
+  }
+
   const cwd = process.cwd();
+  if (action === 'diff' || action.startsWith('worktree-')) {
+    try {
+      let result;
+      if (action === 'diff') {
+        const { patch, cached, base } = parsed.values;
+        const commit = base === undefined ? undefined : resolveCommit(base, cwd);
+        const output = gitResult(['diff', '--no-ext-diff', '--no-textconv', patch ? '--patch' : '--stat', ...(cached ? ['--cached'] : []), ...(commit ? [commit] : []), '--'], cwd);
+        result = { ok: true, [patch ? 'patch' : 'diffStat']: patch ? output : output.trimEnd(), cached: Boolean(cached), base: base ?? null, timestamp: new Date().toISOString() };
+        if (!isJson) console.log(output.trimEnd() || 'No changes.');
+      } else {
+        result = worktreeOperation(action, parsed.values, parsed.positionals[0], cwd);
+        if (!isJson) {
+          if (result.worktrees) for (const tree of result.worktrees) console.log(`${tree.path} ${tree.branch || tree.head || ''}`.trimEnd());
+          else console.log(`${result.removed ? 'Removed' : 'Created'} worktree ${result.path}`);
+        }
+      }
+      if (isJson) console.log(JSON.stringify(result, null, 2));
+    } catch (error) {
+      fail(error.message, 1, { errors: [action] });
+    }
+    return;
+  }
+
   const audit = collectAudit(cwd);
   if (audit.report === undefined) {
     fail(audit.error, 1, { errors: audit.errors });
     return;
   }
 
-  if (action === 'diff') {
-    const diff = git(['diff', '--stat'], cwd);
-    if (!diff.ok) {
-      fail('git diff failed; working tree changes are unknown.', 1, { errors: ['diff'] });
-      return;
-    }
-    if (isJson) console.log(JSON.stringify({ ok: true, diffStat: diff.stdout.trimEnd(), timestamp: new Date().toISOString() }, null, 2));
-    else {
-      console.log('\n  Git Hygiene — Working Tree Changes:\n');
-      console.log(diff.stdout.trimEnd() || '  No unstaged changes.\n');
-    }
+  if (action === 'identity') {
+    const identity = collectIdentity(cwd);
+    if (!identity.ok) process.exitCode = 1;
+    if (isJson) console.log(JSON.stringify(identity, null, 2));
+    else printIdentity(identity);
     return;
   }
 

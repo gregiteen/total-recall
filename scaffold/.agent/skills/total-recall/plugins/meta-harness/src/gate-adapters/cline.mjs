@@ -6,11 +6,21 @@ import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 
+import { removeDeadGateFile } from './hook-files.mjs';
+
 const ACK_COMMAND = 'total-recall tr-preflight --ack --task "<task>" --action read,edit,test';
+
+const DEAD_FILE = (home) => path.join(home, 'Documents', 'Cline', 'Hooks', 'preflight-hook.json');
 
 export const clineAdapter = {
   id: 'cline',
-  level: 'enforced (unverified live)',
+  level: 'not wired',
+  warnings: {
+    delivery: 'unconfirmed',
+    via: 'appendContext',
+    source: 'https://docs.cline.bot/sdk/plugins.md',
+    why: 'The documentation does not say how appendContext reaches the model.',
+  },
   source: {
     url: 'https://docs.cline.bot/sdk/plugins.md',
     retrieved: '2026-11-04',
@@ -54,7 +64,7 @@ export const clineAdapter = {
 
   emit(decision, event, cwd = process.cwd()) {
     if (decision?.decision === 'allow') {
-      const payload = { skip: false, cancel: false };
+      const payload = decision.warning ? { skip: false, cancel: false, appendContext: decision.warning } : { skip: false, cancel: false };
       return { stdout: `${JSON.stringify(payload)}\n`, exitCode: 0 };
     }
 
@@ -81,50 +91,19 @@ export const clineAdapter = {
   },
 
   install({ home = os.homedir(), dryRun = false } = {}) {
-    const clineDir = path.join(home, 'Documents', 'Cline', 'Hooks');
-    const hooksPath = path.join(clineDir, 'preflight-hook.json');
-    const added = [];
-
-    const hookDef = {
-      name: 'total-recall-preflight',
-      hookErrorMode: 'block',
-      command: 'total-recall preflight gate --harness cline',
-      timeout: 5
-    };
-
-    if (!dryRun) {
-      fs.mkdirSync(clineDir, { recursive: true });
-      fs.writeFileSync(hooksPath, `${JSON.stringify(hookDef, null, 2)}\n`);
-      added.push('managed Cline beforeTool hook');
-    }
-
-    return { settings: hooksPath, added };
+    const removed = removeDeadGateFile(DEAD_FILE(home), 'cline', { dryRun });
+    return { settings: null, added: [], removed, unsupported: 'Cline runs hooks from an SDK plugin, and no plugin is built yet. Cline is not installed on any machine this was tested on.' };
   },
 
   verify({ home = os.homedir() } = {}) {
-    const hooksPath = path.join(home, 'Documents', 'Cline', 'Hooks', 'preflight-hook.json');
-    const installed = fs.existsSync(hooksPath);
-
-    const syntheticDeniedCall = {
-      event: 'beforeTool',
-      toolName: 'execute_command',
-      input: { command: 'rm -rf /tmp/foo' },
-      cwd: '/nonexistent-directory-without-receipt'
-    };
-
-    const out = this.emit(
-      { decision: 'deny', reason: 'receipt missing', fix: ACK_COMMAND },
-      'beforeTool',
-      syntheticDeniedCall.cwd
-    );
-
-    const exercised = out.exitCode === 2 && (out.stdout.includes('"skip":true') || out.stdout.includes('"cancel":true'));
-
+    const installed = false;
+    const out = this.emit({ decision: 'deny', reason: 'receipt missing', fix: ACK_COMMAND }, 'beforeTool', '/nonexistent-directory-without-receipt');
     return {
       installed,
-      exercised,
-      level: 'enforced (unverified live)',
-      native: out.stdout.trim()
+      exercised: out.exitCode === 2 && out.stdout.includes('"cancel":true'),
+      level: this.level,
+      native: out.stdout.trim(),
+      note: 'Cline runs hooks from an SDK plugin, and no plugin is built yet. Cline is not installed on any machine this was tested on.'
     };
   }
 };

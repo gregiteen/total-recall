@@ -7,7 +7,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { runBootstrapCommand } from './src/bootstrap.mjs';
 import { describeRetention, hasWiki, isDue, readProjects, refreshProject, refreshProjectAsync, resolveKey, staleness } from './src/refresh.mjs';
-import { announceNewVersion, checkUpstreamStatus, propagateUpdates, readUpstreamState } from './src/upstream-watcher.mjs';
+import { watchUpstream, propagateUpdates, readUpstreamState } from './src/upstream-watcher.mjs';
 import { loadOpenWikiConfig, setOpenWikiConfigValue, resetOpenWikiConfig, resolveConfigPath, ALLOWED_CONFIG_KEYS, ALLOWED_PROVIDERS } from './src/config.mjs';
 import { discoverAllHubs } from './src/mesh-vaults.mjs';
 import { searchWikiHubs } from './src/search.mjs';
@@ -438,34 +438,17 @@ async function ingestCommand(args) {
  * Surveillance command for monitoring the upstream open-source OpenWiki package.
  */
 async function watchCommand(args) {
+  if (args.includes('--help') || args.includes('-h')) {
+    console.log('Usage: total-recall openwiki watch [--check-only] [--announce|--no-announce] [--propagate] [--json]');
+    return;
+  }
   const json = args.includes('--json');
   const checkOnly = args.includes('--check-only');
   const announce = args.includes('--announce') || (!checkOnly && !args.includes('--no-announce'));
   const propagate = args.includes('--propagate');
 
-  const status = await checkUpstreamStatus();
-  let announcement = null;
-  let propagation = null;
-
-  if (status.ok && status.updateAvailable) {
-    if (announce) {
-      announcement = await announceNewVersion({
-        latestVersion: status.latestVersion,
-        currentVersion: status.currentVersion,
-        releaseNotesUrl: status.releaseNotesUrl
-      });
-    }
-    if (propagate) {
-      propagation = await propagateUpdates({ force: true });
-    }
-  }
-
-  const payload = {
-    ok: status.ok,
-    status,
-    announcement,
-    propagation
-  };
+  const payload = await watchUpstream({ checkOnly, announce, propagate });
+  const { status, announcement, propagation } = payload;
 
   if (json) {
     console.log(JSON.stringify(payload, null, 2));
@@ -478,15 +461,18 @@ async function watchCommand(args) {
       console.log(`  Release Notes           : ${status.releaseNotesUrl}`);
     }
     if (announcement?.announced) {
-      console.log(`  Operator Announcement   : Dispatched successfully`);
+      console.log(`  Operator Announcement   : Accepted by alert owner`);
     }
+    if (status.error) console.log(`  Upstream Check          : ${status.error}`);
+    if (announcement?.error) console.log(`  Operator Announcement   : Failed (${announcement.error})`);
     if (propagation) {
       console.log(`  Fleet Propagation       : ${propagation.ok ? 'Completed' : 'Failed'} (${propagation.updatedCount} projects updated)`);
+      if (propagation.error) console.log(`  Propagation Error       : ${propagation.error}`);
     }
     console.log('');
   }
 
-  if (!status.ok) process.exitCode = 1;
+  if (!payload.ok) process.exitCode = 1;
 }
 
 /**
@@ -525,6 +511,9 @@ async function propagateCommand(args) {
     console.log(`  Eligible Repositories : ${result.eligibleCount || 0}`);
     console.log(`  Updated Repositories  : ${result.updatedCount || 0}`);
     console.log(`  Failed Repositories   : ${result.failedCount || 0}`);
+    console.log(`  Partial Repositories  : ${result.partialCount || 0}`);
+    console.log(`  Incomplete Repositories: ${result.incompleteCount || 0}`);
+    if (result.error) console.log(`  Error                 : ${result.error}`);
     if (Array.isArray(result.reports)) {
       for (const r of result.reports) {
         console.log(`  • ${r.name}: ${r.action}${r.reason ? ` — ${r.reason}` : ''}`);

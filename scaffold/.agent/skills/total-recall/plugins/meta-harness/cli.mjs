@@ -225,7 +225,10 @@ async function runOperation(argv) {
         result = await syncModelCatalog();
       } else {
         const setup=await setupIntegrations();
-        result={...await maintainDocumentation(options),setup};
+        const { installAll } = await import('./src/gate-adapters/index.mjs');
+        const gates=await installAll();
+        const docs=await maintainDocumentation(options);
+        result={...docs,ok:docs.ok!==false&&gates.ok,setup,gates};
       }
     } else result = operation==='docs-status' ? documentationStatus(options) : operation==='docs-ensure' ? await ensureDocumentation(options) : await refreshDocumentation(options);
     if(!result.ok)process.exitCode=1;
@@ -264,7 +267,9 @@ async function runOperation(argv) {
     if(!args.includes('--stdin'))throw new Error('Task requests must arrive through stdin: pass --stdin with JSON {agent, cwd, prompt}');
     const input=fs.readFileSync(0,'utf8');if(Buffer.byteLength(input)>65536)throw new Error('Task request too large');
     const request=JSON.parse(input);
-    result=await dispatchWithReceipt({...request,allowUnknownAuth:request.allowUnknownAuth===true},{node:request.node || 'local',role:'Dispatch'});
+    const timeoutMs = request.timeoutMs ?? 300000;
+    if (!Number.isInteger(timeoutMs) || timeoutMs < 1 || timeoutMs > 540000) throw new Error('Foreground dispatch timeout must be 1..540000 ms');
+    result=await dispatchWithReceipt({...request,timeoutMs,allowUnknownAuth:request.allowUnknownAuth===true},{node:request.node || 'local',role:'Dispatch'});
     if(!result.ok)process.exitCode=1;
   }
   else if (operation === 'inspect') {

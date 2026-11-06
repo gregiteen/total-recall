@@ -2,7 +2,7 @@
   "$schema": "https://github.com/gregiteen/total-recall/blob/main/metadata.plugin.schema.json",
   "id": "embeddings",
   "name": "Embeddings",
-  "version": "0.1.0",
+  "version": "0.1.2",
   "description": "Local embedding model management: provider/model status, benchmark, index build and coverage",
   "license": "MIT",
   "branding": {
@@ -15,7 +15,12 @@
     "operations",
     "ai"
   ],
+  "gate": {
+    "tasks": ["Check embedding models and index coverage", "Pull or benchmark a local embedding model"],
+    "owned_commands": []
+  },
   "cli": {
+    "answers_help": true,
     "command": "embeddings",
     "handler": "./cli.mjs",
     "subcommands": [
@@ -33,19 +38,21 @@
       },
       {
         "name": "pull",
-        "description": "Pull an embedding model (default nomic-embed-text)",
+        "description": "Pull an explicitly named local model onto the configured loopback endpoint",
         "effect": "write",
-        "output": "json"
+        "output": "json",
+        "timeout_ms": 600000
       },
       {
         "name": "benchmark",
-        "description": "Measure ms per embedding and project full-vault time",
+        "description": "Measure latency per verified local embedding and project full-vault time",
         "effect": "read",
-        "output": "json"
+        "output": "json",
+        "timeout_ms": 300000
       },
       {
         "name": "coverage",
-        "description": "How much of the vault has vectors, and which model produced them",
+        "description": "How many vault nodes have a current, correct-width vector, and why the rest do not",
         "effect": "read",
         "output": "json"
       }

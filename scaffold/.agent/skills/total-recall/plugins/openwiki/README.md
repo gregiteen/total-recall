@@ -26,8 +26,7 @@ total-recall openwiki bootstrap --brain /absolute/path/to/brain \
 `total-recall openwiki hubs --json` lists repository pages. `total-recall openwiki ingest <directory> --project` explicitly imports documentation through the existing memory CLI. A successful bootstrap does not claim indexing or runtime readiness.
 
 - **Identifier**: `openwiki`
-- **Version**: 0.1.1
-- **SSSS Category**: `openwiki-hubs`
+- **Version**: see `plugin.json`
 - **CLI Command**: `npx total-recall openwiki`
 - **UI**: `ui/panel.js` custom element with DESIGN.md tokens
 
@@ -41,6 +40,19 @@ This plugin is a reusable brick, so a new project does not start from zero.
 total-recall plugin vendor https://github.com/gregiteen/tr-plugin-openwiki.git 
 ```
 
-This copies the plugin's source, skills, tests and docs into `bricks/openwiki` and records it in `tr-bricks.json`. Your project then owns that code: edit it, test it in your own gates, and ship it with no runtime dependency on this plugin or on Total Recall. Combine as many bricks as the project needs. List them with `total-recall plugin bricks`.
+This copies the reduced capability and package metadata into `bricks/openwiki` and records it in `tr-bricks.json`. The [brick contract](capability/BRICK.md) covers local hub discovery, inspection, bootstrap and planning helpers. The full host CLI, generator, ingestion, UI and scheduled tasks are part of the installed plugin. See the [owner tracker](docs/projects/in-progress/OPENWIKI_RADICAL_UTILITY/OPENWIKI_RADICAL_UTILITY_PROJECT_TRACKER.md) for outstanding runtime and CLI acceptance.
 
 **Use it directly with Total Recall (for your own machines and workflow).** Install it with `total-recall plugin install https://github.com/gregiteen/tr-plugin-openwiki.git` and run `total-recall openwiki`. Manage its credentials with `total-recall auth secret` and its skills with `total-recall skill`.
+
+## Using this from an agent
+
+Send wiki work here: searching or reading a repository's generated wiki, refreshing pages, and ingesting documentation into memory. Treat source code and tests as the authority over a wiki page.
+
+```bash
+total-recall openwiki hubs --json
+total-recall openwiki search "<terms>"
+total-recall openwiki refresh
+total-recall openwiki ingest <directory> --project
+```
+
+This plugin owns no raw commands.

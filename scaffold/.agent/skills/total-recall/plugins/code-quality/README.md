@@ -29,14 +29,9 @@ total-recall code-quality report            # latest report; never starts a chec
 total-recall code-quality report file src/  # findings for one path
 ```
 
-## Running on a test node
+## Verify on the Mac mini
 
-```bash
-total-recall code-quality config set remoteNode build-box
-total-recall code-quality snapshot --node build-box --name my-repo --install
-```
-
-`snapshot` copies the exact source (git file lists of the repo and its linked plugins, secrets refused) plus the gate config, with a SHA-256 manifest. `--install` runs `npm ci` beside it. On the node, run `node .agent/skills/total-recall/plugins/code-quality/core/check.mjs`.
+Run development gates in the local isolated checkout on the Mac mini. Start the one-shot check in a background job and read its final report and exit. The plugin's `snapshot` command is an optional transfer mechanism for installations that configure a separate test node. The owner workflow runs directly on the Mac mini.
 
 ## Where things live
 
@@ -60,25 +55,25 @@ npm test
 MIT licensed.
 
 
-## Readiness reconciliation — 2026-09-30
+## Current readiness
 
-[Canonical correction plan](docs/projects/completed/CODE_QUALITY_PLUGIN/CODE_QUALITY_PLUGIN_PROJECT_TRACKER.md). No fresh suite was run against this external repository HEAD during the documentation review. Run `npm test` and configured gates on the Mac mini in a bounded background job. The Total Recall central preview is unwired static UI and is not an operational demonstration of this plugin.
+The [Code Quality tracker](docs/projects/in-progress/CODE_QUALITY_CARD/CODE_QUALITY_CARD_PROJECT_TRACKER.md) owns the current runner/report fixes and the card. The old extraction project and September correction findings are historical. In current source the schema and detector live in `core/`, while gate configuration uses the installed host's native writer.
 
-- **PIC-040:** The Total Recall host CodeQualityPreview.tsx:81 fabricates 42/42 tests and fixed passing gates; it is unwired, and is not proof of this plugin runner.
-- **PIC-041:** Existing architecture names core/config.schema.json, but the tracked file is skills/code-quality/core/config.schema.json; cli.mjs uses host skill-config support, not a self-contained gate configuration store.
+## Install in Total Recall
 
-Durable capability state must use validated SSSS operations. Delivery requires a real clean-install command/UI walkthrough, explicit unavailable/error states and actual result provenance. Tests may use synthetic fixtures; shipped capability behavior may not.
+The plugin uses the installed Total Recall runtime for gate configuration. The standalone `core/check.mjs` runner reads a supplied repository state directory. This manifest does not declare an independently vendorable application brick.
 
-## Use it two ways
+For structured output, use `total-recall code-quality report --json`. The existing positional `report json` is equivalent. Use `report --review-diagnostics --json` for cached failed gates, locations and observed snippets. Missing, stale and non-clean reports exit nonzero. See the [Code Quality project tracker](docs/projects/in-progress/CODE_QUALITY_CARD/CODE_QUALITY_CARD_PROJECT_TRACKER.md).
 
-This plugin is a reusable brick, so a new project does not start from zero.
+## Using this from an agent
 
-**Add it to a project (for apps you build and ship).** From the project directory:
+Send work here to run a repository's quality gates, read the last report, or set gates up. Each check is one run with a machine-wide lock, so run it in the background and read the report.
 
-```sh
-total-recall plugin vendor https://github.com/gregiteen/tr-plugin-code-quality.git 
+```bash
+total-recall code-quality-check --tier fast
+total-recall code-quality report
+total-recall code-quality detect
+total-recall code-quality config check
 ```
 
-This copies the plugin's source, skills, tests and docs into `bricks/code-quality` and records it in `tr-bricks.json`. Your project then owns that code: edit it, test it in your own gates, and ship it with no runtime dependency on this plugin or on Total Recall. Combine as many bricks as the project needs. List them with `total-recall plugin bricks`.
-
-**Use it directly with Total Recall (for your own machines and workflow).** Install it with `total-recall plugin install https://github.com/gregiteen/tr-plugin-code-quality.git` and run `total-recall code-quality`. Manage its credentials with `total-recall auth secret` and its skills with `total-recall skill`.
+This plugin owns no raw commands. A repository's own lint and test commands stay its own.

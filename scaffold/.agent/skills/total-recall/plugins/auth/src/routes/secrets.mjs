@@ -18,7 +18,7 @@ import {
   updateSecretMeta,
   rotateSecret,
   listRotationDue,
-  recordUsage,
+  recordUsageAsync,
   summarizeUsage,
   summarizeUsageByKey,
   listUsageEvents,
@@ -364,7 +364,7 @@ router.post('/api/secrets/usage', requireAuth, requireScope('keys:write', 'confi
   try {
     const brainDir = brainDirFromReq(req);
     const body = req.body || {};
-    const row = recordUsage(brainDir, {
+    const row = await recordUsageAsync(brainDir, {
       provider: body.provider || 'unknown',
       model: body.model,
       input_tokens: body.input_tokens || 0,

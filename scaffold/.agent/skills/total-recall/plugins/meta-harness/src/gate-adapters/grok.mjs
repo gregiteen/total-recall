@@ -6,11 +6,19 @@ import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 
+import { hasGate, mergeGate, readJsonFile, readJsonQuietly, writeJsonFile } from './hook-files.mjs';
+
 const ACK_COMMAND = 'total-recall tr-preflight --ack --task "<task>" --action read,edit,test';
 
 export const grokAdapter = {
   id: 'grok',
   level: 'enforced (unverified live)',
+  warnings: {
+    delivery: 'none',
+    via: null,
+    source: 'https://docs.x.ai/build/features/hooks',
+    why: 'Exit 0 allows, and only a deny carries text.',
+  },
   source: {
     url: 'https://docs.x.ai/build/features/hooks',
     retrieved: '2026-11-04',
@@ -78,52 +86,24 @@ export const grokAdapter = {
     return this.emit(decision, parsed.event, parsed.cwd);
   },
 
-  install({ home = os.homedir(), dryRun = false } = {}) {
-    const grokDir = path.join(home, '.grok', 'hooks');
-    const hooksPath = path.join(grokDir, 'total-recall-preflight.json');
-    const added = [];
-
-    const hookDef = {
-      name: 'total-recall-preflight',
-      description: 'Fail-closed preflight gate for Total Recall',
-      events: ['PreToolUse'],
-      matcher: '*',
-      command: 'total-recall preflight gate --harness grok',
-      timeout: 5
-    };
-
-    if (!dryRun) {
-      fs.mkdirSync(grokDir, { recursive: true });
-      fs.writeFileSync(hooksPath, `${JSON.stringify(hookDef, null, 2)}\n`);
-      added.push('managed Grok PreToolUse hook');
-    }
-
-    return { settings: hooksPath, added };
+  install({ home = os.homedir(), dryRun = false, remove = false, off = false } = {}) {
+    const hooksPath = path.join(home, '.grok', 'hooks', 'total-recall-preflight.json');
+    const config = readJsonFile(hooksPath, { hooks: {} });
+    config.hooks = config.hooks || {};
+    // Grok's matcher is a regular expression and optional, so leave it off to match every tool.
+    const { groups, added, removed } = mergeGate(config.hooks.PreToolUse, 'grok', { remove: remove || off, matcher: null });
+    config.hooks.PreToolUse = groups;
+    if (!dryRun && (added.length || removed.length)) writeJsonFile(hooksPath, config);
+    return { settings: hooksPath, added, removed };
   },
 
   verify({ home = os.homedir() } = {}) {
-    const hooksPath = path.join(home, '.grok', 'hooks', 'total-recall-preflight.json');
-    const installed = fs.existsSync(hooksPath);
-
-    const syntheticDeniedCall = {
-      hookEventName: 'PreToolUse',
-      toolName: 'Bash',
-      toolInput: { command: 'rm -rf /tmp/foo' },
-      cwd: '/nonexistent-directory-without-receipt'
-    };
-
-    const out = this.emit(
-      { decision: 'deny', reason: 'receipt missing', fix: ACK_COMMAND },
-      'PreToolUse',
-      syntheticDeniedCall.cwd
-    );
-
-    const exercised = out.exitCode === 2 && out.stdout.includes('"decision":"deny"');
-
+    const installed = hasGate(readJsonQuietly(path.join(home, '.grok', 'hooks', 'total-recall-preflight.json')).hooks?.PreToolUse, 'grok');
+    const out = this.emit({ decision: 'deny', reason: 'receipt missing', fix: ACK_COMMAND }, 'PreToolUse', '/nonexistent-directory-without-receipt');
     return {
       installed,
-      exercised,
-      level: 'enforced (unverified live)',
+      exercised: out.exitCode === 2 && out.stdout.includes('"decision":"deny"'),
+      level: this.level,
       native: out.stdout.trim()
     };
   }

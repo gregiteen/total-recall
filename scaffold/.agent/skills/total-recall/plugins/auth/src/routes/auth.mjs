@@ -1,26 +1,14 @@
 import express from 'express';
 import { createGoogleOAuth } from '../google-oauth.mjs';
 import { listPasskeys, beginAuthentication, finishAuthentication } from '../webauthn-store.mjs';
-import { getSecret } from '../secrets-store.mjs';
+import { hostSecretsBrainDir } from '../host-secrets-store.mjs';
 export function createAuthRouter({ auth, logger, BRAIN_DIR, googleOAuth }) {
 const { requireAuth, requireScope, authRateLimiter, isLocalRequest, loadSecurityConfig,
   loginHandler, logoutHandler, changePasswordHandler, signSessionToken,
   dashboardAuthState, sessionCookieOptions } = auth;
-function brainDir() {
-  return process.env.TR_SECRETS_BRAIN || BRAIN_DIR;
-}
-
-const google = googleOAuth || createGoogleOAuth({ brainDir: brainDir() });
+const google = googleOAuth || createGoogleOAuth({ brainDir: hostSecretsBrainDir() });
 const browserCookie = 'tr_google_oauth';
 const browserCookieOptions = req => ({ httpOnly: true, secure: req.secure === true, sameSite: 'lax', path: '/auth/google', maxAge: 600000 });
-
-async function getGoogleCredentials() {
-  const idResult = await getSecret(brainDir(), 'GOOGLE_CLIENT_ID');
-  const secretResult = await getSecret(brainDir(), 'GOOGLE_CLIENT_SECRET');
-  return { clientId: idResult.found ? idResult.value : null, clientSecret: secretResult.found ? secretResult.value : null };
-}
-
-
 
 const authRouter = express.Router();
 authRouter.use('/auth', authRateLimiter());
@@ -29,7 +17,10 @@ authRouter.use('/auth', authRateLimiter());
 
 authRouter.post('/auth/login', loginHandler);
 authRouter.post('/auth/logout', logoutHandler);
-authRouter.post('/auth/change-password', requireAuth, requireScope('config:write'), changePasswordHandler);
+authRouter.post('/auth/change-password', requireAuth, (req, res) => {
+  if (req.auth?.type !== 'dashboard_session') return res.status(403).json({ error: 'A dashboard session is required to change its password' });
+  return changePasswordHandler(req, res);
+});
 authRouter.get('/auth/me', requireAuth, (req, res) => res.json({ authenticated: true }));
 
 authRouter.get("/auth/status", (req, res) => {
@@ -43,9 +34,9 @@ authRouter.get("/auth/status", (req, res) => {
  */
 authRouter.get('/auth/providers', async (req, res) => {
   try {
-    const config = loadSecurityConfig();
-    const passkeys = listPasskeys(brainDir());
-    const { clientId } = await getGoogleCredentials();
+    const passkeys = listPasskeys(BRAIN_DIR);
+    let clientId = null;
+    try { clientId = google.config().clientId; } catch { /* disabled until host settings are complete */ }
     res.json({
       password: { configured: dashboardAuthState().configured },
       passkey: {
@@ -69,7 +60,7 @@ authRouter.get('/auth/providers', async (req, res) => {
  */
 authRouter.post('/auth/passkey/options', async (req, res) => {
   try {
-    const options = await beginAuthentication(brainDir(), req);
+    const options = await beginAuthentication(BRAIN_DIR, req);
     res.json(options);
   } catch (err) {
     logger.warn('auth', `Passkey login options generation failed: ${err.message}`);
@@ -87,7 +78,7 @@ authRouter.post('/auth/passkey/verify', async (req, res) => {
     if (!response?.id) {
       return res.status(400).json({ error: 'WebAuthn assertion response required' });
     }
-    const result = await finishAuthentication(brainDir(), req, response);
+    const result = await finishAuthentication(BRAIN_DIR, req, response);
     if (!result?.verified) {
       return res.status(401).json({ error: 'Passkey verification failed' });
     }
@@ -117,7 +108,7 @@ authRouter.get('/auth/google', (req, res) => {
     if (req.query.format === 'json' || req.headers.accept?.includes('application/json')) return res.json({ url: attempt.url, redirectUri: attempt.redirectUri });
     return res.redirect(attempt.url);
   } catch {
-    return res.status(400).json({ error: 'Configure Google credentials and a trusted callback URI through auth' });
+    return res.status(400).json({ error: 'Configure Google credentials, a trusted callback URI and an account allowlist through auth' });
   }
 });
 

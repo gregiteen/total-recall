@@ -4,8 +4,8 @@ import path from 'path';
 import crypto from 'crypto';
 import os from 'os';
 import YAML from 'yaml';
-import { authLedger, appendAuthMetadata } from './metadata-state.mjs';
-import { resolveSecretsPath, resolveAuditPath, resolveUsagePath, secretsPassword, readTrEnvFilePassword, isPlainJsonStore, loadSecretsSync, saveSecretsSync, loadSecrets, saveSecrets, validateSecretsBuffer, replaceSecretsBufferAtomic, ensureMeta, appendAudit, META_KEY } from './secrets-gateway.mjs';
+import { authLedger, authLedgerTail, appendAuthMetadata, appendAuthMetadataAsync } from './metadata-state.mjs';
+import { resolveSecretsPath, resolveAuditPath, resolveUsagePath, secretsPassword, readTrEnvFilePassword, isPlainJsonStore, loadSecretsSync, saveSecretsSync, loadSecrets, saveSecrets, validateSecretsBuffer, replaceSecretsBufferAtomic, ensureMeta, appendAudit, appendAuditAsync, META_KEY } from './secrets-gateway.mjs';
 export * from './secrets-gateway.mjs';
 
 /**
@@ -492,7 +492,7 @@ export async function updateSecretMeta(brainDir, key, patch = {}, opts = {}) {
     meta_updated_at: new Date().toISOString(),
   };
   await saveSecrets(brainDir, secrets);
-  appendAudit(brainDir, {
+  await appendAuditAsync(brainDir, {
     action: 'meta',
     key,
     actor: opts.actor || 'cli',
@@ -551,7 +551,7 @@ export async function setSecret(brainDir, key, value, opts = {}) {
     updated_at: now,
   });
   await saveSecrets(brainDir, secrets);
-  appendAudit(brainDir, {
+  await appendAuditAsync(brainDir, {
     action: 'set',
     key,
     scope: secrets[META_KEY].keys[key].scope,
@@ -587,7 +587,7 @@ export async function getSecret(brainDir, key, opts = {}) {
   if (!(key in secrets) || key === META_KEY) {
     return { found: false, key };
   }
-  appendAudit(brainDir, {
+  await appendAuditAsync(brainDir, {
     action: opts.action || 'get',
     key,
     actor: opts.actor || 'cli',
@@ -607,7 +607,7 @@ export async function deleteSecret(brainDir, key, opts = {}) {
   delete secrets[key];
   if (secrets[META_KEY].keys) delete secrets[META_KEY].keys[key];
   await saveSecrets(brainDir, secrets);
-  appendAudit(brainDir, { action: 'delete', key, actor: opts.actor || 'cli' });
+  await appendAuditAsync(brainDir, { action: 'delete', key, actor: opts.actor || 'cli' });
   return { found: true, key, deleted: true };
 }
 
@@ -630,7 +630,7 @@ export async function rotateSecret(brainDir, key, newValue, opts = {}) {
     rotated_at: now,
   });
   await saveSecrets(brainDir, secrets);
-  appendAudit(brainDir, { action: 'rotate', key, actor: opts.actor || 'cli' });
+  await appendAuditAsync(brainDir, { action: 'rotate', key, actor: opts.actor || 'cli' });
   return { key, rotated: true, next_rotate_due: nextRotateDue(secrets[META_KEY].keys[key]) };
 }
 
@@ -639,16 +639,14 @@ export async function rotateSecret(brainDir, key, newValue, opts = {}) {
  */
 export function readSecretAudit(brainDir, { limit = 50 } = {}) {
   const auditPath = resolveAuditPath(brainDir);
-  return authLedger(auditPath).slice(-limit);
+  return authLedgerTail(auditPath, limit);
 }
 
 /**
  * Record a usage/cost event (no secrets).
  */
-export function recordUsage(brainDir, event) {
-  const usagePath = resolveUsagePath(brainDir);
-  fs.mkdirSync(path.dirname(usagePath), { recursive: true });
-  const row = {
+function usageRow(event) {
+  return {
     ts: new Date().toISOString(),
     provider: event.provider || 'unknown',
     model: event.model || null,
@@ -658,7 +656,22 @@ export function recordUsage(brainDir, event) {
     source: event.source || 'cli',
     key_ref: event.key_ref || null, // secret *name* only, never value
   };
+}
+
+export function recordUsage(brainDir, event) {
+  const usagePath = resolveUsagePath(brainDir);
+  fs.mkdirSync(path.dirname(usagePath), { recursive: true });
+  const row = usageRow(event);
   appendAuthMetadata(usagePath, row);
+  return row;
+}
+
+/** recordUsage for server paths: it never blocks the event loop. */
+export async function recordUsageAsync(brainDir, event) {
+  const usagePath = resolveUsagePath(brainDir);
+  fs.mkdirSync(path.dirname(usagePath), { recursive: true });
+  const row = usageRow(event);
+  await appendAuthMetadataAsync(usagePath, row);
   return row;
 }
 

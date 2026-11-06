@@ -12,19 +12,25 @@
 import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
-import os from "node:os";
+import { pathToFileURL } from 'node:url';
 import { auditMachine, auditFleet, hardenSshPermissions, loadOwner, runCheck } from "./src/machines.mjs";
 import { assessDevice, platformInventory } from './src/devices.mjs';
 import { auditAndroid } from './src/android.mjs';
 import { scanSource } from "./src/scanner.mjs";
+import { websiteMiddleware } from './src/site-shield.mjs';
 
 const TOKEN_KEY = "SECURITY_MASTER_KEY";
 const CHALLENGE_KEY = "CHALLENGE_SECRET_KEY";
 
 async function resolveSecret(key) {
-  const owner = await loadOwner('auth', 'secrets-store');
-  const result = await owner.getSecret(process.env.TR_SECRETS_BRAIN || owner.defaultBrainDir(), key, { actor: 'security-plugin', action: 'use' });
+  const { store, brain } = await authStore();
+  const result = await store.getSecret(brain, key, { actor: 'security-plugin', action: 'use' });
   return result.found ? result.value : null;
+}
+async function authStore() {
+  const store = await loadOwner('auth', 'secrets-store');
+  const { hostSecretsBrainDir } = await loadOwner('auth', 'host-secrets-store');
+  return { store, brain: hostSecretsBrainDir() };
 }
 async function requiredSecret(key) {
   const value = await resolveSecret(key);
@@ -100,12 +106,12 @@ function decryptText(payload, passphrase) {
 
 
 
-async function createPowChallenge(difficulty = 3) {
+async function createPowChallenge(difficulty = 3, { key, binding = '' } = {}) {
   if (!Number.isInteger(difficulty) || difficulty < 1 || difficulty > 6) throw new Error("Difficulty must be an integer between 1 and 6");
   const salt = crypto.randomBytes(12).toString("hex");
   const expires = Date.now() + 5 * 60 * 1000; // 5 min TTL
-  const payload = `${salt}:${difficulty}:${expires}`;
-  const signature = crypto.createHmac("sha256", await requiredSecret(TOKEN_KEY)).update(payload).digest("hex");
+  const payload = `${salt}:${difficulty}:${expires}` + binding;
+  const signature = crypto.createHmac("sha256", key ?? await requiredSecret(TOKEN_KEY)).update(payload).digest("hex");
   return {
     algorithm: "SHA-256",
     difficulty,
@@ -116,13 +122,13 @@ async function createPowChallenge(difficulty = 3) {
   };
 }
 
-async function verifyPowChallenge(salt, difficulty, expires, signature, nonce) {
+async function verifyPowChallenge(salt, difficulty, expires, signature, nonce, { key, binding = '' } = {}) {
   if (!Number.isInteger(Number(difficulty)) || Number(difficulty) < 1 || Number(difficulty) > 6 || !Number.isFinite(Number(expires)) || Number(expires) > Date.now() + 300000) return { valid: false, error: "Invalid challenge parameters" };
   if (Date.now() > Number(expires)) {
     return { valid: false, error: "Challenge expired" };
   }
-  const payload = `${salt}:${difficulty}:${expires}`;
-  const expectedSig = crypto.createHmac("sha256", await requiredSecret(TOKEN_KEY)).update(payload).digest("hex");
+  const payload = `${salt}:${difficulty}:${expires}` + binding;
+  const expectedSig = crypto.createHmac("sha256", key ?? await requiredSecret(TOKEN_KEY)).update(payload).digest("hex");
   if (!equalSignature(signature, expectedSig)) {
     return { valid: false, error: "Invalid challenge signature or tampered parameters" };
   }
@@ -208,37 +214,51 @@ async function evaluateBotRisk({ honeypot = "", elapsedMs = 1500, token = null }
 // 4. ANTI-CSRF & RATE LIMITING
 // ─────────────────────────────────────────────────────────────────────────────
 
-async function generateCsrfToken(sessionId) {
+async function generateCsrfToken(sessionId, key) {
   if (typeof sessionId !== "string" || !sessionId) throw new Error("Authenticated session ID required");
   const timestamp = Date.now();
   const raw = `${sessionId}:${timestamp}`;
-  const sig = crypto.createHmac("sha256", await requiredSecret(TOKEN_KEY)).update(raw).digest("hex");
+  const sig = crypto.createHmac("sha256", key ?? await requiredSecret(TOKEN_KEY)).update(raw).digest("hex");
   return `${timestamp}:${sig}`;
 }
 
-async function verifyCsrfToken(token, sessionId, ttlMs = 3600000) {
+async function verifyCsrfToken(token, sessionId, ttlMs = 3600000, key) {
   if (typeof sessionId !== "string" || !sessionId) return false;
-  if (!token || !token.includes(":")) return false;
+  if (typeof token !== 'string' || !/^[0-9]{13}:[0-9a-f]{64}$/.test(token)) return false;
   const [timestampStr, sig] = token.split(":");
   const timestamp = Number(timestampStr);
   if (!Number.isFinite(timestamp) || timestamp > Date.now() || Date.now() - timestamp > ttlMs) return false;
   const raw = `${sessionId}:${timestamp}`;
-  const expectedSig = crypto.createHmac("sha256", await requiredSecret(TOKEN_KEY)).update(raw).digest("hex");
+  const expectedSig = crypto.createHmac("sha256", key ?? await requiredSecret(TOKEN_KEY)).update(raw).digest("hex");
   return equalSignature(sig, expectedSig);
 }
 
 const rateLimitBuckets = new Map();
 
-function checkRateLimit(ipOrKey, { maxRequests = 60, windowMs = 60000 } = {}) {
+function checkRateLimit(ipOrKey, { maxRequests = 60, windowMs = 60000, buckets = rateLimitBuckets, capacity = 10_000 } = {}) {
   const now = Date.now();
-  const bucket = rateLimitBuckets.get(ipOrKey) || [];
+  if (!buckets.has(ipOrKey) && buckets.size >= capacity) return { allowed: false, remaining: 0, resetInMs: windowMs };
+  const bucket = buckets.get(ipOrKey) || [];
   const valid = bucket.filter((t) => now - t < windowMs);
   if (valid.length >= maxRequests) {
     return { allowed: false, remaining: 0, resetInMs: windowMs - (now - valid[0]) };
   }
   valid.push(now);
-  rateLimitBuckets.set(ipOrKey, valid);
+  buckets.set(ipOrKey, valid);
   return { allowed: true, remaining: maxRequests - valid.length, resetInMs: windowMs };
+}
+
+async function createSiteShield(options) {
+  const key = await requiredSecret(TOKEN_KEY);
+  return websiteMiddleware({
+    ...options,
+    createChallenge: (difficulty, binding) => createPowChallenge(difficulty, { key, binding }),
+    verifyChallenge: (proof, binding) => verifyPowChallenge(...proof, { key, binding }),
+    csrfToken: session => generateCsrfToken(session, key),
+    verifyCsrf: (token, session) => verifyCsrfToken(token, session, 3_600_000, key),
+    botRisk: evaluateBotRisk,
+    rateLimit: checkRateLimit,
+  });
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -249,18 +269,22 @@ async function auditWebsiteUrl(targetUrl) {
   const checks = [];
   let score = 100;
   let headers = {};
+  let target = null;
+  let httpStatus = null;
 
   try {
     const url = new URL(targetUrl);
     if (url.protocol !== "https:" || url.username || url.password || url.search || url.hash) throw new Error("HTTPS without embedded credentials is required");
+    target = url.href;
     const res = await fetch(url, { method: "HEAD", redirect: "error", signal: AbortSignal.timeout(5000) });
+    httpStatus = res.status;
     if (!res.ok) throw new Error("Website returned unsuccessful HTTP status");
     headers = Object.fromEntries(res.headers.entries());
 
     // 1. Content-Security-Policy
     const csp = headers["content-security-policy"];
-    if (csp) {
-      checks.push({ name: "Content-Security-Policy", status: "PASS", detail: "Configured and enforced" });
+    if (csp && /(?:^|;)\s*(?:default-src|script-src)\s+[^;\s]/i.test(csp)) {
+      checks.push({ name: "Content-Security-Policy", status: "PASS", detail: "Content or script source policy observed" });
     } else {
       score -= 25;
       checks.push({ name: "Content-Security-Policy", status: "FAIL", detail: "Missing CSP header; vulnerable to XSS and injection" });
@@ -268,8 +292,8 @@ async function auditWebsiteUrl(targetUrl) {
 
     // 2. Strict-Transport-Security (HSTS)
     const hsts = headers["strict-transport-security"];
-    if (hsts) {
-      checks.push({ name: "Strict-Transport-Security", status: "PASS", detail: "HSTS header active" });
+    if (hsts && /(?:^|;)\s*max-age\s*=\s*[1-9]\d*\s*(?:;|$)/i.test(hsts)) {
+      checks.push({ name: "Strict-Transport-Security", status: "PASS", detail: "Positive HSTS max-age observed" });
     } else {
       score -= 20;
       checks.push({ name: "Strict-Transport-Security", status: "FAIL", detail: "Missing HSTS; downgrade attacks possible" });
@@ -310,12 +334,16 @@ async function auditWebsiteUrl(targetUrl) {
       score -= 10;
       checks.push({ name: "Permissions-Policy", status: "WARN", detail: "Missing Permissions-Policy header" });
     }
-  } catch (err) {
+  } catch {
     return {
-      target: targetUrl,
-      error: `Connection failed: ${err.message}`,
+      target,
+      http_status: httpStatus,
+      ok: false,
+      status: 'unavailable',
+      error: target ? 'Website response could not be assessed' : 'Supply an HTTPS URL without embedded credentials, query or fragment',
       grade: "F",
       score: 0,
+      checks_count: 0,
       checks: []
     };
   }
@@ -328,8 +356,13 @@ async function auditWebsiteUrl(targetUrl) {
   else if (score >= 60) grade = "C";
   else if (score >= 45) grade = "D";
 
+  const ok = checks.every(check => check.status === 'PASS');
   return {
-    target: targetUrl,
+    target,
+    http_status: httpStatus,
+    ok,
+    status: ok ? 'header-check-passed' : 'review-required',
+    coverage: 'HTTP response headers only',
     grade,
     score,
     checks_count: checks.length,
@@ -384,60 +417,44 @@ export function configureSiteSecurity(app) {
 
 function scanPath(targetPath) { return scanSource(targetPath); }
 
-function discoverPluginDirs() {
-  const dirs = new Set();
-  const cwd = process.cwd();
-
-  const projectPlugins = path.join(cwd, ".agent", "skills", "total-recall", "plugins");
-  if (fs.existsSync(projectPlugins)) {
-    for (const d of fs.readdirSync(projectPlugins)) {
-      const full = path.join(projectPlugins, d);
-      if (fs.existsSync(path.join(full, "plugin.json"))) dirs.add(full);
-    }
-  }
-
-  const globalPlugins = path.join(os.homedir(), '.agent', 'skills', 'total-recall', 'plugins');
-  if (fs.existsSync(globalPlugins)) {
-    for (const entry of fs.readdirSync(globalPlugins)) {
-      const full = path.join(globalPlugins, entry);
-      if (fs.existsSync(path.join(full, 'plugin.json'))) dirs.add(full);
-    }
-  }
-
-  return [...new Set([...dirs].map(dir => fs.realpathSync(dir)))];
+async function discoverPluginEntries() {
+  const host = process.env.TR_PACKAGE_ROOT;
+  if (!host || !path.isAbsolute(host)) throw new Error('The installed Total Recall host is required for plugin inventory');
+  const loader = await import(pathToFileURL(path.join(host, 'src/core/plugin-loader.mjs')).href);
+  return loader.discoverPlugins(process.cwd());
 }
 
-function auditPlugins({ harden = false } = {}) {
+async function auditPlugins({ harden = false } = {}) {
   if (harden) throw new Error("Manifest edits cannot enforce runtime security; fix the reported owning source");
-  const pluginDirs = discoverPluginDirs();
   const results = [];
 
-  for (const dir of pluginDirs) {
-    const manifestPath = path.join(dir, "plugin.json");
-    let manifest;
-    try {
-      manifest = JSON.parse(fs.readFileSync(manifestPath, "utf8"));
-    } catch (err) {
-      results.push({ plugin: path.basename(dir), path: dir, status: "error", error: err.message, findings: [] });
+  for (const { id, manifest, dir, scope, valid } of await discoverPluginEntries()) {
+    if (!valid) {
+      results.push({ plugin: id, path: dir, scope, status: 'error', error: 'Host reports the plugin manifest or source as invalid', findings_count: 0, findings: [] });
       continue;
     }
 
     const pluginId = manifest.id || path.basename(dir);
     const findings = [];
-
-
-    if (!manifest.auth || manifest.auth.plugin !== "auth") {
+    const routes = Array.isArray(manifest.runtime?.routers) && manifest.runtime.routers.length > 0;
+    const secrets = Array.isArray(manifest.secrets) && manifest.secrets.length > 0;
+    if (pluginId !== 'auth' && (routes || secrets) && manifest.auth?.plugin !== 'auth' && !manifest.requires?.some(dep => dep.id === 'auth')) {
       findings.push({ rule: "Missing Auth Plugin Integration", severity: "HIGH", detail: "Manifest does not declare auth plugin binding" });
 
     }
 
     const grants = manifest.deploy?.access_grants || [];
-    if (!grants.includes("auth:session:verify")) {
+    if (pluginId !== 'auth' && routes && manifest.deploy && !grants.includes("auth:session:verify")) {
       findings.push({ rule: "Missing Session Verification Grant", severity: "MEDIUM", detail: "deploy.access_grants lacks auth:session:verify" });
 
     }
 
-    const codeFindings = scanPath(dir);
+    let codeFindings;
+    try { codeFindings = scanPath(fs.realpathSync(dir)); }
+    catch {
+      results.push({ plugin: pluginId, path: dir, scope, status: 'error', error: 'Plugin source scan did not establish coverage', findings_count: findings.length, findings });
+      continue;
+    }
     for (const cf of codeFindings) {
       findings.push({ rule: cf.rule, severity: cf.severity, detail: `${cf.file}:${cf.line}` });
     }
@@ -447,6 +464,7 @@ function auditPlugins({ harden = false } = {}) {
     results.push({
       plugin: pluginId,
       path: dir,
+      scope,
       status: findings.some(f => ["CRITICAL", "HIGH"].includes(f.severity)) ? "vulnerable" : findings.length ? "review-required" : "passed",
       hardened: false,
       findings_count: findings.length,
@@ -551,9 +569,11 @@ async function siteAuditCommand(args) {
   const target = args.find((a) => !a.startsWith("--"));
   if (!target) throw new Error("site-audit requires an authorized URL");
   const report = await auditWebsiteUrl(target);
+  if (!report.ok) process.exitCode = 1;
   if (json) console.log(JSON.stringify(report, null, 2));
   else {
-    console.log(`Website Security Audit for: ${target}`);
+    console.log(`Website header audit for: ${report.target ?? '(invalid target)'}`);
+    if (report.error) console.log(report.error);
     console.log("───────────────────────────────────────────────────────");
     console.log(`Security Grade : ${report.grade} (Score: ${report.score}/100)`);
     console.log(`Headers Checked: ${report.checks_count}`);
@@ -567,7 +587,7 @@ async function siteAuditCommand(args) {
 async function siteShieldCommand(args) {
   const code = generateSiteShieldCode();
   const json = args.includes("--json");
-  if (json) console.log(JSON.stringify({ shield_middleware: code }));
+  if (json) console.log(JSON.stringify({ shield_middleware: code, coverage: ['security-headers'], installed: false, runtime_export: 'website:createSiteShield' }));
   else {
     console.log("Website Security Shield Middleware Snippet:");
     console.log(code);
@@ -614,7 +634,7 @@ async function auditCommand(args) {
     });
   }
 
-  const pluginAudit = auditPlugins({ harden: false });
+  const pluginAudit = await auditPlugins({ harden: false });
   const vulnerablePlugins = pluginAudit.filter((p) => p.status === "vulnerable");
   if (vulnerablePlugins.length > 0) {
     findings.push({
@@ -652,7 +672,7 @@ async function auditCommand(args) {
 async function pluginsCommand(args) {
   const json = args.includes("--json");
   const harden = args.includes("--harden") || args.includes("-h");
-  const results = auditPlugins({ harden });
+  const results = await auditPlugins({ harden });
   const totalFindings = results.reduce((acc, r) => acc + r.findings_count, 0);
   const totalHardened = results.filter((r) => r.hardened).length;
 
@@ -778,6 +798,7 @@ async function encryptCommand(args) {
 
 async function decryptCommand(args) {
   const json = args.includes("--json");
+  if (json || !process.stdout.isTTY) throw new Error('Decrypted plaintext is available only in an interactive terminal');
   const passIdx = args.indexOf("--passphrase");
   if (passIdx !== -1) throw new Error("Passphrases in argv are prohibited; configure SECURITY_MASTER_KEY through auth");
   const pass = await requiredSecret(TOKEN_KEY);
@@ -791,8 +812,7 @@ async function decryptCommand(args) {
 
   try {
     const plain = decryptText(payload, pass);
-    if (json) console.log(JSON.stringify({ plaintext: plain }));
-    else console.log(`Decrypted: ${plain}`);
+    console.log(`Decrypted: ${plain}`);
   } catch (err) {
     console.error(`Decryption failed: ${err.message}`);
     process.exitCode = 1;
@@ -816,8 +836,9 @@ async function tokenCommand(args) {
   const [action = "status"] = args;
   const json = args.includes("--json");
   if (action === "status") {
-    const key = await resolveSecret(TOKEN_KEY);
-    const status = { present: Boolean(key), secretKey: TOKEN_KEY };
+    const { store, brain } = await authStore();
+    const rows = await store.listSecretsMeta(brain);
+    const status = { present: rows.some(row => row.key === TOKEN_KEY), secretKey: TOKEN_KEY };
     console.log(json ? JSON.stringify(status) : `Security Master Key: ${status.present ? "present" : "missing"} (${TOKEN_KEY})`);
     if (!status.present) process.exitCode = 1;
     return;
@@ -826,8 +847,8 @@ async function tokenCommand(args) {
     const val = await readStdin();
     if (!val) { console.error("No key provided on stdin."); process.exitCode = 2; return; }
     if (Buffer.byteLength(val) < 32) throw new Error('Master key requires at least 32 bytes');
-    const owner = await loadOwner('auth', 'secrets-store');
-    await owner.setSecret(process.env.TR_SECRETS_BRAIN || owner.defaultBrainDir(), TOKEN_KEY, val, { actor: 'security-plugin' });
+    const { store, brain } = await authStore();
+    await store.setSecret(brain, TOKEN_KEY, val, { actor: 'security-plugin' });
     console.log(JSON.stringify({ saved: true, provider_verified: false, validation: 'local-key-length', secretKey: TOKEN_KEY }));
     return;
   }
@@ -900,12 +921,12 @@ const IMPLEMENTED = {
 export async function run(argv = []) {
   const args = Array.isArray(argv) ? argv.slice(3) : [];
   const sub = args[0] || "status";
-  if (['--help', '-h', 'help'].includes(sub)) {
+  if (args.includes('--help') || args.includes('-h') || sub === 'help') {
     console.log('Usage: total-recall security <command> [--json]\nCommands: ' + Object.keys(IMPLEMENTED).join(', '));
     console.log('Device review: device --platform <platform> --device <label> --json\nSource audit: scan <path> --json; plugins --json\nCredentials: auth plugin only. Missing evidence remains unverified.');
     return;
   }
-  if (IMPLEMENTED[sub]) {
+  if (Object.hasOwn(IMPLEMENTED, sub)) {
     try { return await IMPLEMENTED[sub](args.slice(1)); }
     catch (error) {
       // Say what failed. The generic text hid every cause, including a scan that
@@ -924,7 +945,6 @@ export {
   decryptText,
   scanPath,
   auditPlugins,
-  discoverPluginDirs,
   createPowChallenge,
   verifyPowChallenge,
   solvePowChallenge,
@@ -933,6 +953,7 @@ export {
   verifyCsrfToken,
   checkRateLimit,
   auditWebsiteUrl,
-  generateSiteShieldCode
+  generateSiteShieldCode,
+  createSiteShield
 };
 export default run;

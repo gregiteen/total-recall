@@ -11,6 +11,11 @@ const ACK_COMMAND = 'total-recall tr-preflight --ack --task "<task>" --action re
 export const claudeAdapter = {
   id: 'claude',
   level: 'enforced',
+  warnings: {
+    delivery: 'documented',
+    via: 'hookSpecificOutput.additionalContext',
+    source: 'https://code.claude.com/docs/en/hooks.md',
+  },
   source: {
     url: 'https://docs.anthropic.com/en/docs/agents-and-tools/claude-code/overview',
     retrieved: '2026-11-04',
@@ -51,11 +56,13 @@ export const claudeAdapter = {
       tool = 'web';
     } else if (/^mcp__ccd_turn__/.test(toolName)) {
       tool = 'ui';
+    } else if (/^mcp__ccd_(session|session_mgmt)__/.test(toolName)) {
+      tool = 'agent';
     } else if (/^mcp__/.test(toolName)) {
       tool = 'mcp';
-    } else if (toolName === 'Agent') {
+    } else if (/^(Agent|Task|SendMessage|ListAgents)$/.test(toolName)) {
       tool = 'agent';
-    } else if (/^(ToolSearch|Skill|AskUserQuestion)$/.test(toolName)) {
+    } else if (/^(ToolSearch|Skill|AskUserQuestion|TodoWrite|ExitPlanMode|EnterPlanMode)$/.test(toolName)) {
       tool = 'meta';
     }
 
@@ -79,7 +86,7 @@ export const claudeAdapter = {
         const payload = {
           hookSpecificOutput: {
             hookEventName: 'UserPromptSubmit',
-            additionalContext: `TR-PREFLIGHT FAILED for ${cwd}: ${decision.reason || 'check failed'}. First read the full context capsule (never truncate it), then run: ${decision.fix || ACK_COMMAND}`
+            additionalContext: `TR-PREFLIGHT FAILED for ${cwd}: ${decision.reason || 'check failed'}. Run this on its own, with nothing piped, chained or redirected, and read everything it prints: ${decision.fix || ACK_COMMAND}`
           }
         };
         return { stdout: `${JSON.stringify(payload)}\n`, exitCode: 0 };
@@ -87,8 +94,12 @@ export const claudeAdapter = {
       return { stdout: '', exitCode: 0 };
     }
 
-    // PreToolUse
+    // PreToolUse. permissionDecision stays unset: a warning must not approve the call.
     if (decision?.decision === 'allow') {
+      if (decision.warning) {
+        const payload = { hookSpecificOutput: { hookEventName: 'PreToolUse', additionalContext: decision.warning } };
+        return { stdout: `${JSON.stringify(payload)}\n`, exitCode: 0 };
+      }
       return { stdout: '', exitCode: 0 };
     }
 
@@ -215,6 +226,23 @@ export const claudeAdapter = {
         }]
       });
       added.push('managed UserPromptSubmit reminder');
+    }
+
+    // SessionStart: a compacted or cleared session no longer has its capsule, so the next ack prints it
+    hooks.SessionStart = hooks.SessionStart || [];
+    const hasSessionStart = hooks.SessionStart.some(e =>
+      (e.hooks || []).some(h => String(h.command || '').includes('preflight session-start'))
+    );
+    if (!hasSessionStart) {
+      hooks.SessionStart.push({
+        matcher: 'compact|clear',
+        hooks: [{
+          type: 'command',
+          command: 'total-recall preflight session-start',
+          timeout: 5
+        }]
+      });
+      added.push('managed SessionStart capsule reset');
     }
 
     if (!dryRun && (added.length || removed.length)) {

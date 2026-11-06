@@ -16,6 +16,7 @@
  */
 import fs from 'node:fs';
 import path from 'node:path';
+import { parseDocument } from './ssss-documents.mjs';
 import { builtinCommandNames } from './command.mjs';
 import { EXIT_CODES } from './contract.mjs';
 
@@ -88,16 +89,8 @@ export function resolveGroupDirs(cwd) {
     for (const gf of groupFiles) {
       try {
         const content = fs.readFileSync(path.join(groupsDir, gf), 'utf8');
-        const frontmatter = content.match(/^---\n([\s\S]*?)\n---/);
-        if (!frontmatter) continue;
-        const yaml = frontmatter[1];
-        // Simple YAML-like parsing for members
-        const membersMatch = yaml.match(/members:\s*\[([^\]]*)\]/);
-        if (!membersMatch) continue;
-
-        const membersStr = membersMatch[1];
-        // Check if this project is a member
-        const isMember = projectId && membersStr.includes(projectId);
+        const { data } = parseDocument(content);
+        const isMember = projectId && Array.isArray(data.members) && data.members.includes(projectId);
 
         if (isMember) {
           const groupCommandsDir = path.join(homeDir, '.agent', 'commands',

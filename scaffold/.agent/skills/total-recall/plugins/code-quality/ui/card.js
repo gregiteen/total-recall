@@ -41,14 +41,14 @@ export class CodeQualityCard extends HTMLElement {
   async refreshReport() {
     if (!this.host) return;
     try {
-      const res = await this.host.run('report', ['--json']);
+      const res = await this.host.run('report', ['json']);
       if (res && typeof res === 'object') {
         this.report = res;
       } else if (typeof res === 'string' && res.trim().startsWith('{')) {
         this.report = JSON.parse(res);
       }
       this.render();
-    } catch {
+    } catch (err) {
       this.report = null;
       this.render();
     }
@@ -82,16 +82,18 @@ export class CodeQualityCard extends HTMLElement {
 
     const rep = this.report;
     const isClean = rep?.clean === true;
-    const checks = Array.isArray(rep?.checks) ? rep.checks : [];
-    const timestamp = rep?.timestamp ? new Date(rep.timestamp).toLocaleTimeString() : DASH;
+    const checks = Array.isArray(rep?.gates) ? rep.gates : Array.isArray(rep?.checks) ? rep.checks : [];
+    const timestamp = rep?.finishedAt ? new Date(rep.finishedAt).toLocaleTimeString() : rep?.timestamp ? new Date(rep.timestamp).toLocaleTimeString() : DASH;
     const tierName = rep?.tier || this.selectedTier;
 
-    // Aggregate findings
-    const allFindings = [];
-    for (const c of checks) {
-      if (Array.isArray(c.findings)) {
-        for (const f of c.findings) {
-          allFindings.push({ ...f, checkName: c.name || c.id });
+    // Aggregate findings from report.findings array or nested gate findings
+    let allFindings = Array.isArray(rep?.findings) ? [...rep.findings] : [];
+    if (allFindings.length === 0) {
+      for (const c of checks) {
+        if (Array.isArray(c.findings)) {
+          for (const f of c.findings) {
+            allFindings.push({ ...f, checkName: c.name || c.id });
+          }
         }
       }
     }
@@ -471,10 +473,9 @@ export class CodeQualityCard extends HTMLElement {
 
       <div class="header">
         <div class="brand-group">
-          <div class="wordmark-badge">[NIT//PICKER]</div>
           <div class="title-meta">
             <h3 class="plugin-title">Code Quality Gates</h3>
-            <p class="plugin-subtitle">Fail-closed deterministic repository verification</p>
+            <p class="plugin-subtitle">Fail-closed deterministic repository verification · v0.2.2</p>
           </div>
         </div>
         <div class="verdict-chip ${rep ? (isClean ? 'verdict-clean' : 'verdict-failed') : 'verdict-pending'}">

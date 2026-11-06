@@ -1077,7 +1077,7 @@ export class OpenWikiCard extends HTMLElement {
     return `
       <div style="margin-bottom: 12px;">
         <label style="display: block; font-weight: 600; margin-bottom: 4px;">Target Repository (leave empty for current workspace):</label>
-        <input class="search-input" id="generate-repo-input" placeholder="e.g. total-recall or gro-crm" value="${this.escape(this.generateRepo)}" />
+        <input class="search-input" id="generate-repo-input" placeholder="e.g. total-recall or my-app" value="${this.escape(this.generateRepo)}" />
       </div>
       <div style="display: flex; justify-content: flex-end; margin-bottom: 12px;">
         <button class="action-btn" id="btn-generate-exec" ${this.loading ? 'disabled' : ''}>

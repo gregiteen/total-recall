@@ -1,0 +1,58 @@
+{
+  "version": "0.14.4",
+  "files": {
+    ".gitignore": {
+      "sha256": "0d6c69a5cbd2270c9163d8e1563976b6d15131d0ef599e6fbc413ee287a86da0",
+      "content": "node_modules/\ndist/\n*.ucw.json\n.DS_Store\n"
+    },
+    "CLAUDE.md": {
+      "sha256": "066bbbd3c1b02145f6477f886932fc86ae6f81c8b6716f8c0b1f392787759f6f",
+      "content": "# ssss-project — agent guide\n\nThis repo uses **SSSS** (Structured Semantic Syntax System) as its state contract.\n\n## Source of truth\n- `vault/` is the only source of truth — typed Markdown documents with YAML\n  frontmatter. Every file declares a `type` defined in the `@gregiteen/ssss-cli` core registry.\n- Mutate the vault through the standard, not by hand-writing files in bulk:\n  `npx ssss` for bundle/tenant tooling, or the `@gregiteen/ssss-cli/engine` Operation Contract\n  in code.\n\n## Extension & Registry Isolation Invariant\n- App-specific primitives belong exclusively in `registry/extensions/` inside this application repository.\n- Never modify or fork `@gregiteen/ssss-cli` to add app-specific schemas.\n- Validate local extension schemas with: `npx ssss schema validate registry/extensions/<name>.json`.\n\n## Portability (§5.5) — the rule that matters\n- `structural` documents (rules, workflows, pages, assistants) are the sellable model.\n- `tenant_private` documents (tasks, customer data) are **never** shipped in a\n  `template`/`sale` export.\n- Run `npx ssss help portability` before adding a new document type.\n\n## Verify before claiming done\n- `npm test` replays the canonical Operation Contract fixtures through the engine\n  and round-trips `vault/` as a `sale` bundle. Keep it green.\n"
+    },
+    "README.md": {
+      "sha256": "91f0c482da11724543e1d1b16ae3d95372477b15c544cd0bd1793746e8eb135f",
+      "content": "# ssss-project\n\nAn [SSSS](https://github.com/gregiteen/ssss)-native project: a Markdown **vault** is\nthe source of truth, validated and packaged by the dependency-free `@gregiteen/ssss-cli`.\n\n## Layout\n\n```\nvault/         Your SSSS documents (structural + tenant_private primitives).\ntest/          Conformance test — replays the canonical fixtures + round-trips the vault.\n```\n\n## Use\n\n```bash\nnpm install\nnpm test                              # prove the toolchain + vault are conformant\nnpx ssss export vault --profile sale --out dist/bundle.ucw.json   # a tradeable bundle\nnpx ssss inspect dist/bundle.ucw.json --files\nnpx ssss help portability             # why a sale export is safe to share\n```\n\nThe `sale` profile ships every `structural` primitive and **drops** `tenant_private`\nones (the starter `vault/tasks/` file) — see `ssss help portability`.\n"
+    },
+    "docs/design.md": {
+      "sha256": "ee7e0bfdec7d4205ad223f1a42598e5e8894b243e73330d95adff14e60e1c9c7",
+      "content": "# ssss-project — System Architecture & Design\n\n> Technical design and architecture specification for ssss-project.\n\n## Overview\n\n<High-level summary of the system and its primary goals.>\n\n## Component Architecture\n\n- **Vault Structure**: Typed Markdown documents under `vault/` serving as the source of truth.\n- **Workflows & Execution**: Automated procedures defined in `vault/workflows/` triggered by operational events.\n- **Capabilities & Resources**: Tools and external service integrations required for execution.\n\n## Data & Schema Contracts\n\n<Core entities, external dependencies, and integration interfaces.>\n\n## Open Decisions & Invariants\n\n- SSSS VFS is the single source of truth for application state.\n- Structural business logic is strictly decoupled from private tenant operational data.\n- App-specific primitives reside in `registry/extensions/` within this repository and extend `core`.\n- Core SSSS library (`@gregiteen/ssss-cli`) remains vendor-neutral and dependency-free.\n"
+    },
+    "package.json": {
+      "sha256": "18389bfc91857c6d5917a3ac1af9da8a992c99b013f42f2843921cdc7b41bdfe",
+      "content": "{\n  \"name\": \"ssss-project\",\n  \"version\": \"0.1.0\",\n  \"private\": true,\n  \"type\": \"module\",\n  \"description\": \"An SSSS-native project — Markdown vault as source of truth.\",\n  \"scripts\": {\n    \"ssss\": \"ssss\",\n    \"test\": \"node --test\",\n    \"export\": \"ssss export vault --profile sale --out dist/bundle.ucw.json\",\n    \"validate\": \"ssss conformance --engine\"\n  },\n  \"dependencies\": {\n    \"@gregiteen/ssss-cli\": \"github:gregiteen/ssss#v0.14.4\"\n  }\n}\n"
+    },
+    "test/ssss-conformance.test.mjs": {
+      "sha256": "f626d2f56799fcfda74375d3ddf546cc181a10caf2df08b72b7f2e36782c9bc1",
+      "content": "/**\n * SSSS conformance — proves this repo's toolchain matches the published standard.\n * Zero test dependencies: run with `node --test` (Node 18+).\n */\nimport { test } from 'node:test';\nimport assert from 'node:assert/strict';\nimport { createRequire } from 'node:module';\nimport fs from 'node:fs';\nimport os from 'node:os';\nimport path from 'node:path';\nimport { fileURLToPath } from 'node:url';\nimport { createEngine } from '@gregiteen/ssss-cli/engine';\nimport { exportBundle, validateBundle, provisionBundle, importBundle } from '@gregiteen/ssss-cli/bundle';\n\nconst require = createRequire(import.meta.url);\nconst { fixtures } = require('@gregiteen/ssss-cli/conformance/fixtures.json');\nconst ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');\nconst VAULT = path.join(ROOT, 'vault');\nconst EXPORT_OPTIONS = {};\nconst REGISTRY_OPTIONS = {};\nconst ENGINE_OPTIONS = {};\n\ntest('engine implements the canonical Operation Contract (spec §6)', async () => {\n  const vault = fs.mkdtempSync(path.join(os.tmpdir(), 'ssss-conf-'));\n  const engine = createEngine();\n  try {\n    for (const f of fixtures) {\n      const res = await engine.processOperation(JSON.parse(JSON.stringify(f.request)), vault);\n      const exp = f.expected_response;\n      if (exp.success !== undefined) assert.equal(res.success, exp.success, f.id + ' success');\n      if (exp.validation && exp.validation.valid !== undefined) {\n        assert.equal(res.validation && res.validation.valid, exp.validation.valid, f.id + ' valid');\n      }\n    }\n  } finally { fs.rmSync(vault, { recursive: true, force: true }); }\n});\n\ntest('this vault exports, validates, and round-trips as a sale bundle (spec §16/§17)', async () => {\n  const bundle = exportBundle(VAULT, { profile: 'sale', name: 'starter', ...EXPORT_OPTIONS });\n  const { valid, errors } = validateBundle(bundle, REGISTRY_OPTIONS);\n  assert.ok(valid, 'bundle invalid: ' + errors.join('; '));\n  assert.ok(!bundle.files.some((f) => f.path.startsWith('tasks/')), 'tenant_private leaked into sale export');\n\n  const plan = provisionBundle(bundle, { workspaceId: 'ws-test', ...REGISTRY_OPTIONS });\n  assert.ok(plan.ok, 'provision failed: ' + JSON.stringify(plan.errors) + ' ' + JSON.stringify(plan.unresolved) + ' ' + JSON.stringify(plan.danglingLinks));\n\n  const target = fs.mkdtempSync(path.join(os.tmpdir(), 'ssss-import-'));\n  try {\n    const engine = createEngine(ENGINE_OPTIONS);\n    const r1 = await importBundle(plan.plan, target, engine);\n    assert.ok(r1.ok && r1.committed === bundle.files.length, 'import did not commit every file');\n    const r2 = await importBundle(plan.plan, target, engine);\n    assert.equal(r2.committed, 0, 're-import was not idempotent');\n  } finally { fs.rmSync(target, { recursive: true, force: true }); }\n});\n"
+    },
+    "vault/assistants/concierge.md": {
+      "sha256": "5e3c8995b6d7790457b4ead361d1ac7e04153477f6711ee77923329eb788c64c",
+      "content": "---\ntype: assistant\ntitle: Concierge\ndescription: Starter assistant definition for the project.\ntimestamp: 2026-07-02T00:00:00Z\nname: Concierge\n---\n\n# Concierge\n\nA starter assistant definition.\n"
+    },
+    "vault/rules/welcome.md": {
+      "sha256": "67f526ddd00f214be4764cb63dd8b5be3959f37350f3ddac34cfae45653a1eeb",
+      "content": "---\ntype: rule\ntitle: Welcome Rule\ndescription: Starter structural rule for an SSSS-native app.\ntimestamp: 2026-07-02T00:00:00Z\nname: Welcome Rule\n---\n\n# Welcome\n\nA starter **structural** rule — the kind of thing that ships in a `sale` bundle.\n"
+    },
+    "vault/tasks/first-task.md": {
+      "sha256": "dffaca2ce9e268f0451f6cabdf97539167d3e58387496744d04f14e73ac83cd5",
+      "content": "---\ntype: task\ntitle: First Task\ndescription: Starter private setup task that demonstrates tenant_private filtering.\ntimestamp: 2026-07-02T00:00:00Z\npriority: normal\ncategory: setup\nstatus: pending\n---\n\n# First task\n\nThis is `tenant_private` (§5.5) — it is **dropped** from `template`/`sale` exports.\n"
+    },
+    "vault/workflows/onboarding.md": {
+      "sha256": "e924cc64914c2889f3cb0e04d2d1abb3ec0be9ee3f897524360f478b58431812",
+      "content": "---\ntype: workflow\ntitle: Onboarding\ndescription: Starter workflow that applies the welcome rule and greets the operator.\ntimestamp: 2026-07-02T00:00:00Z\nname: Onboarding\n---\n\n# Onboarding\n\n1. Apply the [[welcome]] rule.\n2. Greet the operator.\n"
+    }
+  },
+  "skill": {
+    "SKILL.md": "4976c9615482f257fd023761dd3ef36b5aa278305ff22ae110295fe4945f5d4c",
+    "core/SKILL.md": "96c6479ad06b84c5f7ffd8bb05bff414dbb8c22a040ec1f1c05d8fa4fdbd976e",
+    "core/references/core-registry.json": "16831aa3b6be3f561a9ca7abdc36065a4843ff595aa3acf5c3fb8af2d733b7e3",
+    "core/references/ssss-spec.md": "cc319e78b1b568651d5717695348363349d502c0e20663da9858369022ddfc3b",
+    "core/scripts/maintain.mjs": "eebcae898f2ce0cf3f0059c6f6737bee8877409de2d370d54a4015a9a82414e9",
+    "evals/evals.json": "8c182937f374783a44b8aafb9779a723624e0ed07e27b18423b071324e9a947f",
+    "evals/maintain.test.mjs": "1eb53112c6dd32f7f30a330a5638ef9bdaeb5b2e67d6779e012223dafc99f455",
+    "references/contract-reference.md": "ec6ad7e284565332df04ce2db3679041e48f6e5981f551e2ac70515c6a2ab0bc",
+    "references/protocol-reference-legacy.md": "bb025ae3d3f6b899d39c2379bca4023933f64409c1a033134aea3e955910ace7",
+    "scripts/validate-schema.mjs": "c6d2caa81cc560e9465d28fde47e3247e6c527561f23c09bc1ed0f8deef21071",
+    "subagents/audit-ssss-contract.md": "cfd78cf8ab18e1bc330aca3f8bc31ec38a72beeed760f98c1d74ee48593c675f"
+  }
+}

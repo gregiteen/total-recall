@@ -10,6 +10,7 @@ import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import { hostSecretsBrainDir } from './src/host-secrets-store.mjs';
+import { HOST_RUNTIME_REQUIRED } from './src/host-runtime.mjs';
 
 function resolveTrPath() {
   const localTr = path.join(process.cwd(), 'bin', 'total-recall.mjs');
@@ -40,9 +41,14 @@ async function handleStatus(subArgs, json) {
     return;
   }
   const passkeys = await listStoredPasskeys();
-  const googleClientId = await resolveSecret('GOOGLE_CLIENT_ID');
-  const googleClientSecret = await resolveSecret('GOOGLE_CLIENT_SECRET');
-  const googleReady = Boolean(googleClientId && googleClientSecret);
+  const { createGoogleOAuth } = await import('./src/google-oauth.mjs');
+  const { loadSecretsSync } = await import('./src/secrets-gateway.mjs');
+  const brainDir = resolveBrainDir();
+  const secrets = loadSecretsSync(brainDir);
+  const google = createGoogleOAuth({ brainDir, load: () => secrets });
+  let googleClientId = null;
+  try { googleClientId = google.config().clientId; } catch { /* incomplete settings do not enable Google sign-in */ }
+  const googleReady = Boolean(googleClientId);
 
   const status = {
     passkey: {
@@ -58,7 +64,7 @@ async function handleStatus(subArgs, json) {
     google_oauth2: {
       configured: googleReady,
       client_id: googleClientId ? `${googleClientId.slice(0, 12)}…` : null,
-      has_secret: Boolean(googleClientSecret),
+      has_secret: typeof secrets.GOOGLE_CLIENT_SECRET === 'string' && Boolean(secrets.GOOGLE_CLIENT_SECRET.trim()),
     },
     system: {
       status: 'local-configuration-read',
@@ -87,7 +93,7 @@ async function handleStatus(subArgs, json) {
   if (googleClientId) {
     console.log(`  • Client ID    : ${googleClientId.slice(0, 16)}…`);
   } else {
-    console.log('  • Set GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET in the secrets store');
+    console.log('  • Configure the client credentials, callback URI and email allowlist through auth');
   }
 }
 
@@ -194,7 +200,7 @@ async function handleGoogle(subArgs, json) {
   }
   let cfg;
   try { cfg = google.config(); } catch {
-    console.log(JSON.stringify({ configured: false, error: 'Configure GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET and GOOGLE_REDIRECT_URI in auth' }));
+    console.log(JSON.stringify({ configured: false, error: 'Configure GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, GOOGLE_REDIRECT_URI and GOOGLE_ALLOWED_EMAILS in auth' }));
     process.exitCode = 2;
     return;
   }
@@ -367,9 +373,8 @@ async function handleRotate(subArgs, json) {
     return;
   }
   const { createSessionCredentials } = await import('./src/session-credentials.mjs');
-  const { defaultBrainDir } = await import('./src/secrets-store.mjs');
   const purpose = subArgs.includes('--collaboration') ? 'collaboration' : 'dashboard';
-  const result = createSessionCredentials({ brainDir: process.env.TR_SECRETS_BRAIN || defaultBrainDir() }).rotateSession(purpose);
+  const result = createSessionCredentials({ brainDir: resolveBrainDir() }).rotateSession(purpose);
   console.log(json ? JSON.stringify(result) : 'Auth signing credential rotated; existing sessions are invalidated.');
 }
 
@@ -572,5 +577,12 @@ export async function run(argv = []) {
 export default run;
 
 if (process.argv[1]?.endsWith('cli.mjs')) {
-  run(process.argv).catch(() => { console.error(JSON.stringify({ error: 'Auth operation failed; verify store access and arguments. No success established.' })); process.exitCode = 1; });
+  // Other errors stay generic because they can carry credential material; this one is a fixed string.
+  run(process.argv).catch((err) => {
+    const error = err?.message === HOST_RUNTIME_REQUIRED
+      ? 'This CLI needs the Total Recall host. Run it as: total-recall auth <command>'
+      : 'Auth operation failed; verify store access and arguments. No success established.';
+    console.error(JSON.stringify({ error }));
+    process.exitCode = 1;
+  });
 }

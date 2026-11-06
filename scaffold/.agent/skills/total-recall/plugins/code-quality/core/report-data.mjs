@@ -61,7 +61,9 @@ export function buildReportView(reportFile, { now = Date.now(), inspectGit = tru
   } catch (err) {
     return { ...base, status: 'unreadable', reasons: [`Report is not valid JSON: ${err.message}`] };
   }
-  if (!report || !Array.isArray(report.checks) || !Array.isArray(report.ranChecks) || !report.startedAt) {
+  if (!report || !Array.isArray(report.checks) || !Array.isArray(report.ranChecks) || !Number.isFinite(Date.parse(report.startedAt)) ||
+      report.checks.some(check => !check || typeof check.id !== 'string' || typeof check.ok !== 'boolean') ||
+      [report.findings, report.skippedChecks].some(rows => rows !== undefined && (!Array.isArray(rows) || rows.some(row => !row || typeof row !== 'object')))) {
     return { ...base, status: 'unreadable', reasons: ['Report does not have the code-quality schema (checks, ranChecks, startedAt).'] };
   }
 
@@ -132,6 +134,41 @@ export function buildReportView(reportFile, { now = Date.now(), inspectGit = tru
     findings: findings.slice(0, 200),
     findingsTruncated: findings.length > 200,
   };
+}
+
+export function wantsStructuredReport(args) {
+  return args[0] === 'json' || args.includes('--json') || args.includes('--review-diagnostics');
+}
+
+export async function printCachedReport(args, reportFile) {
+  const review = args.includes('--review-diagnostics');
+  const json = args[0] === 'json' || args.includes('--json');
+  const modes = args.filter(arg => arg !== '--json' && arg !== '--review-diagnostics');
+  const invalid = modes.length > 1 || (modes.length === 1 && modes[0] !== 'json');
+  const view = invalid
+    ? { status: 'invalid', clean: false, reasons: ['Use report --json or report --review-diagnostics [--json] without a human report view.'] }
+    : buildReportView(reportFile);
+
+  let result = view;
+  if (review) {
+    const { gates = [], findings = [], ...summary } = view;
+    result = {
+      ...summary,
+      failedGates: gates.filter(gate => !gate.skipped && (!gate.ok || gate.spawnError || gate.timedOut)),
+      diagnostics: findings.map(finding => ({
+        ...finding,
+        suggestedFix: finding.suggestedFix ?? finding.fix ?? null,
+      })),
+    };
+  }
+  const output = json ? JSON.stringify(result, null, 2) : [
+    `Code Quality review: ${view.status}`,
+    ...view.reasons,
+    ...(result.failedGates ?? []).map(gate => `${gate.id}: ${gate.spawnError || (gate.timedOut ? 'timed out' : `exit ${gate.exitCode ?? 'unknown'}`)}`),
+    ...(result.diagnostics ?? []).map(finding => `${finding.file ?? '(unknown file)'}:${finding.line ?? '?'}:${finding.col ?? '?'} ${finding.code ?? ''} ${finding.message ?? ''}${finding.snippet ? `\n  ${finding.snippet}` : ''}${finding.suggestedFix ? `\n  ${finding.suggestedFix}` : ''}`),
+  ].join('\n');
+  await new Promise((resolve, reject) => process.stdout.write(`${output}\n`, error => error ? reject(error) : resolve()));
+  return invalid ? 2 : view.clean ? 0 : 1;
 }
 
 export function defaultReportFile() {
