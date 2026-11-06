@@ -1,3 +1,37 @@
+## 3.43.0 — 2026-11-05
+
+- Add a preflight gate for every harness. Total Recall ships the hooks and Meta Harness ships an
+  adapter per harness, so `init`, `update` and `preflight install` set them up with no hand
+  edits, and installing never changes a vault. An agent reads the rules and acknowledges before
+  it works. The acknowledgement belongs to its session, follows it across repositories, and
+  lapses after 30 minutes. Native subagents are never gated. See `docs/guides/preflight-gate.md`.
+- Add routing declarations. Each plugin declares its tasks and the raw commands it owns. The gate
+  warns by default when work goes around an owner, and `preflight mode` turns that off or into a
+  block, which applies only while the owner passes a health check.
+- Fix `total-recall uninstall --help` running the real uninstall. `setup`, `chat`, `doctor` and
+  `friction` had the same defect, and `new` refused the flag. Every command now prints help and
+  does nothing else, a mistyped `uninstall` option stops before any change, and a release check
+  runs every command's help in a sandbox.
+- Fix refreshing a default plugin deleting its owner repository's files, `.git` included, through
+  a link. A linked plugin is never replaced.
+- Fix default plugins that changed without a new version never reaching existing installs. A new
+  release check, `check:plugin-versions`, fails a release that forgets.
+- Add a preflight gate for OpenClaw. It is a small OpenClaw plugin, shipped by Meta Harness and
+  installed by `init`, `update` and `preflight install` through OpenClaw's own CLI. A running
+  gateway loads it without a restart. Warnings reach the agent inside the tool's result. If the
+  gate cannot run, work stays denied, while reading, plain Total Recall commands and changes
+  inside Total Recall's package stay open.
+- Fix `total-recall uninstall` leaving the gate in every harness, which left Hermes and Pi
+  denying every call once Total Recall was gone. It now removes each one first.
+- Fix `preflight install --harness <id>` reporting success for a harness it could not install.
+  It now says why and exits 1. A dry run reports `would-install`.
+- Fix `update --all-brains` and automatic updates installing a full Total Recall copy into
+  every plugin checkout linked into a brain, which took 15 GB on one server and left the
+  checkouts' manifests dirty. A checkout that is not registered as a project now skips dev
+  dependencies and reports `shared_install`. Its runtime dependencies update without dev
+  dependencies and without writing `package.json` or the lockfile. Archived plugin copies
+  under `memory-derived` are no longer updated.
+
 ## 3.42.1 — 2026-11-05
 
 - Fix audited secret reads failing and stalling the brain. Plugin ledgers were one document
@@ -364,7 +398,7 @@
 - Core architecture: extracted all 16 bundled plugins into independent standalone git repositories under the `tr-plugin-*` ecosystem, enforcing the core invariant that Total Recall core contains only memory, mesh, and minimal plugin loading contracts.
 - Standalone plugin creation: upgraded `total-recall plugin create` to automatically initialize a dedicated git repository with initial commit, clean metadata schema, composable command boilerplate, and comprehensive smoke tests.
 - UI & Preview parity: updated the plugins management surface and dedicated preview components (Code Quality, Composable CLI, Decision, Design, Domains, Phone, Signing, Text, Image Generator, User Automations) with verified capabilities, zero fake statistics or simulated ratings.
-- Phone & Telephony: integrated Festech dialer interface into the phone plugin architecture with live call controls, DTMF signaling, WebRTC session handling, and direct transport verification.
+- Phone & Telephony: integrated the dialer interface into the phone plugin architecture with live call controls, DTMF signaling, WebRTC session handling, and direct transport verification.
 - Release & hygiene: updated scaffold generic allowlists and pre-flight diagnostics tests to ensure pristine distribution state.
 
 ## 3.33.1 — 2026-10-01
@@ -534,7 +568,7 @@
 - **The research agenda reported 231 failures that were never attempted.** Both agenda-cleanup paths retired topics by writing `status: 'failed'` and a `cancelled_reason`, so any tally of `status === 'failed'` showed 231 phantom failures beside 44 genuinely pending topics — and `research-queue.mjs` never read `cancelled_reason` at all. Cancellation now has its own `cancelled` status (`CANCELLED_STATUS`), `cancelBogusAgendaTopics()` uses it, and the idempotent `reclassifyCancelledAgendaTopics()` repairs rows written before it existed. `getNextAgendaTopic()` already filtered to `pending | partially-covered`, so cancelled topics were never selectable — that is now asserted rather than assumed. The live agenda went from `failed: 231` to `cancelled: 231, failed: 0`.
 - **`daemon stop` reported success while the daemon kept running the old code.** The SIGTERM handler cleared `running`, but the vault and source watchers hold the event loop open, so the process lingered indefinitely — "Daemon stopped." appears nowhere in `daemon.log` across three separate SIGTERMs, and the node kept ingesting sessions. Worse, the handler released the PID lock while still alive, so the server started a **second** daemon alongside the first. Shutdown is now a single `shutdown()` that stops the watchers, releases the lease, and arms a bounded 30 s fallback before the loop exits with an explicit `process.exit(0)`. Verified live: SIGTERM 06:24:04 → "Daemon stopped." 06:24:07 → process gone.
 - **A node that could not run Total Recall could capture leadership and silence every real machine.** The `TR_LEADER_IP` pin exists because lowest-online-IP election gave the shared droplet (which runs no TR) permanent leadership, leaving every other node a follower that skipped the task loop. But the pin lived only in the supervisor's environment, so `total-recall daemon start` from a plain shell silently dropped it and the node became a follower again — the same outage, invisible. `leaderPin()` now falls back to `<brain>/config/leader.json`, and the daemon logs a loud warning when it follows with no pin configured anywhere, naming both ways to set one.
-- **The shipped `route-manifest.json` described a server that no longer existed, and four spec files could only pass on one developer's machine.** The manifest was last generated on 2026-08-20 while the router gained 12 routes on 2026-09-15 (`/api/mesh/dispatch`, `/api/mesh/presence`, `/api/mesh/presence/local`, `/api/mesh/presence/resolve`, and the plugin routes), so `route-inventory.spec.mjs` compared 233 live routes against 221 committed ones. Regenerated. Separately, `plugin-loader.spec.mjs` and `plugin-context.spec.mjs` read a hard-coded `/Users/greg/Documents/antigravity/keen-hertz` and asserted on a plugin that is gone even there; they now build a self-contained temp fixture. `search.spec.mjs` asserted a `searchPlugins` export that no commit ever added — it now covers the real `searchCatalog` surface. `App.spec.tsx` and `PluginsPage.spec.tsx` failed on a mock missing `fetchPlugins` and on `useSearchParams()` rendered outside a Router. The suite is green end to end again.
+- **The shipped `route-manifest.json` described a server that no longer existed, and four spec files could only pass on one developer's machine.** The manifest was last generated on 2026-08-20 while the router gained 12 routes on 2026-09-15 (`/api/mesh/dispatch`, `/api/mesh/presence`, `/api/mesh/presence/local`, `/api/mesh/presence/resolve`, and the plugin routes), so `route-inventory.spec.mjs` compared 233 live routes against 221 committed ones. Regenerated. Separately, `plugin-loader.spec.mjs` and `plugin-context.spec.mjs` read a hard-coded path on that machine and asserted on a plugin that is gone even there; they now build a self-contained temp fixture. `search.spec.mjs` asserted a `searchPlugins` export that no commit ever added — it now covers the real `searchCatalog` surface. `App.spec.tsx` and `PluginsPage.spec.tsx` failed on a mock missing `fetchPlugins` and on `useSearchParams()` rendered outside a Router. The suite is green end to end again.
 
 ## [3.28.0] — 2026-09-15
 
@@ -609,7 +643,7 @@
 - **The npm tarball was shipping the author's machine**: `scripts/sync-scaffold.mjs` regenerates `scaffold/` from the developer's own live brain, and that brain's `skills-registry/index.yaml` records an absolute `source_path` for every repo on the machine — so the published package carried 562 lines of `/Users/<name>/...` naming 16 unrelated repositories. `docs/ARCHITECTURE.md` shipped `file:///Users/...` links (broken for every reader), and two brand comments named a third-party product repo. The registry is now excluded from the sync and ships empty (a new brain starts with an empty catalog by design), and the rest are genericised.
 - **Scaffold fixes could not survive a release**: because the same sync treats the live brain as the source of truth, the SSSS §4.2 `description`/`timestamp` fields added to the seeded nodes in 3.24.2 were silently reverted mid-release, along with the curated `.gitignore` comments. Both sides now agree, and a new `shipped-package-paths` gate fails the release if anything in the published surface carries a personal path or names a product repo.
 - **A quality gate that scanned zero files reported clean**: `trackedSources()` pre-filtered by the global `sourceExtensions` (`.mjs/.js/.cjs`), so a `grep-forbid` rule declaring `.md`/`.yaml` could only narrow that set, never widen it — it matched nothing and passed. Checks now get the extension set they ask for, and a `grep-forbid` that inspects 0 files is reported as a misconfiguration instead of a pass.
-- **`connect` documented three clients it does not have** (`claude-code`, `windsurf`, `ultrachat`) and omitted six it does. The reference now matches `connect.mjs`.
+- **`connect` documented three clients it does not have** ((`claude-code`, `windsurf` and a host-app client)) and omitted six it does. The reference now matches `connect.mjs`.
 - **Tailnet enrollment read a field that does not exist**: `access_resolved.ssh_user` — the account is `user`, and `complete` is the resolver's own verdict on whether it is known. Caught by the frontend `tsc -b`, which the test suite does not run.
 
 ## [3.24.2] — 2026-08-19
@@ -809,7 +843,7 @@
 ### ✨ Features
 - **Surface Compilation Fixes**: Stripped redundant memory prefixes without triggering duplication bugs, enforced importance-based filtering to preserve token budget, elevated rule instructions to the top of surfaces, and improved deductive similarity algorithms to prevent accidental archival of valid rules.
 - **Rules Dashboard UI**: Created a complete Rules Page UI allowing real-time viewing and management of invariants, preferences, and corrections from the web interface.
-- **TR Stabilization**: Conducted comprehensive cross-repository skill contamination cleanup across `total-recall`, `festech.live`, and other linked projects. Completed backend route and API decomposition to eliminate bloated monolithic routers, migrated to decoupled brain layers, and established a Tamper-Proof Push Gate.
+- **TR Stabilization**: Conducted comprehensive cross-repository skill contamination cleanup across linked projects. Completed backend route and API decomposition to eliminate bloated monolithic routers, migrated to decoupled brain layers, and established a Tamper-Proof Push Gate.
 - **Skills Management Upgrade**: Delivered a new Skills system enabling global template installations with automatic repo-level adaptation, secure `.trash` retention for removed skills, and interactive UI rule rendering. Added agent-driven `skills.sh` registry integration for native package discovery.
 - **Fast Recall**: Introduced a high-speed substring-matching `fast-recall` subsystem to provide <200ms searches for memory nodes without triggering full semantic evaluations.
 - **100% Test Coverage**: Resolved all underlying Vitest timeouts and integration race conditions. Achieved and verified 100% passing tests for both the full Backend and Frontend Vitest suites.
