@@ -7,7 +7,17 @@ import { callLocalRuntime, loadRuntimeConfig, checkRuntimeHealth } from '../core
  * Total Recall CLI Chat Interface
  * Allows direct conversation with the Total Recall System kernel from the terminal.
  */
-export default async function runChat(args) {
+export default async function runChat(args = []) {
+  if (args.includes('--help') || args.includes('-h')) {
+    console.log(`
+  total-recall chat — Talk to your brain in the terminal
+
+  Starts an interactive conversation through the configured local runtime. Type "exit" to quit.
+
+    total-recall chat
+`);
+    return;
+  }
   console.log('🤖 Total Recall CLI Chat initialized. Type "exit" to quit.\n');
 
   const configDir = path.join(resolveBrainDir('global'), 'config');

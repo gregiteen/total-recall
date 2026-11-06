@@ -33,6 +33,6 @@ npx total-recall relay start
 
 By default, Total Recall prioritizes the **Antigravity CLI** (`antigravity`) as the highest-priority active CLI agent:
 
-- **Primary Subagent**: `antigravity` is registered with `priority: 1` in `config/agents.yml` (mirroring the default setup in [src/core/runtime.mjs](file:///Users/greg/Github/total-recall/src/core/runtime.mjs)).
+- **Primary Subagent**: `antigravity` is registered with `priority: 1` in `config/agents.yml` (mirroring the default setup in [src/core/runtime.mjs](../../src/core/runtime.mjs)).
 - **Fallback**: The standard `gemini` CLI agent serves as a high-performance fallback subagent (`priority: 2`).
 - **Dynamic Models Selector**: Outbound reasoning calls utilize `resolveGenerativeModel` to map prompts dynamically to the active Google developer model API (e.g., `gemini-3.5-flash` or `gemini-3.1-pro-preview`) on the fly, preventing version deprecations.

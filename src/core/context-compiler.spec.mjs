@@ -66,3 +66,28 @@ describe('context compiler required coverage', () => {
     expect(debug.stats.overflow_tokens).toBeGreaterThan(0);
   });
 });
+
+describe('rules_hash', () => {
+  const rule = { slug: 'rule', category: 'invariants', status: 'active', body: 'Keep data.' };
+  const fact = { slug: 'fact', category: 'facts', status: 'active', body: 'A deployment note.' };
+  const hash = async (options) => (await compileContext({ nodes: [rule, fact], includeKnowledge: false, ...options })).stats.rules_hash;
+  it('ignores the task and the rest of the vault, which version does not', async () => {
+    const first = await compileContext({ nodes: [rule, fact], query: 'one task', includeKnowledge: false });
+    const second = await compileContext({ nodes: [rule, { ...fact, body: 'A new note.' }], query: 'another task', includeKnowledge: false });
+    expect(first.stats.rules_hash).toMatch(/^[0-9a-f]{16}$/);
+    expect(second.stats.rules_hash).toBe(first.stats.rules_hash);
+    expect(second.stats.version).not.toBe(first.stats.version);
+  });
+  it('changes when a rule changes, or a rule stops applying', async () => {
+    const original = await hash({});
+    expect(await hash({ nodes: [{ ...rule, body: 'Keep all data.' }] })).not.toBe(original);
+    expect(await hash({ nodes: [rule, { ...rule, slug: 'second' }] })).not.toBe(original);
+    const scoped = { slug: 'publish', category: 'invariants', status: 'active', body: 'publish only', tags: ['context:action:publish'] };
+    expect(await hash({ nodes: [rule, scoped], actions: ['publish'] })).not.toBe(await hash({ nodes: [rule, scoped], actions: ['edit'] }));
+  });
+  it('counts a legacy rule file and not supporting text', async () => {
+    const original = await hash({});
+    expect(await hash({ contributions: [{ id: 'legacy:invariants', required: true, text: 'Old rule.' }] })).not.toBe(original);
+    expect(await hash({ contributions: [{ id: 'evidence', required: false, text: 'Some evidence.' }] })).toBe(original);
+  });
+});

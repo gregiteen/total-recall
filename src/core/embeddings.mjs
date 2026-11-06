@@ -25,7 +25,7 @@ import {
   getVssLoadablePath,
 } from 'sqlite-vss';
 
-import { googleApiKey, openAiApiKey, openRouterApiKey, embedModel, brainDir as defaultBrainDir } from './config.mjs';
+import { embedModel, brainDir as defaultBrainDir } from './local-config.mjs';
 import { logger } from './logger.mjs';
 import {
   resolveOllamaEndpoint,
@@ -41,19 +41,6 @@ const DEFAULT_EMBED_MODEL = embedModel;
  * requires rebuilding every stored embedding.
  */
 export const EMBEDDING_DIMS = 768;
-
-/** Provider configuration is projected by the required auth owner. */
-function resolveGoogleApiKey() {
-  return googleApiKey || null;
-}
-
-function resolveOpenAiApiKey() {
-  return openAiApiKey || null;
-}
-
-function resolveOpenRouterApiKey() {
-  return openRouterApiKey || null;
-}
 
 let dbInstance = null;
 let currentDbPath = null;
@@ -191,14 +178,9 @@ function sha256(text) {
 
 // ─── Embedding generation ────────────────────────────────────────────────────
 
-async function resolveEmbeddingModel(selectedModel = embedModel) {
+async function resolveEmbeddingModel(selectedModel, googleKey) {
   if (selectedModel !== 'gemini-embedding-2' && selectedModel !== 'default') {
     return selectedModel;
-  }
-
-  const googleKey = resolveGoogleApiKey();
-  if (!googleKey) {
-    return 'gemini-embedding-2';
   }
 
   try {
@@ -226,13 +208,7 @@ async function resolveEmbeddingModel(selectedModel = embedModel) {
   return 'gemini-embedding-2';
 }
 
-async function getGoogleEmbedding(text, model) {
-  const googleKey = resolveGoogleApiKey();
-  if (!googleKey) {
-    throw new Error('GOOGLE_API_KEY not set. Cannot generate embeddings.');
-  }
-
-  const resolved = await resolveEmbeddingModel(model);
+async function getGoogleEmbedding(text, resolved, googleKey) {
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${resolved}:embedContent?key=${googleKey}`;
 
   const res = await throttledFetch(url, {
@@ -257,12 +233,7 @@ async function getGoogleEmbedding(text, model) {
   return data.embedding.values;
 }
 
-async function getOpenRouterEmbedding(text, model = 'openai/text-embedding-3-small') {
-  const openRouterKey = resolveOpenRouterApiKey();
-  if (!openRouterKey) {
-    throw new Error('OPENROUTER_API_KEY not set. Cannot generate embeddings.');
-  }
-
+async function getOpenRouterEmbedding(text, openRouterKey, model = 'openai/text-embedding-3-small') {
   const res = await throttledFetch('https://openrouter.ai/api/v1/embeddings', {
     method: 'POST',
     headers: {
@@ -287,12 +258,7 @@ async function getOpenRouterEmbedding(text, model = 'openai/text-embedding-3-sma
   return data.data[0].embedding;
 }
 
-async function getOpenAIEmbedding(text, model = 'text-embedding-3-small') {
-  const openaiKey = resolveOpenAiApiKey();
-  if (!openaiKey) {
-    throw new Error('Neither GOOGLE_API_KEY nor OPENAI_API_KEY is set. Cannot generate embeddings.');
-  }
-
+async function getOpenAIEmbedding(text, openaiKey, model = 'text-embedding-3-small') {
   const res = await throttledFetch('https://api.openai.com/v1/embeddings', {
     method: 'POST',
     headers: {
@@ -337,10 +303,6 @@ export async function getEmbeddingWithProvenance(text, model = DEFAULT_EMBED_MOD
     throw new Error('Semantic embeddings explicitly disabled; local recall remains available');
   }
   const input = String(text).slice(0, 8000);
-  const openRouterKey = resolveOpenRouterApiKey();
-  const googleKey = resolveGoogleApiKey();
-  const openaiKey = resolveOpenAiApiKey();
-
   let embedding;
   let provider = null;
   let servedBy = null;
@@ -367,33 +329,36 @@ export async function getEmbeddingWithProvenance(text, model = DEFAULT_EMBED_MOD
   } catch (err) {
     logger.debug('embeddings: Ollama unavailable, trying hosted providers', { err: err.message });
   }
+  if (embedding) return { embedding, provider, model: servedBy };
+
+  // Hosted providers require the Auth owner. A locked or corrupt store still fails closed.
+  const { openRouterApiKey, googleApiKey, openAiApiKey } = await import('./config.mjs');
 
   // OpenRouter next: standing preference (Gemini's budget is exhausted, so
   // Google is a near-guaranteed slow failure right now — trying it first just
   // taxes every call with a ~15-20s timeout before falling through).
-  if (!embedding && openRouterKey) {
+  if (!embedding && openRouterApiKey) {
     try {
-      embedding = await getOpenRouterEmbedding(input);
+      embedding = await getOpenRouterEmbedding(input, openRouterApiKey);
       if (embedding) { provider = 'openrouter'; servedBy = 'openai/text-embedding-3-small'; }
     } catch (err) {
       logger.debug('embeddings: OpenRouter failed, trying Google fallback', { err: err.message });
     }
   }
 
-  if (!embedding && googleKey) {
+  if (!embedding && googleApiKey) {
     try {
-      embedding = await getGoogleEmbedding(input, model);
-      // getGoogleEmbedding resolves the concrete model internally; record that,
-      // not the requested default, so provenance is exact.
-      if (embedding) { provider = 'google'; servedBy = await resolveEmbeddingModel(model); }
+      const resolvedModel = await resolveEmbeddingModel(model, googleApiKey);
+      embedding = await getGoogleEmbedding(input, resolvedModel, googleApiKey);
+      if (embedding) { provider = 'google'; servedBy = resolvedModel; }
     } catch (err) {
       logger.debug('embeddings: Google API failed, trying OpenAI fallback', { err: err.message });
     }
   }
 
-  if (!embedding && openaiKey) {
+  if (!embedding && openAiApiKey) {
     try {
-      embedding = await getOpenAIEmbedding(input);
+      embedding = await getOpenAIEmbedding(input, openAiApiKey);
       if (embedding) { provider = 'openai'; servedBy = 'text-embedding-3-small'; }
     } catch (err) {
       logger.debug('embeddings: OpenAI fallback also failed', { err: err.message });

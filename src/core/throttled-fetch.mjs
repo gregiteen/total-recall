@@ -19,7 +19,7 @@
  */
 
 import { logger } from './logger.mjs';
-import { brainDir } from './config.mjs';
+import { brainDir } from './local-config.mjs';
 
 // ─── Configuration (mutable — can be overridden by network-policy.md doc) ──
 
@@ -169,7 +169,6 @@ export async function loadFirewallPolicy(brainDir) {
 export async function blockDomain(domain) {
   const crypto = await import('node:crypto');
   const { processViaPackageKernel } = await import('./ssss-kernel-bridge.mjs');
-  const { brainDir } = await import('./config.mjs');
   const path = await import('node:path');
   
   const vaultRoot = path.join(brainDir, 'memory-vault');
@@ -188,7 +187,6 @@ export async function blockDomain(domain) {
 export async function unblockDomain(domain) {
   const crypto = await import('node:crypto');
   const { processViaPackageKernel } = await import('./ssss-kernel-bridge.mjs');
-  const { brainDir } = await import('./config.mjs');
   const path = await import('node:path');
   
   const vaultRoot = path.join(brainDir, 'memory-vault');
@@ -250,10 +248,9 @@ function schedulePolicyEventFlush() {
     const batch = policyEventQueue.splice(0, policyEventQueue.length);
     if (batch.length === 0) return;
     try {
-      const [{ processViaPackageKernel }, crypto, { brainDir }, path] = await Promise.all([
+      const [{ processViaPackageKernel }, crypto, path] = await Promise.all([
         import('./ssss-kernel-bridge.mjs'),
         import('node:crypto'),
-        import('./config.mjs'),
         import('node:path'),
       ]);
       const vaultRoot = path.join(brainDir, 'memory-vault');

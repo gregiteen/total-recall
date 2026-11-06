@@ -77,9 +77,9 @@ describe('plugin-store', () => {
   });
 
   it('describes installed plugins with verifiable facts only', async () => {
-    await installPlugin('system-monitor', { projectRoot: projA });
+    await installPlugin('code-quality', { projectRoot: projA });
     const [p] = listInstalledPlugins(projA);
-    expect(p).toMatchObject({ id: 'system-monitor', scope: 'project', shared: false, modified_since_install: false });
+    expect(p).toMatchObject({ id: 'code-quality', scope: 'project', shared: false, modified_since_install: false });
     expect(p.sha256).toMatch(/^[0-9a-f]{64}$/);
     expect(Object.keys(p).filter(k => FORBIDDEN.test(k))).toEqual([]);
   });
@@ -92,7 +92,7 @@ describe('plugin-store', () => {
 
   it('shares only what the owner marks shared', async () => {
     await installPlugin('git-sentinel', { projectRoot: projA });
-    await installPlugin('system-monitor', { projectRoot: projA });
+    await installPlugin('code-quality', { projectRoot: projA });
     expect(listSharedPlugins(projA)).toEqual([]);
     expect(packSharedPlugin('git-sentinel', projA)).toBeNull();
     expect(packPublicPlugin('git-sentinel', projA)).toBeNull();

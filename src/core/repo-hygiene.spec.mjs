@@ -18,17 +18,13 @@ describe('open-source repo hygiene', () => {
   it('commits no per-user memories or IDE projections', () => {
     const files = tracked();
     if (!files) return;
-    // Skills ARE repo content and belong in git: git does not descend into an
-    // ignored directory, so a blanket `.agent/` rule left 11 skill directories
-    // (~317 files) existing in no repository anywhere -- one disk failure from
-    // being lost (commit 9e83665). What must stay out of an open-source package
-    // is per-USER STATE, which is what actually leaks a person's machine:
-    // memories and IDE projections. `.agent/skills/` is allowed;
-    // everything else under those directories is not.
-    const isSkillContent = (f) => /^\.agent\/skills\/[^/]+\//.test(f.replace(/^\.agents\//, '.agent/'));
+    // Per-user state leaks a person's machine, and skills live in a private
+    // repository. The gate config is the only file allowed under these directories,
+    // because the code-quality plugin reads it from this fixed path.
+    const isGateConfig = (f) => /^\.agent\/skills\/code-quality\/(config\.json|\.gitignore)$/.test(f);
     const forbidden = files.filter((f) => {
       const perUserDir = /^(\.agent|\.agents|\.claude|\.codex|\.cursor|\.windsurf)\//.test(f);
-      if (perUserDir && !isSkillContent(f)) return true;
+      if (perUserDir && !isGateConfig(f)) return true;
       if (/(^|\/)memory-(vault|inbox|derived)\/.*\.md$/.test(f) && !f.startsWith('scaffold/')) return true;
       return false;
     });
@@ -46,6 +42,20 @@ describe('open-source repo hygiene', () => {
     const rootScripts = files.filter((f) => !f.includes('/') && /^(fix|test|debug|patch|clean|run-|sim|tmp|temp)[-_.]?.*\.(c?js|mjs|sh|txt)$/.test(f));
     expect(rootScripts).toEqual([]);
     expect(files.filter((f) => !f.includes('/') && f.endsWith('.log'))).toEqual([]);
+  });
+
+  it('names no private product or personal path in any tracked file', () => {
+    const files = tracked();
+    if (!files) return;
+    // The two files that define this check must name what they forbid.
+    const exempt = new Set(['src/core/repo-hygiene.spec.mjs', '.agent/skills/code-quality/config.json']);
+    const named = /festech|ultrachat|dabber|gro-crm|grocrm|moogie|\/Users\/greg/i;
+    const leaks = files.filter((f) => {
+      if (exempt.has(f) || f.includes('/vendor/') || f.startsWith('frontend/dist/')) return false;
+      if (!existsSync(path.join(ROOT, f))) return false;
+      return named.test(readFileSync(path.join(ROOT, f), 'utf8'));
+    });
+    expect(leaks).toEqual([]);
   });
 
   it('ships only the generic bootstrap in scaffold/ (fixed allowlist, no personal markers)', () => {

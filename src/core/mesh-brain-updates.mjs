@@ -8,8 +8,9 @@ export async function updateMeshBrainPackages({version,versions,listNodes,exec,n
   }
   const results=[];
   for(const node of await listNodes()){
-    if(node.self || !node.ip || !node.access?.ssh_user)continue;
-    const row={node:node.ip,status:'pending'};results.push(row);
+    if(node.self)continue;
+    const row={node:node.ip || node.hostname || 'unidentified peer',status:'pending'};results.push(row);
+    if(!node.ip || !node.access?.ssh_user){row.status='failed';row.error='Mesh peer has no configured update transport; verification pending';continue;}
     if(!node.online){row.status='failed';row.error='Configured mesh node is offline; retry pending';continue;}
     try{
       // Read the durable report first, then launch only when stale or failed.

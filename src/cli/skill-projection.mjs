@@ -171,9 +171,9 @@ function isStaleGeneratedDir(entryPath) {
  *   3. when the filesystem refuses links at all, a real COPY of the skill
  *      directory tagged with PROJECTION_MARKER_FILE so later runs refresh it.
  */
-function placeSkill(skillDir, linkPath) {
+function placeSkill(skillDir, linkPath, destination, sourceEntry) {
   const source = path.resolve(skillDir);
-  const relativeTarget = path.relative(path.dirname(path.resolve(linkPath)), source) || '.';
+  const relativeTarget = path.relative(destination, sourceEntry) || '.';
   try {
     if (process.platform === 'win32') {
       fs.symlinkSync(source, linkPath, 'junction');
@@ -248,12 +248,14 @@ export function discoverRepoSkills(agentDir) {
  */
 export function projectSkillsAsCommands(destDir, skills, opts = {}) {
   fs.mkdirSync(destDir, { recursive: true });
+  const destination = fs.realpathSync(destDir);
   const written = [];
   for (const skill of skills) {
     const linkPath = path.join(destDir, skill.name);
     const wantTarget = path.resolve(skill.skillDir);
+    const sourceEntry = path.join(fs.realpathSync(path.dirname(wantTarget)), path.basename(wantTarget));
 
-    if (path.resolve(linkPath) === wantTarget) {
+    if (path.join(destination, skill.name) === sourceEntry) {
       written.push({ name: skill.name, action: 'source' });
       continue;
     }
@@ -264,8 +266,9 @@ export function projectSkillsAsCommands(destDir, skills, opts = {}) {
         // Relative links resolve against the link's own directory; Windows
         // junctions read back with a \\?\ long-path prefix that must be dropped.
         const raw = fs.readlinkSync(linkPath).replace(/^\\\\\?\\/, '');
-        const current = path.resolve(path.dirname(linkPath), raw);
-        if (current === wantTarget && fs.existsSync(linkPath) && !opts.force) {
+        const current = path.resolve(destination, raw);
+        if (!opts.force && fs.existsSync(linkPath) &&
+            (current === sourceEntry || fs.realpathSync(linkPath) === fs.realpathSync(wantTarget))) {
           written.push({ name: skill.name, action: 'exists' });
           continue;
         }
@@ -277,7 +280,7 @@ export function projectSkillsAsCommands(destDir, skills, opts = {}) {
         fs.rmSync(linkPath, { recursive: true, force: true });
       }
     }
-    written.push({ name: skill.name, action: placeSkill(skill.skillDir, linkPath) });
+    written.push({ name: skill.name, action: placeSkill(skill.skillDir, linkPath, destination, sourceEntry) });
   }
   return written;
 }

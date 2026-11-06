@@ -11,7 +11,7 @@ vi.mock('../../core/plugin-peers.mjs', async (importOriginal) => ({
   listPeerPlugins: vi.fn(async () => ({
     mesh: { available: true, configured: true },
     peers: [{ hostname: 'mac-mini', ip: '100.64.0.2', status: 'ok', plugins: [
-      { id: 'reading-list', name: 'Reading List', version: '1.0.0', description: 'Track what to read', use_cases: ['research'], sha256: 'a'.repeat(64), file_count: 2, size_bytes: 100 }
+      { id: 'reading-list', name: 'Reading List', version: '1.0.0', description: 'Track what to read', use_cases: ['research', 'operations'], sha256: 'a'.repeat(64), file_count: 2, size_bytes: 100 }
     ] }]
   })),
 }));
@@ -57,14 +57,14 @@ describe('CLI Plugin Manager', () => {
     await run(['plugin', 'available']);
     const output = consoleLogSpy.mock.calls.map(c => c[0]).join('\n');
     expect(output).toContain('Bundled Plugins');
-    expect(output).toContain('System Monitor');
+    expect(output).toContain('Embeddings');
     expect(output).not.toMatch(/★|rating|reviews|installs|verified/i);
   });
 
   it('filters bundled plugins by use case', async () => {
     await run(['plugin', 'available', '--use-case', 'operations', '--json']);
     const parsed = JSON.parse(consoleLogSpy.mock.calls[0][0]);
-    expect(parsed.map(p => p.id)).toContain('system-monitor');
+    expect(parsed.map(p => p.id)).toContain('embeddings');
     expect(parsed.every(p => p.use_cases.includes('operations'))).toBe(true);
   });
 
@@ -76,10 +76,10 @@ describe('CLI Plugin Manager', () => {
   });
 
   it('searches bundled plugins and mesh peers together', async () => {
-    await run(['plugin', 'search', '--use-case', 'research', '--json']);
+    await run(['plugin', 'search', '--use-case', 'operations', '--json']);
     const parsed = JSON.parse(consoleLogSpy.mock.calls[0][0]);
-    expect(parsed.bundled.map(p => p.id)).toContain('creative-search');
-    expect(parsed.bundled.every(p => p.use_cases.includes('research'))).toBe(true);
+    expect(parsed.bundled.map(p => p.id)).toContain('embeddings');
+    expect(parsed.bundled.every(p => p.use_cases.includes('operations'))).toBe(true);
     expect(parsed.peers[0].source).toBe('peer:mac-mini/reading-list');
   });
 

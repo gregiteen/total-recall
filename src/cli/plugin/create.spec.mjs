@@ -75,6 +75,8 @@ Instructions here.
     // 1. Manifest has deploy, skills, and cli blocks
     const manifest = JSON.parse(fs.readFileSync(path.join(pluginDir, 'plugin.json'), 'utf8'));
     expect(manifest.id).toBe('packaged-cap');
+    expect(manifest.gate).toEqual({ tasks: [], owned_commands: [] });
+    expect(fs.readFileSync(path.join(pluginDir, 'README.md'), 'utf8')).toContain('## Using this from an agent');
     expect(manifest.deploy).toBeDefined();
     expect(manifest.deploy.targets).toContain('ssss-app');
     expect(manifest.skills[0].path).toBe('./skills/packaged-cap/SKILL.md');

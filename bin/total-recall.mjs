@@ -182,12 +182,17 @@ async function main() {
 
     // Check if it is a dynamic integration command configured in the VFS
     try {
-      const { agentDir } = await import('../src/core/config.mjs');
-      const { resolveComposedCommand } = await import('../src/core/composed-command-resolution.mjs');
+      const { agentDir } = await import('../src/core/local-config.mjs');
+      const { resolveComposedCommand, composedCommandHelp } = await import('../src/core/composed-command-resolution.mjs');
       const fs = await import('node:fs');
-      
+
       const customCmdPath = resolveComposedCommand(command);
       if (customCmdPath) {
+        const help = composedCommandHelp(command, customCmdPath, args.slice(1));
+        if (help) {
+          console.log(help);
+          return;
+        }
         const handler = await import(customCmdPath);
         if (handler.run) await handler.run(process.argv);
         else await handler.default(process.argv.slice(3));

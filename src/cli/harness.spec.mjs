@@ -5,7 +5,7 @@ const { run, receipt, plugin } = vi.hoisted(() => ({
 }));
 vi.mock('../core/plugin-loader.mjs', () => ({ getPlugin: vi.fn(() => plugin) }));
 vi.mock('../core/plugin-runner.mjs', () => ({ runPluginCommand: run }));
-vi.mock('../core/preflight-receipt.mjs', () => ({ checkReceipt: receipt, findRoot: () => '/fixture', ACK_COMMAND: 'total-recall tr-preflight --ack' }));
+vi.mock('../core/preflight-receipt.mjs', () => ({ checkAnyReceipt: receipt, findRoot: () => '/fixture', ACK_COMMAND: 'total-recall tr-preflight --ack' }));
 import runHarness from './harness.mjs';
 
 let messages, originalExitCode;

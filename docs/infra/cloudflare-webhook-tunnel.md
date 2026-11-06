@@ -25,7 +25,7 @@ To receive webhooks (GitHub, npm, Stripe) securely without exposing your Total R
    Create a `config.yml` (e.g., in `~/.cloudflared/config.yml`):
    ```yaml
    tunnel: <TUNNEL_ID>
-   credentials-file: /Users/greg/.cloudflared/<TUNNEL_ID>.json
+   credentials-file: ~/.cloudflared/<TUNNEL_ID>.json
 
    ingress:
      - hostname: webhooks.totalrecall.dev

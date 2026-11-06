@@ -18,6 +18,7 @@ import {
 import { brainDir } from '../core/config.mjs';
 import { installAutoPull } from '../core/autopull-install.mjs';
 import { updateAllBrains } from '../core/brain-updates.mjs';
+import { installHarnessHooks } from '../core/harness-hooks.mjs';
 import { automaticUpdateStatus, runAutomaticBrainUpdates } from '../core/automatic-brain-updates.mjs';
 
 /** @param {string[]} args */
@@ -71,6 +72,10 @@ function printHelp() {
     total-recall update --all-brains --apply [--json]
         Pin the same published versions, use npm/pnpm, replace shared dependency
         links with independent local installs, and verify every resolved version.
+        A plugin checkout linked into a brain but not registered as a project is
+        only installed here: its dev dependencies are skipped (it runs under the
+        shared install) and its runtime ones update with --omit=dev, without
+        writing package.json or the lockfile. Register it to develop it here.
     total-recall update --automatic [--json]
         Daemon maintenance: update both packages, ensure defaults, update every
         installed plugin from its recorded source and refresh surfaces.
@@ -113,6 +118,11 @@ export default async function update(args = []) {
     const summary = await updateAllBrains({ brainDir, roots: opts.repos,
       dryRun: !opts.apply || opts.dryRun, ensureDefaults: true });
     if (summary.failed) process.exitCode = 1;
+    if (opts.apply && !opts.dryRun) {
+      const hooks = await installHarnessHooks({ log: (line) => { if (!opts.json) console.log(line); } });
+      summary.hooks = hooks;
+      if (!hooks.ok) process.exitCode = 1;
+    }
     if (opts.json) console.log(JSON.stringify(summary, null, 2));
     else {
       console.log(`\n  Uniform brain updates: ${summary.consumer_count || 0} consumers`);

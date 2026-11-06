@@ -225,7 +225,7 @@ Run arbitrary script modules inside a secure POSIX-isolated sandbox.
 
 ### 💬 7. Chat Completions (OpenAI Compatible)
 
-Exposes endpoints for chat clients (such as UltraChat or customized dashboard interfaces) to communicate with the brain.
+Exposes endpoints for chat clients (such as customized dashboard interfaces) to communicate with the brain.
 
 #### `GET /v1/models`
 Returns list of registered active generative models available on the server.

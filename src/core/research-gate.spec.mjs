@@ -51,11 +51,11 @@ describe('proposeAutonomousResearch (AI noticed a gap while working)', () => {
   it('queues gaps with provenance', async () => {
     const { queued, skipped } = await gate.proposeAutonomousResearch(
       [{ topic: 'Telnyx Call Control v2', rationale: 'agent guessed the command name', priority: 80 }],
-      { project: 'ultrachat', sessionId: 's1', config: cfg(), coverageCheck: notCovered, brainDir: brain },
+      { project: 'example-app', sessionId: 's1', config: cfg(), coverageCheck: notCovered, brainDir: brain },
     );
     expect(skipped).toEqual([]);
     expect(queued[0]).toMatchObject({
-      origin: 'autonomous', requested_via: 'session', project: 'ultrachat',
+      origin: 'autonomous', requested_via: 'session', project: 'example-app',
       session_id: 's1', rationale: 'agent guessed the command name', priority: 'high',
     });
   });

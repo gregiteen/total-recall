@@ -128,7 +128,7 @@ Documentation content.
     expect(() => generateCssVariables(tokens)).toThrow(message);
   });
 
-  it("parses Dabber CRM's DESIGN.md shape (fontFamily role map, references, numbers)", () => {
+  it("parses a DESIGN.md with a fontFamily role map (fontFamily role map, references, numbers)", () => {
     const md = `---
 version: 1.0.0
 colors:

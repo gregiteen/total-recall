@@ -67,7 +67,7 @@ describe('instruction surface briefs', () => {
   const nodes = [node('proj-report', GOOD), node('other-proj', GOOD), node('user-report', GOOD), node('refusal', REFUSAL), node('old-user', GOOD), node('legacy-report', GOOD), node('unlabelled', GOOD)];
   const items = [
     item('1', 'proj-report', { origin: 'autonomous', project: 'total-recall', completed_at: '2026-09-01T00:00:00Z' }),
-    item('2', 'other-proj', { origin: 'autonomous', project: 'ultrachat' }),
+    item('2', 'other-proj', { origin: 'autonomous', project: 'example-app' }),
     item('3', 'user-report', { origin: 'user' }),
     item('4', 'refusal', { origin: 'user' }),
     item('5', 'old-user', { origin: 'user', completed_at: '2026-06-01T00:00:00Z' }),
@@ -83,7 +83,7 @@ describe('instruction surface briefs', () => {
   });
 
   it('never surfaces another project’s autonomous research, refusals, stale or unfinished items', () => {
-    const slugs = selectResearchBriefs({ queueItems: items, nodes, project: 'ultrachat', now: NOW }).map((b) => b.slug);
+    const slugs = selectResearchBriefs({ queueItems: items, nodes, project: 'example-app', now: NOW }).map((b) => b.slug);
     expect(slugs).toContain('other-proj');
     expect(slugs).not.toContain('proj-report');
     expect(slugs).not.toContain('refusal');

@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /** Legacy command door. Native harness behavior is owned by the Meta Harness plugin. */
-import { checkReceipt, findRoot, ACK_COMMAND } from '../core/preflight-receipt.mjs';
+import { checkAnyReceipt, findRoot, ACK_COMMAND } from '../core/preflight-receipt.mjs';
 import path from 'node:path';
 
 async function callPlugin(subcommand, args, options = {}) {
@@ -21,7 +21,7 @@ async function callPlugin(subcommand, args, options = {}) {
 }
 
 function requireReceipt() {
-  const root = findRoot(process.cwd()), receipt = checkReceipt(root);
+  const receipt = checkAnyReceipt(findRoot(process.cwd()));
   if (!receipt.ok) throw new Error(`TR-PREFLIGHT gate: ${receipt.problems[0] || 'check failed'}. Read the complete context capsule, then run: ${ACK_COMMAND}`);
 }
 

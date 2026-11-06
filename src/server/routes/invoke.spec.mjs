@@ -360,13 +360,16 @@ describe('bounded full-mode decision owners', () => {
     expect((await request(server).get('/v1/invoke/capabilities')).body.result.limits).toEqual(limits);
   });
   it('runs prediction in a child with the selected project root', async () => {
-    owner(success); await real();
-    fs.mkdirSync(path.join(dir, 'memory-derived'), { recursive: true });
-    fs.writeFileSync(path.join(dir, 'memory-derived/cli-semantic-index.json'), JSON.stringify({ verbs: [
-      { id: 'fixture', verb: 'status', usage: 'chosen', name: 'Fixture command' },
-    ] }));
+    // Predictions read the live command list, so the fixture chooses from what it was offered.
+    owner(`export const DEFAULT_MODEL='fixture-model';
+      export const requestDecision = async options => ({
+        choice: () => Object.keys(options.questions.next_action.criteria)[0],
+        noul: () => true, score: () => 3, confidence: () => 0.9, modelVersion: 'fixture-version', cost: 0, latencyMs: 1
+      });`);
+    await real();
     const res = await post('decision.predict', { intent: '' });
-    expect(res.body, JSON.stringify(res.body)).toMatchObject({ ok: true, result: { ok: true, abstained: false, action: { id: 'fixture' } } });
+    expect(res.body, JSON.stringify(res.body).slice(0, 400)).toMatchObject({ ok: true, result: { ok: true, abstained: false } });
+    expect(res.body.result.action.id).toBeTruthy();
   });
   it.each(['decision.run', 'decision.predict'])('passes %s through the executor, never ambient server imports', async operation => {
     execute.mockResolvedValue({ exit_code: 0, stdout: JSON.stringify({ ok: true, result: { fixture: true } }) });

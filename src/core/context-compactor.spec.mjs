@@ -98,8 +98,8 @@ describe('compactRules', () => {
 describe('summarizeRule', () => {
   it('keeps short rules whole', () => expect(summarizeRule('Never push.')).toBe('Never push.'));
   it('ends at a sentence and keeps its words', () => {
-    const text = `Never push without Greg explicitly telling you to do that first, because pushing costs money. ${'More detail follows here. '.repeat(20)}`;
-    expect(summarizeRule(text)).toBe('Never push without Greg explicitly telling you to do that first, because pushing costs money.');
+    const text = `Never push without Alex explicitly telling you to do that first, because pushing costs money. ${'More detail follows here. '.repeat(20)}`;
+    expect(summarizeRule(text)).toBe('Never push without Alex explicitly telling you to do that first, because pushing costs money.');
   });
   it('does not end a sentence at e.g. or a version number', () => {
     const text = `Use a real host, e.g. the droplet at version 3.41.3 when it is available and verified by hand. ${'x '.repeat(200)}`;

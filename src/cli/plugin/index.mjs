@@ -27,8 +27,8 @@ Commands:
   list                      Installed plugins (project & global) with source and sharing
   library [--plugin ID]      Installed CLI operation library (--json for agents)
   refresh                   Rebuild installed command inventories and instruction surfaces
-  copies [dir] [--apply]    Audit this repository's leftover copies of the shared default
-                            plugins; --apply removes only the ones identical to the shared install
+  copies [dir] [--apply]    Audit repository copies of shared defaults. --apply deletes only
+                            bundled matches. Add --archive-stale to preserve older differing copies.
   replacements [--prune] [--keep N] [--project] [--json]
                             Copies kept by install --replace (default: shared folder). Reports
                             the space; --prune keeps the newest N per plugin (default 1) and
@@ -100,6 +100,10 @@ export async function run(argv = []) {
   const command = args[0];
   const rest = args.slice(1);
   if (command === 'refresh') {
+    if (rest.includes('--help') || rest.includes('-h')) {
+      console.log('Usage: total-recall plugin refresh [--global]');
+      return;
+    }
     const { recompileAfterPluginMutation } = await import('../../core/plugin-store.mjs');
     const result = await recompileAfterPluginMutation(process.cwd(), rest.includes('--global'));
     const { setupInstalledPlugins } = await import('../../core/plugin-setup.mjs');

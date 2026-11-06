@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { isReleaseFile, releaseFiles, syncScaffoldPlugins } from './scaffold-plugins.mjs';
+import { findOwnerRepos, isReleaseFile, releaseFiles, syncScaffoldPlugins } from './scaffold-plugins.mjs';
 
 let root;
 let source;
@@ -14,7 +14,7 @@ function write(base, rel, body) {
 beforeEach(() => {
   root = fs.mkdtempSync(path.join(os.tmpdir(), 'scaffold-plugins-'));
   source = fs.mkdtempSync(path.join(os.tmpdir(), 'scaffold-plugin-src-'));
-  for (const [rel, body] of Object.entries({ 'cli.mjs': 'cli-v2', 'src/new.mjs': 'new', 'package.json': '{}', 'package-lock.json': '{}', '.gitignore': 'x', 'test/a.spec.mjs': 't' })) write(source, rel, body);
+  for (const [rel, body] of Object.entries({ 'plugin.json': '{"id":"auth"}', 'cli.mjs': 'cli-v2', 'src/new.mjs': 'new', 'package.json': '{}', 'package-lock.json': '{}', '.gitignore': 'x', 'test/a.spec.mjs': 't' })) write(source, rel, body);
   fs.mkdirSync(path.join(root, '.agent/skills/total-recall/plugins'), { recursive: true });
   fs.symlinkSync(source, path.join(root, '.agent/skills/total-recall/plugins/auth'));
   fs.mkdirSync(path.join(root, 'scripts'), { recursive: true });
@@ -82,3 +82,32 @@ describe('syncScaffoldPlugins', () => {
     expect(syncScaffoldPlugins({ root, ids, run: stalePinRun }).changes).toEqual([{ file: 'scripts/scaffold-plugins.json', change: 'stale pin' }]);
   });
 });
+
+describe('findOwnerRepos', () => {
+  let parent;
+  beforeEach(() => {
+    parent = fs.mkdtempSync(path.join(os.tmpdir(), 'scaffold-owners-'));
+    write(parent, 'tr-plugin-auth/plugin.json', '{"id":"auth"}');
+    write(parent, 'tr-plugin-cli-agents/plugin.json', '{"id":"meta-harness"}');
+    write(parent, 'not-a-plugin/README.md', 'x');
+    write(parent, 'broken/plugin.json', '{ not json');
+    write(parent, 'this-repo/plugin.json', '{"id":"this-repo"}');
+  });
+  afterEach(() => fs.rmSync(parent, { recursive: true, force: true }));
+
+  it('finds a plugin by its manifest id, whatever its folder is called', () => {
+    const owners = findOwnerRepos(path.join(parent, 'this-repo'));
+    expect(owners.get('auth')).toBe(path.join(parent, 'tr-plugin-auth'));
+    expect(owners.get('meta-harness')).toBe(path.join(parent, 'tr-plugin-cli-agents'));
+  });
+  it('skips the repository itself, folders without a plugin and unreadable manifests', () => {
+    expect([...findOwnerRepos(path.join(parent, 'this-repo')).keys()].sort()).toEqual(['auth', 'meta-harness']);
+  });
+  it('finds nothing when no plugin repositories sit beside it', () => {
+    const lonely = fs.mkdtempSync(path.join(os.tmpdir(), 'scaffold-lonely-'));
+    fs.mkdirSync(path.join(lonely, 'only'));
+    expect(findOwnerRepos(path.join(lonely, 'only')).size).toBe(0);
+    fs.rmSync(lonely, { recursive: true, force: true });
+  });
+});
+

@@ -15,7 +15,7 @@ vi.mock('fs', () => ({
 }));
 
 // Mock config so brainDir is predictable
-vi.mock('./config.mjs', () => ({
+vi.mock('./local-config.mjs', () => ({
   brainDir: '/tmp/test-brain',
 }));
 

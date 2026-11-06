@@ -2,6 +2,7 @@
 import { getPlugin } from './plugin-loader.mjs';
 import { patchPluginRecord, patchProjectActivationRecord, emit, vaultFor, recompileAfterPluginMutation } from './plugin-store.mjs';
 import { pluginActivation } from './plugin-state.mjs';
+import { REQUIRED_INSTALLATION_PLUGIN_IDS } from './default-plugins.mjs';
 export { pluginActivation };
 
 /**
@@ -13,6 +14,9 @@ export { pluginActivation };
  * following the shared setting (`clear: true`).
  */
 export async function setPluginActive(id, enabled, { projectRoot = process.cwd(), scope = 'project', clear = false } = {}) {
+  if (enabled === false && REQUIRED_INSTALLATION_PLUGIN_IDS.includes(id)) {
+    throw new Error('Required plugin ' + id + ' cannot be disabled');
+  }
   if (clear === true) {
     const plugin = getPlugin(id, projectRoot);
     if (!plugin?.valid) throw new Error(`Plugin ${id} is missing or invalid`);

@@ -33,4 +33,4 @@ schema_version: 2
 ---
 
 This is a valid SSSS memory node used for conformance testing.
-Both Total Recall and UltraChat should parse this file successfully.
+Every SSSS implementation should parse this file successfully.

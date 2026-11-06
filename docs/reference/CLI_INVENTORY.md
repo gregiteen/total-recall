@@ -24,7 +24,7 @@ Classification for the portable-memory product focus. Commands remain available 
 | `mesh` | Control server: nodes, ACL policy, Tailscale SSH |
 | `harness` | Multi-harness orchestration, task dispatch, council consensus |
 | `agent` | Process controller (spawn, list, logs, kill) across mesh |
-| `brain` | List / register / ensure / unregister project brains |
+| `brain` | Inspect or register project brains and relocate the global skills tree |
 | `status` | Health / brain connection summary |
 | `doctor` | Environment diagnostics |
 | `help` | Offline help topics |

@@ -21,17 +21,20 @@ describe('automatic global and mesh package updates',()=>{
    expect(exec.mock.calls[1][1]).not.toContain('total-recall-brain@3.40.2');
   }finally{fs.rmSync(root,{recursive:true,force:true});}
  });
- it('does not call dispatched or offline peers verified and checks both package versions',async()=>{
-  const nodes=[{self:true,ip:'self'},{ip:'phone',online:true},{ip:'offline',online:false,access:{ssh_user:'alice'}},{ip:'old',online:true,access:{ssh_user:'alice'}},{ip:'current',online:true,access:{ssh_user:'alice'}}];
+ it('reports unreachable and unconfigured peers and checks both package versions',async()=>{
+  const nodes=[{self:true,ip:'self'},{ip:'phone',online:true},{hostname:'no-address',online:true,access:{ssh_user:'alice'}},{ip:'offline',online:false,access:{ssh_user:'alice'}},{ip:'old',online:true,access:{ssh_user:'alice'}},{ip:'current',online:true,access:{ssh_user:'alice'}}];
   const exec=vi.fn(async(node,command)=>{
    if(command.includes('nohup'))return {success:true};
    return {success:true,stdout:JSON.stringify({last:{failed:0,checkedAt:1000,versions:node==='old'?{...versions,'@gregiteen/ssss-cli':'0.10.0'}:versions}})};
   });
   const report=await updateMeshBrainPackages({version:versions['total-recall-brain'],versions,listNodes:()=>nodes,exec,now:()=>2000});
-  expect(report.failed).toBe(2);
-  expect(report.results.map(row=>row.status)).toEqual(['failed','dispatched','verified']);
+  expect(report.failed).toBe(4);
+  expect(report.results.map(row=>[row.node,row.status])).toEqual([['phone','failed'],['no-address','failed'],['offline','failed'],['old','dispatched'],['current','verified']]);
+  expect(report.results[0].error).toContain('no configured update transport');
+  expect(report.results[1].error).toContain('no configured update transport');
+  expect(report.results[2].error).toContain('offline');
   expect(exec.mock.calls.find(([node,cmd])=>node==='old' && cmd.includes('nohup'))[1]).toContain('--local-only');
-  expect(exec.mock.calls.some(([node])=>node==='phone' || node==='self' || node==='offline')).toBe(false);
+  expect(exec.mock.calls.some(([node])=>['phone','no-address','self','offline'].includes(node))).toBe(false);
  });
  it('judges a peer by its own maintenance, not by its view of other peers',async()=>{
   const nodes=[{ip:'fleet',online:true,access:{ssh_user:'alice'}},{ip:'legacy',online:true,access:{ssh_user:'alice'}},{ip:'broken',online:true,access:{ssh_user:'alice'}}];

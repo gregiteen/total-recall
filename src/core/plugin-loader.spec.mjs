@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -215,7 +215,7 @@ describe('Plugin Loader & Schema Validation', () => {
 
   describe('discoverPlugins & category extraction', () => {
     // Self-contained fixture. These tests used to read a developer's private
-    // project (`/Users/greg/Documents/antigravity/keen-hertz`), so they could
+    // project (a sibling directory outside the repository), so they could
     // only ever pass on one machine — and the plugin they depended on is gone
     // even there. Build the manifest we assert against instead.
     let fixtureRoot;
@@ -256,6 +256,15 @@ describe('Plugin Loader & Schema Validation', () => {
       expect(sf).toBeDefined();
       expect(sf.valid).toBe(true);
       expect(sf.manifest.name).toBe('Scientific Frontiers Engine');
+    });
+
+    it('labels the shared directory global when invoked from its home root', () => {
+      vi.stubEnv('AGENT_DIR', path.join(fixtureRoot, '.agent'));
+      try {
+        expect(getPlugin('scientific-frontiers', fixtureRoot)?.scope).toBe('global');
+      } finally {
+        vi.unstubAllEnvs();
+      }
     });
 
     it('retrieves specific plugin with getPlugin', () => {

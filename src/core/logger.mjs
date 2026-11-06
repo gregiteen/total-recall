@@ -2,7 +2,7 @@ import fs from 'fs';
 import path from 'path';
 import os from 'os';
 import { EventEmitter } from 'node:events';
-import { brainDir } from './config.mjs';
+import { brainDir } from './local-config.mjs';
 
 const BRAIN_DIR = brainDir;
 const LOG_DIR = path.join(BRAIN_DIR, 'logs');

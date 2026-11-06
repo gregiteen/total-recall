@@ -8,8 +8,36 @@
 import fs from 'fs';
 import path from 'path';
 import crypto from 'crypto';
+import { FileSystemVfs, VfsConflictError } from '@ssss/cli/vfs';
 import matter from './frontmatter.mjs';
-import { atomicWrite, safeStringify } from './vault.mjs';
+import { atomicWrite, isSafeVaultName, safeStringify } from './vault.mjs';
+import { observeDaemon } from './startup-health.mjs';
+
+export const TASK_CANCELLATION_SUPPORTS_EXPECTED_STATUS = true;
+const TASK_QUEUE_PROTOCOL = 1;
+const schedulerReceipt = queueDir => path.join(path.dirname(queueDir), 'queue-protocol.json');
+
+export function publishTaskSchedulerProtocol(queueDir) {
+  const pidFile = path.resolve(queueDir, '../../daemon.pid');
+  fs.mkdirSync(path.dirname(queueDir), { recursive: true });
+  atomicWrite(schedulerReceipt(queueDir), JSON.stringify({
+    protocol: TASK_QUEUE_PROTOCOL,
+    pid: process.pid,
+    pidFileMtime: fs.statSync(pidFile).mtimeMs,
+  }));
+}
+
+export function supportsPendingTaskCancellation(queueDir) {
+  const brainDir = path.resolve(queueDir, '../..');
+  const daemon = observeDaemon(brainDir);
+  if (daemon.status === 'not-started' || daemon.status === 'stopped') return true;
+  if (daemon.status !== 'running') return false;
+  try {
+    const report = JSON.parse(fs.readFileSync(schedulerReceipt(queueDir), 'utf8'));
+    return report.protocol === TASK_QUEUE_PROTOCOL && report.pid === daemon.pid &&
+      report.pidFileMtime === fs.statSync(path.join(brainDir, 'daemon.pid')).mtimeMs;
+  } catch { return false; }
+}
 
 /** Soft kinds — labels only; executor resolution uses `executor` then `category` then kind. */
 export const TASK_KINDS = Object.freeze([
@@ -220,7 +248,8 @@ export function addTask(opts, queueDir) {
  */
 export function listTasks(queueDir, { status = 'pending' } = {}) {
   if (!fs.existsSync(queueDir)) return [];
-  const files = fs.readdirSync(queueDir).filter((f) => f.endsWith('.md'));
+  const files = fs.readdirSync(queueDir, { withFileTypes: true })
+    .filter(entry => entry.isFile() && entry.name.endsWith('.md')).map(entry => entry.name);
   const tasks = [];
   for (const file of files) {
     try {
@@ -253,12 +282,14 @@ export function listTasks(queueDir, { status = 'pending' } = {}) {
  * Load one task by slug.
  */
 export function getTask(queueDir, slug) {
+  if (typeof slug !== 'string' || !isSafeVaultName(slug)) return null;
   const filepath = path.join(queueDir, `${slug}.md`);
   if (!fs.existsSync(filepath)) {
     // scan for match
     const all = listTasks(queueDir, { status: 'all' });
     return all.find((t) => t.slug === slug) || null;
   }
+  if (!fs.lstatSync(filepath).isFile()) return null;
   const raw = fs.readFileSync(filepath, 'utf8');
   const { data, content } = matter(raw);
   return normalizeTask({
@@ -269,26 +300,48 @@ export function getTask(queueDir, slug) {
   });
 }
 
-/**
- * Cancel a pending/in-progress task.
- */
-export function cancelTask(queueDir, slug) {
+/** Compare the observed envelope and commit through the same VFS path for every status change. */
+export async function transitionTaskStatus(queueDir, task, status, { expectedStatus, lastError } = {}) {
+  if (!fs.existsSync(queueDir)) return { success: false, error: `Task not found: ${task.slug}` };
+  const filepath = task._filepath || path.join(queueDir, `${task.slug}.md`);
+  const relative = path.relative(path.resolve(queueDir), path.resolve(filepath));
+  if (path.basename(relative) !== relative || !relative.endsWith('.md')) {
+    return { success: false, error: 'Task path is outside the selected queue' };
+  }
+  const vfs = new FileSystemVfs(queueDir, { lock: { timeoutMs: 5000, staleMs: Infinity } });
+  const current = await vfs.read(relative);
+  if (!current) return { success: false, error: `Task not found: ${task.slug}` };
+  const { data, content } = matter(current.bytes.toString('utf8'));
+  const observed = normalizeTask(data).status;
+  if (expectedStatus !== undefined && observed !== expectedStatus) {
+    return { success: false, error: `Task is ${observed}, expected ${expectedStatus}: ${task.slug}` };
+  }
+  if (observed === 'completed' || observed === 'cancelled') {
+    return { success: false, error: `Task already ${observed}: ${task.slug}` };
+  }
+  data.status = status;
+  data.updated_at = new Date().toISOString();
+  if (status === 'cancelled') data.cancelled_at = data.updated_at;
+  if (status === 'completed') data.completed_at = data.updated_at;
+  if (lastError) data.last_error = lastError;
+  if (task.retry_count !== undefined) data.retry_count = task.retry_count;
+  try {
+    await vfs.writeAtomic(relative, Buffer.from(safeStringify(content, data)), { version: current.version });
+  } catch (error) {
+    if (error instanceof VfsConflictError) return { success: false, error: `Task changed concurrently: ${task.slug}` };
+    throw error;
+  }
+  return { success: true, task: normalizeTask({ ...data, slug: data.slug || task.slug, body: content, _filepath: filepath }) };
+}
+
+/** Mark cancellation, optionally requiring the pending state at the VFS commit. */
+export async function cancelTask(queueDir, slug, { expectedStatus } = {}) {
   const task = getTask(queueDir, slug);
   if (!task) return { success: false, error: `Task not found: ${slug}` };
-  if (task.status === 'completed' || task.status === 'cancelled') {
-    return { success: false, error: `Task already ${task.status}: ${slug}` };
+  if (expectedStatus === 'pending' && !supportsPendingTaskCancellation(queueDir)) {
+    return { success: false, error: 'The running daemon does not support pending-only cancellation' };
   }
-  const filepath = task._filepath || path.join(queueDir, `${task.slug}.md`);
-  const raw = fs.readFileSync(filepath, 'utf8');
-  const { data, content } = matter(raw);
-  data.status = 'cancelled';
-  data.updated_at = new Date().toISOString();
-  data.cancelled_at = data.updated_at;
-  for (const key of Object.keys(data)) {
-    if (data[key] === undefined) delete data[key];
-  }
-  atomicWrite(filepath, safeStringify(content, data));
-  return { success: true, task: { ...task, status: 'cancelled' } };
+  return transitionTaskStatus(queueDir, task, 'cancelled', { expectedStatus });
 }
 
 /**

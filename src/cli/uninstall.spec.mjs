@@ -7,6 +7,11 @@ import os from 'node:os';
 import path from 'node:path';
 import cp from 'node:child_process';
 import uninstall from './uninstall.mjs';
+import { removeHarnessHooks } from '../core/harness-hooks.mjs';
+
+// The real step reaches every harness on the machine it runs on, so scripts/verify-harness-install.mjs
+// proves it in a sandbox and this file proves only that uninstall calls it, and when.
+vi.mock('../core/harness-hooks.mjs', () => ({ removeHarnessHooks: vi.fn().mockResolvedValue({ ok: true, rows: [] }) }));
 
 vi.mock('./backup.mjs', () => {
   return {
@@ -60,6 +65,61 @@ async function runUninstall(args = []) {
 }
 
 describe('uninstall command', () => {
+  function brainWithANode() {
+    const node = path.join(tmpHome, '.agent', 'skills', 'total-recall', 'memory-vault', 'node.md');
+    fs.mkdirSync(path.dirname(node), { recursive: true });
+    fs.writeFileSync(node, 'data', 'utf8');
+    return node;
+  }
+
+  it.each(['--help', '-h'])('%s prints help and removes nothing', async (flag) => {
+    const node = brainWithANode();
+    const log = vi.spyOn(console, 'log').mockImplementation(() => {});
+    try {
+      await runUninstall([flag]);
+      expect(log.mock.calls.flat().join('\n')).toContain('--purge');
+    } finally { log.mockRestore(); }
+    expect(fs.existsSync(node)).toBe(true);
+  });
+
+  it('refuses a mistyped option before touching anything', async () => {
+    const node = brainWithANode();
+    await expect(runUninstall(['--hlep'])).rejects.toThrow(/Unknown uninstall option "--hlep"/);
+    expect(fs.existsSync(node)).toBe(true);
+  });
+
+  it('does not read the value of --push-git as an option', async () => {
+    await expect(runUninstall(['--push-git', '--hlep'])).resolves.toBeUndefined();
+  });
+
+  it('takes the gate out of every harness while the plugins that own it are still here', async () => {
+    const node = brainWithANode();
+    let brainWasThere = null;
+    removeHarnessHooks.mockImplementationOnce(async () => {
+      brainWasThere = fs.existsSync(node);
+      return { ok: true, rows: [] };
+    });
+    await runUninstall();
+    expect(brainWasThere).toBe(true);
+    expect(fs.existsSync(node)).toBe(false);
+  });
+
+  it('a harness that cannot be cleaned does not stop the uninstall', async () => {
+    const node = brainWithANode();
+    removeHarnessHooks.mockResolvedValueOnce({ ok: false, rows: [], error: 'cursor config is not JSON' });
+    await runUninstall();
+    expect(fs.existsSync(node)).toBe(false);
+  });
+
+  it.each(['--help', '--hlep'])('%s never reaches the harnesses', async (flag) => {
+    removeHarnessHooks.mockClear();
+    const log = vi.spyOn(console, 'log').mockImplementation(() => {});
+    try {
+      await runUninstall([flag]).catch(() => {});
+    } finally { log.mockRestore(); }
+    expect(removeHarnessHooks).not.toHaveBeenCalled();
+  });
+
   it('removes total-recall brain from global ~/.agent', async () => {
     const globalAgent = path.join(tmpHome, '.agent');
     const globalBrain = path.join(globalAgent, 'skills', 'total-recall');

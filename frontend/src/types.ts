@@ -318,7 +318,7 @@ export interface OpenWikiNode {
   source: string
 }
 
-// ─── UCW Bundle Types (SSSS §16 — UltraChat Workspace) ─────────────────────────
+// ─── UCW Bundle Types (SSSS §16) ─────────────────────────
 
 export interface UcwBundleManifest {
   name: string

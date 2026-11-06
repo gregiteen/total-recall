@@ -150,9 +150,8 @@ router.get('/api/pairing', requireAuth, requireScope('config:read'), async (_req
  */
 router.get('/api/tasks/failed', requireAuth, async (req, res) => {
   try {
-    const { loadPendingTasks } = await import('../../core/scheduler.mjs');
-    const allTasks = loadPendingTasks(QUEUE_DIR);
-    const failed = allTasks.filter(t => t.status === 'failed');
+    const { listTasks } = await import('../../core/task-envelope.mjs');
+    const failed = listTasks(QUEUE_DIR, { status: 'failed' });
     res.json({ total: failed.length, tasks: failed });
   } catch (err) {
     serverError(res, err);
@@ -166,12 +165,12 @@ router.get('/api/tasks/failed', requireAuth, async (req, res) => {
 router.post('/api/tasks/:id/retry', requireAuth, async (req, res) => {
   try {
     const taskId = req.params.id;
-    const { loadPendingTasks, updateTaskStatus } = await import('../../core/scheduler.mjs');
-    const allTasks = loadPendingTasks(QUEUE_DIR);
-    const task = allTasks.find(t => t.slug === taskId);
+    const { getTask, transitionTaskStatus } = await import('../../core/task-envelope.mjs');
+    const task = getTask(QUEUE_DIR, taskId);
     if (!task) return res.status(404).json({ error: 'Task not found in queue' });
     if (task.status !== 'failed') return res.status(400).json({ error: 'Task is not in failed state' });
-    updateTaskStatus(task, 'pending', QUEUE_DIR);
+    const result = await transitionTaskStatus(QUEUE_DIR, { ...task, retry_count: 0 }, 'pending', { expectedStatus: 'failed' });
+    if (!result.success) return res.status(409).json({ error: result.error });
     res.json({ success: true, message: `Task ${taskId} re-queued` });
   } catch (err) {
     serverError(res, err);

@@ -6,7 +6,7 @@ vi.mock('./plugin-loader.mjs', async importOriginal => ({ ...await importOrigina
 vi.mock('./logger.mjs', () => ({ logger: { info() {}, warn() {}, debug() {} } }));
 vi.mock('./config.mjs', () => ({ brainDir: '/tmp/brain-update-test', ROOT: '/tmp/brain-update-test' }));
 vi.mock('./autopull-install.mjs', () => ({ installAutoPull: vi.fn() }));
-import { updateAllBrains, brainInstallOwner, brainUpdateLockPath, acquireBrainUpdateLock } from './brain-updates.mjs';
+import { updateAllBrains, brainInstallOwner, brainUpdateLockPath, acquireBrainUpdateLock, discoverBrainConsumers } from './brain-updates.mjs';
 import { parseArgs } from '../cli/update.mjs';
 
 describe('uniform brain updates', () => {
@@ -45,6 +45,14 @@ describe('uniform brain updates', () => {
     expect(fs.readFileSync(path.join(root, 'package.json'), 'utf8')).toBe(before);
     expect(exec.mock.calls.every(([, args]) => args[0] === 'view')).toBe(true);
     expect(fs.existsSync(path.join(root, '.total-recall-update.lock'))).toBe(false);
+  });
+
+  it('excludes managed scaffold assets without hiding real nested consumers', () => {
+    const root = manifest(path.join(tmp, 'app'), {});
+    const dependency = { dependencies: { '@gregiteen/ssss-cli': '0.11.0' } };
+    const managed = manifest(path.join(root, '.agent/skills/total-recall/scaffolds/ssss'), dependency);
+    const nested = manifest(path.join(root, 'scaffolds/real-app'), dependency);
+    expect(discoverBrainConsumers([root, managed]).map(({ root }) => root)).toEqual([nested]);
   });
 
   it('fails a registered brain with missing auth even when packages need no update', async () => {
@@ -178,6 +186,82 @@ describe('uniform brain updates', () => {
     expect(result.results.find(r => r.root === pluginRoot)).toBeFalsy();
     // The plugin's own checkout still maintains its dev toolchain.
     expect(result.results.find(r => r.root === source)).toBeTruthy();
+  });
+
+  describe('plugin checkouts linked into a brain but not registered as projects', () => {
+    const linked = dir => ({ id: path.basename(dir), linked: true, valid: true, scope: 'global', dir });
+    function checkout(name, pkg) {
+      const root = manifest(path.join(tmp, 'plugins', name), { name, ...pkg });
+      fs.writeFileSync(path.join(root, 'package-lock.json'), '{"lockfileVersion":3}');
+      return root;
+    }
+    const tracked = root => ['package.json', 'package-lock.json'].map(name => fs.readFileSync(path.join(root, name), 'utf8'));
+    const installs = exec => exec.mock.calls.filter(([, args]) => args[0] !== 'view');
+
+    it('never installs a brain copy for a dev dependency, and reports the shared install', async () => {
+      const root = checkout('tr-plugin-maps', { devDependencies: { 'total-recall-brain': '3.1.0' } });
+      const before = tracked(root);
+      const exec = execWithInstall();
+      const result = await run([], exec, { dryRun: false, plugins: [linked(root)] });
+      expect(installs(exec)).toEqual([]);
+      expect(tracked(root)).toEqual(before);
+      expect(fs.existsSync(path.join(root, 'node_modules'))).toBe(false);
+      const row = result.results.find(r => r.root === root);
+      expect(row.status).toBe('shared_install');
+      expect(row.packages[0]).toMatchObject({ key: 'total-recall-brain', declared: '3.1.0', latest: '3.39.1' });
+      expect(result.shared_install).toBe(1);
+      expect(result.failed).toBe(0);
+    });
+
+    it('updates a runtime dependency without dev dependencies or writing tracked files', async () => {
+      const root = checkout('tr-plugin-text', { dependencies: { '@gregiteen/ssss-cli': '0.10.0' }, devDependencies: { 'total-recall-brain': '3.1.0' } });
+      installed(root, '@gregiteen/ssss-cli', '0.10.0');
+      const before = tracked(root);
+      const exec = execWithInstall((cmd, args, options) => { installed(options.cwd, '@gregiteen/ssss-cli', '0.11.0'); return { status: 0 }; });
+      const result = await run([], exec, { dryRun: false, plugins: [linked(root)] });
+      const [[manager, args, options]] = installs(exec);
+      expect(manager).toBe('npm');
+      expect(options.cwd).toBe(root);
+      expect(args).toEqual(expect.arrayContaining(['--omit=dev', '--no-save', '@gregiteen/ssss-cli@0.11.0']));
+      expect(args.join(' ')).not.toContain('total-recall-brain');
+      expect(tracked(root)).toEqual(before);
+      const row = result.results.find(r => r.root === root);
+      expect(row.status).toBe('updated');
+      expect(row.packages.map(p => p.package)).toEqual(['@gregiteen/ssss-cli']);
+    });
+
+    it('fails when the installed runtime dependency does not match the release', async () => {
+      const root = checkout('tr-plugin-text', { dependencies: { '@gregiteen/ssss-cli': '0.10.0' } });
+      installed(root, '@gregiteen/ssss-cli', '0.10.0');
+      const result = await run([], execWithInstall(), { dryRun: false, plugins: [linked(root)] });
+      expect(result.results.find(r => r.root === root).status).toBe('failed');
+      expect(result.failed).toBe(1);
+    });
+
+    it('leaves a current runtime dependency alone even when its pin is older', async () => {
+      const root = checkout('tr-plugin-text', { dependencies: { '@gregiteen/ssss-cli': '0.10.0' } });
+      installed(root, '@gregiteen/ssss-cli', '0.11.0');
+      const exec = execWithInstall();
+      const result = await run([], exec, { dryRun: false, plugins: [linked(root)] });
+      expect(installs(exec)).toEqual([]);
+      expect(result.results.find(r => r.root === root).status).toBe('up_to_date');
+    });
+
+    it('keeps the dev toolchain of a linked checkout that is registered as a project', async () => {
+      const root = checkout('tr-plugin-maps', { devDependencies: { 'total-recall-brain': '3.1.0' } });
+      const exec = execWithInstall((cmd, args, options) => { installed(options.cwd, 'total-recall-brain', '3.39.1'); return { status: 0 }; });
+      const result = await run([root], exec, { dryRun: false, plugins: [linked(root)] });
+      expect(installs(exec)[0][1]).not.toContain('--omit=dev');
+      expect(JSON.parse(tracked(root)[0]).devDependencies['total-recall-brain']).toBe('3.39.1');
+      expect(result.results.find(r => r.root === root).status).toBe('updated');
+    });
+  });
+
+  it('never updates archived plugin copies under memory-derived', async () => {
+    const archive = manifest(path.join(tmp, 'brain', 'memory-derived', 'plugin-replacements', 'auth-1'), { name: 'tr-plugin-auth', devDependencies: { 'total-recall-brain': '3.1.0' } });
+    fs.writeFileSync(path.join(archive, 'plugin.json'), JSON.stringify({ id: 'auth' }));
+    const result = await run([path.join(tmp, 'brain')], execWithInstall());
+    expect(result.results.find(r => r.root === archive)).toBeFalsy();
   });
 
   it('still skips other dot directories such as .git', async () => {

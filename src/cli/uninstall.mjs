@@ -31,6 +31,7 @@ import path from 'node:path';
 import { spawnSync, execFileSync } from 'node:child_process';
 import backup from './backup.mjs';
 import { loadPluginModule } from '../core/plugin-runtime.mjs';
+import { removeHarnessHooks } from '../core/harness-hooks.mjs';
 
 // ╔══════════════════════════════════════════════════════════════════════════╗
 // ║  FORBIDDEN FLAGS — These patterns must NEVER be accepted as arguments  ║
@@ -40,6 +41,18 @@ const FORBIDDEN_FLAGS = [
   '--no-backup', '--nobackup', '--skip-backup', '--skipbackup',
   '--no_backup', '--skip_backup',
 ];
+
+const USAGE = `
+  total-recall uninstall — Stop and remove Total Recall from this machine
+
+  Stops its services, removes launchd agents and cron jobs, and deletes the global and local
+  installs. It backs up your brain first, and stops if the backup fails. There is no way to skip that.
+
+    total-recall uninstall [--push-git <remote>] [--purge]
+
+    --push-git <remote>   Push the backup to this git remote instead of the one already configured.
+    --purge               Also remove the optional search engine's system directories.
+`;
 
 // ─── Logging Helpers ────────────────────────────────────────────────────────
 function log(msg)      { console.error(`  ${msg}`); }
@@ -89,6 +102,17 @@ export default async function uninstall(args = []) {
       console.error(`  after it caused catastrophic data loss. Aborting.\n`);
       process.exit(1);
     }
+  }
+
+  if (args.includes('--help') || args.includes('-h')) {
+    console.log(USAGE);
+    return;
+  }
+
+  // A mistyped flag must not start a teardown.
+  for (let i = 0; i < args.length; i++) {
+    if (args[i] === '--push-git') i++;
+    else if (args[i] !== '--purge') throw new Error(`Unknown uninstall option "${args[i]}". Nothing was changed. See: total-recall uninstall --help`);
   }
 
   const HOME = os.homedir();
@@ -191,6 +215,10 @@ export default async function uninstall(args = []) {
     const result = preserveCredentials({ brainDir, destination: path.join(agentDir, 'secrets.enc') });
     if (result.preserved) logOk('Auth verified encrypted credential preservation');
   }
+
+  // While the plugins that own these hooks are still here. A fail-closed hook that outlives
+  // Total Recall would deny every call in that harness.
+  await removeHarnessHooks({ log });
 
   // ── Step 1: Stop and disable background services ──
   logStep('1/4', 'Stopping and disabling background services');

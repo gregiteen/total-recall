@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import path from 'node:path';
 import fs from 'node:fs';
+import os from 'node:os';
 
 vi.mock('./config.mjs', async importOriginal => ({
   ...await importOriginal(),
@@ -32,11 +33,11 @@ import {
   queryCliSemanticIndex
 } from './cli-semantic-index.mjs';
 
-const tempDir = path.join(process.cwd(), '.agent/memory-derived-cli-test');
+let tempDir;
 
 describe('CLI Semantic Index', () => {
   beforeEach(() => {
-    fs.mkdirSync(tempDir, { recursive: true });
+    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'tr-cli-index-'));
   });
 
   afterEach(() => {
@@ -138,5 +139,19 @@ describe('CLI Semantic Index', () => {
         process.env.TR_EMBEDDINGS_DISABLED = originalDisabled;
       }
     }
+  });
+
+  it('uses current command metadata and skips query embedding for a lexical-only index', async () => {
+    const verb = { id: 'core:status', name: 'status', verb: 'total-recall status', description: 'Old daemon status.' };
+    const old = { ...verb, hash: hashVerb(verb) };
+    const retired = { ...old, id: 'plugin:retired:status', verb: 'total-recall retired status' };
+    await buildCliSemanticIndex({ derivedDir: tempDir, semantic: false, harvest: () => [old, retired] });
+    const updated = { ...verb, description: 'Current daemon status.' };
+    updated.hash = hashVerb(updated);
+    const embed = vi.fn(async () => new Array(768).fill(.2));
+    const results = await queryCliSemanticIndex('status', { derivedDir: tempDir, harvest: () => [updated], embed });
+    expect(embed).not.toHaveBeenCalled();
+    expect(results).toHaveLength(1);
+    expect(results[0]).toMatchObject({ description: 'Current daemon status.', vectorScore: null });
   });
 });

@@ -4,6 +4,7 @@ vi.mock('./logger.mjs', async () => ({
   ...(await vi.importActual('./logger.mjs')),
   logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() },
 }));
+vi.mock('./leader-election.mjs', () => ({ releaseLease: vi.fn() }));
 
 import { writeInterrupt, acquirePidLock, releasePidLock, reassertPidLock } from './daemon-loop.mjs';
 import fs from 'fs';

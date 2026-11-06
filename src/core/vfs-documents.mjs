@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import matter from './frontmatter.mjs';
-import { brainDir } from './config.mjs';
+import { brainDir } from './local-config.mjs';
 
 export function defaultVaultRoot() {
   return path.join(brainDir, 'memory-vault');

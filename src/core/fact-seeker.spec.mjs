@@ -190,7 +190,7 @@ describe('source-adapters module', () => {
     expect(result.available).toContain('duckduckgo');
     expect(result.unavailable).toContain('brave-search');
     expect(result.unavailable).toContain('serper');
-    // Warning should mention the UltraChat env var name
+    // Warning should mention the env var name
     expect(result.warnings.some(w => w.includes('BRAVE_SEARCH_API_KEY'))).toBe(true);
 
     if (savedBrave) process.env.BRAVE_SEARCH_API_KEY = savedBrave;

@@ -21,7 +21,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
-import { BRAIN_PACKAGES, updateAllBrains } from '../core/brain-updates.mjs';
+import { BRAIN_PACKAGES, discoverBrainConsumers, installedBrainPackage, linkedPluginOwners, updateAllBrains } from '../core/brain-updates.mjs';
 import { listUpdateRoots, rootsFromEnv } from '../core/package-auto-update.mjs';
 
 const DEFAULT_PACKAGES = BRAIN_PACKAGES;
@@ -156,7 +156,22 @@ export async function awaitPublished(pkg, version, { attempts = 45, delayMs = 20
 }
 
 /**
- * Every consumer root TR knows about: the project registry plus TR_SYNC_REPOS.
+ * The registered roots, plus every nested consumer and linked plugin owner under
+ * them. This is the set `update --all-brains` installs into, so verify checks what
+ * propagate touched instead of only the registered top level.
+ */
+function fleetRoots(opts = {}) {
+  const registered = opts.scanRoots
+    || [...listUpdateRoots(opts).map((row) => (typeof row === 'string' ? row : row.root)), ...rootsFromEnv()];
+  const present = registered.filter((root) => root && fs.existsSync(root));
+  const owners = opts.scanRoots ? [] : linkedPluginOwners(present, opts);
+  const nested = discoverBrainConsumers([...present, ...owners], { onError: () => {} }).map((row) => row.root);
+  return [...present, ...owners, ...nested];
+}
+
+/**
+ * Every consumer root TR knows about: the project registry, TR_SYNC_REPOS, and what
+ * they contain.
  * Used by verify so it never depends on the propagate step's own bookkeeping.
  */
 export function consumerRoots(opts = {}) {
@@ -164,9 +179,7 @@ export function consumerRoots(opts = {}) {
   // which is what makes this callable from tests and from --root. Without them,
   // fall back to the whole registered fleet plus TR_SYNC_REPOS.
   const explicit = (opts.roots || []).filter(Boolean);
-  const source = explicit.length
-    ? explicit
-    : [...listUpdateRoots(opts).map((row) => (typeof row === 'string' ? row : row.root)), ...rootsFromEnv()];
+  const source = explicit.length ? explicit : fleetRoots(opts);
   const seen = new Set();
   const out = [];
   for (const root of source) {
@@ -212,8 +225,11 @@ export function consumerState(root, pkg, version = null) {
     want = spec;
   }
 
+  const resolved = installedBrainPackage(root, pkg).file;
   const installedCandidates = [
     path.join(root, 'node_modules', pkg, 'package.json'),
+    // A nested consumer resolves through its parent's node_modules.
+    ...(resolved ? [resolved] : []),
     // npm: aliases install under the alias directory, which is what .bin shims run.
     ...aliasDirs(root, pkg),
   ];
@@ -339,6 +355,9 @@ export async function run(argv = process.argv, deps = {}) {
       const consumers = verifyConsumers(pkg, version, { roots: opts.root ? [opts.root] : [] });
       entry.consumers = consumers;
       if (!reg.ok) return fail(`${pkg}@${version} is not readable from the npm registry (${reg.error}).`);
+      if (!opts.root && consumers.consumers === 0) {
+        return fail(`${pkg}@${version}: found 0 consumers in ${consumers.roots_considered} root(s), so nothing was verified. Pass --root <repo> or register the consumers.`);
+      }
       if (consumers.failing > 0) {
         return fail(`${pkg}@${version}: ${consumers.failing}/${consumers.consumers} consumers not satisfied. First: ${consumers.failures[0].root} (${consumers.failures[0].installed ?? 'not installed'}).`);
       }

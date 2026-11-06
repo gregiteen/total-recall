@@ -82,7 +82,17 @@ export async function isOwnedServerPort(port, { brainDir = getGlobalBrainDir(), 
 }
 
 // ─── Main Doctor Routine ─────────────────────────────────────────────────────
-export default async function doctor() {
+export default async function doctor(args = []) {
+  if (args.includes('--help') || args.includes('-h')) {
+    console.log(`
+  total-recall doctor — Diagnose this machine's Total Recall runtime
+
+  Checks hardware, required plugins, services and the brain, and reports warnings and failures.
+
+    total-recall doctor
+`);
+    return;
+  }
   console.log(`
   ┌─────────────────────────────────────────────────────────┐
   │  Total Recall System Doctor                             │

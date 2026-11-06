@@ -6,7 +6,7 @@ import { spawnSync } from 'node:child_process';
 import os from 'node:os';
 import { createHash } from 'node:crypto';
 import { listUpdateRoots, resolveRegistryFiles, readRegistryEntries, rootsFromEnv } from './package-auto-update.mjs';
-import { discoverPlugins } from './plugin-loader.mjs';
+import { discoverPlugins, PACKAGE_ROOT } from './plugin-loader.mjs';
 import { comparePackageVersions } from './package-version.mjs';
 import { inspectRequiredPlugins } from './required-plugins.mjs';
 import { ensureRequiredPlugins } from './required-plugins.mjs';
@@ -14,8 +14,10 @@ import YAML from 'yaml';
 
 export const BRAIN_PACKAGES = ['total-recall-brain', '@gregiteen/ssss-cli'];
 const sections = ['dependencies', 'devDependencies', 'optionalDependencies', 'peerDependencies'];
+// memory-derived holds archived plugin copies (plugin-replacements); updating one
+// reinstalled its whole dev tree into an archive nothing ever runs.
 const ignored = new Set(['node_modules', 'vendor', 'dist', 'build', 'coverage', 'venv',
-  'test', 'tests', '__tests__', 'fixtures', 'tmp', 'scratch', 'scaffold']);
+  'test', 'tests', '__tests__', 'fixtures', 'tmp', 'scratch', 'scaffold', 'memory-derived']);
 const canonical = key => key === '@ssss/cli' ? '@gregiteen/ssss-cli' : key;
 const read = file => JSON.parse(fs.readFileSync(file, 'utf8'));
 const isLink = file => { try { return fs.lstatSync(file).isSymbolicLink(); } catch { return false; } };
@@ -72,15 +74,26 @@ export function installedBrainPackage(root, key) {
   } catch { return { version: null, file: null }; }
 }
 
-/** Never traverse dependency trees, brain state or directory links. */
-export function discoverBrainConsumers(roots, { onError } = {}) {
+/**
+ * Never traverse dependency trees, managed scaffolds, archives or directory links.
+ *
+ * `installedPlugins` lists real paths of plugin checkouts that are only installed on
+ * this machine, not developed here. An installed plugin runs under the shared Total
+ * Recall install and is set up without dev dependencies, so only its runtime
+ * dependencies make it a consumer (`runtimeOnly`).
+ */
+export function discoverBrainConsumers(roots, { onError, installedPlugins = new Set() } = {}) {
   const seen = new Set();
   const consumers = [];
-  function walk(dir) {
+  function walk(dir, inherited = false) {
     const real = fs.realpathSync(dir);
     if (seen.has(real)) return;
     seen.add(real);
+    const segments = real.split(path.sep);
+    if (segments.some((segment, index) => segment === 'scaffolds'
+      && segments[index - 1] === 'total-recall' && segments[index - 2] === 'skills')) return;
     const file = path.join(real, 'package.json');
+    let runtimeOnly = inherited || installedPlugins.has(real);
     if (fs.existsSync(file)) {
       let pkg;
       try { pkg = read(file); }
@@ -89,14 +102,14 @@ export function discoverBrainConsumers(roots, { onError } = {}) {
       // dependencies, on purpose: full dev trees there filled a disk. Counting its
       // devDependencies made every such plugin a permanently failing consumer, and
       // "fixing" it would mean installing exactly what must never be installed.
-      const sharedPluginCopy = fs.existsSync(path.join(real, 'plugin.json'))
+      runtimeOnly ||= fs.existsSync(path.join(real, 'plugin.json'))
         && real.split(path.sep).join('/').includes('/skills/total-recall/plugins/');
-      const deps = sections.filter(section => !(sharedPluginCopy && section === 'devDependencies'))
+      const deps = sections.filter(section => !(runtimeOnly && section === 'devDependencies'))
         .flatMap(section => Object.entries(pkg[section] || {})
         .filter(([key]) => BRAIN_PACKAGES.includes(canonical(key)) && canonical(key) !== pkg.name)
         .map(([key, declared]) => ({ section, key, package: canonical(key), declared,
           ...installedBrainPackage(real, key) })));
-      if (deps.length) consumers.push({ root: real, file, pkg, deps });
+      if (deps.length) consumers.push({ root: real, file, pkg, deps, runtimeOnly });
     }
     for (const entry of fs.readdirSync(real, { withFileTypes: true })) {
       if (!entry.isDirectory() || ignored.has(entry.name)) continue;
@@ -105,11 +118,42 @@ export function discoverBrainConsumers(roots, { onError } = {}) {
       // `npm install` keeps its own node_modules there, and skipping the whole
       // dot tree left those copies stranded on an old version.
       if (entry.name.startsWith('.') && entry.name !== '.agent') continue;
-      walk(path.join(real, entry.name));
+      walk(path.join(real, entry.name), runtimeOnly);
     }
   }
   for (const root of roots) walk(root);
   return consumers;
+}
+
+/**
+ * Installed plugins can be owned by repositories outside the brain registry. A linked
+ * owner that is registered as a project is developed here and is a full consumer. Any
+ * other is only installed here: see `installedPlugins` in discoverBrainConsumers.
+ */
+export function linkedPluginOwners(roots, opts = {}) {
+  const plugins = opts.plugins || roots.flatMap(root => discoverPlugins(root));
+  return plugins
+    .filter(plugin => plugin.linked && plugin.valid !== false && !plugin.broken && plugin.scope !== 'scaffold' && plugin.dir && fs.existsSync(plugin.dir))
+    .map(plugin => fs.realpathSync(plugin.dir));
+}
+
+/** The version of a brain package that this running CLI, and so its plugins, resolves. */
+function sharedBrainPackage(name) {
+  try {
+    const pkg = read(path.join(PACKAGE_ROOT, 'package.json'));
+    return pkg.name === name ? pkg.version : installedBrainPackage(PACKAGE_ROOT, name).version;
+  } catch { return null; }
+}
+
+/** An installed plugin whose brain packages are all dev tools: nothing to install, one line to report. */
+function sharedInstallRow(root, versions) {
+  let pkg;
+  try { pkg = read(path.join(root, 'package.json')); } catch { return null; }
+  const packages = Object.entries(pkg.devDependencies || {})
+    .filter(([key]) => BRAIN_PACKAGES.includes(canonical(key)) && canonical(key) !== pkg.name)
+    .map(([key, declared]) => ({ key, package: canonical(key), declared,
+      installed: sharedBrainPackage(canonical(key)), latest: versions[canonical(key)] }));
+  return packages.length ? { root, owner: root, status: 'shared_install', packages } : null;
 }
 
 /** Resolve a workspace's owning package manager, including nested consumers. */
@@ -165,13 +209,9 @@ export async function updateAllBrains(opts = {}) {
   for (const root of new Set(requested.map(root => path.resolve(root)))) {
     if (!fs.existsSync(root)) errors.push({ root, status: 'failed', error: 'Registered/requested root is missing' });
   }
-  // Installed plugins can be owned by repositories outside the brain registry.
-  const plugins = opts.plugins || roots.flatMap(root => discoverPlugins(root));
-  for (const plugin of plugins) {
-    // Linked plugin owners are independent repositories. Vendored plugin copies
-    // use their host brain's installation, rather than installing dev tools inside it.
-    if (plugin.linked && plugin.valid !== false && !plugin.broken && plugin.scope !== 'scaffold' && plugin.dir && fs.existsSync(plugin.dir)) roots.push(fs.realpathSync(plugin.dir));
-  }
+  const registered = new Set(roots.map(root => fs.existsSync(root) ? fs.realpathSync(root) : root));
+  const installedPlugins = new Set(linkedPluginOwners(roots, opts).filter(owner => !registered.has(owner)));
+  roots.push(...installedPlugins);
   const versions = {};
   for (const name of BRAIN_PACKAGES) {
     const result = exec('npm', ['view', name, 'version'], { encoding: 'utf8', timeout: 15000 });
@@ -182,10 +222,16 @@ export async function updateAllBrains(opts = {}) {
     versions[name] = value;
   }
   let consumers;
-  try { consumers = discoverBrainConsumers(roots, { onError: (root, error) => errors.push({ root, status: 'failed', error: error.message }) }); }
+  try { consumers = discoverBrainConsumers(roots, { installedPlugins, onError: (root, error) => errors.push({ root, status: 'failed', error: error.message }) }); }
   catch (error) { return { failed: 1, skipped: true, reason: error.message, results: [] }; }
   const groups = new Map();
   const results = [...errors];
+  // These run under the shared install, which the global and source updates verify.
+  const consumerRoots = new Set(consumers.map(consumer => consumer.root));
+  for (const root of installedPlugins) {
+    const row = consumerRoots.has(root) ? null : sharedInstallRow(root, versions);
+    if (row) results.push(row);
+  }
   for (const consumer of consumers) {
     let owner;
     try { owner = brainInstallOwner(consumer.root); }
@@ -200,7 +246,7 @@ export async function updateAllBrains(opts = {}) {
     }
     const shared = isLink(path.join(owner.owner, 'node_modules')) || isLink(path.join(consumer.root, 'node_modules'));
     const needsChange = shared || consumer.deps.some(dep => dep.version !== versions[dep.package]
-      || dep.declared !== targetSpec(dep.key, versions[dep.package])
+      || (!consumer.runtimeOnly && dep.declared !== targetSpec(dep.key, versions[dep.package]))
       || !dep.file?.startsWith(path.join(owner.owner, 'node_modules') + path.sep));
     if (!needsChange) continue;
     row.status = dryRun ? 'would_update' : 'pending';
@@ -212,6 +258,11 @@ export async function updateAllBrains(opts = {}) {
     const links = [];
     const lock = brainUpdateLockPath(group.owner);
     let lockFd;
+    // An installed plugin's manifest and lockfile are its repository's tracked files:
+    // pinning them left checkouts dirty and blocked pulls. npm can install the exact
+    // release without writing either; pnpm cannot, so it keeps the pin.
+    const runtimeOnly = group.consumers.every(({ consumer }) => consumer.runtimeOnly);
+    const unpinned = runtimeOnly && group.manager === 'npm';
     const needsInstall = group.consumers.some(({ consumer }) =>
       isLink(path.join(consumer.root, 'node_modules')) || consumer.deps.some(dep =>
         dep.version !== versions[dep.package] || !dep.file?.startsWith(path.join(group.owner, 'node_modules') + path.sep)));
@@ -221,7 +272,7 @@ export async function updateAllBrains(opts = {}) {
         const file = path.join(group.owner, name);
         saved.set(file, fs.existsSync(file) ? fs.readFileSync(file, 'utf8') : null);
       }
-      for (const { consumer } of group.consumers) {
+      for (const { consumer } of unpinned ? [] : group.consumers) {
         const text = fs.readFileSync(consumer.file, 'utf8');
         saved.set(consumer.file, text);
         const pkg = read(consumer.file);
@@ -239,7 +290,10 @@ export async function updateAllBrains(opts = {}) {
       }
       const args = group.manager === 'pnpm'
         ? ['install', '--no-frozen-lockfile'] : ['install', '--no-audit', '--no-fund'];
-      if (!needsInstall) args.push(group.manager === 'pnpm' ? '--lockfile-only' : '--package-lock-only');
+      if (runtimeOnly) args.push(group.manager === 'pnpm' ? '--prod' : '--omit=dev');
+      if (unpinned) args.push('--no-save', ...new Set(group.consumers.flatMap(({ consumer }) =>
+        consumer.deps.map(dep => `${dep.key}@${targetSpec(dep.key, versions[dep.package])}`))));
+      else if (!needsInstall) args.push(group.manager === 'pnpm' ? '--lockfile-only' : '--package-lock-only');
       const install = exec(group.manager, args, { cwd: group.owner, encoding: 'utf8',
         timeout: 600000, maxBuffer: 8 * 1024 * 1024 });
       if (install.status !== 0) throw new Error(install.error?.message || install.stderr?.trim().slice(-1500) || `Install exited ${install.status}`);
@@ -282,6 +336,7 @@ export async function updateAllBrains(opts = {}) {
   }
   return { dryRun, versions, root_count: new Set(roots).size, consumer_count: consumers.length,
     updated: results.filter(row => row.status === 'updated').length,
+    shared_install: results.filter(row => row.status === 'shared_install').length,
     would_update: results.filter(row => row.status === 'would_update').length,
     failed: results.filter(row => row.status === 'failed').length, results };
 }

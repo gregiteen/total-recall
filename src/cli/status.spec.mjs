@@ -163,8 +163,8 @@ describe('serverBrainId', () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'tr-status-registry-'));
     try {
       const registry = path.join(dir, 'project-registry.json');
-      fs.writeFileSync(registry, JSON.stringify([{ name: 'gro-crm', brainDir: '/repos/gro-crm/.agent/skills/total-recall' }]));
-      expect(serverBrainId('/repos/gro-crm/.agent/skills/total-recall', { url: 'http://127.0.0.1:3000' }, registry)).toBe('project:gro-crm');
+      fs.writeFileSync(registry, JSON.stringify([{ name: 'example-app', brainDir: '/repos/example-app/.agent/skills/total-recall' }]));
+      expect(serverBrainId('/repos/example-app/.agent/skills/total-recall', { url: 'http://127.0.0.1:3000' }, registry)).toBe('project:example-app');
       expect(serverBrainId('/home/.agent/skills/total-recall', { url: 'http://127.0.0.1:3000' }, registry)).toBeNull();
       expect(serverBrainId('/anything', { layer: 'project', name: 'ssss' }, registry)).toBe('project:ssss');
     } finally {

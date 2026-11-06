@@ -128,10 +128,10 @@ describe('updateTaskStatus', () => {
   beforeEach(() => { dir = tmpDir(); });
   afterEach(() => { fs.rmSync(dir, { recursive: true, force: true }); });
 
-  it('updates status on disk', () => {
+  it('updates status on disk', async () => {
     writeTask(dir, 'my-task');
     const tasks = loadPendingTasks(dir);
-    updateTaskStatus(tasks[0], 'completed', dir);
+    expect((await updateTaskStatus(tasks[0], 'completed', dir)).success).toBe(true);
 
     const raw = fs.readFileSync(path.join(dir, 'my-task.md'), 'utf8');
     const { data } = matter(raw);

@@ -13,6 +13,9 @@ function printHelp() {  console.log(`
     on <brain>                 Switch a brain on  (name, repo path, brain path, or "global")
     off <brain>                Switch a brain off — recall stops reading it
     status                     Show active context resolution paths and loaded layers
+    relocate-global <dir> [--apply]
+                               Move shared skills and the global brain to a new private directory
+                               outside Git. Preview by default. Keep home access through a link.
     register <project-path>    Track any project path (full brain + registry)
     unregister <project-path>  Remove a project directory path from the registry
     ensure <project-path>      Ensure a full project brain layout + register
@@ -53,6 +56,9 @@ export default async function brain(args) {
       break;
     case 'status':
       await handleStatus();
+      break;
+    case 'relocate-global':
+      await handleRelocateGlobal(args.slice(1));
       break;
     case 'register':
       await handleRegister(registryPath, args.slice(1));
@@ -179,6 +185,23 @@ async function handleList(registryPath, globalBrainDir) {
   console.log('');
 }
 
+async function handleRelocateGlobal(args) {
+  if (args.includes('--help') || args.includes('-h')) return printHelp();
+  const [destination, ...flags] = args;
+  if (!destination || destination.startsWith('-') || flags.some(flag => !['--apply', '--json'].includes(flag))) {
+    throw new Error('Usage: total-recall brain relocate-global <dir> [--apply] [--json]');
+  }
+  if (process.env.AGENT_DIR || process.env._TR_TEST_AGENT_DIR) {
+    throw new Error('Global relocation requires the default home agent directory');
+  }
+  const { relocateGlobalSkills } = await import('../core/global-brain-relocation.mjs');
+  const requested = destination.startsWith('~/') ? path.join(os.homedir(), destination.slice(2)) : destination;
+  const result = relocateGlobalSkills(requested, { apply: flags.includes('--apply') });
+  if (flags.includes('--json')) return console.log(JSON.stringify(result));
+  if (result.status === 'planned') console.log(`Would move ${result.source} to ${result.target}. Pass --apply to move it.`);
+  else console.log(`Shared skills at ${result.target} are available through ${result.source}.`);
+}
+
 async function handleStatus() {
   const brains = getBothBrains();
 
@@ -189,6 +212,10 @@ async function handleStatus() {
   if (brains.global) {
     console.log(`  🌐 Global Layer:`);
     console.log(`     ├── Resolved Path:  ${brains.global.brainDir}`);
+    if (fs.existsSync(brains.global.brainDir)) {
+      const storage = fs.realpathSync(brains.global.brainDir);
+      if (storage !== brains.global.brainDir) console.log(`     ├── Storage Path:   ${storage}`);
+    }
     console.log(`     └── Status:         Initialized & Available`);
   } else {
     console.log(`  🌐 Global Layer:       ⚠️  Not Resolved`);

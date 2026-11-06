@@ -528,8 +528,9 @@ Start the Express + WebSockets collaboration server and Vite/React browser simul
 ---
 
 ### `brain`
-Switch the active memory vault or display the current context.
-- **Usage**: `npx total-recall brain [switch <path>]`
+List, inspect or register brain layers. `total-recall brain status` shows the current project brain and physical global storage.
+
+Use `total-recall brain relocate-global <dir>` to preview moving the home skills tree. Add `--apply` to perform the move. Choose a new local directory outside Git on the same filesystem as home. The command creates an owner-only destination and preserves the home skills path as a link. The move includes the global brain, skill catalog and shared plugins. Project brains stay in their own directories.
 
 ### `chat`
 Launch an interactive CLI agent session connected to the active brain.

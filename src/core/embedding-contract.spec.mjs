@@ -45,7 +45,7 @@ describe('embedding model configuration', () => {
 
   it('is overridable by environment without touching source', async () => {
     // A model change must be a config change, not a patch.
-    expect(read('config.mjs')).toMatch(/embedModel: process\.env\.TR_EMBED_MODEL/);
+    expect(read('local-config.mjs')).toMatch(/embedModel: process\.env\.TR_EMBED_MODEL/);
   });
 });
 

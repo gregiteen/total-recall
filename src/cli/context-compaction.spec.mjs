@@ -12,6 +12,9 @@ vi.mock('../core/brain-registry.mjs', () => ({ isBrainEnabled: () => true }));
 vi.mock('../core/command-surface.mjs', () => ({ surfaceInputsHash: () => 'fixture' }));
 vi.mock('./config.mjs', () => ({ readConfigValue: () => 20000 }));
 vi.mock('../core/context-providers.mjs', () => ({ retrievePluginContext: async () => ({ candidates: [], diagnostics: [], coverage: [] }) }));
+vi.mock('../core/cli-semantic-index.mjs', () => ({ queryCliSemanticIndex: async () => [{
+  verb: 'total-recall context', description: 'Check task context.', usage: 'OVERSIZED_USAGE_FIXTURE', vectorScore: null,
+}] }));
 import context, { CAPSULE_LIMIT } from './context.mjs';
 import { estimateTokens } from '../core/context-policy.mjs';
 
@@ -45,6 +48,11 @@ describe('context automatic compaction', () => {
     const parsed = JSON.parse(output);
     expect(parsed).toMatchObject({ ready: true, compacted: true });
     expect(parsed.counts.omitted).toBe(0);
+    expect(parsed.context).toContain('Recommended task commands (lexical)');
+    expect(parsed.context).toContain('`total-recall context` — Check task context.');
+    expect(parsed.context).not.toContain('OVERSIZED_USAGE_FIXTURE');
+    expect(parsed.stats.retrieval.commandReferences).toEqual({ count: 1, mode: 'lexical' });
+    expect(parsed.stats.total_tokens).toBe(estimateTokens(`${output}\n`));
     expect(estimateTokens(`${output}\n`)).toBeLessThanOrEqual(2000);
   });
   it('exits 2 with a required budget that then succeeds', async () => {

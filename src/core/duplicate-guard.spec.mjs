@@ -93,7 +93,7 @@ describe('duplicate-guard (Hermes Fail-Closed Memory Gatekeeper)', () => {
       category: 'invariants',
       slug: 'invariants-git-push',
       title: 'Never push without user request',
-      body: 'Never push git commits unless Greg explicitly gives the instruction to push.',
+      body: 'Never push git commits unless Alex explicitly gives the instruction to push.',
     };
 
     const res = checkDuplicateRule(candidate, { vaultDir, derivedDir, projectRoot: tmpDir });

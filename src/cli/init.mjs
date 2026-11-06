@@ -280,10 +280,17 @@ export default async function init(args) {
   }
   logOk(`Base directory structure ready (${created} created, ${dirs.length - created} already existed)`);
 
-  // Auth is a required scaffold plugin. Existing installations are preserved.
+  // Required owner plugins provision their managed payloads before projection.
+  const managedSkills = new Set();
   if (!opts.dryRun) {
     const { ensureRequiredPlugins } = await import('../core/required-plugins.mjs');
-    ensureRequiredPlugins(brainDir);
+    const { installations } = ensureRequiredPlugins(brainDir);
+    for (const report of Object.values(installations)) {
+      if (report.skill?.path) managedSkills.add(path.basename(report.skill.path));
+    }
+    const { installHarnessHooks } = await import('../core/harness-hooks.mjs');
+    const hooks = await installHarnessHooks();
+    if (!hooks.ok) process.exitCode = 1;
   }
 
   // Every scaffold plugin's node_modules are wired in Step 2.5, after the skill
@@ -314,21 +321,13 @@ export default async function init(args) {
   }
 
   for (const skill of skillsToSeed) {
+    if (managedSkills.has(skill)) continue;
     // A repository expert contains project facts and must never be copied from
     // the global brain or package scaffold into a different checkout.
     if (isProject && skill === 'repo-expert') continue;
     let skillSrc = path.join(scaffoldSkillsDir, skill);
 
-    // For ssss: prefer the npm-installed @ssss/cli package over scaffold
-    if (skill === 'ssss') {
-      const npmSsssSrc = path.join(ROOT, 'node_modules', '@ssss', 'cli', 'skills', 'ssss');
-      if (fs.existsSync(npmSsssSrc)) {
-        skillSrc = npmSsssSrc;
-      } else if (!fs.existsSync(skillSrc)) {
-        logWarn('ssss skill not found in @ssss/cli npm package or scaffold — skipping.');
-        continue;
-      }
-    } else if (!fs.existsSync(skillSrc) && isProject) {
+    if (!fs.existsSync(skillSrc) && isProject) {
       // If the skill isn't in scaffold but is in global, use global source
       skillSrc = path.join(globalSkillsDir, skill);
     }

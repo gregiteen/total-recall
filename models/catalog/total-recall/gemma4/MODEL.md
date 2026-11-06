@@ -21,4 +21,4 @@ This file serves as the canonical VFS definition for the local Total Recall kern
 - Runs purely on the sovereign host machine.
 - $0 per-token inference cost.
 - Native access to the `memory-vault` VFS.
-- OpenAI-compatible `/v1/chat/completions` endpoint for UltraChat compatibility.
+- OpenAI-compatible `/v1/chat/completions` endpoint.

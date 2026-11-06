@@ -5,6 +5,7 @@
  * swap console.log process-wide to capture output: a plugin calling
  * process.exit() stopped the server, and concurrent runs interleaved output.
  */
+import { manifestHelp } from './plugin-help.mjs';
 import { spawn } from 'node:child_process';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -43,6 +44,8 @@ export function validatePluginSecretInput(plugin, subcommand, input) {
  */
 export function runPluginCommand(plugin, options = {}) {
   const { subcommand = '', args = [], cwd = process.cwd(), timeoutMs: requestedTimeoutMs, stdin = 'ignore', stdinText, stdinRequest, composable = false, secretsBrainDir } = options;
+  const help = manifestHelp(plugin, { subcommand, args });
+  if (help !== null) return Promise.resolve({ ok: true, exitCode: 0, stdout: help, stderr: '', output: help, durationMs: 0, timedOut: false });
   const maxOutputBytes = options.maxOutputBytes ?? (stdin === 'inherit' ? CLI_MAX_OUTPUT_BYTES : MAX_OUTPUT_BYTES);
   if (!Number.isInteger(maxOutputBytes) || maxOutputBytes < 1 || maxOutputBytes > CLI_MAX_OUTPUT_BYTES) return Promise.reject(new Error(`Plugin output limit must be 1..${CLI_MAX_OUTPUT_BYTES} bytes`));
   if (stdinRequest !== undefined && stdinText !== undefined) return Promise.reject(new Error('Pass stdinText or stdinRequest, not both'));

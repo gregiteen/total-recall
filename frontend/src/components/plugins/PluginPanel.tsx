@@ -17,6 +17,29 @@ export function pluginElements(plugin: PluginInfo): PluginElement[] {
   return (plugin.manifest?.ui as { elements?: PluginElement[] } | undefined)?.elements || plugin.ui?.elements || []
 }
 
+export function parsePluginOutput(rawOutput: string | undefined): unknown {
+  const text = (rawOutput || '').trim()
+  if (!text) return {}
+  try {
+    return JSON.parse(text)
+  } catch {
+    const lines = text.split('\n').map(l => l.trim()).filter(Boolean)
+    for (let start = 0; start < lines.length; start++) {
+      for (let end = lines.length; end > start; end--) {
+        const candidate = lines.slice(start, end).join('\n')
+        try {
+          const parsed = JSON.parse(candidate)
+          if (parsed && typeof parsed === 'object' && 'subsystem' in parsed && 'level' in parsed && !('nodes' in parsed || 'data' in parsed || 'output' in parsed)) {
+            continue
+          }
+          return parsed
+        } catch {}
+      }
+    }
+    return { output: text, raw: text }
+  }
+}
+
 /** Loads owner code; no plugin identities or provider behavior belong here. */
 export function PluginPanel({ plugin, elementId, readOnly = false }: { plugin: PluginInfo; elementId?: string; readOnly?: boolean }) {
   const elements = pluginElements(plugin).filter(element => element.kind !== 'settings' && (!elementId || element.id === elementId))
@@ -68,19 +91,32 @@ export function PluginPanel({ plugin, elementId, readOnly = false }: { plugin: P
       if (data.type !== 'run') return
       const target = event.source as Window
       const reply = (result?: unknown, error?: string) => { if (!disposed) target.postMessage({ channel, type: 'result', requestId: data.requestId, result, error }, '*') }
-      if (!allowedFrameCommand(data, allowed, secretCommands) || active >= 12) { reply(undefined, 'Operation is not available'); return }
+
+      let subcommand = data.subcommand
+      let args = Array.isArray(data.args) ? [...data.args] : []
+      if ((subcommand === plugin.id || subcommand === plugin.cli?.command) && args.length > 0 && allowed.has(args[0])) {
+        subcommand = args[0]
+        args = args.slice(1)
+      }
+
+      if (!allowedFrameCommand({ ...data, subcommand, args }, allowed, secretCommands) || active >= 12) { reply(undefined, 'Operation is not available'); return }
       active++
-      window.dispatchEvent(new CustomEvent('plugin-command-activity', { detail: { pluginId: plugin.id, requestId: data.requestId, command: data.subcommand, running: true } }))
+      window.dispatchEvent(new CustomEvent('plugin-command-activity', { detail: { pluginId: plugin.id, requestId: data.requestId, command: subcommand, running: true } }))
       try {
+        const finalArgs = args.includes('--json') ? args : [...args, '--json']
         const result = data.stdin !== undefined
-          ? await runPluginCommand(plugin.id, data.subcommand, [...data.args, '--json'], { stdin: data.stdin })
-          : await runPluginCommand(plugin.id, data.subcommand, [...data.args, '--json'])
+          ? await runPluginCommand(plugin.id, subcommand, finalArgs, { stdin: data.stdin })
+          : await runPluginCommand(plugin.id, subcommand, finalArgs)
         if (!result.success) { reply(undefined, data.stdin !== undefined ? 'Credential operation failed' : result.output || result.error || 'Operation failed'); return }
-        reply(data.stdin !== undefined ? { ok: true } : JSON.parse(result.output || '{}'))
+        if (data.stdin !== undefined) {
+          reply({ ok: true })
+          return
+        }
+        reply(parsePluginOutput(result.output))
       } catch { reply(undefined, 'Operation failed') }
       finally {
         active--
-        window.dispatchEvent(new CustomEvent('plugin-command-activity', { detail: { pluginId: plugin.id, requestId: data.requestId, command: data.subcommand, running: false } }))
+        window.dispatchEvent(new CustomEvent('plugin-command-activity', { detail: { pluginId: plugin.id, requestId: data.requestId, command: subcommand, running: false } }))
       }
     }
     window.addEventListener('message', message)

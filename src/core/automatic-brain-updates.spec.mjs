@@ -8,6 +8,7 @@ vi.mock('./package-auto-update.mjs',()=>({isPackageAutoUpdateEnabled:()=>true,li
 vi.mock('./plugin-updates.mjs',()=>({updateInstalledPlugins:vi.fn().mockResolvedValue({updated:0,failed:0,results:[]})}));
 vi.mock('./global-brain-updates.mjs',()=>({updateGlobalBrainPackages:vi.fn().mockResolvedValue({failed:0,results:[]})}));
 vi.mock('./source-brain-updates.mjs',()=>({updateSourceBrainPackages:vi.fn().mockResolvedValue({failed:0,results:[]})}));
+vi.mock('./portable-skills-maintenance.mjs',()=>({maintainPortableSkills:vi.fn().mockResolvedValue({skipped:true,failed:0,results:[]})}));
 import {runAutomaticBrainUpdates,automaticUpdateStatus,startAutomaticBrainUpdates} from './automatic-brain-updates.mjs';
 
 const temporary=[];

@@ -4,6 +4,7 @@ import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { vendorPlugin, readBricks } from '../core/plugin-vendor.mjs';
 import { discoverPlugins } from '../core/plugin-loader.mjs';
+import { loadPluginModule } from '../core/plugin-runtime.mjs';
 
 const BIN = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..', 'bin', 'total-recall.mjs');
 const NAME_PATTERN = /^[a-z0-9][a-z0-9._-]*$/;
@@ -98,7 +99,8 @@ export async function createProject(args, { cwd = process.cwd(), run = defaultRu
   const dir = path.resolve(cwd, name);
   if (fs.existsSync(dir) && fs.readdirSync(dir).length) throw new Error(`${dir} is not empty`);
   const meshTarget = noMesh ? null : resolveMeshTarget(listProviders, meshOn);
-  run('npx', ['--yes', '@gregiteen/ssss-cli', 'new', dir, '--with-total-recall'], cwd);
+  const { scaffoldProjectForHost } = await loadPluginModule('ssss', 'project-scaffold', { projectRoot: cwd });
+  scaffoldProjectForHost({ directory: dir });
   run(process.execPath, [BIN, 'init', '--project'], dir);
   run(process.execPath, [BIN, 'connect', client], dir);
   const added = [];
@@ -117,7 +119,22 @@ export async function createProject(args, { cwd = process.cwd(), run = defaultRu
   return { dir, bricks: [...new Set(added)], registered: readBricks(dir).bricks.map((b) => b.id), mesh };
 }
 
+const USAGE = `
+  total-recall new — Create a project with SSSS and Total Recall already set up
+
+    total-recall new <name> [--with id,id] [--client claude-code] [--mesh-on provider | --no-mesh]
+
+    --with id,id        Plugins to add. The project owns their code.
+    --client <name>     The agent client to configure. Defaults to claude-code.
+    --mesh-on <provider>   Provision your own private mesh control server on this provider.
+    --no-mesh           Skip the mesh.
+`;
+
 export default async function newProject(args = []) {
+  if (args.includes('--help') || args.includes('-h')) {
+    console.log(USAGE);
+    return;
+  }
   try {
     const r = await createProject(args);
     console.log(`\n✅ Created ${r.dir}`);

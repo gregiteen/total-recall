@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 import { listAgents, spawnAgent, killAgent, getAgentLogs } from '../core/agent-manager.mjs';
-import { checkReceipt, findRoot, ACK_COMMAND } from '../core/preflight-receipt.mjs';
+import { checkAnyReceipt, findRoot, ACK_COMMAND } from '../core/preflight-receipt.mjs';
 
 function printHelp() {
   console.log(`
@@ -151,7 +151,8 @@ export async function run(argv) {
 
     if (!targetNode) {
       const root = findRoot(cwd || process.cwd());
-      const receipt = checkReceipt(root);
+      // The spawned agent answers to its caller, who may be working in another repository.
+      const receipt = checkAnyReceipt(root);
       if (!receipt.ok) {
         console.error(`\n❌ Agent spawn refused by TR-PREFLIGHT gate: ${receipt.problems[0] || 'check failed'} (directory: ${root}).`);
         console.error(`   Read the complete context capsule, then run: ${ACK_COMMAND}\n`);

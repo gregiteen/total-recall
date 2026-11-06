@@ -85,16 +85,23 @@ export async function compileContext({
       const matchedVerbs = await queryCliSemanticIndex(query, {
         derivedDir,
         projectRoot,
-        limit: 5,
+        limit: 3,
         minScore: 0.35,
+        queryEmbedding: knowledge.queryVector,
       });
       if (matchedVerbs.length > 0) {
-        const verbLines = matchedVerbs.map(v => `- \`${v.usage || v.verb}\` — ${v.description}`);
+        const verbLines = matchedVerbs.map(verb => {
+          const description = String(verb.description || '').replace(/\s+/g, ' ').trim();
+          const brief = description.length <= 120 ? description : description.slice(0, 120).replace(/\s+\S*$/, '…');
+          return `- \`${verb.verb}\`${brief ? ` — ${brief}` : ''}`;
+        });
+        const mode = matchedVerbs.some(verb => Number.isFinite(verb.vectorScore)) ? 'hybrid' : 'lexical';
         cliVerbContribution = {
           id: 'cli:recommended-verbs',
           required: false,
-          text: `### Recommended Task Verbs\n\n${verbLines.join('\n')}`,
+          text: `### Recommended task commands (${mode})\n${verbLines.join('\n')}\nUse command help for current arguments.`,
         };
+        knowledge.summary.commandReferences = { count: matchedVerbs.length, mode };
       }
     } catch {
       /* non-fatal */
@@ -102,13 +109,19 @@ export async function compileContext({
   }
 
   const cliContributions = cliVerbContribution ? [cliVerbContribution] : [];
-  const result = assembleContext([...required, ...knowledge.contributions, ...cliContributions, ...contributions], { total: b.total });
-  const evidenceMissing = knowledge.contributions.some(item => !result.stats.contributions.some(placed => placed.id === item.id));
+  const supporting = [...knowledge.contributions, ...cliContributions];
+  const result = assembleContext([...required, ...supporting, ...contributions], { total: b.total });
+  const evidenceMissing = supporting.some(item => !result.stats.contributions.some(placed => placed.id === item.id));
   // Compaction may reclaim rule explanation space; never claim readiness after losing selected task evidence.
   result.ready = result.ready && !evidenceMissing;
   result.stats.evidence_overflow = evidenceMissing;
   // The compaction path consumes the same retrieved evidence, never a second rules-only reconstruction.
-  result.taskKnowledge = knowledge;
+  result.taskKnowledge = { ...knowledge, contributions: supporting };
+  // Which rules apply, in their exact words. Task text and the rest of the vault stay out, so an
+  // unchanged rule set can be told apart from a changed one (`version` varies with both).
+  result.stats.rules_hash = crypto.createHash('sha256')
+    .update(JSON.stringify([...required, ...contributions.filter(item => item.required)].map(item => [item.id, item.text]).sort()))
+    .digest('hex').slice(0, 16);
   result.stats.retrieval = knowledge.summary;
   result.stats.total_nodes = allNodes.length;
   result.stats.compile_ms = Date.now() - startTime;
@@ -134,17 +147,17 @@ export async function compileContext({
  * `head` still carries the rule (the rule once sat at line 544 of the output and
  * an agent that cut the output at 80 lines never saw it).
  */
-export const PREFLIGHT_NOTICE = 'PREFLIGHT: before any other tool call, read this whole capsule (never pipe or truncate it), then run: total-recall tr-preflight --ack --task "<task>" --action read,edit,test';
+export const PREFLIGHT_NOTICE = 'PREFLIGHT: before any other tool call, read this whole capsule (never pipe or truncate it), then run this on its own, with nothing piped, chained or redirected: total-recall tr-preflight --ack --task "<task>" --action read,edit,test';
 
 export function renderCapsule(result, format = 'json') {
-  return format === 'text' ? `ready:${result.ready} tokens:${result.stats.total_tokens} version:${result.stats.version}\n${PREFLIGHT_NOTICE}\n${result.context}` : JSON.stringify(result);
+  return format === 'text' ? `ready:${result.ready} tokens:${result.stats.total_tokens} version:${result.stats.version} rules_hash:${result.stats.rules_hash}\n${PREFLIGHT_NOTICE}\n${result.context}` : JSON.stringify(result);
 }
 
 /** Budget the actual wire representation, including metadata, escaping and status. */
 export function capsuleResponse(result, { total = 4000, debug = false, format = 'json' } = {}) {
   if (!Number.isFinite(total) || total < 1) throw new Error('Context total must be a positive finite token estimate');
   const stats = debug ? { ...result.stats } : {
-    version: result.stats.version, mode: result.stats.mode,
+    version: result.stats.version, rules_hash: result.stats.rules_hash, mode: result.stats.mode,
     token_measurement: 'estimated_chars_divided_by_four',
     required_count: result.stats.required_ids.length, body_tokens: estimateTokens(result.context),
     retrieval: summarizeRetrieval(result.stats.retrieval),

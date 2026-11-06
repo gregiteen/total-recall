@@ -1,7 +1,7 @@
 /**
  * Required native capability installation checks; never opens credential state.
  *
- * The nine defaults live in ONE shared folder per machine — the global brain.
+ * The defaults live in one shared folder per machine: the global brain.
  * A project brain never receives its own copy: discovery already falls back to
  * the shared folder, and a repository switches a shared plugin on or off with
  * its own `plugin_record` overlay. Copies made by earlier releases are reported
@@ -9,16 +9,55 @@
  */
 import fs from 'node:fs';
 import path from 'node:path';
+import { createRequire } from 'node:module';
 import { readPluginsDir, globalPluginsDir, PACKAGE_ROOT, resolvePluginFile } from './plugin-loader.mjs';
-import { DEFAULT_PLUGIN_IDS } from './default-plugins.mjs';
+import { DEFAULT_PLUGIN_IDS, REQUIRED_INSTALLATION_PLUGIN_IDS } from './default-plugins.mjs';
 import { comparePackageVersions } from './package-version.mjs';
 import { preparePluginDependencies } from './plugin-dependencies.mjs';
+import { resolveRelocatedGlobalBrainDir } from './global-brain-relocation.mjs';
 
-/**
- * True when this brain is the shared (global) brain that owns the defaults.
- */
-function isSharedBrain(brainDir) {
-  return path.resolve(brainDir) === path.resolve(path.dirname(globalPluginsDir()));
+const require = createRequire(import.meta.url);
+export const BUNDLED_PLUGIN_DIR = path.join(PACKAGE_ROOT, 'scaffold', '.agent', 'skills', 'total-recall', 'plugins');
+
+function installationHook(id, directory, manifest) {
+  const relative = manifest.runtime?.modules?.installation;
+  if (!relative?.endsWith('.cjs')) throw new Error('Required ' + id + ' installation module is missing');
+  const hook = require(resolvePluginFile(directory, relative));
+  for (const name of ['inspectSource', 'inspectInstallation', 'ensureInstallation']) {
+    if (typeof hook[name] !== 'function') throw new Error('Required ' + id + ' installation module lacks ' + name);
+  }
+  return hook;
+}
+
+export function loadRequiredInstallationHooks(sourceDir = BUNDLED_PLUGIN_DIR, { fallbackDir } = {}) {
+  return REQUIRED_INSTALLATION_PLUGIN_IDS.map(id => {
+    const primary = path.resolve(sourceDir, id);
+    const directory = fallbackDir && !fs.existsSync(primary) ? path.resolve(fallbackDir, id) : primary;
+    const manifest = JSON.parse(fs.readFileSync(path.join(directory, 'plugin.json'), 'utf8'));
+    if (manifest.id !== id) throw new Error('Required bundled plugin identity mismatch: ' + id);
+    return { id, directory, manifest, hook: installationHook(id, directory, manifest) };
+  });
+}
+
+export function loadInstalledRequiredInstallationHooks(brainDir, sharedBrainDir = path.dirname(globalPluginsDir())) {
+  return loadRequiredInstallationHooks(path.join(brainDir, 'plugins'), {
+    fallbackDir: path.join(sharedBrainDir, 'plugins'),
+  });
+}
+
+export function resolveRequiredInstallationPaths(brainDir, sharedBrainDir = path.dirname(globalPluginsDir())) {
+  const shared = resolveRelocatedGlobalBrainDir(sharedBrainDir);
+  const selected = path.resolve(brainDir);
+  if (selected === path.resolve(sharedBrainDir)) return { brainDir: shared, sharedBrainDir: shared };
+  const skillsDir = path.dirname(selected);
+  if (!fs.lstatSync(skillsDir, { throwIfNoEntry: false })?.isSymbolicLink()) {
+    return { brainDir: selected, sharedBrainDir: shared };
+  }
+  const projectRoot = fs.realpathSync(path.resolve(skillsDir, '..', '..'));
+  const realSkillsDir = fs.realpathSync(skillsDir);
+  const localSkillsDirs = ['.agent', '.agents'].map(dir => path.join(projectRoot, dir, 'skills'));
+  if (!localSkillsDirs.includes(realSkillsDir)) throw new Error('Unsafe project skills link: ' + skillsDir);
+  return { brainDir: path.join(realSkillsDir, path.basename(selected)), sharedBrainDir: shared };
 }
 
 /**
@@ -26,14 +65,14 @@ function isSharedBrain(brainDir) {
  * installs; a project brain validates its own copy when it still has one and
  * otherwise the shared folder that discovery already falls back to.
  */
-export function inspectRequiredPlugins(brainDir, { pluginsDir, sharedBrainDir } = {}) {
+export function inspectRequiredPlugins(brainDir, { pluginsDir, sharedBrainDir = path.dirname(globalPluginsDir()) } = {}) {
+  try {
+    ({ brainDir, sharedBrainDir } = resolveRequiredInstallationPaths(brainDir, sharedBrainDir));
+  } catch (error) {
+    return { status: 'failed', errors: [error.message], source: null, installations: {} };
+  }
   const ownDir = path.join(brainDir, 'plugins');
-  const sharedPlugins = sharedBrainDir ? path.join(sharedBrainDir, 'plugins') : globalPluginsDir();
-  // A project brain's plugins directory can exist yet hold none of the defaults
-  // (provisioning creates it empty). The shared folder is what actually serves
-  // the repository, so consult it whenever this brain carries no auth of its own.
-  const resolved = pluginsDir || (isSharedBrain(brainDir) ? globalPluginsDir()
-    : (hasOwnRequired(ownDir) ? ownDir : sharedPlugins));
+  const resolved = pluginsDir || path.join(sharedBrainDir, 'plugins');
   const own = readPluginsDir(ownDir, 'required');
   const shared = path.resolve(resolved) === path.resolve(ownDir) ? [] : readPluginsDir(resolved, 'shared');
   const seen = new Set();
@@ -54,18 +93,31 @@ export function inspectRequiredPlugins(brainDir, { pluginsDir, sharedBrainDir } 
       } catch { errors.push(`Required auth file is missing or unsafe: ${file || 'CLI handler'}`); }
     }
   }
+  const installations = {};
+  for (const id of REQUIRED_INSTALLATION_PLUGIN_IDS) {
+    const plugin = plugins.find(entry => entry.id === id);
+    try {
+      if (!plugin?.valid) throw new Error('Required ' + id + ' plugin is missing or invalid');
+      const hook = installationHook(id, plugin.dir, plugin.manifest);
+      const report = hook.inspectInstallation({ brainDir, sharedBrainDir });
+      installations[id] = report;
+      if (report?.ok !== true) {
+        const detail = Object.values(report || {}).map(value => value?.error).filter(Boolean).join('; ');
+        throw new Error('Required ' + id + ' installation is incomplete' + (detail ? ': ' + detail : ''));
+      }
+    } catch (error) {
+      errors.push(error.message);
+    }
+  }
   const source = !auth ? null : (path.resolve(auth.pluginsDir) === path.resolve(ownDir) ? 'local' : 'shared');
-  return { status: errors.length ? 'failed' : 'ready', errors, source };
-}
-
-/** True when this brain carries the required plugin itself rather than by fallback. */
-function hasOwnRequired(ownDir) {
-  return fs.existsSync(path.join(ownDir, 'auth', 'plugin.json'));
+  return { status: errors.length ? 'failed' : 'ready', errors, source, installations };
 }
 
 /** Only a copy that declares an older release than the bundled one is refreshed; damaged same-release copies still fail. */
 function isStaleInstall(target, source) {
   try {
+    // A link is its owner's checkout. Replacing it would delete that repository's files, .git included.
+    if (fs.lstatSync(target).isSymbolicLink()) return false;
     const installed = JSON.parse(fs.readFileSync(path.join(target, 'plugin.json'), 'utf8')).version;
     const bundled = JSON.parse(fs.readFileSync(path.join(source, 'plugin.json'), 'utf8')).version;
     return comparePackageVersions(installed, bundled) === -1;
@@ -83,20 +135,25 @@ function isStaleInstall(target, source) {
  * earlier release are refreshed in place (so they stay usable until removed),
  * never created.
  */
-export function ensureRequiredPlugins(brainDir, { sourceDir = path.join(PACKAGE_ROOT, 'scaffold', '.agent', 'skills', 'total-recall', 'plugins'), sharedBrainDir } = {}) {
+export function ensureRequiredPlugins(brainDir, { sourceDir = BUNDLED_PLUGIN_DIR, sharedBrainDir = path.dirname(globalPluginsDir()) } = {}) {
+  const { brainDir: selected, sharedBrainDir: shared } = resolveRequiredInstallationPaths(brainDir, sharedBrainDir);
   // Validate the complete package before changing any installation.
   for (const id of DEFAULT_PLUGIN_IDS) {
     if (!fs.existsSync(path.join(sourceDir, id, 'plugin.json'))) throw new Error(`Required bundled ${id} plugin is missing`);
   }
-  if (!isSharedBrain(brainDir)) {
-    // A repository installs nothing of its own. The shared brain is what serves
-    // it, so seed that one — never this project's plugins directory.
-    const sharedBrain = sharedBrainDir || path.dirname(globalPluginsDir());
-    if (path.resolve(sharedBrain) !== path.resolve(brainDir)) installDefaultsInto(sharedBrain, sourceDir);
-    return inspectRequired(brainDir, { sharedBrainDir: sharedBrain });
+  const hooks = loadRequiredInstallationHooks(sourceDir);
+  for (const { id, hook } of hooks) {
+    if (hook.inspectSource()?.ok !== true) throw new Error('Required bundled ' + id + ' payload is incomplete');
   }
-  installDefaultsInto(brainDir, sourceDir);
-  return inspectRequired(brainDir);
+  installDefaultsInto(shared, sourceDir);
+  for (const target of new Set([shared, selected])) {
+    for (const { id, hook } of loadInstalledRequiredInstallationHooks(target, shared)) {
+      if (hook.ensureInstallation({ brainDir: target, sharedBrainDir: shared })?.ok !== true) {
+        throw new Error('Required ' + id + ' installation is incomplete');
+      }
+    }
+  }
+  return inspectRequired(selected, { sharedBrainDir: shared });
 }
 
 /** Seed or refresh the default plugins inside one brain. */
@@ -134,7 +191,9 @@ function inspectRequired(brainDir, options = {}) {
  */
 export function auditProjectPluginCopies(projectRoot, { sharedDir = globalPluginsDir(), sourceDir = path.join(PACKAGE_ROOT, 'scaffold', '.agent', 'skills', 'total-recall', 'plugins') } = {}) {
   const pluginsDir = path.join(projectRoot, '.agent', 'skills', 'total-recall', 'plugins');
-  if (!fs.existsSync(pluginsDir)) return { copies: [], count: 0, sourceDir };
+  if (!fs.existsSync(pluginsDir) || (fs.existsSync(sharedDir) && fs.realpathSync(pluginsDir) === fs.realpathSync(sharedDir))) {
+    return { copies: [], count: 0, sourceDir };
+  }
   const copies = [];
   for (const id of DEFAULT_PLUGIN_IDS) {
     const copyDir = path.join(pluginsDir, id);
@@ -145,19 +204,16 @@ export function auditProjectPluginCopies(projectRoot, { sharedDir = globalPlugin
       id, dir: copyDir,
       sourceDir: fs.existsSync(source) ? source : null,
       sharedDir: fs.existsSync(shared) ? shared : null,
-      edited: null, version: null, sourceVersion: null, sharedVersion: null
+      edited: null, version: null, sourceVersion: null, sharedVersion: null,
+      linked: fs.lstatSync(copyDir).isSymbolicLink(),
     };
     const version = (dir) => { try { return JSON.parse(fs.readFileSync(path.join(dir, 'plugin.json'), 'utf8')).version; } catch { return null; } };
     row.version = version(copyDir);
     row.sourceVersion = row.sourceDir ? version(row.sourceDir) : null;
     row.sharedVersion = row.sharedDir ? version(row.sharedDir) : null;
     row.edited = row.sourceDir ? !sameTree(copyDir, row.sourceDir) : null;
-    // A copy declaring an older release than the shared install cannot be a deliberate local edit —
-    // it predates the shared plugin. It is a leftover from the release that vendored the defaults into
-    // every brain, and because discovery prefers a brain's own copy it SHADOWS the shared install and
-    // breaks the repository: a stale auth manifest fails validation, so every total-recall command in
-    // that repo dies with "Required plugin auth is missing or invalid". Same staleness rule the updater
-    // already applies when it refreshes a vendored copy.
+    // Older copies shadow the shared install. Version skew identifies stale
+    // candidates for archival but does not prove the local source is disposable.
     row.stale = Boolean(row.version && row.sharedVersion && comparePackageVersions(row.version, row.sharedVersion) < 0);
     copies.push(row);
   }

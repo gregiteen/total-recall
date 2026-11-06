@@ -209,6 +209,23 @@ describe('consumerState', () => {
 });
 
 describe('verifyConsumers', () => {
+  it('finds a consumer nested under a scanned root and reads the version it resolves', () => {
+    const outer = fs.mkdtempSync(path.join(os.tmpdir(), 'tr-release-nested-'));
+    try {
+      const pkgDir = path.join(outer, 'node_modules', 'total-recall-brain');
+      fs.mkdirSync(pkgDir, { recursive: true });
+      fs.writeFileSync(path.join(pkgDir, 'package.json'), JSON.stringify({ name: 'total-recall-brain', version: '9.9.9' }));
+      const nested = path.join(outer, 'apps', 'worker');
+      fs.mkdirSync(nested, { recursive: true });
+      fs.writeFileSync(path.join(nested, 'package.json'), JSON.stringify({ name: 'worker', dependencies: { 'total-recall-brain': '9.9.9' } }));
+      const r = verifyConsumers('total-recall-brain', '9.9.9', { scanRoots: [outer] });
+      expect(r.consumers).toBe(1);
+      expect(r.failing).toBe(0);
+    } finally {
+      fs.rmSync(outer, { recursive: true, force: true });
+    }
+  });
+
   it('counts only repos that declare the package, and lists failures', () => {
     const good = fakeRepo({ deps: { '@gregiteen/ssss-cli': '0.14.4' }, installed: '0.14.4' });
     const bad = fakeRepo({ deps: { '@gregiteen/ssss-cli': '0.14.4' }, installed: '0.14.3' });

@@ -2,7 +2,7 @@ import fs from 'fs';
 import path from 'path';
 import { loadNodes } from './vault.mjs';
 import { logger } from './logger.mjs';
-import { brainDir } from './config.mjs';
+import { brainDir } from './local-config.mjs';
 
 /**
  * Per-directory vault cache with fs.watch auto-invalidation.

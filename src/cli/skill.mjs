@@ -69,6 +69,8 @@ function printHelp() {
     registry              List catalog entries in skills-registry/index.yaml
     deploy <id>           Copy skill into a repo (.agent/skills/<id>/) and record install map
     status [id]           Registry + install map + drift (omit id = summary)
+    links [--repo <path>] Check skill links. --archive <relative-path> preserves a dangling entry.
+                          --use-shared <name> links a portable skill and archives the prior entry.
     config <id> …         Repo-layer config from core/config.schema.json (get|set|unset|rebuild|import|check|
                           validate|schema, <collection> list|add|remove, detect, init)
     sync-registry         Register all local brain skills into the catalog
@@ -241,6 +243,10 @@ export default async function skillCli(args) {
   if (remainingArgs.length === 0 || remainingArgs.includes('--help') || remainingArgs.includes('-h')) {
     printHelp();
     return;
+  }
+  if (remainingArgs[0] === 'links') {
+    const { manageSkillLinks } = await import('./skill-links.mjs');
+    return manageSkillLinks(remainingArgs.slice(1), layer);
   }
 
   let agentDir;

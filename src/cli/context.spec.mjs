@@ -60,6 +60,14 @@ describe('context CLI', () => {
     // A reader that keeps only the first 3 lines still gets the rule.
     expect(lines.slice(0, 3).join('\n')).toContain('tr-preflight --ack');
   });
+  it('prints a rules hash that stays the same across tasks', async () => {
+    const log = vi.spyOn(console, 'log').mockImplementation(() => {});
+    await context(['deployment', '--action', 'read']);
+    const first = log.mock.calls.at(-1)[0].split('\n')[0].match(/ rules_hash:([0-9a-f]{16})( |$)/)?.[1];
+    await context(['something else entirely', '--action', 'read']);
+    expect(first).toBeTruthy();
+    expect(log.mock.calls.at(-1)[0].split('\n')[0]).toContain(`rules_hash:${first}`);
+  });
   it('accepts boolean flags without consuming the following option and preserves overflow', async () => {
     const log = vi.spyOn(console, 'log').mockImplementation(() => {});
     await context(['deployment', '--knowledge', '--format', 'json', '--debug', '--action', 'read', '--budget', '2']);

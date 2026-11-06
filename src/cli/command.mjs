@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { spawn } from 'node:child_process';
-import { resolveBrainLayer } from '../core/config.mjs';
+import { resolveBrainLayer } from '../core/local-config.mjs';
 import { isSafeRelativePath, validatePluginManifest } from '../core/plugin-loader.mjs';
 import { CLI_COMMANDS } from '../core/cli-commands.mjs';
 

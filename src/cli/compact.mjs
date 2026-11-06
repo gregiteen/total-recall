@@ -55,8 +55,8 @@ function lexicalScore(terms, text) {
 }
 
 /** Rank the applicable rules against the task and fit them into `budget`. Shared by `compact` and `context`. */
-export async function compactNodes({ task, actions = [], budget, expand = [], complete = false, rank = true, nodes, skillsDir, derivedDirs, header, supplemental = [], taskVector: suppliedVector }) {
-  const rules = selectRules(curatedRules(nodes), { actions, projectRoot: process.cwd() });
+export async function compactNodes({ task, actions = [], budget, expand = [], complete = false, rank = true, nodes, projectRoot = process.cwd(), skillsDir, derivedDirs, header, supplemental = [], taskVector: suppliedVector }) {
+  const rules = selectRules(curatedRules(nodes), { actions, projectRoot });
   const vectors = loadVectors(derivedDirs);
   const taskVector = suppliedVector !== undefined ? suppliedVector : rank ? await embedTask(task) : null;
   const terms = String(task).toLowerCase().match(/[\p{L}\p{N}_-]{3,}/gu) || [];
@@ -87,7 +87,7 @@ export default async function compact(args = []) {
   const { layer, remainingArgs } = parseLayerFlag(args);
   const task = remainingArgs[0];
   const { budget, actions, expand, format } = parseArgs(remainingArgs);
-  const { nodes, skillsDir, derivedDirs } = loadContextNodes(layer);
+  const { nodes, projectRoot, skillsDir, derivedDirs } = loadContextNodes(layer);
   const header = (counts, tokens, ranking) => [
     `compacted:true tokens:${tokens} budget:${budget} rules:${counts.rules} full:${counts.full} summarized:${counts.summarized} referenced:${counts.referenced} duplicate:${counts.duplicate} omitted:${counts.omitted} ranking:${ranking}`,
     'PARTIAL: read any rule in full with --expand <slug>; total-recall context prints the complete capsule.',
@@ -95,7 +95,7 @@ export default async function compact(args = []) {
 
   let result;
   try {
-    result = await compactNodes({ task, actions, budget, expand, nodes, skillsDir, derivedDirs, header });
+    result = await compactNodes({ task, actions, budget, expand, nodes, projectRoot, skillsDir, derivedDirs, header });
   } catch (error) {
     console.log(error.requiredBudget ? `compacted:false reason:budget-too-small budget:${budget} required_budget:${error.requiredBudget}` : `compacted:false reason:${error.message}`);
     process.exitCode = 2;

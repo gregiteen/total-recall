@@ -254,7 +254,9 @@ export async function createPlugin(args = []) {
     license: "MIT",
     // Declares this plugin as a fresh scaffold so it can install before its
     // bespoke card face exists. Remove the flag when the face is authored.
-    scaffold: true
+    scaffold: true,
+    // How work reaches this plugin. `preflight coverage` reports it until tasks are written.
+    gate: { tasks: [], owned_commands: [] }
   };
   if (useCases.length > 0) manifest.use_cases = useCases;
 
@@ -493,7 +495,17 @@ export default generateContext;
   if (withTask) lines.push(`- **Scheduled task**: \`${taskCommand}\` at \`${taskSchedule}\` (selected node; implement the command and choose a node before use)`);
   if (asksForUi) lines.push('- **UI**: no card face is generated. Author `ui/card.js` and `ui/DESIGN.md` by hand for this plugin\'s own function, then declare the face in `ui.elements[]`');
   if (apiKeys.length) lines.push('- **API key**: paste it in the plugin UI (`save-token` event) or pipe it to `npx total-recall ' + id + ' token set --stdin`; stored as `' + apiKeys[0] + '` in the secrets store');
-  lines.push("");
+  lines.push(
+    "",
+    "## Using this from an agent",
+    "",
+    "Say what work belongs here, and list the same work in `gate.tasks` in `plugin.json`.",
+    "",
+    `Run \`total-recall ${id} --help\` for its commands.`,
+    "",
+    "List any raw shell command this plugin replaces in `gate.owned_commands`. This one owns none yet.",
+    ""
+  );
 
   fs.writeFileSync(path.join(pluginDir, "README.md"), lines.join("\n"), "utf8");
 
@@ -584,9 +596,11 @@ test('every file the manifest references exists', () => {
   // ── Optional GitHub repository (private unless --public) ────────────────
   let githubUrl = null;
   if (createGithub) {
-    const out = spawnSync('gh', ['repo', 'create', `tr-plugin-${id}`, publicRepo ? '--public' : '--private', '--description', pluginDesc, '--source', pluginDir, '--remote', 'origin'], { encoding: 'utf8' });
-    if (out.status !== 0) {
-      console.error(`❌ GitHub repository creation failed: ${(out.stderr || out.stdout || '').trim()}`);
+    // The local origin was already set. Creating a remote repository does not
+    // require gh to add a second origin or upload the scaffold.
+    const out = spawnSync('gh', ['repo', 'create', `tr-plugin-${id}`, publicRepo ? '--public' : '--private', '--description', pluginDesc], { encoding: 'utf8' });
+    if (out.error || out.status !== 0) {
+      console.error('❌ GitHub repository creation failed: ' + (out.error?.message || out.stderr || out.stdout || '').trim());
       process.exitCode = 1;
     } else {
       githubUrl = (out.stdout || '').trim().split('\n').pop();

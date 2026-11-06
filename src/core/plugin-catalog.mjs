@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { discoverPlugins, resolvePluginFile } from './plugin-loader.mjs';
-import { globalAgentDir } from './config.mjs';
+import { globalAgentDir } from './local-config.mjs';
 import { listSurfaceCommands, commandScopeDirectories } from './command-surface.mjs';
 import { pluginActivation } from './plugin-state.mjs';
 

@@ -3,9 +3,18 @@ import { describe, it, expect, vi } from 'vitest';
 vi.mock('./logger.mjs', () => ({
   logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() },
 }));
+vi.mock('./config.mjs', () => ({
+  googleApiKey: 'auth-fixture-key', openAiApiKey: undefined, openRouterApiKey: undefined,
+}));
+vi.mock('./ollama-embeddings.mjs', () => ({
+  resolveOllamaEndpoint: async () => null, selectEmbeddingModel: vi.fn(), getOllamaEmbedding: vi.fn(),
+}));
+vi.mock('./throttled-fetch.mjs', () => ({ throttledFetch: vi.fn() }));
 
 import fs from 'fs';
 import path from 'path';
+import { getEmbeddingWithProvenance } from './embeddings.mjs';
+import { throttledFetch } from './throttled-fetch.mjs';
 
 /**
  * Regression guards for the silent vector-index wipe.
@@ -90,12 +99,23 @@ describe('embedding provenance', () => {
     expect(s).toMatch(/snippet, servedModel \|\| model, new Date\(\)\.toISOString\(\), JSON\.stringify\(embedding\)\)/);
   });
 
-  it('labels each provider with the model that provider actually defaults to', () => {
+  it('reports the model used by each provider', async () => {
     const s = src();
     expect(s).toMatch(/provider = 'ollama'; servedBy = ollamaModel;/);
     expect(s).toMatch(/provider = 'openrouter'; servedBy = 'openai\/text-embedding-3-small';/);
     expect(s).toMatch(/provider = 'openai'; servedBy = 'text-embedding-3-small';/);
-    // Google resolves its model internally, so record the resolved name.
-    expect(s).toMatch(/provider = 'google'; servedBy = await resolveEmbeddingModel\(model\);/);
+    const model = 'gemini-embedding-001';
+    const resource = `models/${model}`;
+    const embedding = new Array(768).fill(0.1);
+    const response = data => ({ ok: true, json: async () => data });
+    throttledFetch.mockResolvedValueOnce(response({ models: [{ name: resource }] }));
+    throttledFetch.mockResolvedValueOnce(response({ embedding: { values: embedding } }));
+    await expect(getEmbeddingWithProvenance('provenance fixture', 'default')).resolves.toEqual({
+      embedding, provider: 'google', model,
+    });
+    expect(throttledFetch).toHaveBeenCalledTimes(2);
+    const [destination, request] = throttledFetch.mock.calls[1];
+    expect(new URL(destination).pathname).toBe(`/v1beta/${resource}:embedContent`);
+    expect(JSON.parse(request.body).model).toBe(resource);
   });
 });

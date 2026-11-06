@@ -20,7 +20,7 @@ import { listSurfaceCommands, commandScopeDirectories } from './command-surface.
 import { getEmbedding, cosineSimilarity } from './embeddings.mjs';
 import { logger } from './logger.mjs';
 import { atomicWrite } from './vault.mjs';
-import { globalAgentDir } from './config.mjs';
+import { globalAgentDir } from './local-config.mjs';
 
 /** Canonical descriptions and usage signatures for built-in core commands. */
 const CORE_METADATA = {
@@ -260,8 +260,8 @@ const CORE_METADATA = {
     effect: 'read'
   },
   brain: {
-    description: 'Register, list, or inspect local and project brains.',
-    usage: 'total-recall brain [list|ensure|register]',
+    description: 'Register or inspect project brains and relocate the shared global skills tree.',
+    usage: 'total-recall brain [list|status|ensure|register|relocate-global]',
     effect: 'write'
   },
   config: {
@@ -416,7 +416,8 @@ export function harvestAllCliVerbs({ projectRoot = process.cwd(), skillsDir = nu
           verb: `total-recall ${ns}`,
           category: 'plugin',
           namespace: ns,
-          description: manifest.description || `${manifest.name || ns} plugin gateway.`,
+          // The work a plugin says belongs to it is what a task description will match.
+          description: [manifest.description || `${manifest.name || ns} plugin gateway.`, ...(Array.isArray(manifest.gate?.tasks) ? manifest.gate.tasks : [])].join(' '),
           usage: `total-recall ${ns} [command] [options]`,
           effect: 'read'
         });
@@ -616,15 +617,18 @@ export async function queryCliSemanticIndex(query, {
   projectRoot = process.cwd(),
   limit = 5,
   minScore = 0.2,
-  category = null
+  category = null,
+  queryEmbedding,
+  embed = getEmbedding,
+  harvest = harvestAllCliVerbs,
 } = {}) {
   const cleanQuery = String(query || '').trim().toLowerCase();
   const indexData = loadCliSemanticIndex(derivedDir);
-  let verbs = indexData?.verbs;
-
-  if (!verbs || !verbs.length) {
-    verbs = harvestAllCliVerbs({ projectRoot });
-  }
+  const cached = new Map((Array.isArray(indexData?.verbs) ? indexData.verbs : []).map(verb => [verb.id, verb]));
+  let verbs = harvest({ projectRoot }).map(verb => {
+    const indexed = cached.get(verb.id);
+    return indexed?.hash === verb.hash ? { ...verb, embedding: indexed.embedding } : verb;
+  });
 
   if (category) {
     verbs = verbs.filter(v => v.category === category);
@@ -651,9 +655,10 @@ export async function queryCliSemanticIndex(query, {
 
   // Generate query vector if available
   let queryVec = null;
-  if (process.env.TR_EMBEDDINGS_DISABLED !== '1') {
+  const vectorAvailable = verbs.some(verb => Array.isArray(verb.embedding) && verb.embedding.length === 768);
+  if (vectorAvailable && process.env.TR_EMBEDDINGS_DISABLED !== '1') {
     try {
-      queryVec = await getEmbedding(cleanQuery);
+      queryVec = queryEmbedding === undefined ? await embed(cleanQuery) : queryEmbedding;
       if (!Array.isArray(queryVec) || queryVec.length !== 768) {
         queryVec = null;
       }
@@ -694,12 +699,13 @@ export async function queryCliSemanticIndex(query, {
 
     // Vector cosine similarity
     let vecSim = 0;
-    if (queryVec && Array.isArray(verb.embedding) && verb.embedding.length === 768) {
+    const usesVector = queryVec && Array.isArray(verb.embedding) && verb.embedding.length === 768;
+    if (usesVector) {
       vecSim = Math.max(0, cosineSimilarity(queryVec, verb.embedding));
     }
 
     // Hybrid combination: 0.65 vector + 0.35 keyword
-    const hybridScore = queryVec ? (0.65 * vecSim + 0.35 * textScore) : textScore;
+    const hybridScore = usesVector ? (0.65 * vecSim + 0.35 * textScore) : textScore;
 
     if (hybridScore >= minScore) {
       scored.push({
@@ -712,7 +718,7 @@ export async function queryCliSemanticIndex(query, {
         usage: verb.usage,
         effect: verb.effect,
         score: Number(hybridScore.toFixed(3)),
-        vectorScore: queryVec ? Number(vecSim.toFixed(3)) : null,
+        vectorScore: usesVector ? Number(vecSim.toFixed(3)) : null,
         textScore: Number(textScore.toFixed(3))
       });
     }

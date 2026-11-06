@@ -8,6 +8,8 @@ import {
   listTasks,
   getTask,
   cancelTask,
+  supportsPendingTaskCancellation,
+  transitionTaskStatus,
   normalizeTask,
   FORBIDDEN_CAPABILITIES,
 } from './task-envelope.mjs';
@@ -58,12 +60,43 @@ describe('task envelope', () => {
     expect(getTask(queueDir, task.slug).intent).toContain('Extract');
   });
 
-  it('cancels a pending task', () => {
+  it('cancels a pending task', async () => {
     const task = addTask({ intent: 'Cancel me' }, queueDir);
-    const result = cancelTask(queueDir, task.slug);
+    const result = await cancelTask(queueDir, task.slug);
     expect(result.success).toBe(true);
     expect(listTasks(queueDir, { status: 'pending' })).toHaveLength(0);
     expect(listTasks(queueDir, { status: 'cancelled' })).toHaveLength(1);
+  });
+
+  it('lets either a pending cancellation or a claim win, never both', async () => {
+    const task = addTask({ intent: 'Compete for this task' }, queueDir);
+    const [claim, cancel] = await Promise.all([
+      transitionTaskStatus(queueDir, task, 'in-progress', { expectedStatus: 'pending' }),
+      cancelTask(queueDir, task.slug, { expectedStatus: 'pending' }),
+    ]);
+    expect(Number(claim.success) + Number(cancel.success)).toBe(1);
+    expect(getTask(queueDir, task.slug).status).toBe(claim.success ? 'in-progress' : 'cancelled');
+  });
+
+  it('refuses pending-only cancellation after a claim and preserves legacy cancellation', async () => {
+    const task = addTask({ intent: 'Claim first' }, queueDir);
+    expect((await transitionTaskStatus(queueDir, task, 'in-progress', { expectedStatus: 'pending' })).success).toBe(true);
+    expect(await cancelTask(queueDir, task.slug, { expectedStatus: 'pending' }))
+      .toMatchObject({ success: false, error: expect.stringMatching(/in-progress/) });
+    expect((await cancelTask(queueDir, task.slug)).success).toBe(true);
+    expect((await transitionTaskStatus(queueDir, task, 'completed', { expectedStatus: 'in-progress' })).success).toBe(false);
+    expect(getTask(queueDir, task.slug).status).toBe('cancelled');
+  });
+
+  it('requires a compatible scheduler receipt when a daemon identity is unresolved', async () => {
+    const brain = path.join(queueDir, 'brain');
+    const selected = path.join(brain, 'scheduler', 'queue');
+    const task = addTask({ intent: 'Preserve pending work' }, selected);
+    expect(supportsPendingTaskCancellation(selected)).toBe(true);
+    fs.writeFileSync(path.join(brain, 'daemon.pid'), 'unknown\n');
+    expect(supportsPendingTaskCancellation(selected)).toBe(false);
+    expect((await cancelTask(selected, task.slug, { expectedStatus: 'pending' })).success).toBe(false);
+    expect(getTask(selected, task.slug).status).toBe('pending');
   });
 });
 

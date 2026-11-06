@@ -2,7 +2,7 @@
  * Integration smoke tests — Phase 5
  *
  * Covers:
- *   - UltraChat session sync endpoints (GET /api/sessions, GET /api/sessions/:id,
+ *   - Session sync endpoints (GET /api/sessions, GET /api/sessions/:id,
  *     POST /api/sessions/ingest)
  */
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
@@ -80,9 +80,9 @@ afterAll(() => {
   fs.rmSync(TEST_AGENT_DIR, { recursive: true, force: true });
 });
 
-// ─── UltraChat Session Sync ──────────────────────────────────────────────────────
+// ─── Session Sync ──────────────────────────────────────────────────────
 
-describe('UltraChat session sync — GET /api/sessions', () => {
+describe('Session sync — GET /api/sessions', () => {
   it('returns empty list when no sessions exist', async () => {
     const res = await request(buildApp()).get('/api/sessions');
     expect(res.status).toBe(200);
@@ -102,7 +102,7 @@ describe('UltraChat session sync — GET /api/sessions', () => {
   });
 });
 
-describe('UltraChat session sync — GET /api/sessions/:id', () => {
+describe('Session sync — GET /api/sessions/:id', () => {
   it('returns 404 for unknown session', async () => {
     const res = await request(buildApp()).get('/api/sessions/nonexistent');
     expect(res.status).toBe(404);
@@ -127,7 +127,7 @@ describe('UltraChat session sync — GET /api/sessions/:id', () => {
   });
 });
 
-describe('UltraChat session sync — POST /api/sessions/ingest', () => {
+describe('Session sync — POST /api/sessions/ingest', () => {
   it('returns 400 when id or messages missing', async () => {
     const res = await request(buildApp())
       .post('/api/sessions/ingest')

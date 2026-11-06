@@ -14,7 +14,7 @@ describe('agent.mjs', () => {
     process.exit = (code) => { exitCode = code; throw new Error(`exit(${code})`); };
     const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
 
-    vi.spyOn(preflightReceipt, 'checkReceipt').mockReturnValue({
+    vi.spyOn(preflightReceipt, 'checkAnyReceipt').mockReturnValue({
       ok: false,
       problems: ['no preflight receipt for this repository'],
       receipt: null,

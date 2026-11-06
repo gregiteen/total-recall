@@ -46,7 +46,7 @@ async function checkCompactable(capsules, budget, problems) {
   const { loadContextNodes, compactedHeader } = await import('./context.mjs');
   const { compactNodes } = await import('./compact.mjs');
   const { nodes, skillsDir, derivedDirs } = loadContextNodes();
-  const header = compactedHeader('0'.repeat(64), budget);
+  const header = compactedHeader('0'.repeat(64), budget, '0'.repeat(16));
   for (const capsule of capsules) {
     capsule.compacted = capsule.tokens > budget;
     try {
@@ -80,14 +80,19 @@ function help() {
 `);
 }
 
-function loadState() {
+function loadState({ allowGlobal = false } = {}) {
   const brains = getBothBrains();
   const own = brains.project && isBrainEnabled(brains.project.brainDir) ? brains.project.brainDir : null;
-  if (!own) throw new Error('rules needs an enabled project brain (run from the repo, or total-recall init --project)');
   const global = brains.global && isBrainEnabled(brains.global.brainDir) ? brains.global.brainDir : null;
-  const repo = path.basename(process.cwd()).toLowerCase();
+  // A repository with no brain gets a capsule from the shared brain, so that is what verify checks there.
+  const globalScope = allowGlobal && !brains.project;
+  if (!own && !globalScope) throw new Error('rules needs an enabled project brain (run from the repo, or total-recall init --project)');
+  if (!own && (!global || !fs.existsSync(path.join(global, 'memory-vault')))) throw new Error('rules verify needs an enabled global brain');
+  // The repository is the brain's root, not this folder: a subfolder or a nested checkout has the same rules.
+  const projectRoot = brains.project?.projectRoot || process.cwd();
+  const repo = path.basename(projectRoot).toLowerCase();
   // Rules scoped to other repos never reach this capsule, so they are neither audited nor curated here.
-  const nodes = mergeGlobalRuleNodes(getNodes(path.join(own, 'memory-vault')),
+  const nodes = mergeGlobalRuleNodes(own ? getNodes(path.join(own, 'memory-vault')) : [],
     global ? getNodes(path.join(global, 'memory-vault')) : []).filter(n => !RULE_CATEGORIES.has(n.category) || ruleAppliesToRepo(n, repo));
   // Superseded and expired rules never reach a capsule either; prune lists them from `all`.
   const all = nodes;
@@ -111,20 +116,20 @@ function loadState() {
     if (!n) orphan.push(id);
     else if (entry.source_hash !== ruleFingerprint(n)) stale.push(id);
   }
-  return { own, nodes: live, all, node, policy, health, ids, stale, orphan };
+  return { own, projectRoot, nodes: live, all, node, policy, health, ids, stale, orphan };
 }
 
 const rawText = n => `## ${n.title || n.slug} [${n.slug}]\n\n${(n.body || n.content || '').trim()}`;
 const renderOf = n => (n._directive ? `[${n.slug}] ${n._directive}` : rawText(n));
 
-function capsuleTokens(nodes, actions) {
-  const rules = selectRules(curatedRules(nodes), { actions, projectRoot: process.cwd() });
+function capsuleTokens(nodes, actions, projectRoot) {
+  const rules = selectRules(curatedRules(nodes), { actions, projectRoot });
   return { tokens: estimateTokens(rules.map(renderOf).join('\n\n---\n\n')), count: rules.length };
 }
 
 function sizes(state) {
   const sets = [[], ...ALL_ACTIONS.map(a => [a]), ['edit', 'publish']];
-  return sets.map(actions => ({ actions: actions.join(',') || '(none)', ...capsuleTokens(state.nodes, actions) }));
+  return sets.map(actions => ({ actions: actions.join(',') || '(none)', ...capsuleTokens(state.nodes, actions, state.projectRoot) }));
 }
 
 function parseFlags(args, valued = []) {
@@ -256,7 +261,7 @@ async function apply(args) {
   const kept = Object.fromEntries(Object.entries(state.policy.rules)
     .filter(([id]) => !state.stale.includes(id) && !state.orphan.includes(id)));
   const merged = { rules: { ...kept, ...clean } };
-  const before = capsuleTokens(state.nodes, ['edit']).tokens;
+  const before = capsuleTokens(state.nodes, ['edit'], state.projectRoot).tokens;
   if (flags['dry-run']) { console.log(`Dry run: ${Object.keys(clean).length} entries valid, ${Object.keys(merged.rules).length} total; nothing written. edit capsule now ${before} tokens.`); return; }
   const body = JSON.stringify(merged);
   if (state.node) await edit([state.node.slug, body, '--project']);
@@ -268,7 +273,7 @@ async function verify(args) {
   const { flags } = parseFlags(args, ['budget']);
   const explicit = explicitBudget(flags);
   const budget = explicit ?? await effectiveBudget();
-  const state = loadState();
+  const state = loadState({ allowGlobal: true });
   const problems = [];
   if (state.health === 'ambiguous' || state.health === 'malformed') problems.push(`policy is ${state.health}; curation is ignored`);
   for (const id of state.stale) problems.push(`stale curation: ${id} (rule edited; full text in use)`);

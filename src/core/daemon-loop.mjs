@@ -26,7 +26,7 @@ import { updateQueueItem } from './research-queue.mjs';
 import { agentDir, brainDir, detectProjectBrain } from './config.mjs';
 import { runCrons } from './crons.mjs';
 import { dispatchTask as registryDispatch } from './task-executors.mjs';
-import { buildTaskEnvelope } from './task-envelope.mjs';
+import { buildTaskEnvelope, publishTaskSchedulerProtocol } from './task-envelope.mjs';
 
 const AGENT_DIR = agentDir;
 const BRAIN_DIR = brainDir;
@@ -212,6 +212,7 @@ export function reassertPidLock() {
   if (holder !== process.pid) {
     try {
       fs.writeFileSync(PID_FILE, String(process.pid), { mode: 0o644 });
+      if (schedulerProtocolActive) publishTaskSchedulerProtocol(QUEUE_DIR);
       logger.info({ subsystem: 'daemon-loop', message: `PID lockfile restored: ${PID_FILE} (PID: ${process.pid})` });
     } catch {
       // Best effort; the next heartbeat retries.
@@ -240,6 +241,7 @@ let taskCount = 0;
 let running = true;
 let vaultWatcher = null;
 let shuttingDown = false;
+let schedulerProtocolActive = false;
 
 // Upper bound on a graceful stop. A loop iteration can be mid-task, so the
 // signal cannot exit instantly — but it must exit *eventually*.
@@ -317,6 +319,12 @@ process.on('unhandledRejection', (reason, promise) => {
 async function main() {
   // ─── PID Lock: prevent duplicate daemons ───
   acquirePidLock();
+  schedulerProtocolActive = true;
+  try {
+    publishTaskSchedulerProtocol(QUEUE_DIR);
+  } catch (error) {
+    logger.warn({ subsystem: 'daemon-loop', message: `Guarded task cancellation unavailable: ${error.message}` });
+  }
 
   logger.info({
     subsystem: 'daemon-loop',
@@ -417,8 +425,8 @@ async function main() {
     logger.info({ subsystem: 'daemon-loop', message: `Starting as FOLLOWER (leader: ${leaderStr})` });
 
     // Lowest-online-IP says nothing about whether the elected node can run Total
-    // Recall. On this mesh the shared droplet holds 100.64.0.1 and runs no TR at
-    // all, so every real machine idled as a follower for months: the daemon
+    // Recall. On a mesh whose lowest address belongs to a machine that runs no TR at
+    // all, every real machine idled as a follower for months: the daemon
     // reported itself healthy while the pipeline stayed silent. A follower with
     // no pin configured anywhere is almost certainly that mistake, and it is
     // invisible without this warning — followers skip the task loop entirely.
@@ -638,7 +646,8 @@ async function main() {
             origin: { agent: 'daemon', created_by: 'daemon-system' },
             capabilities: ['vault:read', 'vault:write'],
           });
-          task = persistTaskToDisk(dreamEnv, QUEUE_DIR);
+          persistTaskToDisk(dreamEnv, QUEUE_DIR);
+          task = dreamEnv;
           source = 'system';
           logger.info({
             subsystem: 'daemon-loop',
@@ -665,12 +674,17 @@ async function main() {
 
       if ((source === 'explicit' || source === 'idle' || source === 'system') && task._filepath) {
         try {
-          updateTaskStatus(task, 'in-progress', QUEUE_DIR);
+          const claim = await updateTaskStatus(task, 'in-progress', QUEUE_DIR, null, { expectedStatus: task.status });
+          if (!claim.success) {
+            logger.info({ subsystem: 'daemon-loop', message: `Task claim skipped: ${claim.error}` });
+            continue;
+          }
         } catch (statusErr) {
           logger.info({
             subsystem: 'daemon-loop',
-            message: `Failed to mark task in-progress (non-fatal): ${statusErr.message}`,
+            message: `Task not dispatched because its claim failed: ${statusErr.message}`,
           });
+          continue;
         }
       }
       if (task._research_id) {
@@ -689,19 +703,19 @@ async function main() {
       if ((source === 'explicit' || source === 'idle' || source === 'system') && task._filepath) {
         try {
           if (result.skippedLLM) {
-            updateTaskStatus(task, 'pending', QUEUE_DIR);
+            await updateTaskStatus(task, 'pending', QUEUE_DIR, null, { expectedStatus: 'in-progress' });
           } else if (result.success) {
-            updateTaskStatus(task, 'completed', QUEUE_DIR);
+            await updateTaskStatus(task, 'completed', QUEUE_DIR, null, { expectedStatus: 'in-progress' });
           } else {
             task.retry_count = (task.retry_count || 0) + 1;
             task.last_error = result.error || 'Unknown error';
             if (task.retry_count >= 3) {
               logger.info({ subsystem: 'daemon-loop', message: `Task ${task.slug} failed ${task.retry_count} times. Moving to DLQ (failed). Last error: ${task.last_error}` });
-              updateTaskStatus(task, 'failed', QUEUE_DIR, result.error || 'Unknown error');
+              await updateTaskStatus(task, 'failed', QUEUE_DIR, result.error || 'Unknown error', { expectedStatus: 'in-progress' });
             } else {
               const backoffMs = Math.min(Math.pow(2, task.retry_count) * 1000, 60000);
               logger.info({ subsystem: 'daemon-loop', message: `Task ${task.slug} failed. Retry ${task.retry_count}/3 after ${backoffMs}ms backoff. Error: ${task.last_error}` });
-              updateTaskStatus(task, 'pending', QUEUE_DIR, result.error || 'Unknown error');
+              await updateTaskStatus(task, 'pending', QUEUE_DIR, result.error || 'Unknown error', { expectedStatus: 'in-progress' });
               await new Promise(r => setTimeout(r, backoffMs));
             }
           }

@@ -47,16 +47,22 @@ function releaseContent(file,rel) {
 }
 
 /** Compare (and with write:true, update) the scaffold copies and the pin. */
-export function syncScaffoldPlugins({ root, ids, write = false, run = spawnSync }) {
+export function syncScaffoldPlugins({ root, ids, write = false, run = spawnSync, sources = new Map(), preserveUnselected = false }) {
   const scaffoldPlugins = path.join(root, 'scaffold', '.agent', 'skills', 'total-recall', 'plugins');
-  const lock = {};
+  const lockFile = path.join(root, 'scripts', 'scaffold-plugins.json');
+  const lock = preserveUnselected ? Object.fromEntries(
+    Object.entries(JSON.parse(fs.readFileSync(lockFile, 'utf8'))).filter(([file]) => !ids.includes(file.split('/')[0])),
+  ) : {};
   const changes = [];
   // Validate every owner before copying any source or replacing the release pin.
   const plans = ids.map(id => {
     const local = path.join(root, '.agent', 'skills', 'total-recall', 'plugins', id);
-    const selected = fs.existsSync(local) ? local : discoverPlugins(root).find(plugin => plugin.id === id && plugin.valid)?.dir;
+    const selected = sources.get(id) || (fs.existsSync(local) ? local : discoverPlugins(root).find(plugin => plugin.id === id && plugin.valid)?.dir);
     if (!selected) throw new Error(`Required default plugin ${id} is not installed`);
     const source = fs.realpathSync(selected);
+    if (JSON.parse(fs.readFileSync(path.join(source, 'plugin.json'), 'utf8')).id !== id) {
+      throw new Error('Plugin source identity does not match ' + id);
+    }
     const files = releaseFiles(source, run);
     return { id, source, files };
   });
@@ -85,7 +91,6 @@ export function syncScaffoldPlugins({ root, ids, write = false, run = spawnSync 
     walk(target);
   }
   // The release gate reads the pin, so a stale pin is drift even when every copied file matches its source.
-  const lockFile = path.join(root, 'scripts', 'scaffold-plugins.json');
   if (!write && fs.existsSync(lockFile)) {
     const pinned = JSON.parse(fs.readFileSync(lockFile, 'utf8'));
     const stale = [...new Set([...Object.keys(pinned), ...Object.keys(lock)])].some(key => pinned[key] !== lock[key]);
@@ -93,4 +98,26 @@ export function syncScaffoldPlugins({ root, ids, write = false, run = spawnSync 
   }
   if (write) fs.writeFileSync(path.join(root, 'scripts', 'scaffold-plugins.json'), `${JSON.stringify(Object.fromEntries(Object.entries(lock).sort()), null, 2)}\n`);
   return { changes, files: Object.keys(lock).length };
+}
+
+/**
+ * The owner repository of each plugin, from the folders beside this one. A machine's installed
+ * copy of a plugin can be older than its repository, and syncing from it would put old code
+ * into the release, so an owner repository wins wherever one exists.
+ * @returns {Map<string, string>} plugin id to folder
+ */
+export function findOwnerRepos(root) {
+  const parent = path.dirname(path.resolve(root));
+  const owners = new Map();
+  let names = [];
+  try { names = fs.readdirSync(parent).sort(); } catch { return owners; }
+  for (const name of names) {
+    const dir = path.join(parent, name);
+    if (dir === path.resolve(root)) continue;
+    try {
+      const id = JSON.parse(fs.readFileSync(path.join(dir, 'plugin.json'), 'utf8')).id;
+      if (id && !owners.has(id)) owners.set(id, dir);
+    } catch { /* not a plugin repository */ }
+  }
+  return owners;
 }

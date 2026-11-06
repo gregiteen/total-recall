@@ -64,6 +64,30 @@ describe('discoverRepoSkills', () => {
 });
 
 describe('projectSkillsAsCommands', () => {
+  it('preserves the canonical entry when two harness roots alias it, even with force', () => {
+    const src = path.join(tmp, 'src');
+    const a = seedSkill(src, 'a');
+    const dest = path.join(tmp, 'alias');
+    fs.symlinkSync(src, dest);
+
+    expect(projectSkillsAsCommands(dest, [{ name: 'a', skillDir: a }], { force: true }))
+      .toEqual([{ name: 'a', action: 'source' }]);
+    expect(fs.lstatSync(a).isDirectory()).toBe(true);
+    expect(fs.existsSync(path.join(a, 'SKILL.md'))).toBe(true);
+  });
+
+  it('resolves a relative projection from the physical location of an aliased destination', () => {
+    const a = seedSkill(path.join(tmp, 'source'), 'a');
+    const physicalDest = path.join(tmp, 'different', 'depth', 'skills');
+    fs.mkdirSync(physicalDest, { recursive: true });
+    const dest = path.join(tmp, 'alias');
+    fs.symlinkSync(physicalDest, dest);
+
+    projectSkillsAsCommands(dest, [{ name: 'a', skillDir: a }]);
+    expect(fs.realpathSync(path.join(dest, 'a'))).toBe(fs.realpathSync(a));
+    expect(path.isAbsolute(fs.readlinkSync(path.join(dest, 'a')))).toBe(false);
+  });
+
   it('symlinks each skill and is idempotent', () => {
     const src = path.join(tmp, 'src');
     const dest = path.join(tmp, 'dest');

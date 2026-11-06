@@ -1,12 +1,25 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { parseNewArgs, createProject, resolveMeshTarget } from './new.mjs';
+import newProject, { parseNewArgs, createProject, resolveMeshTarget } from './new.mjs';
 
 let cwd;
 beforeEach(() => { cwd = fs.mkdtempSync(path.join(os.tmpdir(), 'new-spec-')); });
 afterEach(() => fs.rmSync(cwd, { recursive: true, force: true }));
+
+describe('new --help', () => {
+  it('prints help and creates nothing', async () => {
+    const log = vi.spyOn(console, 'log').mockImplementation(() => {});
+    const before = process.cwd();
+    process.chdir(cwd);
+    try {
+      await newProject(['--help']);
+      expect(log.mock.calls.flat().join('\n')).toContain('--mesh-on');
+      expect(fs.readdirSync(cwd)).toEqual([]);
+    } finally { process.chdir(before); log.mockRestore(); }
+  });
+});
 
 describe('parseNewArgs', () => {
   it('parses name, repeated and comma --with, client', () => {
@@ -29,19 +42,19 @@ describe('createProject', () => {
     const vendored = [];
     const run = (cmd, args, at) => {
       calls.push([path.basename(cmd), args.filter((a) => !a.endsWith('.mjs') || a.includes('ssss')), at]);
-      if (args.includes('new')) fs.mkdirSync(path.join(cwd, 'app'));
     };
     const vendor = async (source, dest, opts) => {
       vendored.push([source, opts.projectRoot, opts.resolveRequires]);
       return { id: source, resolved: source === 'top' ? ['base'] : [] };
     };
     const r = await createProject(['app', '--with', 'top'], { cwd, run, vendor, listProviders: () => [] });
+    // The SSSS plugin scaffolds in process, before the commands that wire Total Recall.
+    expect(fs.existsSync(path.join(cwd, 'app'))).toBe(true);
     expect(calls.map((c) => c[1].join(' '))).toEqual([
-      '--yes @gregiteen/ssss-cli new ' + path.join(cwd, 'app') + ' --with-total-recall',
       'init --project',
       'connect claude-code'
     ]);
-    expect(calls[1][2]).toBe(path.join(cwd, 'app'));
+    expect(calls[0][2]).toBe(path.join(cwd, 'app'));
     expect(vendored).toEqual([['top', path.join(cwd, 'app'), true]]);
     expect(r.bricks).toEqual(['top', 'base']);
   });

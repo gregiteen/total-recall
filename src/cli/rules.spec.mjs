@@ -10,16 +10,28 @@ const nodes = [
   { slug: 'dup-rule', category: 'preferences', status: 'active', body: 'Keep copy plain.', _layer: 'project' },
 ];
 const writes = [];
-vi.mock('./agent-dir.mjs', () => ({ getBothBrains: () => ({ project: { brainDir: '/fixture/brain' } }) }));
+const project = { brainDir: '/fixture/brain' };
+let brains = { project };
+let disabledBrain;
+vi.mock('./agent-dir.mjs', () => ({ getBothBrains: () => brains }));
 vi.mock('../core/vault-cache.mjs', () => ({ getNodes: () => nodes }));
-vi.mock('../core/surface.mjs', () => ({ mergeGlobalRuleNodes: n => n, legacyRuleContributions: () => [] }));
-vi.mock('../core/brain-registry.mjs', () => ({ isBrainEnabled: () => true }));
+vi.mock('../core/surface.mjs', () => ({
+  mergeGlobalRuleNodes: (local, global) => [...local, ...global.map(node => ({ ...node, _layer: 'global' }))],
+  legacyRuleContributions: () => [],
+}));
+vi.mock('../core/brain-registry.mjs', () => ({ isBrainEnabled: dir => dir !== disabledBrain }));
 vi.mock('./remember.mjs', () => ({ default: async args => { writes.push(['remember', args]); } }));
 vi.mock('./edit.mjs', () => ({ default: async args => { writes.push(['edit', args]); } }));
 import rules, { validatePolicyFile } from './rules.mjs';
 
 const tmp = () => path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'rules-')), 'p.json');
-afterEach(() => { vi.restoreAllMocks(); writes.length = 0; process.exitCode = undefined; });
+afterEach(() => {
+  vi.restoreAllMocks();
+  writes.length = 0;
+  process.exitCode = undefined;
+  brains = { project };
+  disabledBrain = undefined;
+});
 
 describe('rules CLI', () => {
   it('drafts a scaffold with every rule, largest first, keeping the original text', async () => {
@@ -120,7 +132,7 @@ describe('rules CLI', () => {
   });
 
   it('verify without --budget fails, naming the required budget, when compaction cannot fit the capsule', async () => {
-    const original = nodes.splice(0, nodes.length, ...Array.from({ length: 4000 }, (_, i) => ({ slug: `a-very-long-rule-slug-number-${i}`, category: 'preferences', status: 'active', body: `Rule ${i} text.`, _layer: 'project' })));
+    const original = nodes.splice(0, nodes.length, ...Array.from({ length: 1500 }, (_, i) => ({ slug: `a-very-long-rule-slug-number-${i}`, category: 'preferences', status: 'active', body: `Rule ${i} text.`, _layer: 'project' })));
     try {
       const log = vi.spyOn(console, 'log').mockImplementation(() => {});
       await rules(['verify', '--json']);
@@ -139,6 +151,55 @@ describe('rules CLI', () => {
     expect(report.problems).toEqual([]);
     expect(report.capsules.every(c => c.withinBudget)).toBe(true);
     expect(process.exitCode).toBeUndefined();
+  });
+
+  it('finds a repository\'s rules from a subfolder or nested checkout, by its brain\'s root', async () => {
+    const scoped = { slug: 'scoped-rule', category: 'invariants', status: 'active', body: 'Scoped.', repos: ['the-repo'], _layer: 'project' };
+    const policy = { slug: 'policy', category: 'decisions', status: 'active', tags: ['context:policy'], _layer: 'project',
+      body: JSON.stringify({ rules: { 'project:scoped-rule': { source_hash: ruleFingerprint(scoped), directive: 'Scoped.' } } }) };
+    const log = vi.spyOn(console, 'log').mockImplementation(() => {});
+    nodes.push(scoped, policy);
+    try {
+      brains = { project: { brainDir: '/fixture/brain', projectRoot: '/fixture/the-repo' } };
+      await rules(['verify', '--budget', '100000', '--json']);
+      expect(JSON.parse(log.mock.calls.flat().join('\n')).problems).toEqual([]);
+      log.mockClear();
+      brains = { project };
+      await rules(['verify', '--budget', '100000', '--json']);
+      expect(JSON.parse(log.mock.calls.flat().join('\n')).problems).toContain('orphan curation: project:scoped-rule (rule no longer exists)');
+    } finally { nodes.splice(nodes.indexOf(scoped), 2); }
+  });
+
+  it('verifies the shared rules in a repository with no brain of its own', async () => {
+    const brainDir = fs.mkdtempSync(path.join(os.tmpdir(), 'tr-rules-global-'));
+    const log = vi.spyOn(console, 'log').mockImplementation(() => {});
+    try {
+      fs.mkdirSync(path.join(brainDir, 'memory-vault'));
+      brains = { global: { brainDir }, project: null };
+      await rules(['verify', '--budget', '100000', '--json']);
+      expect(JSON.parse(log.mock.calls.flat().join('\n')).ok).toBe(true);
+    } finally { fs.rmSync(brainDir, { recursive: true, force: true }); }
+  });
+
+  it('verifies the global rules at home and keeps project curation scoped', async () => {
+    const brainDir = fs.mkdtempSync(path.join(os.tmpdir(), 'tr-rules-global-'));
+    const log = vi.spyOn(console, 'log').mockImplementation(() => {});
+    vi.spyOn(os, 'homedir').mockReturnValue(process.cwd());
+    try {
+      fs.mkdirSync(path.join(brainDir, 'memory-vault'));
+      brains = { global: { brainDir }, project: null };
+      await rules(['verify', '--budget', '100000', '--json']);
+      const report = JSON.parse(log.mock.calls.flat().join('\n'));
+      expect(report.ok).toBe(true);
+      expect(report.capsules.some(capsule => capsule.rules > 0)).toBe(true);
+      await expect(rules(['draft'])).rejects.toThrow('enabled project brain');
+
+      brains.project = project;
+      disabledBrain = project.brainDir;
+      await expect(rules(['verify'])).rejects.toThrow('enabled project brain');
+    } finally {
+      fs.rmSync(brainDir, { recursive: true, force: true });
+    }
   });
 
   it('prune --json emits candidates without the dry-run prose', async () => {

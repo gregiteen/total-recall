@@ -1,5 +1,8 @@
 // @vitest-environment node
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 
 /**
  * config.mjs is a module-level singleton that runs on import.
@@ -58,6 +61,38 @@ describe('config module', () => {
   it('detectProjectBrain returns null in test mode', async () => {
     const mod = await import('./config.mjs');
     expect(mod.detectProjectBrain('/tmp')).toBeNull();
+  });
+
+  it('excludes relocated shared skills without obscuring workspace and repository brains', async () => {
+    const { detectProjectBrain } = await import('./config.mjs');
+    const home = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'tr-config-relocated-')));
+    const homedir = vi.spyOn(os, 'homedir').mockReturnValue(home);
+    vi.stubEnv('_TR_TEST_AGENT_DIR', undefined);
+    vi.stubEnv('AGENT_DIR', undefined);
+    const workspace = path.join(home, 'workspace');
+    const repo = path.join(workspace, 'repo');
+    const shared = path.join(workspace, '.shared', 'skills');
+    const ownBrain = root => path.join(root, '.agent', 'skills', 'total-recall');
+    try {
+      for (const brain of [path.join(shared, 'total-recall'), ownBrain(workspace), ownBrain(repo)]) {
+        fs.mkdirSync(path.join(brain, 'memory-vault'), { recursive: true });
+      }
+      fs.mkdirSync(path.join(home, '.agent'));
+      fs.symlinkSync(shared, path.join(home, '.agent', 'skills'));
+      expect(detectProjectBrain(home)).toBeNull();
+      expect(detectProjectBrain(path.join(shared, 'total-recall'))).toBeNull();
+      expect(detectProjectBrain(workspace)?.brainDir).toBe(ownBrain(workspace));
+      expect(detectProjectBrain(repo)?.brainDir).toBe(ownBrain(repo));
+
+      const alias = path.join(workspace, 'alias');
+      fs.mkdirSync(path.dirname(ownBrain(alias)), { recursive: true });
+      fs.symlinkSync(path.join(shared, 'total-recall'), ownBrain(alias));
+      expect(detectProjectBrain(alias)?.brainDir).toBe(ownBrain(workspace));
+    } finally {
+      homedir.mockRestore();
+      vi.unstubAllEnvs();
+      fs.rmSync(home, { recursive: true, force: true });
+    }
   });
 
   it('getActiveBrains returns global + null project in test mode', async () => {

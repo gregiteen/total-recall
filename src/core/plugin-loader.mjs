@@ -410,15 +410,16 @@ export function readPluginsDir(dir, scope) {
 export function discoverPlugins(projectRoot = process.cwd()) {
   const seen = new Set();
   const plugins = [];
+  const global = globalPluginsDir();
+  const project = projectPluginsDir(projectRoot);
   const sources = [
-    [projectPluginsDir(projectRoot), 'project'],
-    [globalPluginsDir(), 'global'],
+    ...(path.resolve(project) === path.resolve(global) ? [] : [[project, 'project']]),
+    [global, 'global'],
     [path.join(PACKAGE_ROOT, 'scaffold', '.agent', 'skills', 'total-recall', 'plugins'), 'scaffold']
   ];
   const visited = new Set();
   for (const [dir, scope] of sources) {
     const resolved = path.resolve(dir);
-    // When the project *is* the home brain the two directories coincide.
     if (visited.has(resolved)) continue;
     visited.add(resolved);
     for (const p of readPluginsDir(dir, scope)) {

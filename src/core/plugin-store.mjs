@@ -32,6 +32,7 @@ import {
 import { writeVfsDocument, patchVfsDocument, deleteVfsDocument, appendVfsEvent } from './ssss-operation-service.mjs';
 import { findVfsDocumentByPath } from './vfs-documents.mjs';
 import { readActivationRecord, projectActivationOverride } from './plugin-state.mjs';
+import { REQUIRED_INSTALLATION_PLUGIN_IDS } from './default-plugins.mjs';
 
 const execFileAsync = promisify(execFile);
 const ID_PATTERN = /^[a-z][a-z0-9-]{1,63}$/;
@@ -619,6 +620,7 @@ export function findInstalled(id, { projectRoot = process.cwd(), global: isGloba
 }
 
 export async function uninstallPlugin(id, options = {}) {
+  if (REQUIRED_INSTALLATION_PLUGIN_IDS.includes(id)) throw new Error('Required plugin ' + id + ' cannot be removed');
   const plugin = findInstalled(id, options);
   if (!plugin) throw new Error(`Plugin '${id}' is not installed`);
   const stat = fs.lstatSync(plugin.dir);

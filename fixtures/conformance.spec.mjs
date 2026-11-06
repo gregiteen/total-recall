@@ -2,7 +2,7 @@
  * SSSS Conformance Test Suite
  *
  * Validates that the fixtures/ directory contains properly formed valid
- * and invalid SSSS documents. Both Total Recall and UltraChat should
+ * and invalid SSSS documents. Every SSSS implementation should
  * import and run this test to prove SSSS compatibility.
  */
 

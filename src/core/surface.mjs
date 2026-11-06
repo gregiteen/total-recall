@@ -12,7 +12,7 @@ import {
 } from './memory-layers.mjs';
 import { assemblePluginContexts } from './plugin-context.mjs';
 import yaml from 'yaml';
-import { brainDir as globalBrainDir, globalAgentDir } from './config.mjs';
+import { brainDir as globalBrainDir, globalAgentDir } from './local-config.mjs';
 import { listSurfaceCommands, buildCommandsSection, surfaceInputsHash, commandScopeDirectories } from './command-surface.mjs';
 import { fileURLToPath } from 'url';
 import { buildLocalSearchIndex } from './fast-recall.mjs';
@@ -399,9 +399,12 @@ export function buildInstalledPluginsSummary(projectRoot = process.cwd()) {
     }
     for (const p of plugins) {
       const cmd = p.manifest.cli?.command || p.id;
-      const desc = (p.manifest.description || 'Plugin capability').replace(/\s+/g, ' ').trim();
       const state = pluginActivation(p, { projectRoot }).state;
-      lines.push(`- **${p.id}** v${p.manifest.version || 'unknown'} · ${state} · \`total-recall ${cmd}\`: ${desc}`);
+      // This table loads in every session. What belongs to a plugin replaces its description rather
+      // than adding to it, so routing costs almost no extra tokens.
+      const tasks = (p.manifest.gate?.tasks || []).filter((task) => typeof task === 'string' && task.trim());
+      const summary = tasks.length ? `${tasks.join('; ')}.` : (p.manifest.description || 'Plugin capability').replace(/\s+/g, ' ').trim();
+      lines.push(`- **${p.id}** v${p.manifest.version || 'unknown'} · ${state} · \`total-recall ${cmd}\`: ${summary}`);
     }
     return lines.join('\n') + '\n';
   } catch {
@@ -681,7 +684,7 @@ async function compilePointers(instructionsFile, skillsDir, nodes = [], { vaultD
   // already the directory the surface belongs in. Do not derive it again.
   //
   // The old code stripped a trailing `.agent` unconditionally. That relocated
-  // the GLOBAL brain's surface: rebuild.mjs (the command Greg actually runs)
+  // the GLOBAL brain's surface: rebuild.mjs (the command operators run)
   // sets agentDir to `resolveAgentDir('global')` = `<home>/.agent`, so the
   // basename IS `.agent`, baseDir became `<home>`, and every compile wrote
   // `<home>/INSTRUCTIONS.md` while `<home>/.agent/INSTRUCTIONS.md` -- the file

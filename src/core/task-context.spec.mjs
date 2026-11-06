@@ -56,6 +56,16 @@ describe('TASK-CONTEXT-01 task evidence', () => {
     expect(result.summary.coverage[0]).toMatchObject({ compatibleVectors: 0, repositoryFilesIndexed: false });
   });
 
+  it('budgets an identical passage once and retains the next distinct evidence', async () => {
+    const nodes = [fact('planned', 'Inspect the password rotation plan.'), fact('complete', 'Inspect the password rotation plan.'),
+      fact('provider-receipt', 'Confirm the password was changed at its provider.')];
+    const result = await retrieveTaskKnowledge({ ...options, query: 'password rotation', nodes, loadIndex: () => freshIndex(nodes) });
+    const text = result.contributions.map(row => row.text).join('\n');
+    expect(text.match(/Inspect the password rotation plan\./g)).toHaveLength(1);
+    expect(text).toContain('Confirm the password was changed at its provider.');
+    expect(result.summary).toMatchObject({ selected: 2, duplicatePassages: 1 });
+  });
+
   it('keeps selected evidence through complete rule compaction and refuses an insufficient budget', async () => {
     const nodes = [fact('password', 'Password resets require an authenticated request.')];
     const knowledge = await retrieveTaskKnowledge({ ...options, query: 'password reset', nodes, loadIndex: () => freshIndex(nodes) });

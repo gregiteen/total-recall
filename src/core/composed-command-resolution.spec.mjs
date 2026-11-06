@@ -3,7 +3,7 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { composedCommandDirectories, resolveComposedCommand } from './composed-command-resolution.mjs';
+import { composedCommandDirectories, composedCommandHelp, resolveComposedCommand } from './composed-command-resolution.mjs';
 import { globalAgentDir } from './config.mjs';
 import { listSurfaceCommands } from './command-surface.mjs';
 import { commandDirsFor } from './surface.mjs';
@@ -55,5 +55,41 @@ describe('shared composed execution scopes', () => {
     expect(composedCommandDirectories(dir)[0]).toEqual({ scope: 'project', dir: path.join(globalAgentDir, 'commands') });
     expect(resolveComposedCommand('../outside', [{ dir }])).toBeNull();
     expect(resolveComposedCommand('constructor', [{ dir }])).toBeNull();
+  });
+});
+
+describe('composed command help', () => {
+  const body = marker => `// @description Writes a marker\nexport default async () => { (await import('node:fs')).writeFileSync(${JSON.stringify(marker)}, 'ran'); };\n`;
+
+  it('answers --help and -h from the source text without running the command', () => {
+    const marker = path.join(dir, 'ran');
+    const file = path.join(dir, 'writes-marker.mjs');
+    write(file, body(marker));
+    for (const flag of ['--help', '-h']) {
+      const help = composedCommandHelp('writes-marker', file, [flag]);
+      expect(help).toContain('total-recall writes-marker — Writes a marker');
+      expect(help).toContain('Usage: total-recall writes-marker');
+    }
+    expect(fs.existsSync(marker)).toBe(false);
+  });
+
+  it('runs the command when no help flag was passed', () => {
+    const file = path.join(dir, 'writes-marker.mjs');
+    write(file, body(path.join(dir, 'ran')));
+    expect(composedCommandHelp('writes-marker', file, [])).toBeNull();
+    expect(composedCommandHelp('writes-marker', file, ['--json'])).toBeNull();
+  });
+
+  it('leaves a command that handles --help itself to answer for itself', () => {
+    const file = path.join(dir, 'own-help.mjs');
+    write(file, "export default async (args) => { if (args.includes('--help')) console.log('mine'); };\n");
+    expect(composedCommandHelp('own-help', file, ['--help'])).toBeNull();
+  });
+
+  it('does not invent a description when the source declares none', () => {
+    const file = path.join(dir, 'plain.mjs');
+    write(file, 'export default async () => {};\n');
+    const help = composedCommandHelp('plain', file, ['--help']);
+    expect(help.split('\n')[0]).toBe('total-recall plain');
   });
 });

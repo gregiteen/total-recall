@@ -15,7 +15,7 @@ Total Recall separates core intelligence into two distinct virtual file system (
     ├── memory-vault/              # Broad user preferences & SOUL.md
     └── memory-derived/            # disposable global caches
 
-/Users/greg/Github/total-recall/   <-- LOCAL PROJECT BRAIN LAYER
+~/projects/total-recall/        <-- LOCAL PROJECT BRAIN LAYER
 └── .agent/skills/total-recall/
     ├── memory-vault/              # Project-specific facts & patterns
     └── memory-derived/            # Unified project-local compiled index

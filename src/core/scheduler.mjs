@@ -7,6 +7,7 @@ import config from './config.mjs';
 import { getNodes } from './vault-cache.mjs';
 import { logger } from './logger.mjs';
 import { loadQueue, updateQueueItem } from './research-queue.mjs';
+import { transitionTaskStatus } from './task-envelope.mjs';
 
 /**
  * Total Recall Task Scheduler
@@ -125,32 +126,10 @@ export function loadPendingTasks(queueDir) {
 /**
  * Update a task's status on disk.
  */
-export function updateTaskStatus(task, newStatus, queueDir, lastError = null) {
-  const filepath = task._filepath || path.join(queueDir, `${task.slug}.md`);
-  if (!fs.existsSync(filepath)) return;
-
-  const raw = fs.readFileSync(filepath, 'utf8');
-  const { data, content } = matter(raw);
-  data.status = newStatus;
-  if (newStatus === 'completed') {
-    data.completed_at = new Date().toISOString();
-  }
-  if (lastError) {
-    data.last_error = lastError;
-  }
-
-  // Also update in-memory object properties so they stay in sync
-  task.status = newStatus;
-  if (newStatus === 'completed') {
-    task.completed_at = data.completed_at;
-  }
-
-  // Strip undefined values — js-yaml (used by gray-matter) crashes on explicit undefined
-  for (const key of Object.keys(data)) {
-    if (data[key] === undefined) delete data[key];
-  }
-
-  atomicWrite(filepath, safeStringify(content, data));
+export async function updateTaskStatus(task, newStatus, queueDir, lastError = null, { expectedStatus } = {}) {
+  const result = await transitionTaskStatus(queueDir, task, newStatus, { expectedStatus, lastError });
+  if (result.success) Object.assign(task, result.task);
+  return result;
 }
 
 /**

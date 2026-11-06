@@ -12,7 +12,7 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { detectProjectBrain as detectProjectBrainInConfig } from '../core/config.mjs';
+import { detectProjectBrain as detectProjectBrainInConfig } from '../core/local-config.mjs';
 
 /**
  * Parse --global / --project layer flags from CLI args.

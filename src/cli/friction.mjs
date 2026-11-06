@@ -5,7 +5,17 @@ import { resolveBrainDir } from './agent-dir.mjs';
 /**
  * CLI command to run Friction Detection on logs
  */
-export default async function runFriction(args) {
+export default async function runFriction(args = []) {
+  if (args.includes('--help') || args.includes('-h')) {
+    console.log(`
+  total-recall friction — Find workflow bottlenecks in the watchdog logs
+
+    total-recall friction [log-file]
+
+    log-file   The log to analyze. Defaults to the global brain's logs/watchdog.jsonl.
+`);
+    return;
+  }
   console.log(`[Friction] 🔍 Analyzing logs for workflow bottlenecks...`);
   
   // Default path for watchdog logs

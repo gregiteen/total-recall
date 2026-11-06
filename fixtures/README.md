@@ -1,7 +1,7 @@
 # SSSS Conformance Fixtures
 
 These fixtures are the canonical valid and invalid SSSS file examples.
-Both Total Recall and UltraChat import this directory to run conformance tests.
+Total Recall and other SSSS implementations import this directory to run conformance tests.
 
 ## Structure
 

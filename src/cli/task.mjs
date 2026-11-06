@@ -32,7 +32,7 @@ function printHelp() {
     add "<intent>"     Enqueue a task for the daemon
     list               List tasks (default: pending + in-progress)
     show <slug>        Show one task
-    cancel <slug>      Cancel a pending/in-progress task
+    cancel <slug>      Cancel a task, optionally with --expected-status pending
     executors          List registered executor ids
 
   add options:
@@ -138,6 +138,9 @@ function parseArgs(args) {
       case '--status':
         out.status = args[++i];
         break;
+      case '--expected-status':
+        out.expectedStatus = args[++i] || '';
+        break;
       default:
         if (!a.startsWith('--') && !out.intent && out.command === 'add') {
           out.intent = a;
@@ -215,7 +218,12 @@ export default async function taskCli(argv) {
       process.exitCode = 1;
       return;
     }
-    const result = cancelTask(queueDir, opts.slug);
+    if (opts.rest.length || (opts.expectedStatus !== undefined && opts.expectedStatus !== 'pending')) {
+      console.error('  Error: cancel supports only --expected-status pending');
+      process.exitCode = 1;
+      return;
+    }
+    const result = await cancelTask(queueDir, opts.slug, { expectedStatus: opts.expectedStatus });
     if (!result.success) {
       console.error(`  ${result.error}`);
       process.exitCode = 1;

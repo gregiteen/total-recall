@@ -126,6 +126,18 @@ describe('doctor command', () => {
   });
 });
 
+describe('doctor help', () => {
+  it('prints help without running a diagnosis', async () => {
+    const log = vi.spyOn(console, 'log').mockImplementation(() => {});
+    try {
+      await doctor(['--help']);
+      const printed = log.mock.calls.flat().join('\n');
+      expect(printed).toContain('total-recall doctor');
+      expect(printed).not.toContain('HARDWARE');
+    } finally { log.mockRestore(); }
+  });
+});
+
 describe('doctor listener ownership', () => {
   it('accepts only the canonical server PID actually listening on the occupied port', async () => {
     expect(await isOwnedServerPort(3000, { identity: () => ({status:'running',pid:123}), listener: async () => true })).toBe(true);

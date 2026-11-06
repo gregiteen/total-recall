@@ -395,6 +395,19 @@ async function storeBrainConfig(brDir, brainUrl, token, provider, apiKey, extra 
 // ─── Main ─────────────────────────────────────────────────────────────────────
 
 export default async function setup(args) {
+  if (args.includes('--help') || args.includes('-h')) {
+    console.log(`
+  total-recall setup — First-time configuration wizard
+
+  Asks where to run Total Recall, then provisions it there. A cloud choice can create a paid server.
+
+    total-recall setup [--dry-run] [--yes]
+
+    --dry-run   Walk through the choices without changing anything.
+    --yes       Set up the GitHub backup without asking.
+`);
+    return;
+  }
   const dryRun = args.includes('--dry-run');
   const yes = args.includes('--yes');
 
