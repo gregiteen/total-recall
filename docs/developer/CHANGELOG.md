@@ -24,6 +24,8 @@
   Mesh 0.2.9, OpenWiki 0.1.10, Composable CLI 0.2.5, Code Quality 0.2.6, Security 0.3.6,
   Embeddings 0.1.3 and Git Sentinel 1.1.5, all on SSSS 0.14.5.
 - Plugin state written by commands run inside a checkout (`.ssss/`) is ignored.
+- Fix a failed write leaving `<file>.tmp.<pid>` behind. A compiled `CLAUDE.md` left that way is
+  untracked and unignored, so committing everything would publish private instructions.
 
 ## 3.43.3 — 2026-11-06
 

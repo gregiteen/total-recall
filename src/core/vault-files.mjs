@@ -8,6 +8,12 @@ export function isSafeVaultName(name) {
 
 export function atomicWrite(filePath, content) {
   const tmpPath = `${filePath}.tmp.${process.pid}`;
-  fs.writeFileSync(tmpPath, content, 'utf8');
-  fs.renameSync(tmpPath, filePath);
+  try {
+    fs.writeFileSync(tmpPath, content, 'utf8');
+    fs.renameSync(tmpPath, filePath);
+  } catch (error) {
+    // A leftover copy is untracked and unignored, so a commit of everything would publish it.
+    fs.rmSync(tmpPath, { force: true });
+    throw error;
+  }
 }
