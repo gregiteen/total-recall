@@ -12,6 +12,7 @@ import {
   consumerState,
   verifyConsumers,
   verifyRunningServer,
+  REGISTRY_WAIT,
 } from './release.mjs';
 
 function tmp() {
@@ -107,6 +108,9 @@ describe('alreadyPublishedRefusal', () => {
 });
 
 describe('awaitPublished', () => {
+  it('waits longer than the slowest publish seen, 23 minutes', () => {
+    expect(REGISTRY_WAIT.attempts * REGISTRY_WAIT.delayMs).toBeGreaterThanOrEqual(30 * 60 * 1000);
+  });
   it('returns immediately when the registry already matches', async () => {
     const fake = () => ({ status: 0, stdout: '1.0.0\n', stderr: '' });
     const r = await awaitPublished('x', '1.0.0', { exec: fake, tarball: async () => true });

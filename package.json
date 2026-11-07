@@ -54,7 +54,7 @@
     "sync:scaffold-plugins": "node scripts/sync-scaffold-plugins.mjs",
     "clean": "rm -rf scratch/* .remember/* *.log",
     "check:dist": "node scripts/check-dist-freshness.mjs",
-    "prepublishOnly": "npm run check:package && npm run check:dist && npm run check:ssss-registry && node scripts/check-scaffold-state.mjs && npm run check:plugin-versions && npm run check:help && npm run check:harness-install",
+    "prepublishOnly": "node scripts/check-publish-source.mjs && npm run check:package && npm run check:dist && npm run check:ssss-registry && node scripts/check-scaffold-state.mjs && npm run check:plugin-versions && npm run check:help && npm run check:harness-install",
     "check:ssss-registry": "node scripts/check-ssss-registry.mjs",
     "check:plugin-versions": "node scripts/check-plugin-versions.mjs",
     "check:help": "node scripts/audit-help.mjs --builtins",

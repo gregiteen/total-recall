@@ -141,7 +141,10 @@ export async function tarballServed(pkg, version, { exec = spawnSync, fetchImpl 
  * Wait until a just-published version can be installed: listed as latest, and its tarball served.
  * 3.42.0 took about six minutes and 3.42.1 about eight, its listing four minutes ahead of its tarball.
  */
-export async function awaitPublished(pkg, version, { attempts = 45, delayMs = 20000, exec = spawnSync, sleep, tarball = tarballServed } = {}) {
+/** npm has taken 8 and then 23 minutes to serve an accepted publish, so a shorter wait reports failure on a good release. */
+export const REGISTRY_WAIT = Object.freeze({ attempts: 120, delayMs: 20000 });
+
+export async function awaitPublished(pkg, version, { attempts = REGISTRY_WAIT.attempts, delayMs = REGISTRY_WAIT.delayMs, exec = spawnSync, sleep, tarball = tarballServed } = {}) {
   const pause = sleep || ((ms) => new Promise((r) => setTimeout(r, ms)));
   let last = null;
   for (let i = 0; i < attempts; i++) {
