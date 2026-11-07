@@ -202,6 +202,35 @@ describe('consumerState', () => {
     expect(s.satisfied).toBe(true);
   });
 
+  it('counts a consumer as current when it runs the version named, whatever its pin says', () => {
+    // `update` installs plugin copies with --no-save, so their pin stays behind on purpose.
+    const root = fakeRepo({ deps: { '@gregiteen/ssss-cli': '0.14.3' }, installed: '0.14.4' });
+    const s = consumerState(root, '@gregiteen/ssss-cli', '0.14.4');
+    expect(s.satisfied).toBe(true);
+    expect(s.reason).toBe('ok');
+    expect(s.pinBehind).toBe(true);
+  });
+
+  it('never passes a consumer whose pin and install both lag the version named', () => {
+    const root = fakeRepo({ deps: { '@gregiteen/ssss-cli': '0.14.3' }, installed: '0.14.3' });
+    const s = consumerState(root, '@gregiteen/ssss-cli', '0.14.4');
+    expect(s.satisfied).toBe(false);
+    expect(s.reason).toBe('installed-mismatch');
+  });
+
+  it('fails a consumer whose pin is current but whose install is not', () => {
+    const root = fakeRepo({ deps: { '@gregiteen/ssss-cli': '0.14.4' }, installed: '0.14.3' });
+    const s = consumerState(root, '@gregiteen/ssss-cli', '0.14.4');
+    expect(s.satisfied).toBe(false);
+    expect(s.pinBehind).toBe(false);
+  });
+
+  it('reads an npm: alias against the version named too', () => {
+    const root = fakeRepo({ deps: { '@ssss/cli': 'npm:@gregiteen/ssss-cli@0.10.3' }, aliasInstalled: '0.14.4' });
+    expect(consumerState(root, '@ssss/cli', '0.14.4').satisfied).toBe(true);
+    expect(consumerState(root, '@ssss/cli', '0.15.0').satisfied).toBe(false);
+  });
+
   it('marks a repo that does not declare the package as not-declared', () => {
     const root = fakeRepo({ deps: {} });
     expect(consumerState(root, '@gregiteen/ssss-cli').reason).toBe('not-declared');
@@ -234,6 +263,15 @@ describe('verifyConsumers', () => {
     expect(r.consumers).toBe(2);
     expect(r.failing).toBe(1);
     expect(r.failures[0].root).toBe(bad);
+  });
+
+  it('reports a lagging pin without failing, and a lagging install as a failure', () => {
+    const copy = fakeRepo({ deps: { '@gregiteen/ssss-cli': '0.14.3' }, installed: '0.14.4' });
+    const stale = fakeRepo({ deps: { '@gregiteen/ssss-cli': '0.14.3' }, installed: '0.14.3' });
+    const r = verifyConsumers('@gregiteen/ssss-cli', '0.14.4', { roots: [copy, stale] });
+    expect(r.failing).toBe(1);
+    expect(r.failures[0].root).toBe(stale);
+    expect(r.pin_behind).toEqual([{ root: copy, declared: '0.14.3', installed: '0.14.4' }]);
   });
 
   it('passes when every declaring consumer is satisfied', () => {

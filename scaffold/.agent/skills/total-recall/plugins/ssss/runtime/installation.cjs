@@ -99,16 +99,25 @@ function inspectScaffold(dir, source) {
   return { ok: true, path: dir, files: Object.keys(expected.files).length };
 }
 
-function skillRootFor(target, sharedBrainDir) {
-  if (!stat(target)?.isSymbolicLink()) return target;
-  const sharedSkill = sharedBrainDir && path.join(path.dirname(sharedBrainDir), 'ssss');
-  const resolved = fs.realpathSync(target);
-  if (!sharedSkill || resolved !== sharedSkill) throw new Error('SSSS skill points outside the shared skill installation');
-  return resolved;
+const realOrNull = file => { try { return fs.realpathSync(file); } catch { return null; } };
+/** A path with its folders resolved and its last part kept, so a link is compared as itself. */
+const entryOf = file => path.join(realOrNull(path.dirname(file)) ?? path.dirname(file), path.basename(file));
+
+/**
+ * True for a project's link to the machine's shared skill. A link at the shared location itself
+ * is not one: that location is what has to hold the skill.
+ */
+function linksToSharedSkill(target, sharedBrainDir) {
+  if (!sharedBrainDir) return false;
+  const shared = path.join(path.dirname(sharedBrainDir), 'ssss');
+  if (entryOf(shared) === entryOf(target)) return false;
+  const resolved = realOrNull(target);
+  return resolved !== null && resolved === realOrNull(shared);
 }
 
-function inspectSkill(target, source, sharedBrainDir) {
-  const dir = skillRootFor(target, sharedBrainDir);
+/** A link that reaches a complete, current skill is left alone, like a linked plugin. */
+function inspectSkill(target, source) {
+  const dir = stat(target)?.isSymbolicLink() ? fs.realpathSync(target) : target;
   requireDirectory(dir);
   const wrapper = fs.readFileSync(regularPath(dir, 'SKILL.md'), 'utf8');
   if (!/^name:\s*['"]?ssss['"]?\s*$/m.test(wrapper) || !wrapper.includes('core/SKILL.md')) {
@@ -164,31 +173,63 @@ function writeAsset(root, relative, content) {
   fs.writeFileSync(file, content, { flag: 'wx' });
 }
 
+const NAMES_THIS_SKILL = /^name:\s*['"]?ssss['"]?\s*$/m;
+
+/** Fill a staged skill: any files already there stay, and the portable core is always replaced. */
+function completeSkill(stage, source) {
+  fs.rmSync(path.join(stage, 'core'), { recursive: true, force: true });
+  for (const relative of Object.keys(source.skill)) {
+    if (!stat(regularPath(stage, relative))) {
+      writeAsset(stage, relative, fs.readFileSync(regularPath(source.skillRoot, relative)));
+    }
+  }
+  const wrapper = path.join(stage, 'SKILL.md');
+  if (!fs.readFileSync(wrapper, 'utf8').includes('core/SKILL.md')) fs.appendFileSync(wrapper, ROUTE);
+  inspectSkill(stage, source);
+}
+
+/**
+ * An older layout linked the skill in, and the link is now dangling or stale. Only the link is
+ * replaced: nothing is written through it, so whatever it pointed at stays exactly as it was.
+ * A wrapper with this skill's name carries over, because it can hold repository guidance.
+ */
+function replaceLink(target, source) {
+  const pointsAt = fs.readlinkSync(target);
+  let wrapper = null;
+  try {
+    const text = fs.readFileSync(path.join(target, 'SKILL.md'), 'utf8');
+    if (NAMES_THIS_SKILL.test(text)) wrapper = text;
+  } catch { /* a dangling link or a folder with no entry has no wrapper to keep */ }
+  publishDirectory(target, stage => {
+    if (wrapper) writeAsset(stage, 'SKILL.md', wrapper);
+    completeSkill(stage, source);
+  }, true);
+  return { path: target, target: pointsAt };
+}
+
+/** @returns {{ path: string, target: string } | undefined} the link it replaced, if it replaced one */
 function installSkill(target, source, sharedBrainDir) {
-  const dir = skillRootFor(target, sharedBrainDir);
-  if (dir !== target) return inspectSkill(target, source, sharedBrainDir);
-  checkRoot(dir);
-  const exists = Boolean(stat(dir));
+  if (stat(target)?.isSymbolicLink()) {
+    if (!linksToSharedSkill(target, sharedBrainDir)) return replaceLink(target, source);
+    // The shared skill is repaired where it lives. A project does not take a private copy.
+    inspectSkill(target, source);
+    return undefined;
+  }
+  checkRoot(target);
+  const exists = Boolean(stat(target));
   // Stage the complete skill so a failed source read cannot leave a partial skill.
   if (exists) {
-    const wrapper = regularPath(dir, 'SKILL.md');
-    if (stat(wrapper) && !/^name:\s*['"]?ssss['"]?\s*$/m.test(fs.readFileSync(wrapper, 'utf8'))) {
-      throw new Error('Existing skill directory belongs to another skill: ' + dir);
+    const wrapper = regularPath(target, 'SKILL.md');
+    if (stat(wrapper) && !NAMES_THIS_SKILL.test(fs.readFileSync(wrapper, 'utf8'))) {
+      throw new Error('Existing skill directory belongs to another skill: ' + target);
     }
-    listFiles(dir);
+    listFiles(target);
   }
-  publishDirectory(dir, stage => {
-    if (exists) fs.cpSync(dir, stage, { recursive: true });
-    fs.rmSync(path.join(stage, 'core'), { recursive: true, force: true });
-    for (const relative of Object.keys(source.skill)) {
-      if (!stat(regularPath(stage, relative))) {
-        writeAsset(stage, relative, fs.readFileSync(regularPath(source.skillRoot, relative)));
-      }
-    }
-    const wrapper = path.join(stage, 'SKILL.md');
-    if (!fs.readFileSync(wrapper, 'utf8').includes('core/SKILL.md')) fs.appendFileSync(wrapper, ROUTE);
-    inspectSkill(stage, source);
+  publishDirectory(target, stage => {
+    if (exists) fs.cpSync(target, stage, { recursive: true });
+    completeSkill(stage, source);
   }, exists);
+  return undefined;
 }
 
 function hasUpdaterDrift(dir, source, receipt) {
@@ -247,7 +288,7 @@ function inspectInstalled(options, source) {
     catch (error) { return { ok: false, path: target, error: error.message }; }
   };
   const observed = {
-    skill: check(skill, () => inspectSkill(skill, source, options.sharedBrainDir)),
+    skill: check(skill, () => inspectSkill(skill, source)),
     scaffold: check(scaffold, () => {
       checkRoot(options.brainDir);
       checkRoot(path.dirname(scaffold));
@@ -269,10 +310,10 @@ function ensureInstallation(options) {
   checkRoot(options.brainDir);
   const current = inspectInstalled(options, source);
   const recoveredFrom = current.scaffold.ok ? undefined : installScaffold(scaffold, source, options.repair === true);
-  if (!current.skill.ok) installSkill(skill, source, options.sharedBrainDir);
+  const replacedLink = current.skill.ok ? undefined : installSkill(skill, source, options.sharedBrainDir);
   const installed = inspectInstalled(options, source);
   if (!installed.ok) throw new Error([installed.skill.error, installed.scaffold.error].filter(Boolean).join('; '));
-  return recoveredFrom ? { ...installed, recoveredFrom } : installed;
+  return { ...installed, ...(recoveredFrom ? { recoveredFrom } : {}), ...(replacedLink ? { replacedLink } : {}) };
 }
 
 async function maintain({ brainDir, entries, apply, run }) {

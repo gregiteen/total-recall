@@ -243,7 +243,11 @@ export function consumerState(root, pkg, version = null) {
       /* keep looking */
     }
   }
-  const satisfied = range ? Boolean(installed) && installed === version : Boolean(want && installed === want);
+  // What a consumer runs is what counts, and the version named is the question. A pin can lag on
+  // purpose, because `update` installs plugin copies with --no-save. Comparing against the pin
+  // would fail those and pass a consumer whose pin and install both lag.
+  const expected = version || want;
+  const satisfied = Boolean(expected && installed === expected);
   return {
     root,
     declared,
@@ -251,6 +255,7 @@ export function consumerState(root, pkg, version = null) {
     range,
     installed,
     satisfied,
+    pinBehind: Boolean(satisfied && want && want !== installed),
     reason: !installed ? 'not-installed' : satisfied ? 'ok' : 'installed-mismatch',
   };
 }
@@ -279,6 +284,7 @@ export function verifyConsumers(pkg, version, opts = {}) {
     consumers: relevant.length,
     failing: failing.length,
     failures: failing.map((s) => ({ root: s.root, declared: s.declared, installed: s.installed, reason: s.reason })),
+    pin_behind: relevant.filter((s) => s.pinBehind).map((s) => ({ root: s.root, declared: s.declared, installed: s.installed })),
   };
 }
 
@@ -362,6 +368,7 @@ export async function run(argv = process.argv, deps = {}) {
         return fail(`${pkg}@${version}: ${consumers.failing}/${consumers.consumers} consumers not satisfied. First: ${consumers.failures[0].root} (${consumers.failures[0].installed ?? 'not installed'}).`);
       }
       log(`  ✓ ${pkg}@${version} verified: registry + ${consumers.consumers}/${consumers.consumers} consumers`);
+      if (consumers.pin_behind.length) log(`    ${consumers.pin_behind.length} run it with an older pin in package.json, such as ${consumers.pin_behind[0].root}`);
       continue;
     }
 
