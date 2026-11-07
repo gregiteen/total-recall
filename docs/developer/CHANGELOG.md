@@ -1,3 +1,25 @@
+## 3.43.3 — 2026-11-06
+
+- Add `total-recall-server-release`, which replaces a brain server under systemd with no gap, driven
+  by `total-recall deploy release` over the mesh. It starts the release on the next port from the
+  verified global install, moves new connections with one kernel rule, replaces the unit behind the
+  rule, then moves traffic home and removes the rule. A failure leaves traffic on a healthy server.
+  It needs Linux, systemd, iptables and active connection tracking.
+- Add `GET /health/deployment`, a cheap identity route a deploy can compare.
+- Report what the server on a host runs. `update --status`, `update --automatic`, startup health and
+  mesh rows now say, and `release verify total-recall-brain` fails while it lags. Reports used to read
+  `package.json` on disk, so a server left on an old release looked current.
+- Fix automatic maintenance rewriting a checkout under a live server, including `npm ci`, which
+  deletes `node_modules`. It now reports `serving` and leaves the files alone. That install also no
+  longer inherits `NODE_ENV`.
+- `update --install-autopull` now refuses a checkout systemd serves, because a restart there has a gap
+  and would start a second server outside the unit.
+- Fix mesh maintenance failing every run on peers that can never pass. A stored record of a machine
+  that left the mesh is `not-enrolled`, a device that cannot run the CLI is `unsupported`, and neither
+  counts as failed.
+- Keep private names out of the public tree. grep-forbid checks can read their pattern from a file
+  outside the repository, through `patternFile`. Bundles `tr-plugin-code-quality` 0.2.5.
+
 ## 3.43.2 — 2026-11-06
 
 - Fix automatic maintenance stripping dev dependencies from every repository it installed in. The
