@@ -54,6 +54,16 @@ describe('card contract', () => {
     expect(errors.join('\n')).toMatch(/options is required/);
     expect(errors.join('\n')).toMatch(/status.command/);
   });
+  it('rejects a subcommand timeout the plugin runner would refuse', () => {
+    for (const bad of [0, 600001, 900000, 1.5, '60000']) {
+      const m = base();
+      m.cli.subcommands[1].timeout_ms = bad;
+      expect(validateCardContract(m).errors.join('\n')).toMatch(/timeout_ms must be an integer from 1 to 600000/);
+    }
+    const ok = base();
+    ok.cli.subcommands[1].timeout_ms = 600000;
+    expect(validateCardContract(ok).errors).toEqual([]);
+  });
   it('keeps secret arguments off the command line', () => {
     const m = base();
     m.cli.subcommands[1].args.push({ name: 'apiKey', flag: '--key', label: 'Key', type: 'string', secret: true });

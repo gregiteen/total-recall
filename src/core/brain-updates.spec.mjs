@@ -143,13 +143,36 @@ describe('uniform brain updates', () => {
       expect(installArgs(exec)).toEqual([]);
     });
 
-    it('still installs an absent runtime dependency, and fails when it does not arrive', async () => {
+    it('still installs a runtime dependency missing from an existing tree, and fails when it does not arrive', async () => {
       const root = manifest(path.join(tmp, 'app'), { dependencies: { 'total-recall-brain': '3.39.1' } });
+      installed(root, 'left-pad', '1.3.0');
       const exec = execWithInstall();
       const result = await run([root], exec, { dryRun: false });
       const [[, args]] = installArgs(exec);
       expect(args).not.toContain('--package-lock-only');
       expect(result.failed).toBe(1);
+    });
+
+    it('never reinstalls a tree into a checkout that has none, and keeps its runtime pin current', async () => {
+      // A checkout whose node_modules were reclaimed for disk space stays without them.
+      const root = manifest(path.join(tmp, 'app'), { dependencies: { 'total-recall-brain': '3.39.0' } });
+      const exec = execWithInstall();
+      const result = await run([root], exec, { dryRun: false });
+      expect(result.failed).toBe(0);
+      expect(result.updated).toBe(1);
+      const [[, args]] = installArgs(exec);
+      expect(args).toContain('--package-lock-only');
+      expect(fs.existsSync(path.join(root, 'node_modules'))).toBe(false);
+      expect(JSON.parse(fs.readFileSync(path.join(root, 'package.json'))).dependencies['total-recall-brain']).toBe('3.39.1');
+    });
+
+    it('leaves a tree-less checkout alone once its runtime pin is current', async () => {
+      const root = manifest(path.join(tmp, 'app'), { dependencies: { 'total-recall-brain': '3.39.1' } });
+      const exec = execWithInstall();
+      const result = await run([root], exec, { dryRun: false });
+      expect(result.failed).toBe(0);
+      expect(result.results.find(r => r.root === root).status).toBe('up_to_date');
+      expect(installArgs(exec)).toEqual([]);
     });
   });
 

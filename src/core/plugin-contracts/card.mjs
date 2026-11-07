@@ -55,6 +55,9 @@ export function validateCardContract(manifest) {
       else names.add(sub.name);
       if (sub.effect !== undefined && !COMMAND_EFFECTS.includes(sub.effect)) errors.push(`${where}.effect must be one of: ${COMMAND_EFFECTS.join(', ')}`);
       if (sub.output !== undefined && !OUTPUT_KINDS.includes(sub.output)) errors.push(`${where}.output must be one of: ${OUTPUT_KINDS.join(', ')}`);
+      // The runner refuses anything outside this range, so a manifest that
+      // declares it must fail validation rather than every call at run time.
+      if (sub.timeout_ms !== undefined && (!Number.isInteger(sub.timeout_ms) || sub.timeout_ms < 1 || sub.timeout_ms > 600000)) errors.push(`${where}.timeout_ms must be an integer from 1 to 600000`);
       if (sub.args !== undefined) {
         if (!Array.isArray(sub.args)) errors.push(`${where}.args must be an array`);
         else {
