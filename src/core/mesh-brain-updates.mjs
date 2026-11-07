@@ -1,4 +1,9 @@
 /** The daemon dispatches maintenance through the mesh owner; remote brains stay separate. */
+// Mesh clients on these systems cannot run Total Recall, so they have nothing to update.
+const NO_RUNTIME_OS=new Set(['ios','android','tvos']);
+// Rows that are not machines this release can reach. They stay in the report and never count as failed.
+const NOT_APPLICABLE=new Set(['not-enrolled','unsupported']);
+
 export async function updateMeshBrainPackages({version,versions,listNodes,exec,now=Date.now}={}) {
   if(!/^\d+\.\d+\.\d+(?:-[a-zA-Z0-9.-]+)?$/.test(version || ''))throw new Error('A verified published TR version is required');
   if(!listNodes || !exec){
@@ -7,11 +12,18 @@ export async function updateMeshBrainPackages({version,versions,listNodes,exec,n
     exec ||= mesh.execMeshCommand;
   }
   const results=[];
-  for(const node of await listNodes()){
+  const nodes=await listNodes();
+  // A stored record with no live counterpart is a machine that left the mesh, but when every
+  // row is stored the mesh itself did not answer, and that must not read as a clean run.
+  const meshAnswered=nodes.some(node=>!node.vault_only);
+  for(const node of nodes){
     if(node.self)continue;
-    const row={node:node.ip || node.hostname || 'unidentified peer',status:'pending'};results.push(row);
+    const name=node.ip || node.hostname || 'unidentified peer';
+    if(node.vault_only && meshAnswered){results.push({node:name,status:'not-enrolled'});continue;}
+    if(NO_RUNTIME_OS.has(String(node.os).toLowerCase())){results.push({node:name,status:'unsupported',os:node.os});continue;}
+    const row={node:name,status:'pending'};results.push(row);
+    if(!node.online){row.status='failed';row.error='Mesh node is offline; retry pending';continue;}
     if(!node.ip || !node.access?.ssh_user){row.status='failed';row.error='Mesh peer has no configured update transport; verification pending';continue;}
-    if(!node.online){row.status='failed';row.error='Configured mesh node is offline; retry pending';continue;}
     try{
       // Read the durable report first, then launch only when stale or failed.
       const observed=await exec(node.ip,'cd "$HOME" && total-recall update --status --json',{timeoutMs:20000});
@@ -32,5 +44,5 @@ export async function updateMeshBrainPackages({version,versions,listNodes,exec,n
     }catch(error){row.status='failed';row.error=error.message;}
   }
   // A dispatched process is not a verified update. Keep it visible for retries.
-  return {failed:results.filter(row=>row.status!=='verified').length,results};
+  return {failed:results.filter(row=>row.status!=='verified' && !NOT_APPLICABLE.has(row.status)).length,results};
 }
