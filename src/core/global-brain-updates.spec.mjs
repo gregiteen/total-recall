@@ -55,6 +55,14 @@ describe('updateGlobalBrainPackages', () => {
     } finally { fs.rmSync(base, { recursive: true, force: true }); }
   });
 
+  it('reports the global root, so a later step can tell what a restart would start', () => {
+    const { base, root } = fakeGlobalRoot();
+    try {
+      const report = updateGlobalBrainPackages({ versions: { 'total-recall-brain': '3.41.2' }, exec: execFor(root, []), sourceUpdate: () => { throw new Error('unexpected'); } });
+      expect(report.root).toBe(root);
+    } finally { fs.rmSync(base, { recursive: true, force: true }); }
+  });
+
   it('still installs from the registry when no install or source link exists', () => {
     const { base, root } = fakeGlobalRoot();
     try {

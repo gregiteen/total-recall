@@ -34,7 +34,7 @@ import { readProcessCommand, entryPathHint, shouldHonorPidLock } from '../core/p
 import { createCoverageCache } from './health-coverage.mjs';
 import { drainActiveEmbeddings } from './routes/sessions.mjs';
 import { agentDir as configAgentDir, brainDir as configBrainDir, port as configPort, host as configHost, nodeEnv, instructionsFilePath } from '../core/config.mjs';
-import { getDaemonStatus, ensureDaemonRunning } from '../core/daemon-control.mjs';
+import { getDaemonStatus, ensureDaemonRunning, clearStaleDaemonLock } from '../core/daemon-control.mjs';
 import { deploymentHealth } from '../core/running-server.mjs';
 
 
@@ -1004,6 +1004,8 @@ if (HOST !== '127.0.0.1' && HOST !== '0.0.0.0') {
     
     // Unref the interval so it doesn't block process shutdown
     daemonWatchdogInterval.unref();
+  } else if (nodeEnv !== 'test') {
+    clearStaleDaemonLock();
   }
 
   // ─── Cloudflare Tunnel Auto-Start ───

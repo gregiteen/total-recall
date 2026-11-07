@@ -674,7 +674,9 @@ agents:
 
 Files moving does not replace a running process. `total-recall update --status` and each `update --automatic` report list what the server on this host runs against the release (`current`, `stale`, `ahead`, `down`, `none` or `unknown`). `total-recall release verify total-recall-brain` fails while it lags. Automatic maintenance never rewrites a checkout a live server runs from: it reports `serving` and leaves the files alone.
 
-Where systemd serves the brain, replace it with no gap through the deploy plugin:
+Where a per-user service (a LaunchAgent or a systemd user unit) runs the server from the global install, `update --automatic` replaces a stale server itself, after everything else in the run. It restarts through that service, which is a short gap, and counts it done only when `/health` reports the release. It waits for a moment with no open connection and gives up waiting after 6 hours, reporting `held` until then. A hold or a failed attempt counts as that machine's own failure, so peers dispatch maintenance to it again. A server that runs any other way is reported and left running. `TR_SERVER_AUTO_RESTART=0` opts a host out. A checkout under a LaunchAgent stays with `update --install-autopull`.
+
+Where systemd serves the brain as a system service, replace it with no gap through the deploy plugin:
 
 ```bash
 total-recall deploy release <version> --adapter-secret <DEPLOY_MESH_REFERENCE>

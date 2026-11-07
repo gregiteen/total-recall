@@ -55,5 +55,5 @@ export function updateGlobalBrainPackages({versions,exec=spawnSync,sourceUpdate=
       if(row.status==='failed')row.error=result.error?.message || result.stderr?.slice(-1000) || 'Global version verification failed';
     }
   }
-  return {failed:results.filter(row=>row.status==='failed').length,results};
+  return {failed:results.filter(row=>row.status==='failed').length,results,root};
 }

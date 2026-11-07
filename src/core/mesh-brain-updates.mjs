@@ -30,7 +30,8 @@ export async function updateMeshBrainPackages({version,versions,listNodes,exec,n
       let report,serving;try{const status=JSON.parse(observed.stdout);report=status.last;serving=status.server;}catch{}
       const localFailed=report?(report.local_failed ?? Math.max(0,(report.failed || 0)-(report.mesh?.failed || 0))):null;
       const current=observed.success && report && localFailed===0 && now()>=report.checkedAt && now()-report.checkedAt<2*60*60*1000 && report.versions?.['total-recall-brain']===version && (!versions?.['@gregiteen/ssss-cli'] || report.versions?.['@gregiteen/ssss-cli']===versions['@gregiteen/ssss-cli']);
-      // Maintenance cannot fix a lagging server, so this is reported and not dispatched again.
+      // Maintenance could not fix this server, or it would have reported a local failure above and
+      // been dispatched again, so this is reported. One that lags since the last run waits for that run's report to age.
       if(current && serving?.status==='stale'){row.status='failed';row.report=report;row.server=serving;row.error=serving.reason;continue;}
       if(current){row.status='verified';row.report=report;continue;}
       // npm exec pins the verified release so an old installed CLI can bootstrap

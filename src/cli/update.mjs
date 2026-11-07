@@ -79,7 +79,9 @@ function printHelp() {
         writing package.json or the lockfile. Register it to develop it here.
     total-recall update --automatic [--json]
         Daemon maintenance: update both packages, ensure defaults, update every
-        installed plugin from its recorded source and refresh surfaces.
+        installed plugin from its recorded source and refresh surfaces. Where a
+        per-user service (LaunchAgent, systemd user unit) runs the server from
+        the global install, also restart a stale server and verify /health.
     total-recall update --status [--json]
         Read the actual last automatic maintenance report without starting work.
         Also reports what the server on this host runs against the release.
@@ -96,6 +98,7 @@ function printHelp() {
 
   Env:
     TR_AUTO_UPDATE_PACKAGE=0   Disable daemon cron auto-update (default: on)
+    TR_SERVER_AUTO_RESTART=0   Report a stale server instead of restarting it (default: on)
     TR_SYNC_REPOS=/a:/b       Extra project roots
 
   Source monorepos named ${PACKAGE_NAME} are skipped (use git, not npm into self).

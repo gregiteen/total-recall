@@ -38,6 +38,28 @@ export function getDaemonStatus() {
 }
 
 /**
+ * Remove the lock of a daemon that is gone, for a server told to run none.
+ *
+ * startDaemon is the only other thing that recovers this lock, and such a server never
+ * calls it. A daemon that went down with the machine left a lock nothing would ever
+ * clear, so the server reported `dead` and `degraded` for good. Only a lock whose process
+ * is verified gone is removed: a live process or one that cannot be identified keeps it.
+ * @returns {boolean} True if a lock was removed.
+ */
+export function clearStaleDaemonLock({ observe = getDaemonObservation } = {}) {
+  try {
+    const before = fs.readFileSync(PID_FILE, 'utf8');
+    if (observe().status !== 'stopped') return false;
+    if (fs.readFileSync(PID_FILE, 'utf8') !== before) return false;
+    fs.unlinkSync(PID_FILE);
+    logger.info('daemon-control', `Removed the lock of daemon PID ${before.trim()}, which is gone. This server runs no daemon.`);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Detaches the daemon script in the background and writes its PID to file.
  * @returns {number} The PID of the newly spawned daemon.
  */

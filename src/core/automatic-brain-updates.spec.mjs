@@ -25,6 +25,57 @@ describe('daemon automatic package maintenance',()=>{
     expect(report.local_failed).toBe(0);
     expect(report.failed).toBe(0);
   });
+  it('asks to replace a stale server after everything that moves files, with what it needs',async()=>{
+    const order=[];
+    const compile=vi.fn(async()=>{order.push('compile');return {ok:true,results:[]};});
+    const update=vi.fn().mockResolvedValue({versions:{'total-recall-brain':'3.43.3'},failed:0,results:[]});
+    const globalUpdate=vi.fn(async()=>{order.push('global');return {failed:0,results:[],root:'/global'};});
+    const stale={status:'stale',url:'http://127.0.0.1:3000',running:'3.43.2',latest:'3.43.3',reason:'old process'};
+    const serverCheck=vi.fn(async()=>{order.push('check');return stale;});
+    const replaceServer=vi.fn(async()=>{order.push('replace');return {status:'current',running:'3.43.3',latest:'3.43.3',replacement:{method:'restart',state:'replaced',from:'3.43.2'}};});
+    const dir=brain();
+    const report=await runAutomaticBrainUpdates({brainDir:dir,update,compile,globalUpdate,serverCheck,replaceServer});
+    expect(order).toEqual(['global','compile','check','replace']);
+    expect(replaceServer).toHaveBeenCalledWith(expect.objectContaining({brainDir:dir,server:stale,globalRoot:'/global'}));
+    expect(report.server).toMatchObject({status:'current',replacement:{state:'replaced'}});
+    expect(report.local_failed).toBe(0);
+  });
+  it('leaves a server that is not stale alone',async()=>{
+    const compile=vi.fn().mockResolvedValue({ok:true,results:[]});
+    const update=vi.fn().mockResolvedValue({versions:{'total-recall-brain':'3.43.3'},failed:0,results:[]});
+    const replaceServer=vi.fn();
+    const serverCheck=vi.fn().mockResolvedValue({status:'current',running:'3.43.3',latest:'3.43.3'});
+    await runAutomaticBrainUpdates({brainDir:brain(),update,compile,serverCheck,replaceServer});
+    expect(replaceServer).not.toHaveBeenCalled();
+  });
+  it.each(['held','failed'])('counts a %s replacement as this machine\'s failure, so peers dispatch it again',async(state)=>{
+    const compile=vi.fn().mockResolvedValue({ok:true,results:[]});
+    const update=vi.fn().mockResolvedValue({versions:{'total-recall-brain':'3.43.3'},failed:0,results:[]});
+    const serverCheck=vi.fn().mockResolvedValue({status:'stale',running:'3.43.2',latest:'3.43.3',reason:'old process'});
+    const replaceServer=vi.fn().mockResolvedValue({status:'stale',running:'3.43.2',latest:'3.43.3',reason:'old process',replacement:{method:'restart',state,reason:'why'}});
+    const report=await runAutomaticBrainUpdates({brainDir:brain(),update,compile,serverCheck,replaceServer});
+    expect(report.local_failed).toBe(1);
+    expect(report.failed).toBe(1);
+  });
+  it('passes a hold on to the next run',async()=>{
+    const dir=brain();
+    const compile=vi.fn().mockResolvedValue({ok:true,results:[]});
+    const update=vi.fn().mockResolvedValue({versions:{'total-recall-brain':'3.43.3'},failed:0,results:[]});
+    const serverCheck=vi.fn().mockResolvedValue({status:'stale',running:'3.43.2',latest:'3.43.3'});
+    const held={status:'stale',running:'3.43.2',latest:'3.43.3',replacement:{method:'restart',state:'held',held_since:500}};
+    const replaceServer=vi.fn().mockResolvedValue(held);
+    await runAutomaticBrainUpdates({brainDir:dir,update,compile,serverCheck,replaceServer,force:true});
+    await runAutomaticBrainUpdates({brainDir:dir,update,compile,serverCheck,replaceServer,force:true});
+    expect(replaceServer.mock.calls[1][0].previous).toEqual(held);
+  });
+  it('does not count a host that cannot replace its server as failed',async()=>{
+    const compile=vi.fn().mockResolvedValue({ok:true,results:[]});
+    const update=vi.fn().mockResolvedValue({versions:{'total-recall-brain':'3.43.3'},failed:0,results:[]});
+    const serverCheck=vi.fn().mockResolvedValue({status:'stale',running:'3.43.2',latest:'3.43.3'});
+    const replaceServer=vi.fn().mockResolvedValue({status:'stale',running:'3.43.2',latest:'3.43.3',replacement:{method:'deploy',reason:'production'}});
+    const report=await runAutomaticBrainUpdates({brainDir:brain(),update,compile,serverCheck,replaceServer});
+    expect(report.local_failed).toBe(0);
+  });
   it('retries fast for its own failures, and at the normal interval for a peer with no way to update', async () => {
     const dir=fs.mkdtempSync(path.join(os.tmpdir(),'tr-automatic-retry-'));
     const brain=path.join(dir,'brain');

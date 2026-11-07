@@ -314,6 +314,42 @@ describe('daemon-control', () => {
   // ---------------------------------------------------------------------------
   // ensureDaemonRunning
   // ---------------------------------------------------------------------------
+  describe('clearStaleDaemonLock', () => {
+    let clearStaleDaemonLock;
+    beforeEach(async () => {
+      ({ clearStaleDaemonLock } = await import('./daemon-control.mjs'));
+      fs.readFileSync.mockReturnValue('35190');
+    });
+
+    it('removes the lock of a daemon that is gone, so the status reads not_started', () => {
+      expect(clearStaleDaemonLock({ observe: () => ({ status: 'stopped' }) })).toBe(true);
+      expect(fs.unlinkSync).toHaveBeenCalledWith(PID_FILE);
+    });
+
+    it.each(['running', 'conflict', 'unknown', 'not-started'])('leaves the lock alone when the daemon is %s', (status) => {
+      expect(clearStaleDaemonLock({ observe: () => ({ status }) })).toBe(false);
+      expect(fs.unlinkSync).not.toHaveBeenCalled();
+    });
+
+    it('leaves a lock that changed while it looked, because a new daemon just took it', () => {
+      fs.readFileSync.mockReturnValueOnce('35190').mockReturnValueOnce('40000');
+      expect(clearStaleDaemonLock({ observe: () => ({ status: 'stopped' }) })).toBe(false);
+      expect(fs.unlinkSync).not.toHaveBeenCalled();
+    });
+
+    it('has nothing to do without a lock', () => {
+      fs.readFileSync.mockImplementation(() => { throw Object.assign(new Error('missing'), { code: 'ENOENT' }); });
+      const observe = vi.fn();
+      expect(clearStaleDaemonLock({ observe })).toBe(false);
+      expect(observe).not.toHaveBeenCalled();
+    });
+
+    it('never throws into server startup', () => {
+      fs.unlinkSync.mockImplementation(() => { throw Object.assign(new Error('denied'), { code: 'EACCES' }); });
+      expect(clearStaleDaemonLock({ observe: () => ({ status: 'stopped' }) })).toBe(false);
+    });
+  });
+
   describe('ensureDaemonRunning', () => {
     it('returns the existing pid when daemon is already running', async () => {
       fs.existsSync.mockReturnValue(true);
