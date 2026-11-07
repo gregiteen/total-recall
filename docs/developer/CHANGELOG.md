@@ -1,3 +1,14 @@
+## 3.43.1 — 2026-11-06
+
+- Fix `release verify` testing the wrong thing. It compared each consumer's install against the
+  version pin in `package.json` instead of the version being released, so it failed plugin copies
+  that run the right version and passed a consumer whose pin and install both lagged. It now asks
+  what each consumer runs. A lagging pin is reported and does not fail.
+- Fix `update` and `ssss repair` failing on a symlinked SSSS skill from an older layout. A link to a
+  complete, current skill stays. A dangling or stale link is replaced by a real folder, nothing is
+  written through it, and the result reports what it replaced. A project's link to the shared skill
+  stays a link.
+
 ## 3.43.0 — 2026-11-05
 
 - Add a preflight gate for every harness. Total Recall ships the hooks and Meta Harness ships an
