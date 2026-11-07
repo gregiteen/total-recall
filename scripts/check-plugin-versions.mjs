@@ -23,7 +23,11 @@ const version = (dir) => JSON.parse(fs.readFileSync(path.join(dir, 'plugin.json'
 
 let failed = true;
 try {
-  const npm = (...args) => execFileSync('npm', args, { cwd: work, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).trim();
+  // `npm publish --dry-run` passes the flag on to its scripts, and a dry-run pack writes no file.
+  const env = { ...process.env };
+  delete env.npm_config_dry_run;
+  delete env.NPM_CONFIG_DRY_RUN;
+  const npm = (...args) => execFileSync('npm', args, { cwd: work, env, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).trim();
   const published = npm('view', packageName, 'version');
   const tarball = npm('pack', `${packageName}@${published}`, '--silent').split('\n').pop();
   execFileSync('tar', ['-xzf', tarball], { cwd: work });

@@ -8,6 +8,8 @@
   complete, current skill stays. A dangling or stale link is replaced by a real folder, nothing is
   written through it, and the result reports what it replaced. A project's link to the shared skill
   stays a link.
+- Fix `check:plugin-versions` failing under `npm publish --dry-run`, which passes the flag on to
+  the check's own `npm pack`, so no tarball was written.
 
 ## 3.43.0 — 2026-11-05
 
