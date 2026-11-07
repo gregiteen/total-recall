@@ -9,7 +9,29 @@ import {
   detectLaunchAgentPort,
   installAutoPull,
   mergeCrontab,
+  systemdServesCheckout,
 } from './autopull-install.mjs';
+
+describe('a checkout systemd serves', () => {
+  const shown = (stdout, status = 0) => () => ({ status, stdout });
+  const served = 'LoadState=loaded\nExecStart={ path=/usr/local/bin/node ; argv[]=/usr/local/bin/node /root/total-recall/src/server/index.mjs ; }\n';
+  it('is recognized from the unit', () => {
+    expect(systemdServesCheckout('/root/total-recall', { exec: shown(served) })).toBe(true);
+    expect(systemdServesCheckout('/srv/other', { exec: shown(served) })).toBe(false);
+    expect(systemdServesCheckout('/root/total-recall', { exec: shown('LoadState=not-found\nExecStart=\n') })).toBe(false);
+    expect(systemdServesCheckout('/root/total-recall', { exec: () => ({ status: null, stdout: '' }) })).toBe(false);
+  });
+  it('refuses the timer, because a restart there would stop the serving process', () => {
+    const repo = fs.mkdtempSync(path.join(os.tmpdir(), 'tr-autopull-systemd-'));
+    try {
+      fs.mkdirSync(path.join(repo, '.git'));
+      fs.mkdirSync(path.join(repo, 'scripts'));
+      fs.writeFileSync(path.join(repo, 'scripts', 'auto-pull.sh'), '');
+      const exec = shown(`LoadState=loaded\nExecStart={ argv[]=node ${repo}/src/server/index.mjs ; }\n`);
+      expect(() => installAutoPull({ repoDir: repo, platform: 'linux', dryRun: true, exec })).toThrow(/deploy release/);
+    } finally { fs.rmSync(repo, { recursive: true, force: true }); }
+  });
+});
 
 describe('buildLaunchAgentPlist', () => {
   it('runs the checkout script on an interval with its environment', () => {

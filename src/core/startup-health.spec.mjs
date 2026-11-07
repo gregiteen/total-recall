@@ -67,6 +67,13 @@ describe('startup health truth and boundaries', () => {
     const report = await startupHealth({ listener: async () => true, brainDir: '/missing', brainUrl: 'http://localhost:3000', identity: () => ({ status: 'running' }), run: async (...args) => { calls++; return run(...args); }, fetchImpl: async url => url.pathname === '/health' ? new Response(JSON.stringify(health)) : new Response('', { status: 403 }) });
     expect(report.server.status).toBe('ready'); expect(report.brain.reason).toBe('instructions-http-403'); expect(report.ready).toBe(false); expect(calls).toBe(1); expect(report.actions).toEqual([]);
   });
+  it('says when the process serving is older than the code beside it', async () => {
+    const report = await startupHealth({ listener: async () => true, brainDir: '/missing', brainUrl: 'http://localhost:3000', identity: () => ({ status: 'running' }), fetchImpl: fetchGood, run, onDiskVersion: () => '99.0.0' });
+    expect(report.server.status).toBe('ready');
+    expect(report.server.stale.on_disk).toBe('99.0.0');
+    const same = await startupHealth({ listener: async () => true, brainDir: '/missing', brainUrl: 'http://localhost:3000', identity: () => ({ status: 'running' }), fetchImpl: fetchGood, run, onDiskVersion: () => null });
+    expect(same.server.stale).toBeUndefined();
+  });
   it('cannot green recycled PID or unavailable tooling', async () => {
     const report = await startupHealth({ listener: async () => true, brainDir: '/missing', brainUrl: 'http://localhost:3000', identity: () => ({ status: 'conflict' }), run: async () => ({ code: null, reason: 'spawn-failed', output: '' }), fetchImpl: fetchGood, ensure: true });
     expect(report.server.status).toBe('conflict'); expect(report.ready).toBe(false); expect(report.actions).toEqual([]);

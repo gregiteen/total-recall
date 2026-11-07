@@ -35,6 +35,7 @@ import { createCoverageCache } from './health-coverage.mjs';
 import { drainActiveEmbeddings } from './routes/sessions.mjs';
 import { agentDir as configAgentDir, brainDir as configBrainDir, port as configPort, host as configHost, nodeEnv, instructionsFilePath } from '../core/config.mjs';
 import { getDaemonStatus, ensureDaemonRunning } from '../core/daemon-control.mjs';
+import { deploymentHealth } from '../core/running-server.mjs';
 
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -44,6 +45,13 @@ const PACKAGE_VERSION = (() => {
     return JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8')).version || 'unknown';
   } catch {
     return 'unknown';
+  }
+})();
+const PACKAGE_NAME = (() => {
+  try {
+    return JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8')).name || 'total-recall-brain';
+  } catch {
+    return 'total-recall-brain';
   }
 })();
 
@@ -228,6 +236,12 @@ const embeddingCoverageSnapshot = () => coverageCache.snapshot();
 
 // Warm it at boot so the first probe already has a real answer.
 embeddingCoverageSnapshot();
+
+// Identity only, for a deploy telling one instance from another. /health forks and reads
+// the disk, so it can take seconds under load; this does neither.
+app.get('/health/deployment', requireAuthOrLocal, (_req, res) => {
+  res.json(deploymentHealth({ name: PACKAGE_NAME, version: PACKAGE_VERSION, port: PORT }));
+});
 
 app.get('/health', requireAuthOrLocal, async (req, res) => {
   let disk = { free: 0, total: 0 };

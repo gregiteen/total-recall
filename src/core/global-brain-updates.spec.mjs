@@ -41,6 +41,20 @@ describe('updateGlobalBrainPackages', () => {
     } finally { fs.rmSync(base, { recursive: true, force: true }); }
   });
 
+  it('reports a linked checkout a live server runs from as serving, not failed', () => {
+    const { base, root, checkout } = fakeGlobalRoot();
+    try {
+      fs.symlinkSync(checkout, path.join(root, 'total-recall'));
+      const result = updateGlobalBrainPackages({
+        versions: { 'total-recall-brain': '3.41.2', '@gregiteen/ssss-cli': '0.11.2' },
+        exec: execFor(root, []),
+        sourceUpdate: () => ({ ok: false, serving: true, error: 'A live server runs from this checkout.' }),
+      });
+      expect(result.results.find((row) => row.package === 'total-recall-brain')).toMatchObject({ status: 'serving', source: true });
+      expect(result.results.find((row) => row.package === 'total-recall-brain').error).toBeUndefined();
+    } finally { fs.rmSync(base, { recursive: true, force: true }); }
+  });
+
   it('still installs from the registry when no install or source link exists', () => {
     const { base, root } = fakeGlobalRoot();
     try {

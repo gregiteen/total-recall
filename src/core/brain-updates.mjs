@@ -196,7 +196,7 @@ const absentDevDep = (dep) => dep.section === 'devDependencies' && !dep.file;
  * The daemon runs with NODE_ENV=production, and under that npm and pnpm remove dev dependencies
  * from whatever they install in. An install that wants a runtime tree says so with a flag.
  */
-function installEnv(env = process.env) {
+export function installEnv(env = process.env) {
   const { NODE_ENV, npm_config_omit, NPM_CONFIG_OMIT, npm_config_production, NPM_CONFIG_PRODUCTION, ...kept } = env;
   return kept;
 }

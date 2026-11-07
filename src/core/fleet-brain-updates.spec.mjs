@@ -21,6 +21,14 @@ describe('automatic global and mesh package updates',()=>{
    expect(exec.mock.calls[1][1]).not.toContain('total-recall-brain@3.40.2');
   }finally{fs.rmSync(root,{recursive:true,force:true});}
  });
+ it('does not verify a peer whose server still runs an old release, and does not dispatch again',async()=>{
+  const versions={'total-recall-brain':'3.43.2','@gregiteen/ssss-cli':'0.14.4'};
+  const nodes=[{ip:'peer',online:true,access:{ssh_user:'alice'}}];
+  const exec=vi.fn(async()=>({success:true,stdout:JSON.stringify({last:{failed:0,checkedAt:1000,versions},server:{status:'stale',running:'3.41.2',latest:'3.43.2',reason:'old process'}})}));
+  const report=await updateMeshBrainPackages({version:versions['total-recall-brain'],versions,listNodes:()=>nodes,exec,now:()=>2000});
+  expect(report.results[0]).toMatchObject({node:'peer',status:'failed',error:'old process',server:{running:'3.41.2'}});
+  expect(exec).toHaveBeenCalledTimes(1);
+ });
  it('reports unreachable and unconfigured peers and checks both package versions',async()=>{
   const nodes=[{self:true,ip:'self'},{ip:'phone',online:true},{hostname:'no-address',online:true,access:{ssh_user:'alice'}},{ip:'offline',online:false,access:{ssh_user:'alice'}},{ip:'old',online:true,access:{ssh_user:'alice'}},{ip:'current',online:true,access:{ssh_user:'alice'}}];
   const exec=vi.fn(async(node,command)=>{

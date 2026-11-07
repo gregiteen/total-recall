@@ -41,8 +41,8 @@ export function updateGlobalBrainPackages({versions,exec=spawnSync,sourceUpdate=
     if(installed && comparePackageVersions(installed,versions[name])===1){row.status='failed';row.error='Newer local/preview global package; refusing implicit downgrade';continue;}
     if(fs.existsSync(path.join(directory,'.git'))){
       const result=sourceUpdate({directory:fs.realpathSync(directory),name,version:versions[name],exec});
-      row.status=result.ok?'updated':'failed';row.source=true;
-      if(result.ok){row.installed=result.installed;row.commit=result.commit;}else row.error=`Source checkout update failed: ${result.error}`;
+      row.status=result.ok?'updated':result.serving?'serving':'failed';row.source=true;
+      if(result.ok){row.installed=result.installed;row.commit=result.commit;}else if(result.serving)row.note=result.error;else row.error=`Source checkout update failed: ${result.error}`;
       continue;
     }
     row.status='pending';install.push(`${name}@${versions[name]}`);

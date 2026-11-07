@@ -11,6 +11,7 @@ import {
   alreadyPublishedRefusal,
   consumerState,
   verifyConsumers,
+  verifyRunningServer,
 } from './release.mjs';
 
 function tmp() {
@@ -249,6 +250,27 @@ describe('consumerState', () => {
   it('marks a repo that does not declare the package as not-declared', () => {
     const root = fakeRepo({ deps: {} });
     expect(consumerState(root, '@gregiteen/ssss-cli').reason).toBe('not-declared');
+  });
+});
+
+describe('verifyRunningServer', () => {
+  const answering = (row) => async () => row;
+  it('fails a server older than the release, which installs alone cannot show', async () => {
+    const result = await verifyRunningServer('total-recall-brain', '3.43.2', { check: answering({ status: 'stale', running: '3.43.0', latest: '3.43.2', reason: 'old' }) });
+    expect(result).toMatchObject({ checked: true, ok: false });
+  });
+  it('fails a server that should be running and is not', async () => {
+    expect((await verifyRunningServer('total-recall-brain', '3.43.2', { check: answering({ status: 'down', reason: 'x' }) })).ok).toBe(false);
+  });
+  it('accepts a current server, a newer build, a host with none and an unreadable one', async () => {
+    for (const status of ['current', 'ahead', 'none', 'unknown']) {
+      expect((await verifyRunningServer('total-recall-brain', '3.43.2', { check: answering({ status }) })).ok).toBe(true);
+    }
+  });
+  it('asks nothing for another package or an explicit root', async () => {
+    const check = () => { throw new Error('unexpected'); };
+    expect(await verifyRunningServer('@gregiteen/ssss-cli', '1.0.0', { check })).toEqual({ checked: false, ok: true });
+    expect(await verifyRunningServer('total-recall-brain', '1.0.0', { check, explicitRoot: true })).toEqual({ checked: false, ok: true });
   });
 });
 

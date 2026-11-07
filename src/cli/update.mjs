@@ -20,6 +20,7 @@ import { installAutoPull } from '../core/autopull-install.mjs';
 import { updateAllBrains } from '../core/brain-updates.mjs';
 import { installHarnessHooks } from '../core/harness-hooks.mjs';
 import { automaticUpdateStatus, runAutomaticBrainUpdates } from '../core/automatic-brain-updates.mjs';
+import { runningServerStatus } from '../core/running-server.mjs';
 
 /** @param {string[]} args */
 export function parseArgs(args) {
@@ -81,12 +82,14 @@ function printHelp() {
         installed plugin from its recorded source and refresh surfaces.
     total-recall update --status [--json]
         Read the actual last automatic maintenance report without starting work.
+        Also reports what the server on this host runs against the release.
 
   This brain's own checkout (git):
     total-recall update --install-autopull [--port N] [--no-build] [--dry-run]
         Every 5 minutes fast-forward this checkout to origin/main, install and
         rebuild what changed, restart the brain and verify /health reports the
-        new version (scripts/auto-pull.sh). macOS: LaunchAgent
+        new version (scripts/auto-pull.sh). Refused where systemd serves the
+        checkout, because a restart there has a gap: use total-recall deploy. macOS: LaunchAgent
         com.totalrecall.autopull; Linux: crontab. A dev checkout (other branch,
         uncommitted or unpushed work) is never touched. --no-build: never build
         the dashboard on this host (laptops).
@@ -106,7 +109,12 @@ export default async function update(args = []) {
     return;
   }
 
-  if(opts.status){const status=automaticUpdateStatus(brainDir);console.log(JSON.stringify(status,null,2));return status;}
+  if(opts.status){
+    const status=automaticUpdateStatus(brainDir);
+    status.server=await runningServerStatus({brainDir,latest:status.last?.versions?.['total-recall-brain']});
+    console.log(JSON.stringify(status,null,2));
+    return status;
+  }
   if(opts.automatic){
     const report=await runAutomaticBrainUpdates({brainDir,force:opts.force,fleet:!opts.localOnly});
     console.log(JSON.stringify(report,null,2));

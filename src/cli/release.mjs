@@ -73,7 +73,8 @@ function printHelp() {
     plan        Resolve the release version and report gate/consumer readiness. No writes.
     publish     Run the package's prepublish gate, then npm publish. Requires --apply.
     propagate   Pin the published version across every registered consumer (update --all-brains).
-    verify      Independently confirm the registry artifact and each consumer's resolved install.
+    verify      Independently confirm the registry artifact, each consumer's resolved install,
+                and that the server on this host runs the release.
     all         plan → publish → propagate → verify, stopping at the first failure.
 
   Rules enforced here:
@@ -295,6 +296,20 @@ export function verifyConsumers(pkg, version, opts = {}) {
   };
 }
 
+/**
+ * What the server on this host runs. Files moving does not replace a running process, so a
+ * release is not verified here until the process is on it. Packages other than the brain and
+ * explicit --root runs have no server to ask about.
+ */
+export async function verifyRunningServer(pkg, version, { check, explicitRoot = false } = {}) {
+  if (pkg !== 'total-recall-brain' || explicitRoot) return { checked: false, ok: true };
+  const server = await (check || (async (args) => {
+    const [{ runningServerStatus }, { brainDir }] = await Promise.all([import('../core/running-server.mjs'), import('../core/config.mjs')]);
+    return runningServerStatus({ brainDir, ...args });
+  }))({ latest: version });
+  return { checked: true, ok: !['stale', 'down'].includes(server.status), server };
+}
+
 function runPrepublish(dir, pkgJson, { exec = spawnSync, timeoutMs } = {}) {
   if (!pkgJson?.scripts?.prepublishOnly) return { ok: true, skipped: true };
   const manager = fs.existsSync(path.join(dir, 'pnpm-lock.yaml')) ? 'pnpm' : 'npm';
@@ -374,6 +389,13 @@ export async function run(argv = process.argv, deps = {}) {
       if (consumers.failing > 0) {
         return fail(`${pkg}@${version}: ${consumers.failing}/${consumers.consumers} consumers not satisfied. First: ${consumers.failures[0].root} (${consumers.failures[0].installed ?? 'not installed'}).`);
       }
+      const running = await verifyRunningServer(pkg, version, { check: deps.runningServerStatus, explicitRoot: Boolean(opts.root) });
+      entry.running_server = running.server || null;
+      if (!running.ok) {
+        return fail(`${pkg}@${version}: ${running.server.reason} Replace it with: total-recall deploy release ${version} --adapter-secret <DEPLOY_MESH_REFERENCE>, or restart it on a host that is not production.`);
+      }
+      if (running.server?.status === 'current') log(`  ✓ the server on this host runs ${version}`);
+      else if (running.server?.status === 'unknown') log(`    The server on this host could not be read: ${running.server.reason}`);
       log(`  ✓ ${pkg}@${version} verified: registry + ${consumers.consumers}/${consumers.consumers} consumers`);
       if (consumers.pin_behind.length) log(`    ${consumers.pin_behind.length} run it with an older pin in package.json, such as ${consumers.pin_behind[0].root}`);
       if (consumers.dev_not_installed.length) log(`    ${consumers.dev_not_installed.length} keep no dev copy of it and run under the shared install`);

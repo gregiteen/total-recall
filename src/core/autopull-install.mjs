@@ -123,6 +123,16 @@ function readPlistValue(file, key) {
 }
 
 /**
+ * Whether systemd serves this checkout. auto-pull stops the brain and starts another with
+ * nohup, so on such a host it would cause an outage and leave a process outside the unit.
+ */
+export function systemdServesCheckout(repoDir, { exec = spawnSync } = {}) {
+  const shown = exec('systemctl', ['show', 'total-recall-server.service', '-p', 'LoadState', '-p', 'ExecStart'], { encoding: 'utf8', timeout: 5000 });
+  if (shown.status !== 0) return false;
+  return /^LoadState=loaded$/m.test(shown.stdout || '') && (shown.stdout || '').includes(`${repoDir}/`);
+}
+
+/**
  * Install (or refresh) the timer. Returns what it did; `dryRun` returns the
  * plan without writing.
  */
@@ -133,12 +143,16 @@ export function installAutoPull({
   platform = process.platform,
   home = os.homedir(),
   dryRun = false,
+  exec = spawnSync,
 } = {}) {
   const script = path.join(repoDir, 'scripts', 'auto-pull.sh');
   if (!fs.existsSync(path.join(repoDir, '.git'))) {
     throw new Error(`${repoDir} is not a git checkout; npm installs update through the daemon (total-recall update --apply).`);
   }
   if (!fs.existsSync(script)) throw new Error(`Missing ${script}`);
+  if (platform === 'linux' && systemdServesCheckout(repoDir, { exec })) {
+    throw new Error(`systemd serves ${repoDir}, and a restart there has a gap. Replace it with: total-recall deploy release <version> --adapter-secret <DEPLOY_MESH_REFERENCE>`);
+  }
 
   const resolvedPort =
     port || Number(process.env.TR_PORT) || (platform === 'darwin' ? detectLaunchAgentPort(repoDir, { home }) : null) || 3000;

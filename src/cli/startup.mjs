@@ -36,6 +36,7 @@ export default async function startup(args = []) {
   if (args.includes('--json')) console.log(JSON.stringify(report, null, 2));
   else {
     console.log(`Startup: required plugins ${report.required_plugins?.status || 'unknown'}; server ${report.server?.status || 'unknown'}; brain ${report.brain?.status || 'unknown'}; daemon ${report.daemon?.status || 'unknown'}; SSSS tooling ${report.ssss?.status || 'unknown'}; app ${report.app?.status || 'unknown'}`);
+    if (report.server?.stale) console.log(`Server: running ${report.server.stale.running} with ${report.server.stale.on_disk} on disk; it has not been replaced.`);
     for (const error of report.required_plugins?.errors || []) console.log(`Required plugin: ${error}`);
     const harnesses = await queryHarnessUsage().catch(() => []);
     const availH = harnesses.filter(h => h.available);

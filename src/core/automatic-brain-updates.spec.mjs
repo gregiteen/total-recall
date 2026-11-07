@@ -15,6 +15,16 @@ const temporary=[];
 afterEach(()=>{vi.useRealTimers();for(const root of temporary.splice(0))fs.rmSync(root,{recursive:true,force:true});});
 const brain=()=>{const dir=fs.mkdtempSync(path.join(os.tmpdir(),'tr-automatic-'));temporary.push(dir);return dir;};
 describe('daemon automatic package maintenance',()=>{
+  it('reports a server left on an old release without counting it a failure',async()=>{
+    const compile=vi.fn().mockResolvedValue({ok:true,results:[]});
+    const update=vi.fn().mockResolvedValue({versions:{'total-recall-brain':'3.43.2'},failed:0,results:[]});
+    const serverCheck=vi.fn().mockResolvedValue({status:'stale',running:'3.43.0',latest:'3.43.2',reason:'old process'});
+    const report=await runAutomaticBrainUpdates({brainDir:brain(),update,compile,serverCheck});
+    expect(serverCheck).toHaveBeenCalledWith(expect.objectContaining({latest:'3.43.2'}));
+    expect(report.server).toMatchObject({status:'stale',running:'3.43.0'});
+    expect(report.local_failed).toBe(0);
+    expect(report.failed).toBe(0);
+  });
   it('retries fast for its own failures, and at the normal interval for a peer with no way to update', async () => {
     const dir=fs.mkdtempSync(path.join(os.tmpdir(),'tr-automatic-retry-'));
     const brain=path.join(dir,'brain');

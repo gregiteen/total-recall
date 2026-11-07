@@ -96,6 +96,16 @@ export function healthVerdict(body) {
   return { status: 'ready', version: body.version };
 }
 
+/** A server older than the code beside it: healthy, and not what was installed. */
+export function serverCodeDrift(running, onDisk) {
+  if (!running || !onDisk || running === onDisk) return null;
+  return { running, on_disk: onDisk };
+}
+
+function packageVersionOnDisk() {
+  try { return JSON.parse(fs.readFileSync(path.join(packageRoot, 'package.json'), 'utf8')).version; } catch { return null; }
+}
+
 export function appVerdict(result) {
   if (result.reason || result.code !== 0) return { status: 'failed', reason: result.reason || 'check-exit-failed' };
   let body;
@@ -120,7 +130,7 @@ export async function fetchStartup(url, options = {}, fetchImpl = fetch) {
 }
 
 export async function startupHealth({ cwd = process.cwd(), brainDir, brainUrl = null, token = null, brainId = null, ensure = false,
-  appCheck = null, appStart = null, run = runBounded, fetchImpl = fetch, listener = verifyListener, platform = process.platform, home = os.homedir(), identity = processIdentity } = {}) {
+  appCheck = null, appStart = null, run = runBounded, fetchImpl = fetch, onDiskVersion = packageVersionOnDisk, listener = verifyListener, platform = process.platform, home = os.homedir(), identity = processIdentity } = {}) {
   const actions = [];
   const serverFile = path.join(brainDir, 'server.pid');
   const report = { checked_at: new Date().toISOString(), server: { status: 'not-configured' }, brain: { status: 'unknown' }, daemon: { status: 'unknown' },
@@ -141,7 +151,8 @@ export async function startupHealth({ cwd = process.cwd(), brainDir, brainUrl = 
         if (own.status !== 'running') return { status: own.status === 'conflict' ? 'conflict' : 'unknown', reason: 'server-process-unverified' };
         if (!await listener(own.pid, new URL(brainUrl), { run, cwd })) return { status: 'unknown', reason: 'server-listener-unverified' };
       }
-      return { ...verdict, source: local ? 'local-verified-listener' : 'remote-health' };
+      const drift = local && verdict.status === 'ready' ? serverCodeDrift(verdict.version, onDiskVersion()) : null;
+      return { ...verdict, ...(drift ? { stale: drift } : {}), source: local ? 'local-verified-listener' : 'remote-health' };
     } catch { return { status: 'offline', reason: 'health-unreachable' }; }
   };
   report.server = await probeServer();

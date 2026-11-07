@@ -7,7 +7,8 @@
     "total-recall": "bin/total-recall.mjs",
     "vibebrain": "bin/total-recall.mjs",
     "antigravity": "bin/antigravity.mjs",
-    "total-recall-memory": "bin/total-recall-memory.mjs"
+    "total-recall-memory": "bin/total-recall-memory.mjs",
+    "total-recall-server-release": "bin/total-recall-server-release.mjs"
   },
   "files": [
     "bin/",

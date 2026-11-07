@@ -670,6 +670,18 @@ agents:
 ### `secrets.enc` (AES Encrypted Credentials)
 - Secure, GPG symmetrically password-encrypted binary container enclosing environment tokens (`google_api_key`, `github_token`, `openai_api_key`) with owner-only `0o600` access modes. Plaintext keys are never written to disk.
 
+### What a server runs after an update
+
+Files moving does not replace a running process. `total-recall update --status` and each `update --automatic` report list what the server on this host runs against the release (`current`, `stale`, `ahead`, `down`, `none` or `unknown`). `total-recall release verify total-recall-brain` fails while it lags. Automatic maintenance never rewrites a checkout a live server runs from: it reports `serving` and leaves the files alone.
+
+Where systemd serves the brain, replace it with no gap through the deploy plugin:
+
+```bash
+total-recall deploy release <version> --adapter-secret <DEPLOY_MESH_REFERENCE>
+```
+
+The binding names the node and the runner, `total-recall-server-release`, which ships with the package. It needs Linux with systemd, iptables and connection tracking active, and the node's global install at that exact version. It starts the release on the next port, checks it, moves new connections with one kernel rule, replaces the unit behind the rule, then moves traffic home and removes the rule. A failure leaves traffic on a healthy server, and `deploy retire` tries again. `update --install-autopull` refuses such a host, because a restart there has a gap.
+
 ### `update --all-brains`
 
 Plan a uniform SSSS and Total Recall release across registered brains, installed plugin owners and nested package consumers.
