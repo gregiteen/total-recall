@@ -71,14 +71,15 @@
           "message": "Hardcoded ~/Github path. Use project-registry / TR_SYNC_REPOS / --repo / cwd."
         },
         {
-          "pattern": "(festech\\.live|ultrachat|portfolio-site|moogie_crm|documenso)",
+          "patternFile": "docs/projects/public-repo-forbidden-names.txt",
+          "flags": "i",
           "code": "TR-OSS-001",
-          "message": "Names a third-party product repo. TR is open-source: host apps are equal implementations, never special-cased."
+          "message": "Names a private product, person or machine. TR is open-source: host apps are equal implementations, never special-cased. Use a generic example (admin, build-box)."
         },
         {
-          "pattern": "(gregoryiteen|\\bmacmini\\b|\\b100\\.64\\.0\\.[2-9]\\b)",
+          "pattern": "\\b100\\.64\\.0\\.[2-9]\\b",
           "code": "TR-OSS-002",
-          "message": "Names a specific person's login, machine, or mesh address. Use a generic example (admin, build-box, 100.64.0.10) or resolve it with `mesh access <node>`."
+          "message": "Names a specific mesh address. Use a generic example (100.64.0.10) or resolve it with `mesh access <node>`."
         }
       ]
     },
@@ -126,14 +127,10 @@
           "message": "Shipped package contains a personal ~/Github path."
         },
         {
-          "pattern": "(festech\\.live|ultrachat|portfolio-site|moogie_crm|documenso)",
+          "patternFile": "docs/projects/public-repo-forbidden-names.txt",
+          "flags": "i",
           "code": "TR-SHIP-003",
-          "message": "Shipped package names a third-party product repo."
-        },
-        {
-          "pattern": "(gregoryiteen|\\bmacmini\\b)",
-          "code": "TR-SHIP-004",
-          "message": "Shipped package names a specific person's login or machine. Use a generic example (admin, build-box)."
+          "message": "Shipped package names a private product, person or machine. Use a generic example (admin, build-box)."
         }
       ]
     },

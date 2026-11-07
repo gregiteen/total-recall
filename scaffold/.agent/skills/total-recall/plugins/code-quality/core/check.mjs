@@ -104,8 +104,11 @@ function loadConfig() {
     if (c.kind === 'grep-forbid') {
       if (!Array.isArray(c.patterns) || c.patterns.length === 0) problems.push(`${where}: grep-forbid needs a non-empty "patterns" array`);
       else c.patterns.forEach((p, j) => {
-        if (!p.pattern) problems.push(`${where}.patterns[${j}]: missing "pattern"`);
-        else if (/^\(\?[a-z]+\)/.test(p.pattern)) {
+        if (!p.pattern === !p.patternFile) problems.push(`${where}.patterns[${j}]: needs exactly one of "pattern" and "patternFile"`);
+        else if (p.patternFile) {
+          try { new RegExp('x', p.flags || ''); }
+          catch (e) { problems.push(`${where}.patterns[${j}]: invalid flags — ${e.message}`); }
+        } else if (/^\(\?[a-z]+\)/.test(p.pattern)) {
           problems.push(`${where}.patterns[${j}]: JS RegExp has no inline (?i) flags — use "flags": "i" instead`);
         } else {
           try { new RegExp(p.pattern, p.flags || ''); }
@@ -503,11 +506,41 @@ function applyFallbackViolationBaseline(check, findings) {
   return retained;
 }
 
+/**
+ * Reads a pattern's terms from a file, for words the config must not contain because the config
+ * is published and the words are private. Each line is a literal term; a # line is a comment.
+ */
+function readPatternFile(file) {
+  let text;
+  try { text = readFileSync(path.resolve(REPO_ROOT, file), 'utf8'); }
+  catch (error) { if (error.code === 'ENOENT') return { absent: true }; throw error; }
+  const terms = text.split('\n').map((line) => line.trim()).filter((line) => line && !line.startsWith('#'));
+  return { terms };
+}
+
 function runGrepForbid(check) {
   let findings = [];
-  const patterns = (check.patterns || []).map((p) => ({
-    re: new RegExp(p.pattern, p.flags || ''), message: p.message, code: p.code || 'FORBIDDEN'
-  }));
+  const notes = [];
+  const patterns = [];
+  for (const p of check.patterns || []) {
+    const rule = { message: p.message, code: p.code || 'FORBIDDEN' };
+    if (!p.patternFile) { patterns.push({ ...rule, re: new RegExp(p.pattern, p.flags || '') }); continue; }
+    const { absent, terms } = readPatternFile(p.patternFile);
+    if (absent) {
+      // A public clone has no private list. Say the rule did not run; never call that a pass.
+      const note = `${check.id}: ${rule.code} did not run, ${p.patternFile} is not present.`;
+      notes.push(note);
+      console.error(`  [code-quality] ${note}`);
+    } else if (!terms.length) {
+      findings.push({
+        file: '.agent/skills/code-quality/config.json', line: 1, col: 1,
+        code: 'CQ-EMPTY-LIST', check: check.id, severity: 'error',
+        message: `grep-forbid check "${check.id}" reads no terms from ${p.patternFile}.`, snippet: p.patternFile
+      });
+    } else {
+      patterns.push({ ...rule, re: new RegExp(terms.map((term) => term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|'), p.flags || '') });
+    }
+  }
   const exts = new Set(check.extensions || config.sourceExtensions || ['.ts', '.tsx', '.js', '.jsx', '.mjs', '.cjs', '.py']);
   const ignore = (check.ignorePaths || []).map((p) => new RegExp(p));
   // Optional allowlist: when present, ONLY files matching one of these path
@@ -556,7 +589,7 @@ function runGrepForbid(check) {
   return Promise.resolve({
     id: check.id, ok: findings.length === 0, exitCode: findings.length ? 1 : 0,
     timedOut: false, durationMs: 0, findings, scanned,
-    raw: findings.map((f) => `${f.file}:${f.line}: ${f.code} ${f.message}`).join('\n')
+    raw: [...notes, ...findings.map((f) => `${f.file}:${f.line}: ${f.code} ${f.message}`)].join('\n')
   });
 }
 

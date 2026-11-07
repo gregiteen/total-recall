@@ -67,9 +67,10 @@
             "items": {
               "type": "object",
               "additionalProperties": false,
-              "required": ["pattern"],
+              "oneOf": [{ "required": ["pattern"] }, { "required": ["patternFile"] }],
               "properties": {
                 "pattern": { "type": "string", "minLength": 1 },
+                "patternFile": { "type": "string", "minLength": 1, "description": "Repo-relative file of literal terms, one a line, for words the published config must not contain. The rule reports that it did not run when the file is absent." },
                 "flags": { "type": "string", "pattern": "^[dgimsuvy]*$" },
                 "code": { "type": "string" },
                 "message": { "type": "string" }

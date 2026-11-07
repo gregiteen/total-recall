@@ -233,7 +233,7 @@ Found by running the applier against a real vault, not by any unit test.
 - `generateMemoryCleanupProposals` keyed on `predicate:object` and **ignored
   `subject`**, so every node sharing a *type marker* formed one "duplicate" set —
   15 distinct research projects under `tracked_research_project:knowledge_vault`,
-  98 under `documents:portfolio-site`, 156 under `remembers_fact:brain`. Now keyed
+  98 under `documents:example-site`, 156 under `remembers_fact:brain`. Now keyed
   on the full `subject:predicate:object` triple.
 - Added `MAX_AUTO_MERGE_SET = 5` and a Jaccard content-similarity floor: a matching
   triple says nodes are *about* the same thing, not that they *state* it. The gate

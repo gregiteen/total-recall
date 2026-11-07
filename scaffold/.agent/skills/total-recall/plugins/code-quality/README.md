@@ -5,7 +5,7 @@ One-shot, fail-closed code-quality gates for any repository. The plugin ships a 
 ## What it does
 
 - Runs each configured gate once, as a background job, and writes `reports/latest.json`. There is no daemon.
-- Gate kinds: a command (typecheck, lint, tests, conformance suites) with an output parser (`tsc`, `eslint-stylish`, `eslint-compact`, `biome`, `flake8`, `mypy`, `black`, `generic`), or `grep-forbid`, which turns a written repository invariant into a failing gate.
+- Gate kinds: a command (typecheck, lint, tests, conformance suites) with an output parser (`tsc`, `eslint-stylish`, `eslint-compact`, `biome`, `flake8`, `mypy`, `black`, `generic`), or `grep-forbid`, which turns a written repository invariant into a failing gate. A `grep-forbid` pattern can read its terms from a file with `patternFile`, for words a published config must not contain.
 - Tiers (`fast`, `full`, `remote`) keep heavy work off small machines. A bounded run lists the gates it skipped.
 - Locking is fail-closed and machine-wide, so only one check runs per host. `--steal-lock` recovers a dead or unverifiable lock and refuses to take one from a verified running check.
 - Reports record coverage, the git head and source freshness. A gate that scans zero files, or a tool that fails without parseable output, is never reported as clean.
@@ -44,7 +44,7 @@ The canonical gate list is a `skill_config` record in the repository's Total Rec
 
 ## Data and network access
 
-The core runs only the commands in the repository's own config, with the repository as working directory. It reads tracked source files for `grep-forbid` gates and writes only `reports/` and lock files. It makes no network requests. Commands you configure may.
+The core runs only the commands in the repository's own config, with the repository as working directory. It reads tracked source files and any `patternFile` for `grep-forbid` gates and writes only `reports/` and lock files. It makes no network requests. Commands you configure may.
 
 ## Development
 

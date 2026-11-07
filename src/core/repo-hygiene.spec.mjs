@@ -6,6 +6,16 @@ import { fileURLToPath } from 'node:url';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 
+// The names this repository must never contain are private, so a check here cannot spell them.
+// They live in the private projects repo. A public clone has no list, and the check shows as skipped.
+const NAMES_FILE = path.join(ROOT, 'docs/projects/public-repo-forbidden-names.txt');
+const forbiddenNames = existsSync(NAMES_FILE)
+  ? readFileSync(NAMES_FILE, 'utf8').split('\n').map((line) => line.trim()).filter((line) => line && !line.startsWith('#'))
+  : [];
+const named = forbiddenNames.length
+  ? new RegExp(forbiddenNames.map((name) => name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|'), 'i')
+  : null;
+
 function tracked() {
   try {
     return execFileSync('git', ['ls-files'], { cwd: ROOT, encoding: 'utf8' }).split('\n').filter(Boolean);
@@ -44,14 +54,11 @@ describe('open-source repo hygiene', () => {
     expect(files.filter((f) => !f.includes('/') && f.endsWith('.log'))).toEqual([]);
   });
 
-  it('names no private product or personal path in any tracked file', () => {
+  it.skipIf(!named)('names no private product or personal path in any tracked file', () => {
     const files = tracked();
     if (!files) return;
-    // The two files that define this check must name what they forbid.
-    const exempt = new Set(['src/core/repo-hygiene.spec.mjs', '.agent/skills/code-quality/config.json']);
-    const named = /festech|ultrachat|dabber|gro-crm|grocrm|moogie|\/Users\/greg/i;
     const leaks = files.filter((f) => {
-      if (exempt.has(f) || f.includes('/vendor/') || f.startsWith('frontend/dist/')) return false;
+      if (f.includes('/vendor/') || f.startsWith('frontend/dist/')) return false;
       if (!existsSync(path.join(ROOT, f))) return false;
       return named.test(readFileSync(path.join(ROOT, f), 'utf8'));
     });
@@ -93,7 +100,7 @@ describe('open-source repo hygiene', () => {
     // the generic personal filter to prevent false positives on third-party author
     // license notices and REST endpoint paths like /users/me/.
     const meshHost = /100\.64\.0\.\d+(?!\d|\/)/;
-    const personal = /festech|hedgehog|ultrachat|dabber|gmail\.com|\/Users\/[a-z]+\//i;
+    const personal = /gmail\.com|\/Users\/[a-z]+\//i;
     const leaks = scaffold.filter((f) => {
       if (f.includes('/vendor/')) return false;
       // A tracked file deleted in the working tree has no content to scan.

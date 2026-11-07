@@ -19,7 +19,7 @@ const node = (over = {}) => ({
 
 describe('TailnetEnroll', () => {
   beforeEach(() => {
-    vi.mocked(fetchNodes).mockResolvedValue([node(), node({ hostname: 'macmini', ip: '100.64.0.2', self: true })] as never);
+    vi.mocked(fetchNodes).mockResolvedValue([node(), node({ hostname: 'build-box', ip: '100.64.0.2', self: true })] as never);
     vi.mocked(fetchEnrollmentStatus).mockResolvedValue({ login_server: 'https://control.example.org' } as never);
     vi.mocked(mintPreAuthKey).mockResolvedValue({
       success: true,
@@ -72,7 +72,7 @@ describe('TailnetEnroll', () => {
   it('lists mesh nodes', async () => {
     render(<TailnetEnroll />);
     await waitFor(() => expect(screen.getByTestId('enroll-node-list')).toHaveTextContent('laptop'));
-    expect(screen.getByTestId('enroll-node-list')).toHaveTextContent('macmini');
+    expect(screen.getByTestId('enroll-node-list')).toHaveTextContent('build-box');
   });
 
   it('mints a key and shows a QR to scan', async () => {

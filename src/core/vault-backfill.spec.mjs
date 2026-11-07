@@ -50,11 +50,11 @@ afterEach(() => {
 describe('normalizeLegacyShapes', () => {
   it('carries the repo-sync source string into the object form without losing it', () => {
     const { data, repairs } = normalizeLegacyShapes({
-      source: 'repo-sync:portfolio-site:vault/tasks/plan.md',
+      source: 'repo-sync:example-site:vault/tasks/plan.md',
     });
     expect(data.source).toEqual({
       type: 'repo-sync',
-      session_id: 'portfolio-site:vault/tasks/plan.md',
+      session_id: 'example-site:vault/tasks/plan.md',
       agent: 'repo-sync',
       evidence_count: 1,
     });
@@ -132,7 +132,7 @@ describe('analyzeVault', () => {
 describe('backfillVault', () => {
   it('repairs shape corruption in place and keeps the node where it was', async () => {
     const file = seed('facts/broken.md', validMemory('broken', {
-      source: 'repo-sync:portfolio-site:vault/x.md',
+      source: 'repo-sync:example-site:vault/x.md',
       decay: 0,
     }));
 
@@ -142,7 +142,7 @@ describe('backfillVault', () => {
 
     const { data } = matter(fs.readFileSync(file, 'utf8'));
     expect(data.source.type).toBe('repo-sync');
-    expect(data.source.session_id).toBe('portfolio-site:vault/x.md');
+    expect(data.source.session_id).toBe('example-site:vault/x.md');
     expect(data.decay.access_count).toBe(0);
     expect(fs.existsSync(file)).toBe(true);
   });

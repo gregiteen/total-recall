@@ -148,7 +148,7 @@ describe('plugins router', () => {
     const reviewsDir = path.join(testCtx.vaultPath, 'reviews');
     fs.mkdirSync(reviewsDir, { recursive: true });
     fs.writeFileSync(
-      path.join(reviewsDir, 'review-phone-macmini-1.md'),
+      path.join(reviewsDir, 'review-phone-build-box-1.md'),
       [
         '---',
         'type: plugin_review',
@@ -157,7 +157,7 @@ describe('plugins router', () => {
         'timestamp: 2026-09-28T20:30:00Z',
         'plugin_id: phone',
         'rating: 5',
-        'reviewer_node: macmini',
+        'reviewer_node: build-box',
         'verified_conformance: true',
         'portability: structural',
         'tags: [plugin, review, phone, telecom]',
@@ -166,7 +166,7 @@ describe('plugins router', () => {
       ].join('\n'),
     );
     fs.writeFileSync(
-      path.join(reviewsDir, 'review-phone-macmini-2.md'),
+      path.join(reviewsDir, 'review-phone-build-box-2.md'),
       [
         '---',
         'type: plugin_review',
@@ -185,7 +185,7 @@ describe('plugins router', () => {
     );
     // A review for a different plugin
     fs.writeFileSync(
-      path.join(reviewsDir, 'review-signing-macmini-1.md'),
+      path.join(reviewsDir, 'review-signing-build-box-1.md'),
       [
         '---',
         'type: plugin_review',
@@ -194,12 +194,12 @@ describe('plugins router', () => {
         'timestamp: 2026-09-28T22:00:00Z',
         'plugin_id: signing',
         'rating: 4',
-        'reviewer_node: macmini',
+        'reviewer_node: build-box',
         'verified_conformance: true',
         'portability: structural',
         'tags: [plugin, review, signing]',
         '---',
-        'Documenso integration works well with standard signature workflows.',
+        'The integration works well with standard signature workflows.',
       ].join('\n'),
     );
     app = express();
