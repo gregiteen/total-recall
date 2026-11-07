@@ -98,7 +98,7 @@ async function cachedMeteredQuota(options) {
 async function readMeteredQuota(options) {
   let meteredQuota = { billingModel: 'metered', creditRemainingUSD: null, usageUSD: null, usageDailyUSD: null, usageWeeklyUSD: null, usagePercent: null, quotaNote: 'No OpenRouter key in the auth store', status: 'unconfigured' };
   try {
-    const key = options.openRouterKey !== undefined ? options.openRouterKey : (runHostCli(['auth', 'secret', 'get', 'DEVELOPER_OPENROUTER_API_KEY']) || runHostCli(['auth', 'secret', 'get', 'OPENROUTER_API_KEY']));
+    const key = options.openRouterKey !== undefined ? options.openRouterKey : runHostCli(['auth', 'secret', 'get', 'OPENROUTER_API_KEY']);
     if (key) {
       const response = await (options.fetchImpl || fetch)('https://openrouter.ai/api/v1/auth/key', { headers: { Authorization: `Bearer ${key}` }, signal: AbortSignal.timeout(6000) });
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
@@ -164,7 +164,9 @@ export async function inspectQuotas(options = {}) {
   }
 
   // Harness state comes from the selected machine. Quota walls are this machine's receipts.
-  const inspected = remote ? await (options.inspectNodeFn || inspectNode)(options.node) : await (options.inspect || inspectAgents)({ env: process.env });
+  const claudePlan = policy.enabled ? policy.claudePlan?.organization : undefined;
+  const inspected = remote ? await (options.inspectNodeFn || inspectNode)(options.node) :
+    await (options.inspect || inspectAgents)({ env: process.env, cwd: options.cwd, claudePlan });
   const codexLimits = remote ? null : readCodexRateLimits();
   const receipts = remote ? [] : (await readReceipts()).filter(run => !policy.enabled || run.billingMode === 'included');
   const walls = remote ? {} : { ...activeQuotaWalls(receipts), ...(!policy.enabled ? measuredWalls(codexLimits) : {}) };
@@ -172,11 +174,13 @@ export async function inspectQuotas(options = {}) {
 
   const blocks = activeCredentialBlocks(receipts);
   for (const installed of inspected.agents || []) {
-    const agent = policy.enabled && !remote && installed.id === 'claude' ? { ...installed, authenticated: claudeProofCurrent(policy) } : installed;
+    const agent = policy.enabled && !remote && installed.id === 'claude' && !claudePlan ?
+      { ...installed, authenticated: claudeProofCurrent(policy) } : installed;
     const wall = walls[agent.id];
     const block = blocks[agent.id];
     const policyBlocked = policy.enabled && !INCLUDED_AGENTS.includes(agent.id);
-    const reason = policyBlocked ? 'outside the included usage route' : exclusionReason(agent, wall, block);
+    const explicitOpenRouter = !remote && Boolean(policy.openRouter?.[agent.id]);
+    const reason = policyBlocked ? (explicitOpenRouter ? 'available through explicit OpenRouter dispatch' : 'outside the included usage route') : exclusionReason(agent, wall, block);
     let status = 'ready';
     if (!agent.installed) status = 'not_installed';
     else if (policyBlocked) status = 'blocked';
@@ -186,9 +190,11 @@ export async function inspectQuotas(options = {}) {
     else if (agent.authenticated === 'unknown') status = 'unverified';
     const quota = {
       installed: Boolean(agent.installed), version: agent.version || null,
-      billingModel: policy.enabled && agent.id === 'claude' ? 'included-api-credits' : agent.id === 'ollama' ? 'local' : metered.has(agent.id) ? 'metered' : 'subscription',
+      billingModel: policy.enabled && !remote && !claudePlan && agent.id === 'claude' ? 'included-api-credits' :
+        agent.id === 'ollama' ? 'local' : metered.has(agent.id) ? 'metered' : 'subscription',
       rolling5hUsedPercent: null, weeklyUsedPercent: null, usagePercent: null,
       quotaSource: 'none', quotaNote: reason || 'No usage figure is available from this harness', status,
+      ...(explicitOpenRouter ? { explicitOpenRouter: true } : {}),
       ...(wall ? { resetsAt: wall.until, wallMessage: wall.message } : {}),
     };
     if (agent.id === 'codex' && codexLimits) {

@@ -25,6 +25,7 @@ export default {
   files: {
     'plugin.json': JSON.stringify({
       id: 'reassuring', name: 'Reassuring', version: '1.0.0', description: 'A plugin that reassures without checking.',
+      reuse: { commands: [], owned: 'Displays the status returned by its own command.' },
       cli: { command: 'reassuring', handler: './cli.mjs', subcommands: [{ name: 'audit', effect: 'read' }] },
       status: { command: 'audit', refresh_seconds: 30 },
       branding: { color: '#b45309' },

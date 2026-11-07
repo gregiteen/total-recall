@@ -73,6 +73,34 @@ describe('uniform brain updates', () => {
     expect(result.results[0].packages[0].installed).toBe('0.11.0');
   });
 
+  it('moves an @ssss/cli override together with the dependency it shadows', async () => {
+    // Plugins declare the engine twice: as a dependency and as an override for the alias that
+    // total-recall-brain uses. Moving only the dependency left each plugin asking for two versions.
+    const root = manifest(path.join(tmp, 'plugin'), {
+      dependencies: { '@gregiteen/ssss-cli': '0.10.1' },
+      overrides: { '@ssss/cli': 'npm:@gregiteen/ssss-cli@0.10.1', unrelated: '1.0.0' },
+    });
+    installed(root, '@gregiteen/ssss-cli', '0.10.1');
+    const exec = execWithInstall(() => { installed(root, '@gregiteen/ssss-cli', '0.11.0'); return { status: 0 }; });
+    const result = await run([root], exec, { dryRun: false });
+    expect(result.updated).toBe(1);
+    expect(JSON.parse(fs.readFileSync(path.join(root, 'package.json')))).toEqual({
+      dependencies: { '@gregiteen/ssss-cli': '0.11.0' },
+      overrides: { '@ssss/cli': 'npm:@gregiteen/ssss-cli@0.11.0', unrelated: '1.0.0' },
+    });
+  });
+
+  it('updates a consumer whose only lagging pin is the override', async () => {
+    const root = manifest(path.join(tmp, 'plugin'), {
+      dependencies: { '@gregiteen/ssss-cli': '0.11.0' },
+      overrides: { '@ssss/cli': 'npm:@gregiteen/ssss-cli@0.10.1' },
+    });
+    installed(root, '@gregiteen/ssss-cli', '0.11.0');
+    const result = await run([root], execWithInstall(), { dryRun: false });
+    expect(result.updated).toBe(1);
+    expect(JSON.parse(fs.readFileSync(path.join(root, 'package.json'))).overrides['@ssss/cli']).toBe('npm:@gregiteen/ssss-cli@0.11.0');
+  });
+
   describe('dev dependencies under automatic maintenance', () => {
     const installArgs = (exec) => exec.mock.calls.filter(([, args]) => args[0] === 'install');
 

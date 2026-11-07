@@ -27,13 +27,14 @@ export function exclusionReason(agent, wall, credentialBlock, { allowUnknownAuth
 export async function resolvePool({ availableHarnesses, inspect = inspectAgents, receipts = readReceipts, allowUnknownAuth = false, policy } = {}) {
   policy ??= await readIncludedPolicy();
   if (!policy.enabled && Array.isArray(availableHarnesses) && availableHarnesses.length) return { ready: availableHarnesses.map(id => describe(id)), excluded: [], walls: {} };
-  const [{ agents = [] }, entries] = await Promise.all([inspect({ env: process.env }), receipts()]);
+  const claudePlan = policy.enabled ? policy.claudePlan?.organization : undefined;
+  const [{ agents = [] }, entries] = await Promise.all([inspect({ env: process.env, claudePlan }), receipts()]);
   const billingEntries = policy.enabled ? entries.filter(run => run.billingMode === 'included') : entries;
   const walls = { ...activeQuotaWalls(billingEntries), ...(!policy.enabled ? measuredWalls() : {}) };
   const blocks = activeCredentialBlocks(billingEntries);
   const ready = [], excluded = [];
   for (const installed of agents) {
-    const agent = policy.enabled && installed.id === 'claude' ? { ...installed, authenticated: claudeProofCurrent(policy) } : installed;
+    const agent = policy.enabled && installed.id === 'claude' && !claudePlan ? { ...installed, authenticated: claudeProofCurrent(policy) } : installed;
     const policyBlocked = policy.enabled && (!INCLUDED_AGENTS.includes(agent.id) || (Array.isArray(availableHarnesses) && !availableHarnesses.includes(agent.id)));
     const reason = policyBlocked ? 'outside the included usage route' : exclusionReason(agent, walls[agent.id], blocks[agent.id], { allowUnknownAuth: !policy.enabled && allowUnknownAuth });
     if (!reason) ready.push(describe(agent.id, { authVerified: agent.authenticated === true }));

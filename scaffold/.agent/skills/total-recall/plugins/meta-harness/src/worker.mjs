@@ -4,13 +4,55 @@ import os from 'node:os';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
 import { createInterface } from 'node:readline';
+import { randomUUID } from 'node:crypto';
 
 /** These adapters can be told not to write. Any other runs read-only work only inside a disposable checkout. */
 export const READ_ONLY_ADAPTERS = ['codex', 'claude', 'agy', 'muse', 'pi'];
 // Internal only. Public and remote dispatch requests cannot carry this symbol.
 export const INCLUDED_BILLING = Symbol('included-billing');
+export const OPENROUTER_AGENTS = ['dsh', 'pi', 'hermes', 'openclaw'];
 export const CODEX_PLAN_ARGS = ['-c', 'forced_login_method="chatgpt"', '-c', 'model_provider="openai"'];
 const claudeIncludedEnv = key => ({ ANTHROPIC_API_KEY: key, ANTHROPIC_BASE_URL: 'https://api.anthropic.com' });
+const CLAUDE_PLAN_ARGS = ['--settings', JSON.stringify({
+  apiKeyHelper: '',
+  fastMode: false,
+  env: {
+    ANTHROPIC_BASE_URL: 'https://api.anthropic.com',
+    ANTHROPIC_API_KEY: '',
+    ANTHROPIC_AUTH_TOKEN: '',
+    ANTHROPIC_CUSTOM_HEADERS: '',
+    ANTHROPIC_PROFILE: '',
+    CLAUDE_CODE_OAUTH_TOKEN: '',
+    CLAUDE_CODE_USE_BEDROCK: '0',
+    CLAUDE_CODE_USE_VERTEX: '0',
+    CLAUDE_CODE_USE_FOUNDRY: '0',
+  },
+})];
+
+function claudeSettingArgs(sources) {
+  if (sources === undefined) return [];
+  if (typeof sources !== 'string' || sources.split(',').some(source => !['', 'user', 'project', 'local'].includes(source))) {
+    throw new Error('Invalid setting sources');
+  }
+  return ['--setting-sources', sources];
+}
+
+function claudeMaxOrganization(auth) {
+  return auth?.loggedIn === true && auth.apiProvider === 'firstParty' && auth.authMethod === 'claude.ai' &&
+    !auth.apiKeySource && auth.subscriptionType === 'max' && /^[\w-]{1,100}$/.test(auth.orgId || '') ? auth.orgId : null;
+}
+
+async function readClaudeAuth(binary, { cwd, probe, env, args = [] }) {
+  const auth = await probe(binary, [...args, 'auth', 'status', '--json'], { cwd, env, timeoutMs: 15000 });
+  if (auth.exitCode !== 0 || auth.reason) return null;
+  try { return JSON.parse(auth.stdout); } catch { return null; }
+}
+
+export async function readClaudeMaxOrganization(cwd, { probe = runProcess, env = process.env } = {}) {
+  const binary = findBinary('claude', env);
+  if (!binary) return null;
+  return claudeMaxOrganization(await readClaudeAuth(binary, { cwd, probe, env: agentEnvironment(env), args: CLAUDE_PLAN_ARGS }));
+}
 
 /** The harness or node could not start the work. This says nothing about the quality of the harness. */
 export function notReady(message) {
@@ -20,14 +62,14 @@ export function notReady(message) {
 }
 
 export const ADAPTERS = [
-  { id: 'claude', name: 'Claude Code', binary: 'claude', args: ['--output-format', 'json', '--permission-mode', 'acceptEdits', '-p'], input: 'stdin', auth: ['auth', 'status'], docs: 'https://code.claude.com/docs/en/headless' },
+  { id: 'claude', name: 'Claude Code', binary: 'claude', args: ['--output-format', 'stream-json', '--verbose', '--permission-mode', 'acceptEdits', '-p'], input: 'stdin', auth: ['auth', 'status'], docs: 'https://code.claude.com/docs/en/headless' },
   { id: 'codex', name: 'Codex', binary: 'codex', args: ['exec', '--sandbox', 'workspace-write', '--json', '-'], input: 'stdin', auth: ['login', 'status'], docs: 'https://developers.openai.com/codex/noninteractive' },
   { id: 'agy', name: 'Antigravity', binary: 'agy', args: ['--mode', 'accept-edits', '--sandbox', '--output-format', 'json', '-p'], input: 'argument', docs: 'https://antigravity.google/docs/cli/reference' },
   { id: 'cursor', name: 'Cursor', binary: 'cursor-agent', args: ['--print', '--output-format', 'json'], input: 'argument', auth: ['status'], docs: 'https://docs.cursor.com/en/cli/reference/parameters' },
-  { id: 'dsh', name: 'DSH', binary: 'dsh', args: ['--profile', 'headless', '--json', '-'], input: 'stdin', credentials: { OPENROUTER_API_KEY: ['DEVELOPER_OPENROUTER_API_KEY', 'OPENROUTER_API_KEY'] }, docs: 'https://github.com/deepseek-ai/deepseek-harness/blob/master/apps/cli/README.md' },
+  { id: 'dsh', name: 'DSH', binary: 'dsh', args: ['--profile', 'headless', '--json', '-'], input: 'stdin', credentials: { OPENROUTER_API_KEY: ['OPENROUTER_API_KEY'] }, docs: 'https://github.com/deepseek-ai/deepseek-harness/blob/master/apps/cli/README.md' },
   { id: 'grok', name: 'Grok', binary: 'grok', args: ['--output-format', 'json', '-p'], input: 'argument', docs: 'https://docs.x.ai/build/cli/headless-scripting' },
   { id: 'muse', name: 'Muse', binary: 'muse', args: ['exec', '--json'], input: 'file', docs: 'https://dev.meta.ai/docs/muse-code/' },
-  { id: 'pi', name: 'Pi', binary: 'pi', args: ['--print', '--mode', 'json', '--provider', 'openrouter', '--tools', 'read,bash', '--no-extensions'], input: 'stdin', credentials: { OPENROUTER_API_KEY: ['DEVELOPER_OPENROUTER_API_KEY', 'OPENROUTER_API_KEY'] }, docs: 'https://raw.githubusercontent.com/badlogic/pi-mono/main/packages/coding-agent/docs/cli.md' },
+  { id: 'pi', name: 'Pi', binary: 'pi', args: ['--print', '--mode', 'json', '--provider', 'openrouter', '--tools', 'read,bash', '--no-extensions'], input: 'stdin', credentials: { OPENROUTER_API_KEY: ['OPENROUTER_API_KEY'] }, docs: 'https://raw.githubusercontent.com/badlogic/pi-mono/main/packages/coding-agent/docs/cli.md' },
   { id: 'hermes', name: 'Hermes', binary: 'hermes', args: ['chat', '--oneshot', '--format', 'stream-json', '--query-file', '-'], input: 'stdin', docs: 'https://github.com/NousResearch/hermes-agent/blob/main/website/docs/reference/cli-commands.md' }
 ];
 
@@ -136,7 +178,92 @@ export function stopActiveProcesses(signal = 'SIGTERM') {
   return ACTIVE_GROUPS.size;
 }
 
-export function runProcess(binary, args, { cwd, input = '', timeoutMs = 300000, env = agentEnvironment(), maxBytes = 2 * 1024 * 1024, codexJsonl = false } = {}) {
+const TOOL_RESULT_LIMIT = 20;
+const TOOL_OUTPUT_LIMIT = 4096;
+
+function toolOutput(content) {
+  const text = Array.isArray(content) ? content.filter(part => part?.type === 'text').map(part => part.text).join('\n') : typeof content === 'string' ? content : '';
+  const safe = text
+    .replace(/-----BEGIN [A-Z ]*PRIVATE KEY-----[\s\S]*?(?:-----END [A-Z ]*PRIVATE KEY-----|$)/g, '[redacted private key]')
+    .replace(/\bBearer[ \t]+[\w.~+/=-]{8,}/gi, 'Bearer [redacted]')
+    .replace(/\b(?:sk-|gh[pousr]_|github_pat_|xox[baprs]-|AIza)[\w-]{12,}\b/g, '[redacted]')
+    .replace(/((?:api[_-]?key|password|secret|token)["']?\s*[:=]\s*)[^\r\n]+/gi, '$1[redacted]');
+  return safe.length > TOOL_OUTPUT_LIMIT ? safe.slice(0, TOOL_OUTPUT_LIMIT) + '\n[output truncated]' : safe;
+}
+
+function completedCodexTool(frame) {
+  const item = frame?.item;
+  if (frame?.type !== 'item.completed' || item?.type !== 'command_execution' ||
+      !Number.isInteger(item.exit_code) || !['completed', 'failed'].includes(item.status)) return null;
+  return { type: frame.type, item: { type: item.type, exit_code: item.exit_code, status: item.status,
+    aggregated_output: toolOutput(item.aggregated_output) } };
+}
+
+function claudeToolBlocks(frame) {
+  return (Array.isArray(frame?.message?.content) ? frame.message.content : []).flatMap(block => {
+    if (frame.type === 'assistant' && block?.type === 'tool_use' && typeof block.id === 'string' && typeof block.name === 'string') {
+      return [{ type: block.type, id: block.id, name: block.name.slice(0, 120) }];
+    }
+    if (frame.type === 'user' && block?.type === 'tool_result' && typeof block.tool_use_id === 'string') {
+      return [{ type: block.type, tool_use_id: block.tool_use_id, is_error: block.is_error === true, content: toolOutput(block.content) }];
+    }
+    return [];
+  });
+}
+
+function nativeToolResults(agent, frames) {
+  if (agent === 'codex') return frames.map(completedCodexTool).filter(Boolean).slice(0, TOOL_RESULT_LIMIT).map(({ item }) => ({
+    tool: 'shell', status: item.status === 'completed' && item.exit_code === 0 ? 'completed' : 'failed',
+    exitCode: item.exit_code, output: item.aggregated_output,
+  }));
+  const names = new Map();
+  const results = [];
+  for (const frame of frames) {
+    if (results.length >= TOOL_RESULT_LIMIT) break;
+    if (agent === 'claude') {
+      for (const block of claudeToolBlocks(frame)) {
+        if (block.type === 'tool_use') names.set(block.id, block.name);
+        else if (names.has(block.tool_use_id) && results.length < TOOL_RESULT_LIMIT) {
+          results.push({ tool: names.get(block.tool_use_id), status: block.is_error ? 'failed' : 'completed', output: block.content });
+          names.delete(block.tool_use_id);
+        }
+      }
+    } else if (agent === 'dsh') {
+      if (frame.type === 'tool_call' && typeof frame.callId === 'string' && typeof frame.tool === 'string') {
+        names.set(frame.callId, frame.tool);
+      } else if (frame.type === 'tool_result' && names.has(frame.callId) && ['completed', 'error'].includes(frame.status)) {
+        const denied = ['AUTO_REVIEW_DENIED', 'AUTO_REVIEW_FAILED'].includes(frame.error?.code);
+        results.push(toolResult(names.get(frame.callId), frame.result, frame.status === 'error', { denied }));
+        names.delete(frame.callId);
+      }
+    } else if (agent === 'pi' && frame.type === 'tool_execution_end' && typeof frame.toolName === 'string' && typeof frame.isError === 'boolean') {
+      results.push(toolResult(frame.toolName, frame.result?.content, frame.isError));
+    } else if (agent === 'hermes' && frame.type === 'tool_result' && typeof frame.name === 'string' && typeof frame.is_error === 'boolean') {
+      results.push(toolResult(frame.name, frame.output, frame.is_error));
+    }
+  }
+  return results;
+}
+
+function toolResult(name, content, failed, { exitCode, denied = false } = {}) {
+  return {
+    tool: name.slice(0, 120),
+    status: denied ? 'blocked' : failed || (Number.isInteger(exitCode) && exitCode !== 0) ? 'failed' : 'completed',
+    ...(Number.isInteger(exitCode) ? { exitCode } : {}),
+    output: toolOutput(content),
+  };
+}
+
+function toolEvidence(toolResults) {
+  return {
+    toolResults,
+    toolExecutionVerified: toolResults.some(result => result.status !== 'blocked'),
+    commandExecutionVerified: toolResults.some(result =>
+      ['shell', 'Bash', 'bash', 'exec', 'terminal'].includes(result.tool) && result.status === 'completed'),
+  };
+}
+
+export function runProcess(binary, args, { cwd, input = '', timeoutMs = 300000, env = agentEnvironment(), maxBytes = 2 * 1024 * 1024, codexJsonl = false, claudeJsonl = false } = {}) {
   return new Promise(resolve => {
     let stdout = '', stderr = '', bytes = 0, reason = null, child, timer, escalation, settled = false;
     const kill = signal => { try { if (process.platform !== 'win32') process.kill(-child.pid, signal); else child.kill(signal); } catch {} };
@@ -163,8 +290,8 @@ export function runProcess(binary, args, { cwd, input = '', timeoutMs = 300000, 
       if (output) stdout += part; else stderr += part;
       if (bytes > maxBytes) stop('output-limit');
     };
-    if (codexJsonl) {
-      let transportBytes = 0;
+    if (codexJsonl || claudeJsonl) {
+      let transportBytes = 0, toolFrames = 0;
       const lines = createInterface({ input: child.stdout, crlfDelay: Infinity });
       child.stdout.prependListener('data', chunk => {
         transportBytes += Buffer.byteLength(chunk);
@@ -177,8 +304,17 @@ export function runProcess(binary, args, { cwd, input = '', timeoutMs = 300000, 
         if (reason || !line.trim()) return;
         let frame;
         try { frame = JSON.parse(line); } catch { /* Keep malformed data so validation fails. */ }
-        if (typeof frame?.type === 'string' && frame.type.startsWith('item.') &&
-            frame.item?.type !== 'agent_message' && !frameError(frame)) return;
+        if (codexJsonl && typeof frame?.type === 'string' && frame.type.startsWith('item.') &&
+            frame.item?.type !== 'agent_message' && !frameError(frame)) {
+          const toolFrame = completedCodexTool(frame);
+          if (toolFrame && toolFrames++ < TOOL_RESULT_LIMIT) collect(Buffer.from(JSON.stringify(toolFrame) + '\n'), true);
+          return;
+        }
+        if (claudeJsonl && ['assistant', 'user'].includes(frame?.type) && !frameError(frame)) {
+          const content = claudeToolBlocks(frame).filter(block => block.type === 'tool_use' || toolFrames++ < TOOL_RESULT_LIMIT);
+          if (content.length) collect(Buffer.from(JSON.stringify({ type: frame.type, message: { content } }) + '\n'), true);
+          return;
+        }
         collect(Buffer.from(line + '\n'), true);
       });
     } else child.stdout.on('data', chunk => collect(chunk, true));
@@ -208,7 +344,7 @@ export function parseResetTime(text, now = new Date()) {
 }
 export function classifyFailure(message, now) {
   const text = String(message || '');
-  if (/resource_exhausted|quota|usage limit|rate.?limit|too many requests|\b429\b|out of credits|insufficient credits|credit balance (?:is )?too low|credit_balance_exhausted|session limit|requires more credits|can only afford|\b402\b/i.test(text)) return { failureKind: 'quota', resetsAt: parseResetTime(text, now) };
+  if (/resource_exhausted|quota|usage limit|rate.?limit|too many requests|\b429\b|out of (?:credits|extra usage|usage credits)|hit your limit|insufficient credits|credit balance (?:is )?too low|credit_balance_exhausted|session limit|requires more credits|can only afford|\b402\b/i.test(text)) return { failureKind: 'quota', resetsAt: parseResetTime(text, now) };
   if (/not logged in|not authenticated|unauthenticated|please (log|sign) in|failed to authenticate|\b(?:login|oauth (?:session|token)) (?:has )?expired\b|\b401\b|invalid api key|missing_credential|no api key/i.test(text)) return { failureKind: 'auth' };
   return { failureKind: 'agent' };
 }
@@ -223,8 +359,9 @@ function agentFailure(message, stderr = '') {
 const PLAIN_TEXT_ADAPTERS = ['ollama', 'openclaw', 'aider', 'goose', 'openhands', 'cline'];
 export function parseAgentResult(id, result) {
   const stderr = String(result.stderr || '').trim().slice(-2000);
-  if (result.reason) return { ok: false, error: result.reason, failureKind: 'process' };
+  const processFailure = result.reason ? { ok: false, error: result.reason, failureKind: 'process' } : null;
   if (PLAIN_TEXT_ADAPTERS.includes(id) || loadCustomAdapters().some(c => c.id === id)) {
+    if (processFailure) return processFailure;
     if (result.exitCode !== 0) return agentFailure(null, stderr || `Agent process exited ${result.exitCode}`);
     const text = String(result.stdout || '').trim();
     return text ? { ok: true, response: text, commandExecutionVerified: false } : { ok: false, error: 'Agent returned no result', failureKind: 'agent' };
@@ -232,8 +369,14 @@ export function parseAgentResult(id, result) {
   let frames;
   try { const value = JSON.parse(result.stdout); frames = Array.isArray(value) ? value : [value]; }
   catch {
-    try { frames = String(result.stdout).trim().split('\n').filter(Boolean).map(line => JSON.parse(line)); }
-    catch { return result.exitCode === 0 ? { ok: false, error: 'Agent output is not valid structured data', failureKind: 'agent' } : agentFailure(null, stderr || `Agent process exited ${result.exitCode}`); }
+    try {
+      frames = String(result.stdout).trim().split('\n').filter(Boolean).flatMap(line => {
+        try { return [JSON.parse(line)]; }
+        catch (error) { if (processFailure) return []; throw error; }
+      });
+    } catch {
+      return result.exitCode === 0 ? { ok: false, error: 'Agent output is not valid structured data', failureKind: 'agent' } : agentFailure(null, stderr || `Agent process exited ${result.exitCode}`);
+    }
   }
   frames = (frames || []).filter(frame => frame && typeof frame === 'object');
   const last = frames.at(-1);
@@ -241,10 +384,13 @@ export function parseAgentResult(id, result) {
     exitCode: result.exitCode ?? null,
     model: frames.findLast(frame => typeof frame.model === 'string')?.model ?? null,
     finishedReason: last?.finished_reason ?? last?.messages?.at(-1)?.stopReason ?? last?.stopReason ?? last?.type ?? null,
+    ...toolEvidence(nativeToolResults(id, frames)),
   };
-  const failed = frames.find(frame => frameError(frame) || frame.is_error || ['error', 'turn.failed'].includes(frame.type) || ['FAILED', 'ERROR', 'CANCELED', 'WAITING'].includes(frame.status) || ['print_timeout', 'interrupted', 'error'].includes(frame.finished_reason));
+  if (processFailure) return { ...processFailure, ...metadata };
+  const failed = frames.find(frame => !['tool_result', 'tool_execution_end'].includes(frame.type) &&
+    (frameError(frame) || frame.is_error || ['error', 'turn.failed'].includes(frame.type) || ['FAILED', 'ERROR', 'CANCELED', 'WAITING'].includes(frame.status) || ['print_timeout', 'interrupted', 'error'].includes(frame.finished_reason)));
   if (failed) return { ...agentFailure(frameError(failed) || frameReason(failed), stderr), ...metadata };
-  if (result.exitCode !== 0) return agentFailure(null, stderr || `Agent process exited ${result.exitCode}`);
+  if (result.exitCode !== 0) return { ...agentFailure(null, stderr || `Agent process exited ${result.exitCode}`), ...metadata };
   if (!frames.length) return { ok: false, error: 'Agent returned no result', failureKind: 'agent' };
   if (id === 'claude' && Array.isArray(last.permission_denials) && last.permission_denials.length) {
     return { ok: false, failureKind: 'permission', error: `Claude denied ${last.permission_denials.length} tool call(s)`, ...metadata };
@@ -257,14 +403,51 @@ export function parseAgentResult(id, result) {
   if (id === 'hermes' && last.type === 'result' && last.exit_code === 0) text = last.text;
   if (id === 'pi' && last.type === 'agent_end') {
     const messages = last.messages || [];
-    if (messages.some(message => ['error', 'aborted'].includes(message.stopReason))) return { ok: false, error: 'Pi turn failed' };
+    if (messages.some(message => ['error', 'aborted'].includes(message.stopReason))) return { ok: false, error: 'Pi turn failed', failureKind: 'agent', ...metadata };
     text = messages.filter(message => message.role === 'assistant').flatMap(message => message.content || []).filter(part => part.type === 'text').map(part => part.text).join('\n');
   }
   // The official headless contract documents JSONL plus exit status, not MSP
   // notifications. Preserve the actual log rather than invent a headless schema.
   // Exit zero certifies a finished turn only; it never certifies the requested work.
   if (id === 'muse') return { ok: true, response: result.stdout.trim(), events: frames, completionEvidence: 'headless-process-exit', commandExecutionVerified: false };
-  return typeof text === 'string' && text.trim() ? { ok: true, response: text, commandExecutionVerified: false, ...metadata } : { ok: false, error: 'Agent did not produce a recognized completed result', failureKind: 'agent', ...metadata };
+  return typeof text === 'string' && text.trim() ? { ok: true, response: text, ...metadata } : { ok: false, error: 'Agent did not produce a recognized completed result', failureKind: 'agent', ...metadata };
+}
+
+async function readOpenClawResult(execution, { binary, cwd, env, probe, sessionId }) {
+  const fallback = parseAgentResult('openclaw', execution);
+  let run;
+  try { run = JSON.parse(execution.stdout); } catch { /* No structured run to attribute. */ }
+  const meta = run?.result?.meta;
+  if (meta?.agentMeta?.sessionId !== sessionId) {
+    return {
+      ...(fallback.ok ? agentFailure('OpenClaw did not return the requested session') : fallback),
+      ...toolEvidence([]),
+      toolEvidenceError: 'OpenClaw did not confirm the managed session',
+    };
+  }
+  const reply = run.result.payloads?.flatMap(payload => typeof payload.text === 'string' ? [payload.text] : []).join('\n');
+  const result = {
+    ...(fallback.ok && run.status === 'ok' && reply ? { ok: true, response: reply } :
+      fallback.ok ? agentFailure(run.summary || 'OpenClaw did not complete the turn') : fallback),
+    model: meta.agentMeta.model ?? null,
+    provider: meta.agentMeta.provider ?? null,
+  };
+  if (meta.toolSummary?.calls === 0) return { ...result, ...toolEvidence([]) };
+  try {
+    const key = `agent:main:explicit:${sessionId}`;
+    const history = await probe(binary, ['gateway', 'call', 'sessions.get', '--params', JSON.stringify({ key, limit: 40 }),
+      '--timeout', '10000', '--json'], { cwd, env, timeoutMs: 15000 });
+    if (history.exitCode !== 0 || history.reason) throw new Error('OpenClaw transcript query failed');
+    const { messages } = JSON.parse(history.stdout);
+    if (!Array.isArray(messages) || !messages.length) throw new Error('OpenClaw returned no transcript');
+    const tools = messages.filter(message => message?.role === 'toolResult' && typeof message.toolName === 'string' &&
+      typeof message.isError === 'boolean').slice(0, TOOL_RESULT_LIMIT);
+    if (!tools.length && meta.toolSummary?.calls > 0) throw new Error('OpenClaw transcript did not include tool results');
+    return { ...result, ...toolEvidence(tools.map(message =>
+      toolResult(message.toolName, message.content, message.isError, { exitCode: message.details?.exitCode }))) };
+  } catch {
+    return { ...result, ...toolEvidence([]), toolEvidenceError: 'Could not read tool results from the OpenClaw gateway' };
+  }
 }
 
 /** Rebuild the instruction payload from the selected node/workspace, never a cached prompt. */
@@ -276,9 +459,13 @@ export async function totalRecallBootstrap(request, { probe = runProcess, env = 
   const invoke = async (args, at = cwd) => {
     const result = await probe(binary, args, { cwd: at, timeoutMs: 120000, maxBytes: 4 * 1024 * 1024, env: agentEnvironment(env) });
     if (result.reason || result.exitCode !== 0) {
-      let detail = String(result.stderr || '').trim();
-      try { detail = JSON.parse(result.stdout).problems?.join('; ') || detail; } catch { /* plain output */ }
-      throw notReady(`Total Recall ${args[0]} failed in ${at}, so dispatch was refused${detail ? `: ${detail.slice(0, 300)}` : ''}`);
+      let detail = result.reason || String(result.stderr || '').trim();
+      try {
+        const report = JSON.parse(result.stdout);
+        detail = report.problems?.join('; ') || report.agents?.find(agent => agent.error)?.error || report.error || detail;
+      } catch { /* plain output */ }
+      const diagnostic = toolOutput(detail).slice(0, 300);
+      throw notReady(`Total Recall ${args[0]} failed in ${at}, so dispatch was refused${diagnostic ? `: ${diagnostic}` : ''}`);
     }
     return result.stdout;
   };
@@ -326,7 +513,7 @@ export async function totalRecallBootstrap(request, { probe = runProcess, env = 
 }
 
 /** Authentication is `true` or `false` only when a real probe says so. Everything else stays 'unknown' until a run proves it. */
-export async function inspectAgents({ probe = runProcess, env = process.env, ids, claudeKey } = {}) {
+export async function inspectAgents({ probe = runProcess, env = process.env, ids, cwd, claudeKey, claudePlan, settingSources } = {}) {
   const selected = getActiveAdapters().filter(adapter => !ids || ids.includes(adapter.id));
   // Probes run together: this is on the path of every route, and each harness answers on its own.
   const agents = await Promise.all(selected.map(async adapter => {
@@ -340,13 +527,14 @@ export async function inspectAgents({ probe = runProcess, env = process.env, ids
         const auth = await probe(binary, ['login', 'status'], { timeoutMs: 15000 });
         item.authenticated = auth.exitCode === 0 && /Logged in using ChatGPT/i.test(auth.stdout + auth.stderr);
       } else if (adapter.id === 'claude') {
-        const auth = await probe(binary, ['auth', 'status'], { timeoutMs: 15000,
-          ...(claudeKey ? { env: { ...agentEnvironment(env), ...claudeIncludedEnv(claudeKey) } } : {}) });
-        try {
-          const value = JSON.parse(auth.stdout);
-          item.authenticated = auth.exitCode === 0 && value.loggedIn === true && value.apiProvider === 'firstParty' &&
-            (claudeKey ? value.authMethod === 'api_key' : value.authMethod === 'claude.ai' && !value.apiKeySource && Boolean(value.subscriptionType));
-        } catch { item.authenticated = false; }
+        const value = await readClaudeAuth(binary, {
+          cwd, probe,
+          args: claudePlan ? [...CLAUDE_PLAN_ARGS, ...claudeSettingArgs(settingSources)] : [],
+          env: { ...agentEnvironment(env), ...(claudeKey ? claudeIncludedEnv(claudeKey) : {}) },
+        });
+        item.authenticated = claudePlan ? claudeMaxOrganization(value) === claudePlan :
+          value?.loggedIn === true && value.apiProvider === 'firstParty' &&
+          (claudeKey ? value.authMethod === 'api_key' : value.authMethod === 'claude.ai' && !value.apiKeySource && Boolean(value.subscriptionType));
       } else if (adapter.id === 'cursor') {
         const auth = await probe(binary, ['status'], { timeoutMs: 15000 });
         item.authenticated = auth.exitCode === 0 && /logged in|authenticated/i.test(auth.stdout) && !/not authenticated|not logged in/i.test(auth.stdout);
@@ -375,25 +563,59 @@ export async function dispatchAgent(request, { probe = runProcess, env = process
   const binary = findBinary(adapter.binary, env);
   if (!binary) throw notReady(`${adapter.name} is not installed on the selected node`);
   const billing = request[INCLUDED_BILLING];
-  if (billing && (adapter.custom || !['codex', 'claude'].includes(adapter.id))) throw notReady('Included usage requires the built-in Claude or Codex adapter.');
+  const openRouter = billing?.openRouter;
+  if (billing && (adapter.custom || !(openRouter ? OPENROUTER_AGENTS : ['codex', 'claude']).includes(adapter.id))) {
+    throw notReady('The authorized usage route requires its built-in adapter.');
+  }
   const claudeKey = billing && adapter.id === 'claude' ? billing.key : undefined;
-  if (billing && adapter.id === 'claude' && !claudeKey) throw notReady('Claude has no verified included usage key.');
-  const inspected = await inspectAgents({ probe, env, ids: [adapter.id], claudeKey });
+  const claudePlan = billing && adapter.id === 'claude' ? billing.claudePlan : undefined;
+  if (billing && adapter.id === 'claude' && !claudePlan && !claudeKey) throw notReady('Claude has no verified Max login or included usage key.');
+  const inspected = await inspectAgents({ probe, env, ids: [adapter.id], cwd: request.cwd, claudeKey, claudePlan, settingSources: request.settingSources });
   const state = inspected.agents.find(item => item.id === adapter.id);
   if (!state.versionVerified) throw notReady(`${adapter.name} did not report a version`);
   if (state.authenticated === false) {
     return { agent: adapter.id, ok: false, failureKind: 'auth',
-      error: claudeKey ? 'Claude did not select the verified Anthropic API key.' : `${adapter.name} is not signed in on this node`, exitCode: null };
+      error: claudePlan ? 'Sign in to the verified Claude Max account on this node.' :
+        claudeKey ? 'Claude did not select the verified Anthropic API key.' : `${adapter.name} is not signed in on this node`, exitCode: null };
   }
   if (state.blockedBy === 'no-chat-model') throw notReady(`${adapter.name} has no chat model installed on this node`);
-  if (state.authenticated === 'unknown' && request.allowUnknownAuth !== true) throw notReady(`${adapter.name} has no login probe; select it explicitly to verify it through execution`);
+  if (state.authenticated === 'unknown' && !openRouter && request.allowUnknownAuth !== true) throw notReady(`${adapter.name} has no login probe; select it explicitly to verify it through execution`);
   if (request.permissions?.write !== true && !READ_ONLY_ADAPTERS.includes(adapter.id) && request.isolated !== true) throw notReady(`${adapter.name} has no read-only mode, so a read-only run must use a disposable checkout`);
+  const auth = findBinary('total-recall', env);
+  const readOwner = async args => {
+    if (!auth) throw notReady('The native Total Recall owner is required for this route.');
+    const report = await probe(auth, [...args, '--json'], { cwd: request.contextCwd || request.cwd, timeoutMs: 15000, env: agentEnvironment(env) });
+    try { return JSON.parse(report.stdout); } catch { throw notReady('The native owner did not report provider configuration.'); }
+  };
+  if (openRouter && request.model !== undefined && request.model !== openRouter.model) {
+    throw notReady('Use the model in the destination’s approved OpenRouter binding.');
+  }
+  if (openRouter && adapter.id === 'dsh') {
+    const report = await readOwner(['dsh', 'model']);
+    if (!report.defaults?.some(row => row.home === '~/.dsh' && row.profile === 'headless' && row.provider === 'openrouter' && row.model === openRouter.model) || env.DSH_HOME) {
+      throw notReady('DSH headless must select the model and provider in its approved OpenRouter binding.');
+    }
+  }
+  if (openRouter && adapter.id === 'hermes') {
+    const report = await readOwner(['hermes', 'status', '--local']);
+    if (openRouter.keyName !== 'OPENROUTER_API_KEY' || !report.totalRecall?.ok) {
+      throw notReady('Hermes must have its OpenRouter credential projected by its Total Recall owner.');
+    }
+  }
+  if (openRouter && adapter.id === 'openclaw') {
+    const report = await readOwner(['openclaw', 'status']);
+    if (openRouter.keyName !== 'OPENCLAW_OPENROUTER_API_KEY' || !report.gateway?.running ||
+        !report.gate?.installed || report.model !== `openrouter/${openRouter.model}` || report.problems?.length) {
+      throw notReady('OpenClaw needs a healthy gated gateway and the model in its approved OpenRouter binding.');
+    }
+  }
   const temporary = fs.mkdtempSync(path.join(os.tmpdir(), 'meta-harness-prompt-'));
   try {
   const prompt = await bootstrap({ ...request, bootstrapDirectory: temporary }, { probe, env });
   const credentials = claudeKey ? claudeIncludedEnv(claudeKey) : {};
+  if (openRouter && ['dsh', 'pi'].includes(adapter.id)) credentials.OPENROUTER_API_KEY = openRouter.key;
   for (const [name, candidates] of Object.entries(adapter.credentials || {})) {
-    const auth = findBinary('total-recall', env);
+    if (Object.hasOwn(credentials, name)) continue;
     let value = null;
     for (const secret of candidates) {
       const result = auth ? await probe(auth, ['auth', 'secret', 'get', secret], { timeoutMs: 15000, env }) : { exitCode: 1 };
@@ -403,7 +625,13 @@ export async function dispatchAgent(request, { probe = runProcess, env = process
     credentials[name] = value;
   }
   const args = [...adapter.args];
-  if (request.model !== undefined) {
+  const openClawSession = openRouter && adapter.id === 'openclaw' ? randomUUID() : null;
+  if (openRouter) {
+    if (adapter.id === 'pi') args.push('--model', openRouter.model);
+    if (adapter.id === 'hermes') args.push('--provider', 'openrouter', '--model', openRouter.model);
+    if (openClawSession) args.splice(1, 0, '--agent', 'main', '--session-id', openClawSession,
+      '--model', `openrouter/${openRouter.model}`, '--json');
+  } else if (request.model !== undefined) {
     if (typeof request.model !== 'string' || !request.model.trim() || /[\0\r\n]/.test(request.model)) throw new Error('Invalid requested model');
     if (adapter.id === 'ollama') throw new Error('Select the local chat model through its configured runtime');
     args.push('--model', request.model);
@@ -415,10 +643,7 @@ export async function dispatchAgent(request, { probe = runProcess, env = process
       if (typeof tools !== 'string' && (!Array.isArray(tools) || tools.some(tool => typeof tool !== 'string'))) throw new Error('Invalid tool restriction');
       args.push('--tools', tools === 'none' ? '' : Array.isArray(tools) ? tools.join(',') : tools);
     }
-    if (request.settingSources !== undefined) {
-      if (typeof request.settingSources !== 'string' || request.settingSources.split(',').some(source => !['', 'user', 'project', 'local'].includes(source))) throw new Error('Invalid setting sources');
-      args.push('--setting-sources', request.settingSources);
-    }
+    args.push(...claudeSettingArgs(request.settingSources));
     if (request.allowedTools !== undefined) {
       const allowed = request.allowedTools;
       if (request.permissions?.write !== true || !Array.isArray(allowed) || !allowed.length || allowed.length > 32 ||
@@ -432,6 +657,7 @@ export async function dispatchAgent(request, { probe = runProcess, env = process
   const allowWrites = request.permissions?.write === true;
   if (adapter.id === 'codex') args[args.indexOf('--sandbox') + 1] = allowWrites ? 'workspace-write' : 'read-only';
   if (billing && adapter.id === 'codex') args.unshift(...CODEX_PLAN_ARGS);
+  if (claudePlan) args.unshift(...CLAUDE_PLAN_ARGS);
   if (adapter.id === 'claude') args[args.indexOf('--permission-mode') + 1] = allowWrites ? 'acceptEdits' : 'plan';
   if (adapter.id === 'agy') args[args.indexOf('--mode') + 1] = allowWrites ? 'accept-edits' : 'plan';
   if (adapter.id === 'muse' && !allowWrites) args.push('--disable-write');
@@ -443,8 +669,11 @@ export async function dispatchAgent(request, { probe = runProcess, env = process
     if (adapter.input === 'file') args.push('--prompt-file', file);
     else args.push(`Read ${file} completely before taking action. It contains the required Total Recall task context, CLI reference location, official documentation location and the requested task. Carry out that task using the supplied context.`);
   }
-  const execution = await probe(binary, args, { cwd: request.cwd, input, timeoutMs: request.timeoutMs || 900000, codexJsonl: adapter.id === 'codex', env: { ...agentEnvironment(env), ...credentials, TR_META_HARNESS_RUN: '1' } });
-  const parsed = parseAgentResult(adapter.id, execution);
+  const execution = await probe(binary, args, { cwd: request.cwd, input, timeoutMs: request.timeoutMs || 900000,
+    codexJsonl: adapter.id === 'codex', claudeJsonl: adapter.id === 'claude', env: { ...agentEnvironment(env), ...credentials, TR_META_HARNESS_RUN: '1' } });
+  const parsed = openClawSession ? await readOpenClawResult(execution, {
+    binary, cwd: request.cwd, env: agentEnvironment(env), probe, sessionId: openClawSession,
+  }) : parseAgentResult(adapter.id, execution);
   const frames = parsed.events || [];
   return { agent: adapter.id, ...parsed, exitCode: execution.exitCode ?? null,
     model: parsed.model ?? frames.find(frame => frame.model)?.model ?? null,

@@ -145,10 +145,20 @@ Use when the capability is deployed into other applications.
 ## Composition
 
 ```json
-"requires": [ { "id": "auth", "range": "^1.0.0" } ]
+"reuse": {
+  "commands": ["total-recall auth secret"],
+  "owned": "Connects to the service and translates its records into the plugin's read model."
+},
+"requires": [ { "id": "mesh", "version": "^0.2.0" } ]
 ```
 
-Builds on other bricks instead of starting from zero.
+Copy exact command strings from `total-recall plugin library --json` for the installed owners this project uses. In `owned`, explain the capability the plugin supplies after the ecosystem inventory. Use an empty command list when the inventory supports that decision.
+
+A plugin that declares secrets names `total-recall auth secret` as its credential interface. Auth itself owns that interface.
+
+Declare portable dependencies with `requires`. Use the supported source with `total-recall plugin vendor` and inspect `total-recall plugin bricks --json` for the project-owned copy. Use `requires` only for bricks the capability actually imports. The vendor resolver checks the version constraint when it assembles a consuming project.
+
+The full Creator check verifies these declarations against the installed commands and recorded brick payloads. Verify actual reuse through the plugin and fresh-project workflow tests.
 
 ## Credentials
 

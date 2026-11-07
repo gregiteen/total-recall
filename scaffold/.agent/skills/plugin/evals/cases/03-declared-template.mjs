@@ -17,6 +17,7 @@ export default {
   files: {
     'plugin.json': JSON.stringify({
       id: 'templated', name: 'Templated', version: '1.0.0', description: 'A plugin that declares a layout template.',
+      reuse: { commands: [], owned: 'Displays the plugin-specific view.' },
       cli: { command: 'templated', handler: './cli.mjs', subcommands: [{ name: 'status', effect: 'read' }] },
       status: { command: 'status', refresh_seconds: 30 },
       branding: { color: '#475569' },

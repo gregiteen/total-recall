@@ -12,6 +12,7 @@ Then work the list, and record the actual outcome of each. Do not tick a box you
 
 - [ ] `total-recall plugin info <id>` reports no errors and no warnings.
 - [ ] Every surface the function needs is declared, and nothing unused.
+- [ ] Each shared dependency uses its existing owner command or a vendored brick. The reuse gate passes and the workflow tests exercise the declared interfaces.
 - [ ] Every operation has typed arguments and an effect.
 - [ ] `--json` works on every subcommand; failures exit non-zero; `--help` works without credentials.
 - [ ] No secret value appears in `argv`, stdout, stderr, a log or the card state.

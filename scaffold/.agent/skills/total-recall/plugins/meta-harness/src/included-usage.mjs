@@ -6,13 +6,17 @@ import { spawn } from 'node:child_process';
 import { createInterface } from 'node:readline';
 import { pathToFileURL } from 'node:url';
 import { configDir } from './paths.mjs';
-import { agentEnvironment, CODEX_PLAN_ARGS, findBinary } from './worker.mjs';
+import { agentEnvironment, CODEX_PLAN_ARGS, findBinary, OPENROUTER_AGENTS, readClaudeMaxOrganization } from './worker.mjs';
 import { activeQuotaWalls, readReceipts } from './learner.mjs';
 
 export const INCLUDED_AGENTS = ['claude', 'codex'];
 const VERSION = 1;
 const DEFAULT = { version: VERSION, enabled: false, claude: null };
 const sha256 = key => createHash('sha256').update(key).digest('hex');
+const validKeyName = name => typeof name === 'string' && /^[A-Z][A-Z0-9_]{1,100}$/.test(name);
+const validModel = model => typeof model === 'string' && /^[\w.-]+\/[\w./:-]+$/.test(model) && model.length <= 180;
+const validOpenRouterBinding = (agent, binding) => OPENROUTER_AGENTS.includes(agent) &&
+  validKeyName(binding?.keyName) && validModel(binding?.model);
 
 async function policyStore() {
   const { PluginStateStore } = await import('./ssss-store.mjs');
@@ -25,7 +29,11 @@ export async function readIncludedPolicy(store) {
   if (state?.version !== VERSION || typeof state.enabled !== 'boolean' ||
       (state.claude !== null && (!/^[a-f0-9]{64}$/.test(state.claude?.fingerprint || '') ||
         typeof state.claude.keyName !== 'string' || typeof state.claude.organization !== 'string' ||
-        !Number.isFinite(Date.parse(state.claude.expiresAt))))) {
+        !Number.isFinite(Date.parse(state.claude.expiresAt)))) ||
+      (state.claudePlan !== undefined && (!/^[\w-]{1,100}$/.test(state.claudePlan?.organization || '') ||
+        state.claudePlan.usageCreditsEnabled !== false || !Number.isFinite(Date.parse(state.claudePlan.verifiedAt)))) ||
+      (state.openRouter !== undefined && (!state.openRouter || typeof state.openRouter !== 'object' ||
+        Array.isArray(state.openRouter) || !Object.entries(state.openRouter).every(([agent, binding]) => validOpenRouterBinding(agent, binding))))) {
     throw new Error('Included usage policy is invalid; dispatch stopped.');
   }
   return state;
@@ -43,7 +51,7 @@ export async function enforceIncludedUsage() {
   return includedUsageStatus();
 }
 
-async function authKey(keyName) {
+async function authRuntime() {
   const root = process.env.TR_PACKAGE_ROOT;
   if (!root || !path.isAbsolute(root) ||
       JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8')).name !== 'total-recall-brain') {
@@ -51,12 +59,49 @@ async function authKey(keyName) {
   }
   const { loadPluginModule } = await import(pathToFileURL(path.join(root, 'src/core/plugin-runtime.mjs')).href);
   const { hostSecretsBrainDir } = await loadPluginModule('auth', 'host-secrets-store', { activeRequired: true });
-  const { getSecret } = await loadPluginModule('auth', 'secrets-store', { activeRequired: true });
-  const result = await getSecret(hostSecretsBrainDir(), keyName, { action: 'use', actor: 'meta-harness' });
-  if (!result.found || typeof result.value !== 'string' || !/^sk-ant-api[0-9]+-[\w-]+$/.test(result.value)) {
+  return { brain: hostSecretsBrainDir(), load: module => loadPluginModule('auth', module, { activeRequired: true }) };
+}
+
+async function authValue(keyName) {
+  const { brain, load } = await authRuntime();
+  const { getSecret } = await load('secrets-store');
+  const result = await getSecret(brain, keyName, { action: 'use', actor: 'meta-harness' });
+  return result.found && typeof result.value === 'string' ? result.value : '';
+}
+
+async function authKey(keyName) {
+  const value = await authValue(keyName);
+  if (!/^sk-ant-api[0-9]+-[\w-]+$/.test(value)) {
     throw new Error('The selected Anthropic API key is missing or invalid in Total Recall Auth.');
   }
-  return result.value;
+  return value;
+}
+
+async function verifyOpenRouterKey(keyName) {
+  const { brain, load } = await authRuntime();
+  const { syncSecretAccount } = await load('provider-account-sync');
+  const result = await syncSecretAccount(brain, keyName);
+  return result.provider === 'openrouter' && result.key_valid === true && result.tracking_status === 'ok';
+}
+
+/** OpenRouter opt-in is per harness and per destination, with no subscription fallback. */
+export async function bindOpenRouter(agent, keyName, model, { verify = verifyOpenRouterKey } = {}) {
+  requireOperator();
+  const binding = { keyName, model };
+  if (!validOpenRouterBinding(agent, binding)) throw new Error('Select a supported OpenRouter harness, an Auth key name and a catalog model ID.');
+  if (!(await verify(keyName))) throw new Error('Total Recall Auth could not verify this OpenRouter key.');
+  const store = await policyStore();
+  const state = await readIncludedPolicy(store);
+  store.write({ ...state, enabled: true, openRouter: { ...state.openRouter, [agent]: binding } });
+  return { ok: true, agent, ...binding };
+}
+
+export async function openRouterAdmission(agent, policy, { readKey = authValue } = {}) {
+  const binding = policy.openRouter?.[agent];
+  if (!validOpenRouterBinding(agent, binding)) return { ok: false, failureKind: 'billing-policy', error: 'No approved OpenRouter binding for this harness.' };
+  const key = await readKey(binding.keyName);
+  if (!/^sk-or-v1-[\w-]+$/.test(key)) return { ok: false, failureKind: 'auth', error: 'The approved OpenRouter key is unavailable in Total Recall Auth.' };
+  return { ok: true, openRouter: { key, keyName: binding.keyName, model: binding.model } };
 }
 
 /** Bind the operator's Console observation to the actual secret without recording its value or hint. */
@@ -81,11 +126,28 @@ export async function bindClaudeIncludedKey(evidence, { readKey = authKey, now =
 
 export const claudeProofCurrent = (policy, now = Date.now()) => Date.parse(policy.claude?.expiresAt) > now;
 
+/** Bind the observed account setting to this host's native Claude Max login. */
+export async function bindClaudeMaxPlan(evidence, { readOrganization = readClaudeMaxOrganization } = {}) {
+  requireOperator();
+  const { organization, usageCreditsEnabled } = evidence || {};
+  if (!/^[\w-]{1,100}$/.test(organization || '') || usageCreditsEnabled !== false) {
+    throw new Error('Confirm Usage credits are off in the signed-in Max account before binding it.');
+  }
+  if (organization !== await readOrganization(process.cwd())) {
+    throw new Error('The native Claude Max login does not match the verified organization.');
+  }
+  const store = await policyStore();
+  const state = await readIncludedPolicy(store);
+  store.write({ ...state, enabled: true, claudePlan: { organization, usageCreditsEnabled, verifiedAt: new Date().toISOString() } });
+  return includedUsageStatus();
+}
+
 export async function includedUsageStatus({ probe = false } = {}) {
   const policy = await readIncludedPolicy();
   const claude = policy.claude ? { organization: policy.claude.organization, verifiedAt: policy.claude.verifiedAt,
     expiresAt: policy.claude.expiresAt, current: claudeProofCurrent(policy) } : null;
-  return { ok: true, policyVersion: VERSION, enabled: policy.enabled, claude,
+  return { ok: true, policyVersion: VERSION, enabled: policy.enabled, claude, claudePlan: policy.claudePlan ?? null,
+    openRouter: policy.openRouter ?? {},
     ...(probe ? { codex: await readCodexAllowance(process.cwd()) } : {}) };
 }
 
@@ -170,12 +232,13 @@ export async function readCodexAllowance(cwd, { query = queryCodexAccount } = {}
 export async function includedAdmission(agent, cwd, policy, { readKey = authKey, codex = readCodexAllowance,
   receipts = readReceipts } = {}) {
   if (!INCLUDED_AGENTS.includes(agent)) return { ok: false, failureKind: 'billing-policy', error: 'This harness is outside the included usage policy.' };
-  if (agent === 'claude' && !claudeProofCurrent(policy)) {
-    return { ok: false, failureKind: 'billing-policy', error: 'Claude requires current verification of the linked Max credit grant and key.' };
+  if (agent === 'claude' && !policy.claudePlan && !claudeProofCurrent(policy)) {
+    return { ok: false, failureKind: 'billing-policy', error: 'Verify the native Claude Max login with Usage credits off, or bind a verified included grant.' };
   }
   const wall = activeQuotaWalls((await receipts()).filter(run => run.billingMode === 'included'))[agent];
   if (wall) return { ok: false, failureKind: 'quota', error: 'This harness is waiting for included usage.', resetsAt: wall.resetReported ? wall.until : null };
   if (agent === 'codex') return codex(cwd);
+  if (policy.claudePlan) return { ok: true, claudePlan: policy.claudePlan.organization };
   try {
     const key = await readKey(policy.claude.keyName);
     if (sha256(key) !== policy.claude.fingerprint) throw new Error('The Claude key changed; verify the new key against the Max grant.');

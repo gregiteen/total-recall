@@ -68,6 +68,7 @@ export default {
   files: {
     'plugin.json': JSON.stringify({
       id: 'example', name: 'Example', version: '1.0.0', description: 'A plugin that follows the recipe exactly.',
+      reuse: { commands: ['total-recall auth secret'], owned: 'Reads the service-specific status endpoint.' },
       cli: { command: 'example', handler: './cli.mjs', subcommands: [
         { name: 'status', description: 'Read current status', effect: 'read', output: 'json' },
         { name: 'set-key', description: 'Store the service key', effect: 'write',

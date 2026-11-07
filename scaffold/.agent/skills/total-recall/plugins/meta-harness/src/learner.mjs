@@ -50,6 +50,8 @@ export async function recordRunReceipt(receipt = {}) {
     durationMs: receipt.durationMs || 0,
     failureKind: receipt.failureKind || null,
     ...(receipt.billingMode ? { billingMode: receipt.billingMode } : {}),
+    ...(Array.isArray(receipt.tools) && receipt.tools.length ? { tools: receipt.tools.map(({ tool, status, exitCode }) =>
+      ({ tool, status, ...(Number.isInteger(exitCode) ? { exitCode } : {}) })) } : {}),
     error: receipt.error ? String(receipt.error).slice(0, 500) : null,
     resetsAt: receipt.resetsAt || null,
     gate: receipt.gate || null,

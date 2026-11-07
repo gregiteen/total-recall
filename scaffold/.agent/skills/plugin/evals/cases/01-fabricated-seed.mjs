@@ -28,6 +28,7 @@ export default {
   files: {
     'plugin.json': JSON.stringify({
       id: 'seeded', name: 'Seeded', version: '1.0.0', description: 'A plugin that fabricates a reading.',
+      reuse: { commands: [], owned: 'Displays its own telemetry reading.' },
       cli: { command: 'seeded', handler: './cli.mjs', subcommands: [{ name: 'sample', effect: 'read' }] },
       status: { command: 'sample', refresh_seconds: 30 },
       branding: { color: '#059669' },

@@ -1,5 +1,5 @@
 {
-  "version": "0.14.4",
+  "version": "0.14.5",
   "files": {
     ".gitignore": {
       "sha256": "0d6c69a5cbd2270c9163d8e1563976b6d15131d0ef599e6fbc413ee287a86da0",
@@ -18,8 +18,8 @@
       "content": "# ssss-project — System Architecture & Design\n\n> Technical design and architecture specification for ssss-project.\n\n## Overview\n\n<High-level summary of the system and its primary goals.>\n\n## Component Architecture\n\n- **Vault Structure**: Typed Markdown documents under `vault/` serving as the source of truth.\n- **Workflows & Execution**: Automated procedures defined in `vault/workflows/` triggered by operational events.\n- **Capabilities & Resources**: Tools and external service integrations required for execution.\n\n## Data & Schema Contracts\n\n<Core entities, external dependencies, and integration interfaces.>\n\n## Open Decisions & Invariants\n\n- SSSS VFS is the single source of truth for application state.\n- Structural business logic is strictly decoupled from private tenant operational data.\n- App-specific primitives reside in `registry/extensions/` within this repository and extend `core`.\n- Core SSSS library (`@gregiteen/ssss-cli`) remains vendor-neutral and dependency-free.\n"
     },
     "package.json": {
-      "sha256": "18389bfc91857c6d5917a3ac1af9da8a992c99b013f42f2843921cdc7b41bdfe",
-      "content": "{\n  \"name\": \"ssss-project\",\n  \"version\": \"0.1.0\",\n  \"private\": true,\n  \"type\": \"module\",\n  \"description\": \"An SSSS-native project — Markdown vault as source of truth.\",\n  \"scripts\": {\n    \"ssss\": \"ssss\",\n    \"test\": \"node --test\",\n    \"export\": \"ssss export vault --profile sale --out dist/bundle.ucw.json\",\n    \"validate\": \"ssss conformance --engine\"\n  },\n  \"dependencies\": {\n    \"@gregiteen/ssss-cli\": \"github:gregiteen/ssss#v0.14.4\"\n  }\n}\n"
+      "sha256": "ea77c2944b853999741a8e603de257604048c63b5db8754a0e8b92f383ff973b",
+      "content": "{\n  \"name\": \"ssss-project\",\n  \"version\": \"0.1.0\",\n  \"private\": true,\n  \"type\": \"module\",\n  \"description\": \"An SSSS-native project — Markdown vault as source of truth.\",\n  \"scripts\": {\n    \"ssss\": \"ssss\",\n    \"test\": \"node --test\",\n    \"export\": \"ssss export vault --profile sale --out dist/bundle.ucw.json\",\n    \"validate\": \"ssss conformance --engine\"\n  },\n  \"dependencies\": {\n    \"@gregiteen/ssss-cli\": \"github:gregiteen/ssss#v0.14.5\"\n  }\n}\n"
     },
     "test/ssss-conformance.test.mjs": {
       "sha256": "f626d2f56799fcfda74375d3ddf546cc181a10caf2df08b72b7f2e36782c9bc1",
@@ -43,8 +43,8 @@
     }
   },
   "skill": {
-    "SKILL.md": "4976c9615482f257fd023761dd3ef36b5aa278305ff22ae110295fe4945f5d4c",
-    "core/SKILL.md": "96c6479ad06b84c5f7ffd8bb05bff414dbb8c22a040ec1f1c05d8fa4fdbd976e",
+    "SKILL.md": "e5c2c0aa2c0fb5480c1f7bdb37928f935e1160bff18fd6b63366a04f3e281938",
+    "core/SKILL.md": "12543720135f13650efcd7afd751e3253996692c6ab805fd7da99788b6fc4af9",
     "core/references/core-registry.json": "16831aa3b6be3f561a9ca7abdc36065a4843ff595aa3acf5c3fb8af2d733b7e3",
     "core/references/ssss-spec.md": "cc319e78b1b568651d5717695348363349d502c0e20663da9858369022ddfc3b",
     "core/scripts/maintain.mjs": "eebcae898f2ce0cf3f0059c6f6737bee8877409de2d370d54a4015a9a82414e9",

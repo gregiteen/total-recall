@@ -16,9 +16,9 @@
     "ui/"
   ],
   "dependencies": {
-    "@gregiteen/ssss-cli": "0.14.4"
+    "@gregiteen/ssss-cli": "0.14.5"
   },
   "overrides": {
-    "@ssss/cli": "npm:@gregiteen/ssss-cli@0.14.4"
+    "@ssss/cli": "npm:@gregiteen/ssss-cli@0.14.5"
   }
 }

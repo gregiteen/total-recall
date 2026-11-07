@@ -11,7 +11,7 @@
     "validate": "ssss conformance --engine"
   },
   "dependencies": {
-    "@gregiteen/ssss-cli": "0.14.4"
+    "@gregiteen/ssss-cli": "0.14.5"
   },
   "files": [
     "cli.mjs",
@@ -26,6 +26,6 @@
     "access": "public"
   },
   "overrides": {
-    "@ssss/cli": "npm:@gregiteen/ssss-cli@0.14.4"
+    "@ssss/cli": "npm:@gregiteen/ssss-cli@0.14.5"
   }
 }

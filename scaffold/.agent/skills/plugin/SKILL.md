@@ -13,6 +13,10 @@ A recipe for agents: prompts with exact specifications, executed in order. Each 
 
 A plugin adds **one capability** to Total Recall. Core holds portable memory and generic loading; everything else is a plugin.
 
+## Reuse the ecosystem first
+
+Before designing or writing a plugin, inventory `total-recall plugin library --json`, `total-recall plugin available --json` and `total-recall plugin bricks --json`. Match each dependency to an existing owner. Call installed plugins for shared services and vendor existing bricks for code the project needs to own. Document the verified gaps that need new code. Run `record.mjs --reuse` after drafting the manifest and before implementing the capability.
+
 **A plugin is not one shape.** It declares the surfaces its capability needs, and a capability can need almost any combination — memory, context, a CLI, skills, scheduled work, runtime behaviour, a face, deployment, distribution, composition. Some plugins are only a memory category. Some are only a generator. Some are a CLI. Some are several at once. What it is, is decided by what it does.
 
 ```
@@ -29,7 +33,7 @@ evals/        proof that the recipe produces correct plugins
 
 True of every plugin, whatever it turns out to be. Check every one before calling it done.
 
-1. **Everything is declared.** If the plugin can do it, the manifest says so. An undeclared operation does not exist to the host or to an agent.
+1. **Everything is declared.** If the plugin can do it, the manifest says so. Record its reused operations and brick dependencies as well.
 2. **Every executable operation declares an effect** — `read`, `write`, `destructive`, `send`. The host uses it to decide what may run read-only; an agent uses it to know what needs confirmation.
 3. **Machine-facing output is structured.** A command emits JSON under `--json` and exits non-zero on failure, so an agent acts on a result instead of scraping prose.
 4. **Credentials are declared, never held.** Resolved only through `total-recall auth secret`. Never a second store, never `argv`, never an ambient environment variable, never a log.
@@ -45,7 +49,7 @@ True of every plugin, whatever it turns out to be. Check every one before callin
 
 | # | Prompt | Produce | Check |
 | --- | --- | --- | --- |
-| 1 | [Establish the function](prompts/01-function.md) | the users, the tasks, the dependencies | you can name them |
+| 1 | [Establish the function](prompts/01-function.md) | the users, the tasks, the reused plugins and bricks | owner interfaces and gaps are identified |
 | 2 | [Choose the surfaces](prompts/02-surfaces.md) | the manifest's surface set | each declared surface is used |
 | 3 | [Scaffold, then stop generating](prompts/03-scaffold.md) | repository skeleton | it exists, tests run |
 | 4 | [Write the CLI as an agent interface](prompts/04-cli.md) | operations, args, effects, JSON | `record.mjs` passes |
@@ -68,6 +72,7 @@ node <skill>/scripts/record.mjs . --manifest   # manifest only
 node <skill>/scripts/record.mjs . --card       # face only
 node <skill>/scripts/record.mjs . --secrets    # credential safety only
 node <skill>/scripts/record.mjs . --scaffold   # standalone scaffold only
+node <skill>/scripts/record.mjs . --reuse      # installed owner commands and required bricks
 node <skill>/scripts/record.mjs . --json       # machine-readable result
 ```
 

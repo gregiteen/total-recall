@@ -17,9 +17,12 @@
   It waits 40. Publishing from a linked git worktree is refused, because npm records no `gitHead`.
 - Fix `update` leaving a stale server running on a machine that serves from its global npm install.
 - Requires SSSS 0.14.5, where a dry run no longer changes anything on disk.
+- Fix `update --all-brains` moving a consumer's SSSS dependency but not the `@ssss/cli` override that
+  shadows it, which left every plugin asking for two versions of the engine.
 - Bundles Auth 1.2.9, which adds `auth secret gh-login status|adopt|use-store` and stops the mesh
-  sync undoing a `gh` login changed on the machine. Also bundles Meta Harness 0.3.6, Code Quality
-  0.2.6, Security 0.3.6, Embeddings 0.1.3 and Git Sentinel 1.1.5.
+  sync undoing a `gh` login changed on the machine. Also bundles SSSS 0.1.3, Meta Harness 0.3.9,
+  Mesh 0.2.9, OpenWiki 0.1.10, Composable CLI 0.2.5, Code Quality 0.2.6, Security 0.3.6,
+  Embeddings 0.1.3 and Git Sentinel 1.1.5, all on SSSS 0.14.5.
 - Plugin state written by commands run inside a checkout (`.ssss/`) is ignored.
 
 ## 3.43.3 — 2026-11-06

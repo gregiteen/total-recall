@@ -1,7 +1,7 @@
 {
   "id": "meta-harness",
   "name": "Meta Harness",
-  "version": "0.3.6",
+  "version": "0.3.9",
   "description": "Discover, configure, document, track, and run coding agent harnesses through Total Recall across mesh nodes.",
   "gate": {
     "tasks": ["Run work in another agent harness", "Choose which harness takes a task", "Check harness versions, sign-in and quota", "Read a harness's official documentation"],
@@ -147,6 +147,24 @@
         "effect": "write",
         "output": "json",
         "args": []
+      },
+      {
+        "name": "included-bind-claude-plan",
+        "description": "Bind the signed-in Claude Max account after verifying Usage credits are off",
+        "effect": "write",
+        "output": "json",
+        "args": []
+      },
+      {
+        "name": "openrouter-bind",
+        "description": "Authorize an explicit OpenRouter harness with a verified Total Recall Auth key and catalog model",
+        "effect": "write",
+        "output": "json",
+        "args": [
+          { "name": "agent", "type": "string", "label": "Harness", "required": true, "positional": true },
+          { "name": "key", "type": "string", "label": "Auth key name", "required": true, "positional": true },
+          { "name": "model", "flag": "--model", "type": "string", "label": "OpenRouter model ID", "required": true }
+        ]
       },
       {
         "name": "usage-queue",

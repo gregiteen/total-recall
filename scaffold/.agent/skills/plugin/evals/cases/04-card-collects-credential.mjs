@@ -28,6 +28,7 @@ export default {
   files: {
     'plugin.json': JSON.stringify({
       id: 'collecting', name: 'Collecting', version: '1.0.0', description: 'A plugin whose card collects a key.',
+      reuse: { commands: ['total-recall auth secret'], owned: 'Provides the service connection screen.' },
       cli: { command: 'collecting', handler: './cli.mjs', subcommands: [
         { name: 'status', effect: 'read' },
         { name: 'token', effect: 'write', args: [{ name: 'key', label: 'Key', type: 'string', secret: true }] },

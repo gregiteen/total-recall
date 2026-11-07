@@ -71,13 +71,19 @@ A native login probe reads account metadata. A headless request can still fail i
 
 ### Included usage
 
-Run `total-recall meta-harness included-enforce` to limit this node's managed dispatches to included usage. Use `included-status --probe --json` to see whether Claude has a verified binding and read current Codex allowance without an agent turn. Codex uses the built-in ChatGPT route and requires the signed-in plan to report no paid credit.
+Run `total-recall meta-harness included-enforce` to limit this node's managed dispatches to included usage. Use `included-status --probe --json` to see the Claude billing bindings and read current Codex allowance without an agent turn. Codex uses the built-in ChatGPT route and requires the signed-in plan to report no paid credit.
+
+To approve OpenRouter on this node, run `total-recall meta-harness openrouter-bind <harness> <auth-key-name> --model <openrouter-model-id> --json`. Then select that harness by name when dispatching. Automatic routing continues to choose from the included subscription pool.
+
+Run `total-recall harness dispatch codex "Run pwd and report the output" --json` to see the final reply and `toolResults`. Codex, Claude, DSH, Pi, Hermes and OpenClaw report native tool outcomes, available exit codes and bounded output. OpenClaw reports `toolEvidenceError` if its gateway cannot return the run's tool results. Adoption receipts retain the outcomes without the output text.
+
+For Claude Max, sign in on the execution host with `claude auth login --claudeai`. Check that Usage credits are off in the account's Usage settings. Pass `{"organization":"<orgId from claude auth status>","usageCreditsEnabled":false}` to `included-bind-claude-plan --stdin`. Meta Harness prefers the bound plan and checks the native login on every turn. Keep Usage credits off on that account. Claude manages that switch and enforces the plan limits. [Claude's subscription and SDK billing](https://support.claude.com/en/articles/15036540-use-the-claude-agent-sdk-with-your-claude-plan)
 
 Before using `included-bind-claude --stdin`, verify the Max credit grant, key hint and organization in Claude Console. Supply `keyName` (the Total Recall Auth entry), `organization`, the masked `keyHint`, `expiresAt`, `creditSource: "claude-max"`, `paidBalanceCents: 0` and false values for `autoReload`, `paymentMethod` and `invoiced`. The binding expires with the observed grant. Reverify after a key or billing change.
 
 `usage-queue --json` lists deferred jobs. Use `usage-retry <id>` after the reported reset to run a replayable job through the same policy, or `usage-cancel <id>` to cancel it. Review a job marked `needsReview` in the original workspace before resubmitting it. A queued result has `queued: true` and a `queueId` and has not succeeded.
 
-A completed model turn is distinct from a completed plugin operation. Structured results return `commandExecutionVerified: false` for agent turns; only direct CLI execution returns a command exit receipt. Muse preserves its actual headless JSONL log and documented process exit status rather than treating session-protocol notifications as headless output. Do not infer working accounts, provider delivery or successful mutations from discovery or fixture tests.
+A completed model turn is distinct from a completed plugin operation. `commandExecutionVerified` requires a successful native shell result. Direct CLI execution returns the CLI process's exit receipt. Muse preserves its actual headless JSONL log and documented process exit status. Verify accounts, provider delivery and mutations through the real runtime.
 
 ## Primary contracts checked 2026-10-14
 

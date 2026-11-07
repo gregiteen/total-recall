@@ -6,7 +6,7 @@
  * non-zero on any failure and prints the real reason. Nothing here trusts a
  * declaration: every check reads the actual files or runs the actual command.
  *
- *   node record.mjs <pluginDir> [--manifest|--card|--secrets|--scaffold|--json]
+ *   node record.mjs <pluginDir> [--manifest|--card|--secrets|--scaffold|--reuse|--json]
  *
  * Checks are marked PASS, FAIL or WARN. A WARN is a judgement call the agent
  * must resolve; a FAIL is a rejection.
@@ -18,7 +18,7 @@ import { pathToFileURL } from 'node:url';
 
 const args = process.argv.slice(2);
 const json = args.includes('--json');
-const only = ['--manifest', '--card', '--secrets', '--scaffold'].filter((f) => args.includes(f));
+const only = ['--manifest', '--card', '--secrets', '--scaffold', '--reuse'].filter((f) => args.includes(f));
 const root = path.resolve(args.find((a) => !a.startsWith('-')) || '.');
 const want = (section) => only.length === 0 || only.includes(section);
 
@@ -121,6 +121,63 @@ if (manifest && want('--manifest')) {
     if (!sub) record('manifest', 'FAIL', 'status binds', `status.command '${status.command}' is not declared`);
     else if (sub.effect && sub.effect !== 'read') record('manifest', 'FAIL', 'status binds', `status.command '${status.command}' is not a read`);
     else record('manifest', 'PASS', 'status binds', status.command);
+  }
+}
+
+/* ── reuse ───────────────────────────────────────────────────────────────── */
+
+function pluginInventory(command) {
+  const binary = process.env.TOTAL_RECALL_BIN || 'total-recall';
+  const output = execFileSync(binary, ['plugin', command, '--json'], {
+    cwd: root, encoding: 'utf8', timeout: 15000, maxBuffer: 8 * 1024 * 1024,
+    stdio: ['ignore', 'pipe', 'pipe'],
+  });
+  return JSON.parse(output);
+}
+
+if (want('--reuse') && manifest) {
+  const { reuse } = manifest;
+  const commands = reuse?.commands;
+  const validCommands = Array.isArray(commands) &&
+    commands.every((command) => typeof command === 'string' && command.startsWith('total-recall '));
+  if (typeof reuse?.owned !== 'string' || !reuse.owned.trim() || !validCommands) {
+    record('reuse', 'FAIL', 'reuse declared', 'Record reuse.commands and reuse.owned after inspecting the plugin library and project bricks');
+  } else {
+    record('reuse', 'PASS', 'reuse declared', 'Installed operations and plugin responsibility are documented');
+    if (manifest.id !== 'auth' && manifest.secrets?.length && !commands.includes('total-recall auth secret')) {
+      record('reuse', 'FAIL', 'Auth owner declared', 'Declare total-recall auth secret for the credential interface');
+    }
+    if (commands.length) {
+      try {
+        const library = pluginInventory('library');
+        const owners = new Set(library.plugins.filter((plugin) =>
+          plugin.valid && plugin.callable && plugin.id !== manifest.id).map((plugin) => plugin.id));
+        const available = new Set(library.commands.filter((entry) => owners.has(entry.plugin)).map((entry) => entry.command));
+        const unresolved = commands.flatMap((command, index) => available.has(command) ? [] : [`reuse.commands[${index}]`]);
+        const detail = unresolved.length ? `Resolve ${unresolved.join(', ')} against the installed plugin library` : `${commands.length} owner operations verified`;
+        record('reuse', unresolved.length ? 'FAIL' : 'PASS', 'owner commands resolve', detail);
+      } catch {
+        record('reuse', 'FAIL', 'owner commands resolve', 'Could not read total-recall plugin library --json');
+      }
+    }
+  }
+
+  const requires = manifest.requires === undefined ? [] : manifest.requires;
+  const brickIds = Array.isArray(requires) && requires.map((entry) => typeof entry === 'string' ? entry : entry?.id);
+  const invalidVersion = Array.isArray(requires) && requires.some((entry) =>
+    entry?.range !== undefined || (entry?.version !== undefined && typeof entry.version !== 'string'));
+  if (!brickIds || invalidVersion || brickIds.some((id) => typeof id !== 'string' || !/^[a-z][a-z0-9-]*$/.test(id) || id === manifest.id)) {
+    record('reuse', 'FAIL', 'required bricks present', 'Declare other brick IDs in requires and use version for version constraints');
+  } else if (brickIds.length) {
+    try {
+      const bricks = pluginInventory('bricks');
+      const present = new Set(bricks.filter((brick) => ['unchanged', 'modified'].includes(brick.status)).map((brick) => brick.id));
+      const missing = brickIds.filter((id) => !present.has(id));
+      const detail = missing.length ? `Vendor required bricks through the plugin manager: ${missing.join(', ')}` : `${brickIds.length} project-owned bricks verified`;
+      record('reuse', missing.length ? 'FAIL' : 'PASS', 'required bricks present', detail);
+    } catch {
+      record('reuse', 'FAIL', 'required bricks present', 'Could not read total-recall plugin bricks --json');
+    }
   }
 }
 

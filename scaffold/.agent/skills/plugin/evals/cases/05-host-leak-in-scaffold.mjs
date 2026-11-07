@@ -38,6 +38,7 @@ export default {
   files: {
     'plugin.json': JSON.stringify({
       id: 'leaky', name: 'Leaky', version: '1.0.0', description: 'A plugin whose capability depends on the host.',
+      reuse: { commands: ['total-recall auth secret'], owned: 'Submits a checkout request to the service.' },
       cli: { command: 'leaky', handler: './cli.mjs', subcommands: [{ name: 'status', effect: 'read' }] },
       capability: { entry: 'capability/index.mjs', exports: ['createCheckout'] },
       secrets: [{ key: 'LEAKY_API_KEY', description: 'Service key', required: true }],

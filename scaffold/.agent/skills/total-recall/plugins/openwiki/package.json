@@ -1,6 +1,6 @@
 {
   "name": "tr-plugin-openwiki",
-  "version": "0.1.9",
+  "version": "0.1.10",
   "type": "module",
   "description": "Multi-repo knowledge graph and documentation wiki engine for Total Recall",
   "scripts": {
@@ -20,9 +20,9 @@
     "templates/"
   ],
   "dependencies": {
-    "@gregiteen/ssss-cli": "0.14.4"
+    "@gregiteen/ssss-cli": "0.14.5"
   },
   "overrides": {
-    "@ssss/cli": "npm:@gregiteen/ssss-cli@0.14.4"
+    "@ssss/cli": "npm:@gregiteen/ssss-cli@0.14.5"
   }
 }

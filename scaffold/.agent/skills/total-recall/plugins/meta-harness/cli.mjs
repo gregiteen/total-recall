@@ -94,15 +94,20 @@ async function runOperation(argv) {
     if (!result.ok) process.exitCode = 1;
   }
   else if (operation === 'quota') result = await inspectQuotas({ node: value('--node') || 'local' });
-  else if (['included-status', 'included-enforce', 'included-bind-claude'].includes(operation)) {
+  else if (operation === 'openrouter-bind') {
+    const { bindOpenRouter } = await import('./src/included-usage.mjs');
+    result = await bindOpenRouter(positional[0], positional[1], value('--model'));
+  }
+  else if (['included-status', 'included-enforce', 'included-bind-claude', 'included-bind-claude-plan'].includes(operation)) {
     const usage = await import('./src/included-usage.mjs');
     if (operation === 'included-status') result = await usage.includedUsageStatus({ probe: has('--probe') });
     else if (operation === 'included-enforce') result = await usage.enforceIncludedUsage();
     else {
-      if (!has('--stdin')) throw new Error('Pass verified Claude Console evidence as JSON on stdin.');
+      if (!has('--stdin')) throw new Error('Pass verified Claude billing evidence as JSON on stdin.');
       const input = fs.readFileSync(0, 'utf8');
       if (Buffer.byteLength(input) > 4096) throw new Error('Claude billing evidence is too large.');
-      result = await usage.bindClaudeIncludedKey(JSON.parse(input));
+      const evidence = JSON.parse(input);
+      result = await (operation === 'included-bind-claude-plan' ? usage.bindClaudeMaxPlan : usage.bindClaudeIncludedKey)(evidence);
     }
   }
   else if (['usage-queue', 'usage-retry', 'usage-cancel'].includes(operation)) {

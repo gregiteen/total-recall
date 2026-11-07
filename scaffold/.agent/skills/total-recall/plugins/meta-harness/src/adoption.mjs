@@ -19,6 +19,8 @@ async function readPreflight(args) {
 const describeRun = run => run ? {
   id: run.id, at: run.timestamp, success: run.success === true, exitCode: run.exitCode ?? null,
   failureKind: run.failureKind ?? null,
+  ...(run.billingMode ? { billingMode: run.billingMode } : {}),
+  ...(run.tools?.length ? { tools: run.tools } : {}),
 } : null;
 
 function latestRuns(receipts) {

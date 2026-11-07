@@ -19,6 +19,13 @@ const sections = ['dependencies', 'devDependencies', 'optionalDependencies', 'pe
 const ignored = new Set(['node_modules', 'vendor', 'dist', 'build', 'coverage', 'venv',
   'test', 'tests', '__tests__', 'fixtures', 'tmp', 'scratch', 'scaffold', 'memory-derived']);
 const canonical = key => key === '@ssss/cli' ? '@gregiteen/ssss-cli' : key;
+// Plugins also force the engine alias through `overrides`. Those pins move with the dependency,
+// or a consumer ends up asking for two versions of the same package.
+const overrideKeys = pkg => Object.entries(pkg.overrides || {})
+  .filter(([key, spec]) => typeof spec === 'string' && BRAIN_PACKAGES.includes(canonical(key)) && canonical(key) !== pkg.name)
+  .map(([key]) => key);
+const overridesLag = (pkg, versions) => overrideKeys(pkg)
+  .some(key => versions[canonical(key)] && pkg.overrides[key] !== targetSpec(key, versions[canonical(key)]));
 const read = file => JSON.parse(fs.readFileSync(file, 'utf8'));
 const isLink = file => { try { return fs.lstatSync(file).isSymbolicLink(); } catch { return false; } };
 export const brainUpdateLockPath = owner => path.join(os.tmpdir(),
@@ -261,7 +268,7 @@ export async function updateAllBrains(opts = {}) {
       row.status = 'failed'; row.error = 'Newer local/preview package; refusing an implicit downgrade'; continue;
     }
     const shared = isLink(path.join(owner.owner, 'node_modules')) || isLink(path.join(consumer.root, 'node_modules'));
-    const needsChange = shared || consumer.deps.some(dep => {
+    const needsChange = shared || (!consumer.runtimeOnly && overridesLag(consumer.pkg, versions)) || consumer.deps.some(dep => {
       const pinLags = !consumer.runtimeOnly && dep.declared !== targetSpec(dep.key, versions[dep.package]);
       if (absentDevDep(dep)) return pinLags;
       return pinLags || dep.version !== versions[dep.package]
@@ -296,6 +303,9 @@ export async function updateAllBrains(opts = {}) {
         saved.set(consumer.file, text);
         const pkg = read(consumer.file);
         for (const dep of consumer.deps) pkg[dep.section][dep.key] = targetSpec(dep.key, versions[dep.package]);
+        for (const key of overrideKeys(pkg)) {
+          if (versions[canonical(key)]) pkg.overrides[key] = targetSpec(key, versions[canonical(key)]);
+        }
         const indent = /\n([ \t]+)"/.exec(text)?.[1] || 2;
         fs.writeFileSync(consumer.file, JSON.stringify(pkg, null, indent) + '\n');
       }
