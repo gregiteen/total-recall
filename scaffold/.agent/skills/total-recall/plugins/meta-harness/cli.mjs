@@ -6,7 +6,8 @@ import { configDir } from './src/paths.mjs';
 import { inspectAgents, getActiveAdapters, getCustomAdaptersDirs, loadCustomAdapters, validateCustomAdapter, adapterPath } from './src/worker.mjs';
 import { inspectNode, listTargets, executeCommand, executeOnNode } from './src/executor.mjs';
 import { DOC_SOURCES, documentationStatus, refreshDocumentation, ensureDocumentation, maintainDocumentation, readDocumentation, searchDocumentation } from './src/documentation.mjs';
-import { manageRuntime } from './src/runtime.mjs';
+import { manageRuntime, validateRuntimeOperation } from './src/runtime.mjs';
+import { validateDispatchRequest } from './src/dispatch-request.mjs';
 import { setupIntegrations } from './src/setup.mjs';
 import { inspectUpstreamFleet, getAgentChangelog } from './src/tracker.mjs';
 import { inspectQuotas, getBenchmarks, routeTask } from './src/router.mjs';
@@ -76,7 +77,7 @@ async function runOperation(argv) {
   // Help anywhere in the arguments prints usage; it must never run an operation.
   if (operation === 'help' || args.some(arg => arg === '--help' || arg === '-h')) {
     const manifest=JSON.parse(fs.readFileSync(new URL('./plugin.json',import.meta.url),'utf8'));
-    console.log('Usage: total-recall meta-harness <operation> [options]  (alias: cli-agents)\nEvery agent receives Total Recall bootstrap before dispatch. Runtime syntax: runtime <agent> <native-command...> [--node ID].\n');
+    console.log('Usage: total-recall meta-harness <operation> [options]  (alias: cli-agents)\nEvery agent receives Total Recall bootstrap before dispatch. Runtime syntax: runtime <agent> <maintenance-command...> [--node ID].\n');
     for(const command of manifest.cli.subcommands)console.log(`  ${command.name} ${(command.args || []).map(arg=>arg.flag?`${arg.flag} <${arg.name}>`:`<${arg.name}>`).join(' ')} — ${command.description}`);
     return;
   }
@@ -85,7 +86,33 @@ async function runOperation(argv) {
   if (operation === 'status') result = {...await inspectNode(value('--node') || 'local'),documentation:documentationStatus()};
   else if (operation === 'catalog') result = { adapters: getActiveAdapters(), permissions: ['read', 'write', 'send', 'destructive'] };
   else if (operation === 'nodes') result = await listTargets();
+  else if (operation === 'adoption') {
+    const node = value('--node');
+    if (node && has('--all')) throw new Error('Choose either --node or --all');
+    const { inspectLocalAdoption, inspectFleetAdoption } = await import('./src/adoption.mjs');
+    result = has('--all') || (node && node !== 'local') ? await inspectFleetAdoption({ node }) : await inspectLocalAdoption();
+    if (!result.ok) process.exitCode = 1;
+  }
   else if (operation === 'quota') result = await inspectQuotas({ node: value('--node') || 'local' });
+  else if (['included-status', 'included-enforce', 'included-bind-claude'].includes(operation)) {
+    const usage = await import('./src/included-usage.mjs');
+    if (operation === 'included-status') result = await usage.includedUsageStatus({ probe: has('--probe') });
+    else if (operation === 'included-enforce') result = await usage.enforceIncludedUsage();
+    else {
+      if (!has('--stdin')) throw new Error('Pass verified Claude Console evidence as JSON on stdin.');
+      const input = fs.readFileSync(0, 'utf8');
+      if (Buffer.byteLength(input) > 4096) throw new Error('Claude billing evidence is too large.');
+      result = await usage.bindClaudeIncludedKey(JSON.parse(input));
+    }
+  }
+  else if (['usage-queue', 'usage-retry', 'usage-cancel'].includes(operation)) {
+    const queue = await import('./src/usage-queue.mjs');
+    if (operation === 'usage-queue') result = { ok: true, jobs: await queue.listIncludedJobs() };
+    else if (!positional[0]) throw new Error('Choose a queued job ID.');
+    else if (operation === 'usage-cancel') result = { ok: true, job: await queue.cancelIncludedJob(positional[0]) };
+    else result = await queue.retryIncludedJob(positional[0]);
+    if (!result.ok) process.exitCode = 1;
+  }
   else if (operation === 'benchmarks') result = await getBenchmarks();
   else if (operation === 'route') {
     const task = positional.join(' ');
@@ -237,7 +264,8 @@ async function runOperation(argv) {
     const runtimeArgs=args.slice(1).filter(arg=>arg!=='--json'), agent=runtimeArgs.shift();
     const index=runtimeArgs.indexOf('--node'); let node='local';
     if(index>=0){node=runtimeArgs[index+1];if(!node || node.startsWith('-'))throw new Error('--node requires an identifier');runtimeArgs.splice(index,2);}
-    result = node==='local' ? await manageRuntime(agent,runtimeArgs) : await executeOnNode(node,{operation:'direct',cwd:process.cwd(),argv:['total-recall','meta-harness','runtime',agent,...runtimeArgs,'--json']});
+    const command = validateRuntimeOperation(agent, runtimeArgs);
+    result = node==='local' ? await manageRuntime(agent,command) : await executeOnNode(node,{operation:'direct',useHome:true,argv:['total-recall','meta-harness','runtime',agent,...command,'--json']});
     if(!result.ok)process.exitCode=1;
   }
   else if (operation === 'process') {
@@ -266,10 +294,8 @@ async function runOperation(argv) {
   else if(operation==='dispatch') {
     if(!args.includes('--stdin'))throw new Error('Task requests must arrive through stdin: pass --stdin with JSON {agent, cwd, prompt}');
     const input=fs.readFileSync(0,'utf8');if(Buffer.byteLength(input)>65536)throw new Error('Task request too large');
-    const request=JSON.parse(input);
-    const timeoutMs = request.timeoutMs ?? 300000;
-    if (!Number.isInteger(timeoutMs) || timeoutMs < 1 || timeoutMs > 540000) throw new Error('Foreground dispatch timeout must be 1..540000 ms');
-    result=await dispatchWithReceipt({...request,timeoutMs,allowUnknownAuth:request.allowUnknownAuth===true},{node:request.node || 'local',role:'Dispatch'});
+    const request=validateDispatchRequest(JSON.parse(input));
+    result=await dispatchWithReceipt(request,{node:request.node || 'local',role:'Dispatch'});
     if(!result.ok)process.exitCode=1;
   }
   else if (operation === 'inspect') {

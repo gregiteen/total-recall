@@ -21,6 +21,7 @@ import { getModelCatalog, joinHarnessModels } from './model-catalog.mjs';
 import { readReceipts, activeQuotaWalls, activeCredentialBlocks } from './learner.mjs';
 import { resolvePool, exclusionReason, isLocalExecutionNode } from './pool.mjs';
 import { readCodexRateLimits, measuredWalls } from './telemetry.mjs';
+import { claudeProofCurrent, INCLUDED_AGENTS, readIncludedPolicy } from './included-usage.mjs';
 import { derivedDir } from './paths.mjs';
 
 /**
@@ -139,6 +140,7 @@ async function readMeteredQuota(options) {
  * Never fabricates or hardcodes synthetic subscription percentages.
  */
 export async function inspectQuotas(options = {}) {
+  const policy = options.policy || await readIncludedPolicy();
   const quotas = {};
   const remote = options.node && options.node !== 'local';
   const fleet = (options.fleet || fleetTelemetry)();
@@ -164,23 +166,27 @@ export async function inspectQuotas(options = {}) {
   // Harness state comes from the selected machine. Quota walls are this machine's receipts.
   const inspected = remote ? await (options.inspectNodeFn || inspectNode)(options.node) : await (options.inspect || inspectAgents)({ env: process.env });
   const codexLimits = remote ? null : readCodexRateLimits();
-  const walls = remote ? {} : { ...activeQuotaWalls(await readReceipts()), ...measuredWalls(codexLimits) };
+  const receipts = remote ? [] : (await readReceipts()).filter(run => !policy.enabled || run.billingMode === 'included');
+  const walls = remote ? {} : { ...activeQuotaWalls(receipts), ...(!policy.enabled ? measuredWalls(codexLimits) : {}) };
   const metered = METERED_HARNESSES;
 
-  const blocks = remote ? {} : activeCredentialBlocks(await readReceipts());
-  for (const agent of inspected.agents || []) {
+  const blocks = activeCredentialBlocks(receipts);
+  for (const installed of inspected.agents || []) {
+    const agent = policy.enabled && !remote && installed.id === 'claude' ? { ...installed, authenticated: claudeProofCurrent(policy) } : installed;
     const wall = walls[agent.id];
     const block = blocks[agent.id];
-    const reason = exclusionReason(agent, wall, block);
+    const policyBlocked = policy.enabled && !INCLUDED_AGENTS.includes(agent.id);
+    const reason = policyBlocked ? 'outside the included usage route' : exclusionReason(agent, wall, block);
     let status = 'ready';
     if (!agent.installed) status = 'not_installed';
+    else if (policyBlocked) status = 'blocked';
     else if (agent.authenticated === false || block) status = 'needs_auth';
     else if (agent.blockedBy) status = 'blocked';
     else if (wall) status = 'exhausted';
     else if (agent.authenticated === 'unknown') status = 'unverified';
     const quota = {
       installed: Boolean(agent.installed), version: agent.version || null,
-      billingModel: agent.id === 'ollama' ? 'local' : metered.has(agent.id) ? 'metered' : 'subscription',
+      billingModel: policy.enabled && agent.id === 'claude' ? 'included-api-credits' : agent.id === 'ollama' ? 'local' : metered.has(agent.id) ? 'metered' : 'subscription',
       rolling5hUsedPercent: null, weeklyUsedPercent: null, usagePercent: null,
       quotaSource: 'none', quotaNote: reason || 'No usage figure is available from this harness', status,
       ...(wall ? { resetsAt: wall.until, wallMessage: wall.message } : {}),
@@ -196,7 +202,7 @@ export async function inspectQuotas(options = {}) {
     quotas[agent.id] = quota;
   }
 
-  const meteredQuota = options.skipMetered
+  const meteredQuota = options.skipMetered || policy.enabled
     ? { billingModel: 'metered', status: 'not-read', quotaNote: 'Not read: no metered harness is in this route pool' }
     : await cachedMeteredQuota(options);
   quotas.metered = meteredQuota;
@@ -241,9 +247,10 @@ export function placeLocalWork(fleet = {}) {
 }
 
 export async function routeTask(taskDescription, options = {}) {
+  const policy = await readIncludedPolicy();
   let complexity = classifyTaskComplexity(taskDescription, options);
   let classifier = { source: 'heuristic' };
-  if (options.jev) {
+  if (options.jev && !policy.enabled) {
     try {
       const decided = classifyWithDecision(taskDescription, options.decisionRun);
       complexity = { ...complexity, tier: decided.tier, isFrontierRecommended: decided.tier === 'frontier', isLocalRecommended: decided.tier === 'local' };
@@ -260,17 +267,19 @@ export async function routeTask(taskDescription, options = {}) {
   // fleet telemetry places local work, and the balance matters only to a metered harness.
   const shared = scoped.inspect ? null : inspectAgents({ env: process.env });
   const lean = shared ? { ...scoped, inspect: () => shared } : scoped;
-  const [pool, receipts] = await Promise.all([resolvePool(lean), readReceipts()]);
+  const [pool, receipts] = await Promise.all([resolvePool({ ...lean, policy }), readReceipts()]);
   const quotaReport = await inspectQuotas({
     ...lean,
+    policy,
     meteredTtlMs: METERED_TTL_MS,
-    skipMetered: lean.openRouterKey === undefined && !pool.ready.some(h => METERED_HARNESSES.has(h.id)),
+    skipMetered: policy.enabled || (lean.openRouterKey === undefined && !pool.ready.some(h => METERED_HARNESSES.has(h.id))),
     ...(remote || lean.fleet ? {} : { fleet: complexity.tier === 'local' ? cachedFleet : () => ({ ok: false, error: 'Not read: this route places no local work', nodes: [] }) }),
   });
   const quotas = quotaReport.quotas;
   const routing = selectOptimalHarness(taskDescription, pool.ready.map(h => h.id), quotas, { ...options, tierOverride: complexity.tier, empiricalScorecard: computeEmpiricalScorecard(receipts) });
   const selectedQuota = quotas[routing.selected] || {};
   const warnings = [];
+  if (policy.enabled && options.jev) warnings.push('Included usage policy uses the local task classifier.');
   if (typeof selectedQuota.usagePercent === 'number' && selectedQuota.usagePercent > 85) warnings.push(`${routing.selected} is at ${selectedQuota.usagePercent}% measured usage.`);
   if (selectedQuota.status === 'unverified') warnings.push(`${routing.selected} has no login probe; only a completed run proves it works.`);
   if (selectedQuota.billingModel === 'metered') warnings.push(`${routing.selected} bills per token.`);
@@ -278,6 +287,7 @@ export async function routeTask(taskDescription, options = {}) {
   return {
     ok: Boolean(routing.selected), task: taskDescription, classifier, complexity,
     selected: routing.selected, tier: complexity.tier, candidates: routing.candidates, excluded: pool.excluded,
+    ...(policy.enabled && !routing.selected ? { deferred: pool.excluded.find(row => row.failureKind === 'quota') || null } : {}),
     placement: complexity.tier === 'local' ? placeLocalWork(quotaReport.fleet) : null,
     scoring: 'Adapter quality and cost scores are configured priors, adjusted by pass rates measured on this machine.',
     quotaSnapshot: { selectedHarnessStatus: selectedQuota.status || null, selectedHarnessUsage: selectedQuota.usagePercent ?? null, freeMemGB: quotas.system.freeMemGB ?? null },

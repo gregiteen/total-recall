@@ -11,7 +11,7 @@ export async function runOkfIngest(args) {
     dryRun: false,
     category: null,
     importance: null,
-    onConflict: 'warn',
+    onConflict: 'skip',
     typeMap: null,
     help: false
   };
@@ -118,10 +118,10 @@ function printIngestOkfHelp() {
 
   Options:
     --dry-run                 Validate concepts and preview import without writing
-    --category <name>         Override and force category for all imported concepts
+    --category <name>         Choose a descriptive category for imported concepts
     --importance <1-5>        Override default importance (default: 3)
-    --on-conflict <strategy>  Strategy for duplicate slugs: 'skip' | 'warn' | 'overwrite' (default: warn)
-    --type-map <mapping>      Custom type mappings. Format: "Type A=facts,Type B=concepts"
+    --on-conflict <strategy>  'skip' (default), 'warn' (report and skip), or 'overwrite' (same imported concept)
+    --type-map <mapping>      Map types to descriptive categories, e.g. "Type A=facts,Type B=concepts"
     --global                  Target the global brain
     --project                 Target the project brain (default)
     --help, -h                Show this help

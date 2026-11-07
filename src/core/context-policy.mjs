@@ -100,14 +100,18 @@ export function assembleContext(contributions, { total = 4000 } = {}) {
     if (estimateTokens(render([...selected, item])) <= total) selected.push(item);
     else excluded.push(item.id);
   }
-  const context = render(selected);
+  const isEvidence = item => item.taskEvidence && !item.required;
+  const evidence = selected.filter(isEvidence);
+  const ordered = [...selected.filter(item => !isEvidence(item)), ...evidence];
+  const context = render(ordered);
+  const evidenceText = render(evidence);
   const totalTokens = estimateTokens(context);
-  return { context, ready: requiredTokens <= total, stats: {
+  return { context, ...(evidenceText && { evidenceStart: context.length - evidenceText.length }), ready: requiredTokens <= total, stats: {
     token_measurement: 'estimated_chars_divided_by_four', total_tokens: totalTokens,
     budget_used: totalTokens, budget_remaining: Math.max(0, total - totalTokens),
     required_tokens: requiredTokens, overflow_tokens: Math.max(0, requiredTokens - total),
     required_ids: required.map(c => c.id), excluded_ids: excluded,
-    contributions: selected.map(c => ({ id: c.id, required: Boolean(c.required), chars: c.text.length, estimated_tokens: estimateTokens(c.text) })),
+    contributions: ordered.map(c => ({ id: c.id, required: Boolean(c.required), chars: c.text.length, estimated_tokens: estimateTokens(c.text) })),
     version: crypto.createHash('sha256').update(JSON.stringify({ total, contributions })).digest('hex'),
   } };
 }

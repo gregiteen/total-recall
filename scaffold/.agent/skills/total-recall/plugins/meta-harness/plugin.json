@@ -1,7 +1,7 @@
 {
   "id": "meta-harness",
   "name": "Meta Harness",
-  "version": "0.3.4",
+  "version": "0.3.6",
   "description": "Discover, configure, document, track, and run coding agent harnesses through Total Recall across mesh nodes.",
   "gate": {
     "tasks": ["Run work in another agent harness", "Choose which harness takes a task", "Check harness versions, sign-in and quota", "Read a harness's official documentation"],
@@ -68,6 +68,27 @@
         "timeout_ms": 120000
       },
       {
+        "name": "adoption",
+        "description": "Check installed agents, native gate activity and managed run receipts on this node or the mesh",
+        "effect": "read",
+        "output": "json",
+        "args": [
+          {
+            "name": "node",
+            "flag": "--node",
+            "type": "string",
+            "label": "Mesh node"
+          },
+          {
+            "name": "all",
+            "flag": "--all",
+            "type": "boolean",
+            "label": "Check the recorded fleet"
+          }
+        ],
+        "timeout_ms": 120000
+      },
+      {
         "name": "run-command",
         "description": "Run an explicit plugin command through the selected agent and node using a JSON request on stdin",
         "effect": "write",
@@ -77,7 +98,7 @@
       },
       {
         "name": "runtime",
-        "description": "Manage any agent runtime; includes Hermes gateway/auth/skills/plugins and DSH observations",
+        "description": "Inspect a runtime or run supported maintenance; agent tasks use dispatch",
         "effect": "write",
         "output": "json",
         "args": [
@@ -91,7 +112,7 @@
           {
             "name": "operation",
             "type": "string",
-            "label": "Native operation",
+            "label": "Maintenance operation",
             "required": true,
             "positional": true
           }
@@ -105,6 +126,49 @@
         "output": "json",
         "args": [],
         "timeout_ms": 600000
+      },
+      {
+        "name": "included-status",
+        "description": "Read included usage policy and optionally check Codex allowance without a turn",
+        "effect": "read",
+        "output": "json",
+        "args": [{ "name": "probe", "flag": "--probe", "type": "boolean", "label": "Read live Codex allowance" }]
+      },
+      {
+        "name": "included-enforce",
+        "description": "Require included usage for managed agent dispatch on this node",
+        "effect": "write",
+        "output": "json",
+        "args": []
+      },
+      {
+        "name": "included-bind-claude",
+        "description": "Bind verified Max credit evidence on stdin to an existing Auth key",
+        "effect": "write",
+        "output": "json",
+        "args": []
+      },
+      {
+        "name": "usage-queue",
+        "description": "List jobs waiting for included usage and their reset evidence",
+        "effect": "read",
+        "output": "json",
+        "args": []
+      },
+      {
+        "name": "usage-retry",
+        "description": "Retry a waiting job after checking included usage",
+        "effect": "write",
+        "output": "json",
+        "args": [{ "name": "job", "type": "string", "label": "Queued job ID", "required": true, "positional": true }],
+        "timeout_ms": 600000
+      },
+      {
+        "name": "usage-cancel",
+        "description": "Cancel a waiting included usage job",
+        "effect": "write",
+        "output": "json",
+        "args": [{ "name": "job", "type": "string", "label": "Queued job ID", "required": true, "positional": true }]
       },
       {
         "name": "docs-status",

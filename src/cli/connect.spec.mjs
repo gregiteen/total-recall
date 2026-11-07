@@ -170,6 +170,33 @@ describe('connect — Codex projection', () => {
   });
 });
 
+describe('connect — OpenClaw projection', () => {
+  it('projects AGENTS.md and leaves the native memory file absent on first connection', async () => {
+    await runConnect(['openclaw']);
+    const projection = path.join(tmpProject, 'AGENTS.md');
+    expect(fs.readlinkSync(projection)).toBe('INSTRUCTIONS.md');
+    expect(fs.existsSync(path.join(tmpProject, 'MEMORY.md'))).toBe(false);
+    const registry = JSON.parse(
+      fs.readFileSync(path.join(tmpAgentDir, 'skills', 'total-recall', 'config', 'clients.json'), 'utf8')
+    );
+    expect(registry.clients.openclaw.projectionPath).toBe(path.join(fs.realpathSync(tmpProject), 'AGENTS.md'));
+  });
+
+  it.each(['file', 'symlink'])('preserves native memory stored as a %s on forced connection', async (kind) => {
+    const memoryPath = path.join(tmpProject, 'MEMORY.md');
+    const backingPath = kind === 'symlink' ? path.join(tmpAgentDir, 'native-memory.md') : memoryPath;
+    fs.writeFileSync(backingPath, 'Agent-authored memory\n');
+    if (kind === 'symlink') fs.symlinkSync(backingPath, memoryPath);
+    fs.writeFileSync(path.join(tmpProject, 'AGENTS.md'), 'Previous instruction projection\n');
+
+    await runConnect(['openclaw', '--force']);
+
+    expect(fs.readlinkSync(path.join(tmpProject, 'AGENTS.md'))).toBe('INSTRUCTIONS.md');
+    expect(fs.readFileSync(memoryPath, 'utf8')).toBe('Agent-authored memory\n');
+    expect(fs.lstatSync(memoryPath).isSymbolicLink()).toBe(kind === 'symlink');
+  });
+});
+
 describe('connect — repo skills projected as slash commands', () => {
   // Seed two repo skills in the agent dir (the connect skills source)
   function seedSkill(name, description) {

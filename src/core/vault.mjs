@@ -33,7 +33,7 @@ function stripUndefined(obj) {
  * @returns {string}        The serialized markdown with frontmatter
  */
 export function safeStringify(content, data) {
-  return matter.stringify(content ?? '', stripUndefined(data ?? {}));
+  return matter.stringify({ content: content ?? '', data: stripUndefined(data ?? {}) });
 }
 
 /**

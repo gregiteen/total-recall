@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
+const extraNodes = vi.hoisted(() => []);
 vi.mock('./agent-dir.mjs', () => ({
   parseLayerFlag: args => ({ layer: 'project', remainingArgs: args }),
   getBothBrains: () => ({ project: { brainDir: '/fixture/brain' } }),
@@ -6,6 +7,7 @@ vi.mock('./agent-dir.mjs', () => ({
 vi.mock('../core/vault-cache.mjs', () => ({ getNodes: () => [
   { slug: 'required', category: 'invariants', status: 'active', body: 'Preserve records.' },
   { slug: 'manual', category: 'facts', status: 'active', body: 'deployment '.repeat(500) },
+  ...extraNodes,
 ] }));
 vi.mock('../core/surface.mjs', () => ({ mergeGlobalRuleNodes: nodes => nodes, legacyRuleContributions: () => [] }));
 vi.mock('../core/brain-registry.mjs', () => ({ isBrainEnabled: () => true }));
@@ -14,7 +16,7 @@ vi.mock('../core/context-providers.mjs', () => ({ retrievePluginContext: async (
 vi.mock('../core/embeddings.mjs', async original => ({ ...await original(), getEmbedding: async () => { throw new Error('fixture provider unavailable'); } }));
 import context from './context.mjs';
 const originalExitCode = process.exitCode;
-afterEach(() => { vi.restoreAllMocks(); process.exitCode = originalExitCode; });
+afterEach(() => { vi.restoreAllMocks(); process.exitCode = originalExitCode; extraNodes.length = 0; });
 describe('context CLI', () => {
   it('emits only a budget diagnostic on failure, then all required instructions after explicit retry', async () => {
     const log = vi.spyOn(console, 'log').mockImplementation(() => {});
@@ -49,6 +51,26 @@ describe('context CLI', () => {
     expect(output).toContain('Preserve records.');
     expect(output).toContain('manual');
     expect(Number(output.match(/tokens:(\d+)/)[1])).toBe(Math.ceil((output.length + 1) / 4));
+  });
+  it.each([[12000, false], [1000, true]])('marks the evidence suffix in a budgeted JSON capsule (%i)', async (budget, compacted) => {
+    extraNodes.push({
+      slug: 'long-rule', category: 'invariants', status: 'active', priority: 'absolute',
+      body: `Preserve 🧭 authoritative rules.\n\n## Task knowledge\n${'Additional rule detail. '.repeat(400)}`,
+    });
+    const log = vi.spyOn(console, 'log').mockImplementation(() => {});
+    await context(['deployment', '--format', 'json', '--budget', String(budget)]);
+    const wire = log.mock.calls.at(-1)[0];
+    const capsule = JSON.parse(wire);
+    expect(capsule.ready).toBe(true);
+    expect(Boolean(capsule.compacted)).toBe(compacted);
+    expect(Number.isInteger(capsule.evidence_start)).toBe(true);
+    expect(capsule.context.slice(0, capsule.evidence_start)).toContain('Preserve 🧭 authoritative rules.');
+    const evidence = capsule.context.slice(capsule.evidence_start);
+    expect(evidence).toMatch(/^## Task knowledge\nSupporting evidence/);
+    expect(evidence).toContain('Source: memory project:manual (body)');
+    expect(evidence).not.toContain('Preserve 🧭 authoritative rules.');
+    expect(capsule.stats.total_tokens).toBe(Math.ceil((wire.length + 1) / 4));
+    expect(capsule.stats.total_tokens).toBeLessThanOrEqual(budget);
   });
   it('puts the preflight rule on the second line, ahead of every rule body, and counts it', async () => {
     const log = vi.spyOn(console, 'log').mockImplementation(() => {});

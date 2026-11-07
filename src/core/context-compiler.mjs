@@ -109,7 +109,10 @@ export async function compileContext({
   }
 
   const cliContributions = cliVerbContribution ? [cliVerbContribution] : [];
-  const supporting = [...knowledge.contributions, ...cliContributions];
+  const evidence = knowledge.summary.selected
+    ? knowledge.contributions.map(item => ({ ...item, taskEvidence: true }))
+    : knowledge.contributions;
+  const supporting = [...evidence, ...cliContributions];
   const result = assembleContext([...required, ...supporting, ...contributions], { total: b.total });
   const evidenceMissing = supporting.some(item => !result.stats.contributions.some(placed => placed.id === item.id));
   // Compaction may reclaim rule explanation space; never claim readiness after losing selected task evidence.
@@ -163,6 +166,8 @@ export function capsuleResponse(result, { total = 4000, debug = false, format = 
     retrieval: summarizeRetrieval(result.stats.retrieval),
   };
   const response = { ready: result.ready, context: result.context, stats };
+  // This offset refers to the decoded context string, not the escaped JSON bytes.
+  if (result.evidenceStart !== undefined) response.evidence_start = result.evidenceStart;
   stats.budget = total;
   // Counts affect serialization themselves. Iterate to a stable representation.
   for (let i = 0; i < 20; i++) {

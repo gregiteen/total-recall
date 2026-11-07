@@ -8,6 +8,7 @@ import { recordRunReceipt } from './learner.mjs';
 import { classifyTaskComplexity, synthesizeOneWayValve } from '../capability/index.mjs';
 import { notifyAlert } from './alerts.mjs';
 import { dispatchWithReceipt } from './dispatch.mjs';
+import { queueIncludedJob } from './usage-queue.mjs';
 import { resolvePool, localExecutionNode } from './pool.mjs';
 import { createThread, appendThreadTurn, updateThread } from './threads.mjs';
 import { executeCodeReview } from './review.mjs';
@@ -101,9 +102,10 @@ async function runPipeline(task, poolInfo, options) {
   const run = async (stage, harness, prompt, { workdir = cwd, permissions, role = stage.role } = {}) => {
     stage.status = 'running';
     const result = await dispatchWithReceipt({ agent: harness.id, node: 'local', cwd: workdir, contextCwd: cwd, contextTask: task, prompt, permissions: permissions || stage.permissions, allowUnknownAuth: options.allowUnknownAuth === true }, { dispatchFn: options.dispatchFn, role, complexityScore: complexity.score });
-    stage.status = result.ok ? 'completed' : 'failed';
+    stage.status = result.ok ? 'completed' : result.queued ? 'queued' : 'failed';
     stage.output = result.response || result.error || null;
     stage.failureKind = result.ok ? undefined : result.failureKind;
+    if (result.queueId) stage.queueId = result.queueId;
     appendThreadTurn(thread.id, { role: role.toLowerCase(), agent: harness.id, content: stage.output || '' });
     return result;
   };
@@ -186,7 +188,8 @@ async function runCouncil(task, poolInfo, options) {
   const cwd = options.cwd || process.cwd();
   const votes = await Promise.all(seats.map(async harness => {
     const result = await dispatchWithReceipt({ agent: harness, node: 'local', cwd, contextTask: task, prompt: `[ROLE: COUNCIL MEMBER]\nDo not change any file. Assess this proposal, with its trade-offs and risks:\n${task}\n\nEnd your reply with exactly one JSON object: {"vote":"APPROVE"|"REJECT","reason":"..."}`, permissions: READ, allowUnknownAuth: options.allowUnknownAuth === true }, { dispatchFn: options.dispatchFn, role: 'Council' });
-    return { harness, ok: result.ok === true, ...(result.ok ? parseVote(result.response) : { vote: 'ABSTAIN', reason: null, error: result.error }), feedback: result.response || null };
+    return { harness, ok: result.ok === true, ...(result.ok ? parseVote(result.response) : { vote: 'ABSTAIN', reason: null, error: result.error }),
+      ...(result.queueId ? { queueId: result.queueId } : {}), feedback: result.response || null };
   }));
   const count = vote => votes.filter(item => item.vote === vote).length;
   const majority = votes.length / 2;
@@ -214,7 +217,8 @@ async function runRace(task, poolInfo, options) {
       if (commit && options.gate) linkDependencies(cwd, directory);
       const gate = commit ? await (options.gateFn || runQualityGate)(directory, options.gateOptions) : null;
       keep = Boolean(commit) && gate?.passed === true;
-      return { harness, branch: keep ? branch : null, commit: keep ? commit : null, ok: keep, gate, completedAt: Date.now(), durationMs: Date.now() - started, error: result.ok ? (commit ? (keep ? undefined : 'The quality gate failed') : 'No files changed') : result.error };
+      return { harness, branch: keep ? branch : null, commit: keep ? commit : null, ok: keep, gate, completedAt: Date.now(), durationMs: Date.now() - started, error: result.ok ? (commit ? (keep ? undefined : 'The quality gate failed') : 'No files changed') : result.error,
+        ...(result.queueId ? { queueId: result.queueId } : {}) };
     } catch (error) {
       return { harness, branch: null, commit: null, ok: false, gate: null, durationMs: null, error: String(error.message) };
     } finally {
@@ -235,6 +239,14 @@ export async function coordinateTask(taskDescription, options = {}) {
   if (!['pipeline', 'orchestrate', 'council', 'race'].includes(mode)) throw new Error(`Unsupported coordination mode: ${mode}`);
   localExecutionNode(options);
   const poolInfo = await resolvePool(options);
+  const wall = poolInfo.excluded.find(item => item.failureKind === 'quota');
+  const minimum = mode === 'race' || ((mode === 'pipeline' || mode === 'orchestrate') && options.allowSameFamily !== true) ? 2 : 1;
+  if (options.execute === true && wall && poolInfo.ready.length < minimum) {
+    const blocked = { ok: false, failureKind: 'quota', error: 'Coordination is waiting for included usage.', resetsAt: wall.resetsAt };
+    const job = await queueIncludedJob({ agent: wall.harness, cwd: options.cwd || process.cwd(), prompt: task }, blocked,
+      { role: 'Coordinate', launchPrevented: true });
+    return { ...blocked, mode, executedLive: false, queued: true, queueId: job.id, needsReview: job.needsReview };
+  }
   if (mode === 'council') return runCouncil(task, poolInfo, options);
   if (mode === 'race') return runRace(task, poolInfo, options);
   return runPipeline(task, poolInfo, options);

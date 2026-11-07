@@ -49,6 +49,7 @@ export async function recordRunReceipt(receipt = {}) {
     success: receipt.success === true,
     durationMs: receipt.durationMs || 0,
     failureKind: receipt.failureKind || null,
+    ...(receipt.billingMode ? { billingMode: receipt.billingMode } : {}),
     error: receipt.error ? String(receipt.error).slice(0, 500) : null,
     resetsAt: receipt.resetsAt || null,
     gate: receipt.gate || null,

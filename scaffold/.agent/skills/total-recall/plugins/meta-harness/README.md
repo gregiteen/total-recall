@@ -1,8 +1,10 @@
 # Meta Harness
 
-Built-in and validated custom adapters share one plugin. `runtime <agent> ...`
-exposes native runtime commands; DSH observations and Hermes gateway management
-live here as well. `meta-harness` is the primary namespace; `cli-agents` is an alias.
+Built-in and validated custom adapters share one plugin. Use `dispatch` or
+`route --execute` for agent work. `runtime <agent> ...` accepts supported maintenance
+commands such as `codex login status`, `hermes gateway status`, and `dsh models`.
+Manage gateway services through their owning plugins. `cli-agents` is an alias
+for `meta-harness`.
 
 `total-recall cli-agents setup` connects all nine native instruction surfaces.
 The declared setup operation also runs during daemon-owned plugin refresh.
@@ -29,6 +31,21 @@ total-recall cli-agents inspect --node <recorded-node> --json
 total-recall cli-agents run-command --stdin --json < request.json
 ```
 
+Check adoption without launching a model:
+
+```sh
+total-recall meta-harness adoption --json
+total-recall meta-harness adoption --node <recorded-node> --json
+total-recall meta-harness adoption --all --json
+```
+
+The report separates native login and hook configuration from recent hook
+decisions and completed managed runs. Its run evidence is historical; use the
+timestamps and last attempt to see whether an agent has since stopped working.
+Native hook activity alone does not prove that an agent was launched through
+Meta Harness. A fleet report lists offline nodes, missing CLI access, and
+installed versions that cannot provide adoption evidence.
+
 `request.json` selects one installed plugin operation, its literal arguments, a node and an agent:
 
 ```json
@@ -44,11 +61,21 @@ total-recall cli-agents run-command --stdin --json < request.json
 }
 ```
 
-For remote nodes, supply `execution.cwd` as an explicit absolute workspace. `agent: "direct"` runs the actual installed Total Recall CLI without a model. Remote access comes from recorded mesh entities and verified SSH configuration; unavailable nodes or binaries produce errors. Secrets are never accepted in an agent prompt. Existing account metadata is inspected without printing credentials or substituting provider API keys.
+For remote nodes, supply `execution.cwd` as an explicit absolute workspace. `agent: "direct"` runs the actual installed Total Recall CLI without a model. A remote agent task enters the destination's installed Meta Harness and records its receipt there. Remote access comes from recorded mesh entities and verified SSH configuration; unavailable nodes or binaries produce errors. Secrets are never accepted in an agent prompt. Existing account metadata is inspected without printing credentials or substituting provider API keys.
 
 The four permissions are strict boolean **command-effect admission controls**. They allow or deny the selected plugin command before dispatch. They are not a network policy or an OS sandbox for every action a model might propose. Supported adapter write modes are scoped through the vendor CLI; vendor approval and sandbox defaults stay enabled. The host's authenticated authorization still applies.
 
 The foreground `dispatch --stdin` request accepts `timeoutMs` from 1 to 540000, defaulting to 300000. Use the managed process or background execution commands for longer jobs. A Claude write request can include explicit `allowedTools` rules such as `["Bash(git status *)"]`. Native permission denials surface as failed dispatch receipts. Agent turn completion and command verification are separate fields.
+
+A native login probe reads account metadata. A headless request can still fail if the provider rejects that login. Signed-out and expired Claude subscription sessions produce a failed receipt with `failureKind: "auth"`. Renew the subscription sign-in on the dispatch node and retry a scoped dispatch to verify execution. See [Claude Code authentication](https://code.claude.com/docs/en/iam#renew-an-expiring-login).
+
+### Included usage
+
+Run `total-recall meta-harness included-enforce` to limit this node's managed dispatches to included usage. Use `included-status --probe --json` to see whether Claude has a verified binding and read current Codex allowance without an agent turn. Codex uses the built-in ChatGPT route and requires the signed-in plan to report no paid credit.
+
+Before using `included-bind-claude --stdin`, verify the Max credit grant, key hint and organization in Claude Console. Supply `keyName` (the Total Recall Auth entry), `organization`, the masked `keyHint`, `expiresAt`, `creditSource: "claude-max"`, `paidBalanceCents: 0` and false values for `autoReload`, `paymentMethod` and `invoiced`. The binding expires with the observed grant. Reverify after a key or billing change.
+
+`usage-queue --json` lists deferred jobs. Use `usage-retry <id>` after the reported reset to run a replayable job through the same policy, or `usage-cancel <id>` to cancel it. Review a job marked `needsReview` in the original workspace before resubmitting it. A queued result has `queued: true` and a `queueId` and has not succeeded.
 
 A completed model turn is distinct from a completed plugin operation. Structured results return `commandExecutionVerified: false` for agent turns; only direct CLI execution returns a command exit receipt. Muse preserves its actual headless JSONL log and documented process exit status rather than treating session-protocol notifications as headless output. Do not infer working accounts, provider delivery or successful mutations from discovery or fixture tests.
 

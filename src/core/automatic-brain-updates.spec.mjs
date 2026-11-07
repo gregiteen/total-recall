@@ -9,6 +9,10 @@ vi.mock('./plugin-updates.mjs',()=>({updateInstalledPlugins:vi.fn().mockResolved
 vi.mock('./global-brain-updates.mjs',()=>({updateGlobalBrainPackages:vi.fn().mockResolvedValue({failed:0,results:[]})}));
 vi.mock('./source-brain-updates.mjs',()=>({updateSourceBrainPackages:vi.fn().mockResolvedValue({failed:0,results:[]})}));
 vi.mock('./portable-skills-maintenance.mjs',()=>({maintainPortableSkills:vi.fn().mockResolvedValue({skipped:true,failed:0,results:[]})}));
+vi.mock('./running-server.mjs', async importOriginal => ({
+  ...await importOriginal(),
+  runningServerStatus: vi.fn().mockResolvedValue({ status: 'none' }),
+}));
 import {runAutomaticBrainUpdates,automaticUpdateStatus,startAutomaticBrainUpdates} from './automatic-brain-updates.mjs';
 
 const temporary=[];
@@ -77,24 +81,21 @@ describe('daemon automatic package maintenance',()=>{
     expect(report.local_failed).toBe(0);
   });
   it('retries fast for its own failures, and at the normal interval for a peer with no way to update', async () => {
-    const dir=fs.mkdtempSync(path.join(os.tmpdir(),'tr-automatic-retry-'));
-    const brain=path.join(dir,'brain');
-    fs.mkdirSync(brain,{recursive:true});
+    const brainDir=brain();
     const start=10000000;
     const compile=vi.fn().mockResolvedValue({ok:true,results:[]});
     const update=vi.fn().mockResolvedValue({versions:{'total-recall-brain':'3.40.2'},failed:0,results:[]});
     const meshUpdate=vi.fn().mockResolvedValue({failed:3,results:[{status:'failed',error:'Mesh peer has no configured update transport'}]});
-    const first=await runAutomaticBrainUpdates({brainDir:brain,update,compile,meshUpdate,fleet:true,now:()=>start});
+    const first=await runAutomaticBrainUpdates({brainDir,update,compile,meshUpdate,fleet:true,now:()=>start});
     expect(first.failed).toBe(3);
     expect(first.local_failed).toBe(0);
     const tenMinutes=start+10*60*1000;
-    expect((await runAutomaticBrainUpdates({brainDir:brain,update,compile,meshUpdate,fleet:true,now:()=>tenMinutes})).reason).toBe('throttled');
+    expect((await runAutomaticBrainUpdates({brainDir,update,compile,meshUpdate,fleet:true,now:()=>tenMinutes})).reason).toBe('throttled');
     const local=vi.fn().mockResolvedValue({versions:{'total-recall-brain':'3.40.2'},failed:1,results:[]});
     const later=start+2*60*60*1000;
-    expect((await runAutomaticBrainUpdates({brainDir:brain,update:local,compile,meshUpdate,fleet:true,now:()=>later})).local_failed).toBe(1);
-    const retried=await runAutomaticBrainUpdates({brainDir:brain,update,compile,meshUpdate,fleet:true,now:()=>later+6*60*1000});
+    expect((await runAutomaticBrainUpdates({brainDir,update:local,compile,meshUpdate,fleet:true,now:()=>later})).local_failed).toBe(1);
+    const retried=await runAutomaticBrainUpdates({brainDir,update,compile,meshUpdate,fleet:true,now:()=>later+6*60*1000});
     expect(retried.reason).toBeUndefined();
-    fs.rmSync(dir,{recursive:true,force:true});
   });
 
   it('updates the shared plugin folder and counts their failures',async()=>{

@@ -235,9 +235,8 @@ export function isProtocolPath(vfsPath = '') {
 }
 
 function stringifyDocument(data, body) {
-  // Prefer gray-matter when available; fall back to simple frontmatter dump.
   try {
-    return matter.stringify(body || '', data);
+    return matter.stringify({ content: body || '', data });
   } catch {
     const yaml = Object.entries(data)
       .map(([key, value]) => `${key}: ${JSON.stringify(value)}`)

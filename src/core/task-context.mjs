@@ -9,7 +9,9 @@ import fs from 'node:fs';
 const hash = text => crypto.createHash('sha256').update(String(text)).digest('hex');
 const STOP = new Set('a an and are as at be before by can do for from how i in is it of on or our should so that the their this to use we what when which with you'.split(' '));
 export const taskTerms = task => [...new Set((String(task).toLowerCase().match(/[\p{L}\p{N}_-]{3,}/gu) || []).filter(term => !STOP.has(term)))];
-const overlap = (terms, text) => terms.filter(term => String(text).toLowerCase().includes(term)).length / Math.max(1, terms.length);
+// Task terms contain only letters, digits, underscores and hyphens. Hyphens also delimit source-reference segments.
+const taskMatchers = task => taskTerms(task).map(term => new RegExp(`(?<![\\p{L}\\p{N}_])${term}(?![\\p{L}\\p{N}_])`, 'iu'));
+const overlap = (matchers, text) => matchers.filter(matcher => matcher.test(text)).length / Math.max(1, matchers.length);
 export const summarizeRetrieval = summary => summary ? { mode: summary.mode, selected: summary.selected,
   candidates: summary.candidates || 0, providers: (summary.coverage || []).map(row => row.provider),
   ...(summary.duplicatePassages ? { duplicatePassages: summary.duplicatePassages } : {}),
@@ -18,11 +20,11 @@ export const summarizeRetrieval = summary => summary ? { mode: summary.mode, sel
 
 /** Preserve the best matching line and bounded neighboring text, including a match late in a long body. */
 export function extractTaskPassage(text, task, { maxChars = 1000, anchorLine } = {}) {
-  const lines = String(text || '').split('\n'), terms = taskTerms(task);
+  const lines = String(text || '').split('\n'), matchers = taskMatchers(task);
   let anchor = Number.isInteger(anchorLine) ? Math.max(0, Math.min(lines.length - 1, anchorLine - 1)) : 0;
   if (!Number.isInteger(anchorLine)) {
     let best = -1;
-    lines.forEach((line, index) => { const score = overlap(terms, line); if (score > best) { best = score; anchor = index; } });
+    lines.forEach((line, index) => { const score = overlap(matchers, line); if (score > best) { best = score; anchor = index; } });
   }
   let start = Math.max(0, anchor - 2), end = Math.min(lines.length, anchor + 3);
   while (lines.slice(start, end).join('\n').length > maxChars && (start < anchor || end > anchor + 1)) {
@@ -32,8 +34,7 @@ export function extractTaskPassage(text, task, { maxChars = 1000, anchorLine } =
   let passage = lines.slice(start, end).join('\n');
   let startColumn = 1;
   if (passage.length > maxChars) {
-    const lower = passage.toLowerCase();
-    const hits = terms.map(term => lower.indexOf(term)).filter(index => index >= 0);
+    const hits = matchers.map(matcher => passage.search(matcher)).filter(index => index >= 0);
     const focus = hits.length ? Math.min(...hits) : 0;
     const offset = Math.max(0, Math.min(passage.length - maxChars, focus - Math.floor(maxChars / 3)));
     passage = passage.slice(offset, offset + maxChars); startColumn += offset;
@@ -50,8 +51,8 @@ function renderEvidence(item) {
 export async function retrieveTaskKnowledge({ query, nodes = [], derivedDir, indexScopes,
   projectRoot = process.cwd(), actions = [], semantic = true, budget = 1200, limit = 6,
   embedding = getEmbedding, loadIndex = loadEmbeddingsIndex, providers = retrievePluginContext } = {}) {
-  const terms = taskTerms(query);
-  if (!terms.length) return { contributions: [], summary: { mode: 'none', selected: 0, diagnostics: [], coverage: [] }, queryVector: null };
+  const matchers = taskMatchers(query);
+  if (!matchers.length) return { contributions: [], summary: { mode: 'none', selected: 0, diagnostics: [], coverage: [] }, queryVector: null };
   const diagnostics = [], indexes = new Map();
   const scopes = indexScopes || (derivedDir ? [{ layer: '*', derivedDir }] : []);
   for (const scope of scopes) {
@@ -77,7 +78,7 @@ export async function retrieveTaskKnowledge({ query, nodes = [], derivedDir, ind
     if (stale) staleVectors++;
     const valid = !stale && Array.isArray(entry?.embedding) && Array.isArray(queryVector) && entry.embedding.length === queryVector.length;
     if (valid) vectors++;
-    const lexical = overlap(terms, `${node.title || ''}\n${body}`);
+    const lexical = overlap(matchers, `${node.title || ''}\n${body}`);
     const similarity = valid ? cosineSimilarity(queryVector, entry.embedding) : 0;
     const score = valid ? Math.max(0, similarity) * .75 + lexical * .25 : lexical * .7;
     return { node, layer, body, score, relevant: lexical > 0 || similarity >= .35 };

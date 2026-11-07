@@ -311,6 +311,13 @@ function printHelp() {
                            the provider rejects the key; a value another key shares is refused.
       --yes               Revoke it
       --json              Machine-readable output
+    gh-login status       Compare this machine's gh login with github_token (no values)
+    gh-login adopt        Save gh's token as github_token for every machine that holds a grant.
+                           Shows the scope change unless --yes is given.
+      --yes               Do it
+      --revoke-old        Also end the previous token at GitHub, once the new one is in place
+    gh-login use-store    Give up this machine's own gh login and sign in from github_token.
+                           Shows the plan unless --yes is given.
     rotation-status       Rotation coverage for every key in the vault
       --json              Machine-readable output
     browser-logout        Delete TR's persistent browser profile (all sessions)
@@ -429,6 +436,7 @@ function parseArgs(args) {
       'rotate-auto',
       'provider-keys',
       'revoke',
+      'gh-login',
       'rm',
       'generate',
       'account-sync',
@@ -629,6 +637,9 @@ function parseArgs(args) {
       case '--revoke':
         out.revokeHash = args[++i];
         break;
+      case '--revoke-old':
+        out.revokeOld = true;
+        break;
       case '--yes':
         out.yes = true;
         break;
@@ -707,7 +718,7 @@ function parseArgs(args) {
           out.keys.push(a);
         } else if (!a.startsWith('--') && !out.key) out.key = a;
         else if (!a.startsWith('--') && !out.value) out.value = a;
-        else if (a.startsWith('--') && out.command === 'revoke') out.unknownOption = a;
+        else if (a.startsWith('--') && ['revoke', 'gh-login'].includes(out.command)) out.unknownOption = a;
     }
     i++;
   }
@@ -1634,6 +1645,12 @@ export default async function secretCli(argv) {
       else if (result.revoked) console.log(`\n  ✅ ${result.key} (${result.fingerprint}): ${result.provider} now rejects it, and it is gone from the store.\n`);
       else console.error(`\n  ❌ ${result.key} (${result.fingerprint}) still authenticates (revoke request ${result.request_status ?? 'failed'}, check ${result.probe_status ?? 'unreachable'}). It stays in the store.${result.console_url ? `\n     Delete it at ${result.console_url}` : ''}\n`);
       if (!result.ok) await exitAfterFlush(1);
+      return;
+    }
+
+    if (opts.command === 'gh-login') {
+      const { runGhLogin } = await import('./cli-gh-login.mjs');
+      if ((await runGhLogin(brainDir, opts)) !== 0) await exitAfterFlush(1);
       return;
     }
 

@@ -80,6 +80,27 @@ describe('instruction artifact integrity', () => {
       expect(fs.readFileSync(outside, 'utf8')).toBe(content);
     }));
   }
+
+  it.each(['missing', 'file', 'symlink'])('rebuilds a legacy OpenClaw registration while preserving %s native memory', mode =>
+    withBrain('project', async ({ root, surface, config, options }) => {
+      const memoryPath = path.join(surface, 'MEMORY.md');
+      const destination = mode === 'symlink' ? path.join(root, 'native.md') : memoryPath;
+      const nativeMemory = '# Native memory\n\nThe operator chose option A.\n';
+      fs.writeFileSync(path.join(config, 'clients.json'), JSON.stringify({
+        clients: { openclaw: { mode: 'openclaw', projectionPath: memoryPath } },
+      }));
+      if (mode !== 'missing') fs.writeFileSync(destination, nativeMemory);
+      if (mode === 'symlink') fs.symlinkSync(destination, memoryPath);
+
+      await compileSurface({ ...options, force: true });
+
+      const artifacts = JSON.parse(fs.readFileSync(path.join(options.derivedDir, 'surface-artifacts.json'), 'utf8'));
+      expect(artifacts.files.map(entry => entry.file)).toEqual(['INSTRUCTIONS.md', 'AGENTS.md']);
+      expect(fs.readFileSync(path.join(surface, 'AGENTS.md'), 'utf8')).toContain('TOTAL RECALL');
+      if (mode === 'missing') expect(fs.existsSync(memoryPath)).toBe(false);
+      else expect(fs.readFileSync(destination, 'utf8')).toBe(nativeMemory);
+      if (mode === 'symlink') expect(fs.readlinkSync(memoryPath)).toBe(destination);
+    }));
 });
 
 describe('compileSurface writes the surface where the harness reads it', () => {
@@ -290,10 +311,19 @@ describe('mergeGlobalRuleNodes', () => {
     expect(merged[1]._layer).toBe('global');
   });
 
-  it('lets a project node override a global rule with the same slug', () => {
+  it('lets a project rule override a global rule with the same slug', () => {
     const merged = mergeGlobalRuleNodes([rule('same', 'invariants', 'project wording')], [rule('same', 'invariants', 'global wording')]);
     expect(merged).toHaveLength(1);
     expect(merged[0].body).toBe('project wording');
+  });
+
+  it('keeps a global rule when a descriptive project record has the same slug', () => {
+    const fact = rule('same', 'facts', 'project evidence');
+    const invariant = rule('same', 'invariants', 'global requirement');
+    expect(mergeGlobalRuleNodes([fact], [invariant])).toEqual([
+      fact,
+      { ...invariant, _layer: 'global' },
+    ]);
   });
 
   it('keeps global facts and concepts out of the surfaces', () => {

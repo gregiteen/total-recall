@@ -7,6 +7,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { createRequire } from 'node:module';
+import matter from './frontmatter.mjs';
 import {
   inventorySummary,
   createTotalRecallRegistrySet,
@@ -71,6 +72,16 @@ describe('SSSS 0.9 package kernel bridge', () => {
   let vault;
   beforeEach(() => { vault = tmpVault(); });
   afterEach(() => { fs.rmSync(vault, { recursive: true, force: true }); });
+
+  it('keeps a second YAML fence in the body during host preflight', () => {
+    const body = '---\nimmutable: true\n---\nEvidence\n';
+    const content = matter.stringify({ content: body, data: { type: 'rule', title: 'Test' } });
+    const prepared = prepareEnvelopeForKernel({ type: 'operation', content });
+    expect(prepared.errors).toEqual([]);
+    const parsed = matter(prepared.envelope.content);
+    expect(parsed.data).not.toHaveProperty('immutable');
+    expect(parsed.content).toBe(body);
+  });
 
   it('commits a low-risk rule through the package kernel', async () => {
     const content = [

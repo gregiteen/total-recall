@@ -25,7 +25,8 @@ Coordinates coding agent harnesses across mesh nodes. `cli-agents` is an alias o
 - `review [<git-range>] [--staged] [--author <id>] [--reviewer <id>] [--thread <id>]`: review by another model family. `NO_DIFF` means there was nothing to review.
 - `dispatch --stdin` with JSON `{agent, cwd, prompt, permissions, node, allowUnknownAuth}`: one bootstrapped run with a receipt.
 - `threads list|show|create|close|delete`, `learn [--emit]`, `alerts check|test [--dry-run]`, `adapter list|add|remove`.
-- `docs-status`, `docs-refresh`, `docs-search --query <q>`, `docs-read`, `maintenance`, `setup`, `runtime <agent> <args>`.
+- `adoption [--node <id> | --all]`: inspect native gate activity and real managed run receipts separately from installation and login.
+- `docs-status`, `docs-refresh`, `docs-search --query <q>`, `docs-read`, `maintenance`, `setup`, `runtime <agent> <maintenance-command>`. Use dispatch for agent tasks and the service owner for gateway changes.
 
 ## When something fails
 Read `failureKind` on the result. `quota` carries `resetsAt`, and routing avoids that harness until then. `auth` and `not-ready` mean the operator must sign in or install something. These do not count against a harness's pass rate; `agent` and `gate` failures do.

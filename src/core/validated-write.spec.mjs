@@ -113,6 +113,15 @@ describe('validated-write', () => {
       expect(envelope.path).toContain('valid-slug');
     });
 
+    it.each([undefined, null, 'a'.repeat(64)])('preserves the optional write precondition %s', async (expectedBeforeHash) => {
+      vi.mocked(processOperationAsync).mockResolvedValue({ success: true });
+      const node = { slug: 'guarded', type: 'memory', category: 'facts' };
+      await writeNodeValidatedAsync(node, '/tmp/vault', { expectedBeforeHash });
+      const [envelope] = processOperationAsync.mock.lastCall;
+      if (expectedBeforeHash === undefined) expect(envelope).not.toHaveProperty('expected_before_hash');
+      else expect(envelope.expected_before_hash).toBe(expectedBeforeHash);
+    });
+
     it('invalidates vault cache on success', async () => {
       vi.mocked(processOperationAsync).mockResolvedValue({ success: true });
       await writeNodeValidatedAsync({ slug: 'cache-test', type: 'memory', category: 'facts' }, '/tmp/vault');

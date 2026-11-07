@@ -15,6 +15,8 @@ import { processOperationAsync } from './operation-validator.mjs';
 import { safeStringify, isSafeVaultName } from './vault.mjs';
 import { invalidate } from './vault-cache.mjs';
 
+export const supportsExpectedBeforeHash = true;
+
 /**
  * Normalize a vault node so package universal frontmatter + TR memory v2 pass.
  */
@@ -101,6 +103,7 @@ function buildEnvelope(node, options = {}) {
   const {
     workspaceId = 'default',
     idempotencyKey,
+    expectedBeforeHash,
     dryRun = false,
     path: pathOverride,
   } = options;
@@ -124,6 +127,7 @@ function buildEnvelope(node, options = {}) {
     path: vfsPath,
     workspace_id: workspaceId,
     content,
+    ...(expectedBeforeHash === undefined ? {} : { expected_before_hash: expectedBeforeHash }),
     dry_run: !!dryRun,
     actor: { role: options.agentRole || 'system' },
   };

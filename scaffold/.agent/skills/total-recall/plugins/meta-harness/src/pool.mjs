@@ -3,6 +3,7 @@ import { ADAPTER_CATALOG } from '../capability/index.mjs';
 import { inspectAgents, getActiveAdapters } from './worker.mjs';
 import { readReceipts, activeQuotaWalls, activeCredentialBlocks } from './learner.mjs';
 import { measuredWalls } from './telemetry.mjs';
+import { claudeProofCurrent, INCLUDED_AGENTS, readIncludedPolicy } from './included-usage.mjs';
 import os from 'node:os';
 
 const describe = (id, extra = {}) => {
@@ -23,16 +24,22 @@ export function exclusionReason(agent, wall, credentialBlock, { allowUnknownAuth
 }
 
 /** An explicit list is the caller's decision and is not filtered. */
-export async function resolvePool({ availableHarnesses, inspect = inspectAgents, receipts = readReceipts, allowUnknownAuth = false } = {}) {
-  if (Array.isArray(availableHarnesses) && availableHarnesses.length) return { ready: availableHarnesses.map(id => describe(id)), excluded: [], walls: {} };
+export async function resolvePool({ availableHarnesses, inspect = inspectAgents, receipts = readReceipts, allowUnknownAuth = false, policy } = {}) {
+  policy ??= await readIncludedPolicy();
+  if (!policy.enabled && Array.isArray(availableHarnesses) && availableHarnesses.length) return { ready: availableHarnesses.map(id => describe(id)), excluded: [], walls: {} };
   const [{ agents = [] }, entries] = await Promise.all([inspect({ env: process.env }), receipts()]);
-  const walls = { ...activeQuotaWalls(entries), ...measuredWalls() };
-  const blocks = activeCredentialBlocks(entries);
+  const billingEntries = policy.enabled ? entries.filter(run => run.billingMode === 'included') : entries;
+  const walls = { ...activeQuotaWalls(billingEntries), ...(!policy.enabled ? measuredWalls() : {}) };
+  const blocks = activeCredentialBlocks(billingEntries);
   const ready = [], excluded = [];
-  for (const agent of agents) {
-    const reason = exclusionReason(agent, walls[agent.id], blocks[agent.id], { allowUnknownAuth });
+  for (const installed of agents) {
+    const agent = policy.enabled && installed.id === 'claude' ? { ...installed, authenticated: claudeProofCurrent(policy) } : installed;
+    const policyBlocked = policy.enabled && (!INCLUDED_AGENTS.includes(agent.id) || (Array.isArray(availableHarnesses) && !availableHarnesses.includes(agent.id)));
+    const reason = policyBlocked ? 'outside the included usage route' : exclusionReason(agent, walls[agent.id], blocks[agent.id], { allowUnknownAuth: !policy.enabled && allowUnknownAuth });
     if (!reason) ready.push(describe(agent.id, { authVerified: agent.authenticated === true }));
-    else if (agent.installed) excluded.push({ harness: agent.id, reason });
+    else if (agent.installed) excluded.push({ harness: agent.id, reason,
+      ...(policy.enabled && !policyBlocked && agent.authenticated === true && agent.versionVerified && !agent.blockedBy && walls[agent.id]
+        ? { failureKind: 'quota', resetsAt: walls[agent.id].resetReported ? walls[agent.id].until : null } : {}) });
   }
   return { ready, excluded, walls };
 }

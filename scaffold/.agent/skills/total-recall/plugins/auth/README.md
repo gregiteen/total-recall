@@ -50,6 +50,14 @@ override; `_TR_TEST_BRAIN_DIR` and `_TR_TEST_AGENT_DIR` preserve disposable test
 isolation. Resolving this path performs no credential read or initialization.
 Explicit low-level store APIs retain their existing selected-store semantics.
 
+## Changing `gh` scopes
+
+`gh` signs in from `github_token` on every machine that receives it, so a rotated token lands everywhere. A login changed on the machine itself stays, and the sync reports it once.
+
+- One machine: `gh auth refresh -h github.com -s <scope>`. Remove it with `--remove-scopes <scope>`, and the next sync returns `gh` to the store's token.
+- Every machine: refresh on one, then `total-recall auth secret gh-login adopt`. It shows the scope change and writes nothing until `--yes`. `--revoke-old` also ends the previous token at GitHub.
+- Compare or go back: `total-recall auth secret gh-login status` and `use-store`.
+
 ## Using this from an agent
 
 Send anything involving a credential here: reading, storing or rotating a secret, issuing API keys, passkeys, passwords and sign-in sessions. There is one store per machine, so search it before asking anyone for a key, and never print a value.

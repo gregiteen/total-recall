@@ -3,6 +3,10 @@ import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { runWorker, runProcess, getActiveAdapters, notReady, agentEnvironment } from './worker.mjs';
 import { dispatchWithReceipt } from './dispatch.mjs';
+import { commandPermissions, destinationDispatchRequest } from './dispatch-request.mjs';
+import { readIncludedPolicy } from './included-usage.mjs';
+
+export { DEFAULT_PERMISSIONS, commandPermissions } from './dispatch-request.mjs';
 
 async function hostModule(name) {
   const selected = process.env.TR_PACKAGE_ROOT;
@@ -10,13 +14,6 @@ async function hostModule(name) {
   const root = fs.realpathSync(selected);
   if (JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8')).name !== 'total-recall-brain') throw new Error('Host package identity mismatch');
   return import(pathToFileURL(path.join(root, 'src/core', `${name}.mjs`)).href);
-}
-
-export const DEFAULT_PERMISSIONS = Object.freeze({ read: true, write: false, send: false, destructive: false });
-export function commandPermissions(value = DEFAULT_PERMISSIONS) {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('Command permissions must be boolean values');
-  for (const key of Object.keys(value)) if (!Object.hasOwn(DEFAULT_PERMISSIONS, key) || typeof value[key] !== 'boolean') throw new Error(`Invalid permission ${key}`);
-  return { ...DEFAULT_PERMISSIONS, ...value };
 }
 
 export async function listTargets() {
@@ -27,10 +24,11 @@ export async function listTargets() {
       nodes: nodes.length > 0 ? nodes : [{ id: 'local', name: 'Local Host', online: true, self: true, accessConfigured: true }],
       adapters: getActiveAdapters().map(({ id, name, docs, custom }) => ({ id, name, docs, custom: Boolean(custom) }))
     };
-  } catch {
+  } catch (error) {
     return {
       nodes: [{ id: 'local', name: 'Local Host', online: true, self: true, accessConfigured: true }],
-      adapters: getActiveAdapters().map(({ id, name, docs, custom }) => ({ id, name, docs, custom: Boolean(custom) }))
+      adapters: getActiveAdapters().map(({ id, name, docs, custom }) => ({ id, name, docs, custom: Boolean(custom) })),
+      meshError: String(error?.message || error).slice(0, 400),
     };
   }
 }
@@ -40,19 +38,48 @@ export function workerProgram(request) {
   return source + '\nrunWorker(' + JSON.stringify(request) + ').then(result=>console.log(JSON.stringify(result))).catch(error=>{console.error(String(error?.message||"Selected agent worker failed"));process.exitCode=1;});\n';
 }
 
+function destinationDispatchResult(result, node, request) {
+  let payload;
+  try { payload = JSON.parse(result.output); } catch { /* No structured result from the installed owner. */ }
+  if (!payload || typeof payload.ok !== 'boolean' || (payload.ok && !result.ok)) {
+    throw notReady(`Installed Meta Harness on ${node} returned no valid dispatch outcome (exit ${result.exitCode ?? 'unknown'})`);
+  }
+  return { ...payload, execution: { node, workspace: request.cwd, remote: true,
+    ...(typeof payload.receiptId === 'string' ? { receiptOwner: 'destination' } : {}) } };
+}
+
 export async function executeOnNode(node, request, { worker = runWorker, processRunner = runProcess, mesh, access } = {}) {
   if (!node || node === 'local') return worker(request);
-  mesh ||= await hostModule('mesh'); access ||= await hostModule('mesh-access');
+  mesh ||= await hostModule('mesh');
   const target = mesh.findMeshNode(node);
   if (!target) throw new Error('Selected mesh node is not recorded');
-  if (target.self) return worker(request);
+  if (target.self && request.operation !== 'dispatch') return worker(request);
+  // Route simple dispatch through the installed owner, just like a routed, coordinated or managed job.
+  const dispatch = request.operation === 'dispatch';
+  let transport = request;
+  if (dispatch) {
+    const input = JSON.stringify(destinationDispatchRequest(request));
+    if (Buffer.byteLength(input) > 65536) throw new Error('Remote dispatch request is too large');
+    transport = { operation: 'direct', cwd: request.cwd, argv: ['total-recall', 'meta-harness', 'dispatch', '--stdin', '--json'], input, timeoutMs: 600000 };
+  }
+  const managed = dispatch || (transport.argv?.[1] === 'meta-harness' &&
+    ['route', 'coordinate', 'review', 'process', 'run-command', 'usage-retry'].includes(transport.argv[2]));
+  if (managed && (await readIncludedPolicy()).enabled) transport = { ...transport, requireIncluded: true };
+  if (target.self) {
+    const result = destinationDispatchResult(await worker(transport), 'local', request);
+    result.execution.remote = false;
+    return result;
+  }
   if (target.online === false) throw new Error('Selected mesh node is offline');
+  access ||= await hostModule('mesh-access');
   const resolved = access.resolveNodeAccess(target);
   const args = access.buildSshArgs(resolved, { command: 'export PATH="$HOME/.local/bin:/opt/homebrew/bin:/usr/local/bin:$PATH"; exec node --input-type=module', extraOptions: ['BatchMode=yes', 'ConnectTimeout=10'] });
   if (!args) throw new Error('Selected mesh node has no verified SSH access');
-  const result = await processRunner('ssh', args, { input: workerProgram(request), timeoutMs: request.operation === 'inspect' ? 120000 : (request.timeoutMs || 900000) + 30000, maxBytes: 17 * 1024 * 1024, env: { ...agentEnvironment(), ...(process.env.SSH_AUTH_SOCK ? { SSH_AUTH_SOCK: process.env.SSH_AUTH_SOCK } : {}) } });
+  const result = await processRunner('ssh', args, { input: workerProgram(transport), timeoutMs: transport.operation === 'inspect' ? 120000 : (transport.timeoutMs || 900000) + 30000, maxBytes: 17 * 1024 * 1024, env: { ...agentEnvironment(), ...(process.env.SSH_AUTH_SOCK ? { SSH_AUTH_SOCK: process.env.SSH_AUTH_SOCK } : {}) } });
   if (result.reason || result.exitCode !== 0) throw notReady(`Worker on ${node} failed: ${String(result.stderr || result.reason || 'verify node access, workspace and agent installation').trim().slice(0, 400)}`);
-  try { return JSON.parse(result.stdout); } catch { throw new Error('Selected mesh worker returned invalid data'); }
+  let payload;
+  try { payload = JSON.parse(result.stdout); } catch { throw new Error('Selected mesh worker returned invalid data'); }
+  return dispatch ? destinationDispatchResult(payload, target.hostname || node, request) : payload;
 }
 
 export async function inspectNode(node = 'local', dependencies) {

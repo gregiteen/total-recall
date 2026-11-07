@@ -170,6 +170,7 @@ export async function executeProcessTask(job, dependencies = {}) {
     if (branch && !commit) { (dependencies.deleteBranch || deleteBranch)(job.cwd, branch); branch = null; }
   } catch (error) { result = { ...result, ok: false, error: `${result.error ? result.error + '; ' : ''}Isolation cleanup failed: ${error.message}` }; }
   return updateAgentRecord(job.id, { status: result.ok ? 'completed' : 'failed', exitCode: result.exitCode ?? (result.ok ? 0 : 1), error: result.ok ? null : result.error,
+    ...(result.queueId ? { queueId: result.queueId } : {}),
     result: result.response || null, branch, commit, worktreePath: worktree, endedAt: new Date().toISOString() });
 }
 

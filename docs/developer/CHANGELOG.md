@@ -1,3 +1,27 @@
+## 3.44.0 — 2026-11-07
+
+- `connect openclaw` no longer writes the workspace's `MEMORY.md`, which is OpenClaw's own memory.
+  It links `AGENTS.md` like the other harnesses, and compiling instructions no longer lists
+  `MEMORY.md` as an OpenClaw output, so neither a routine compile nor a forced rebuild can
+  overwrite native memory.
+- Task capsules put matched evidence after the rules instead of mixing it in, in both normal and
+  compacted output. JSON capsules report where it starts in `evidence_start`. Retrieval matches
+  task words on word boundaries, so a short word such as `ACK` no longer matches inside another.
+- Fix a body that starts with a YAML fence being read as metadata when a node is written. The vault
+  writer and the SSSS bridge now pass body and metadata separately.
+- Fix a project node shadowing a global rule of the same name when the project node is not a rule.
+- Validated writes accept an expected prior hash, so a caller can refuse to overwrite a node that
+  changed since it read it. OKF import (`tr-plugin-okf` 0.1.2) requires it.
+- `ingest-okf` now skips a duplicate by default instead of warning and writing it.
+- Fix the release script giving up on npm after 15 minutes, which reported a good release as failed.
+  It waits 40. Publishing from a linked git worktree is refused, because npm records no `gitHead`.
+- Fix `update` leaving a stale server running on a machine that serves from its global npm install.
+- Requires SSSS 0.14.5, where a dry run no longer changes anything on disk.
+- Bundles Auth 1.2.9, which adds `auth secret gh-login status|adopt|use-store` and stops the mesh
+  sync undoing a `gh` login changed on the machine. Also bundles Meta Harness 0.3.6, Code Quality
+  0.2.6, Security 0.3.6, Embeddings 0.1.3 and Git Sentinel 1.1.5.
+- Plugin state written by commands run inside a checkout (`.ssss/`) is ignored.
+
 ## 3.43.3 — 2026-11-06
 
 - Add `total-recall-server-release`, which replaces a brain server under systemd with no gap, driven

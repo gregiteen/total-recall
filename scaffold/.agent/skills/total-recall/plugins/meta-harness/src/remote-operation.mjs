@@ -60,7 +60,7 @@ export async function forwardRemoteOperation(operation, task, options = {}) {
       error: transport.error || 'Remote operation returned no valid structured result' };
   }
   const result = { ...payload, ok: transport.ok === true && payload.ok === true, execution, transportExitCode: transport.exitCode ?? null,
-    ...(!transport.ok ? { failureKind: 'transport' } : {}) };
+    ...(!transport.ok && !payload.failureKind ? { failureKind: 'transport' } : {}) };
   if (!result.ok && !result.error) result.error = transport.error || `Remote ${operation} failed`;
   if (result.ok && payload.branch) result.deliverable = { node: options.node, workspace: options.cwd, branch: payload.branch, commit: payload.commit ?? null };
   const threadId = payload.threadId || options.threadId;

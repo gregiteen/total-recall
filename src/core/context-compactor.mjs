@@ -62,6 +62,9 @@ export function compactRules(items, { budget, expand = [], header, complete = fa
   if (unknown.length) throw new Error(`Cannot expand rules not in this capsule: ${unknown.join(', ')}`);
   const duplicateOf = findDuplicates(ranked.filter(item => !expand.includes(item.slug)));
   const tiers = new Map(ranked.map(item => [item.slug, 'omitted']));
+  const isEvidence = item => item.taskEvidence && !item.required;
+  const supplement = supplemental.filter(item => item.text && !isEvidence(item)).map(item => item.text.trim());
+  const evidence = supplemental.filter(item => item.text && isEvidence(item)).map(item => item.text.trim()).join('\n\n---\n\n');
 
   const render = () => {
     const of = tier => ranked.filter(item => tiers.get(item.slug) === tier);
@@ -71,10 +74,11 @@ export function compactRules(items, { budget, expand = [], header, complete = fa
     const blocks = [
       ...full.map(item => item.text.trim()),
       ...summary.map(item => `[${item.slug}] ${summarizeRule(item.body)}`),
-      ...supplemental.filter(item => item.text).map(item => item.text.trim()),
+      ...supplement,
     ];
     if (reference.length) blocks.push(`Referenced: ${reference.map(item => item.slug).join(', ')}`);
     if (duplicate.length) blocks.push(`Duplicates: ${duplicate.map(item => `${item.slug} (of ${duplicateOf.get(item.slug)})`).join(', ')}`);
+    if (evidence) blocks.push(evidence);
     const body = blocks.join('\n\n---\n\n');
     // The token count sits inside the text it counts, so iterate to a stable value.
     let tokens = estimateTokens(body);
@@ -142,5 +146,6 @@ export function compactRules(items, { budget, expand = [], header, complete = fa
   for (const slug of duplicateOf.keys()) tryTier(ranked.find(item => item.slug === slug), 'duplicate');
 
   const { context, counts, tokens } = render();
-  return { context, counts, tokens, tiers: Object.fromEntries(tiers) };
+  return { context, counts, tokens, tiers: Object.fromEntries(tiers),
+    ...(evidence && { evidenceStart: context.length - evidence.length }) };
 }

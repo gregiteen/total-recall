@@ -11,6 +11,7 @@ import { routeTask } from './router.mjs';
 import { runQualityGate } from './gate.mjs';
 import { isGitRepo, createWorktree, removeWorktree, commitAll, linkDependencies, deleteBranch } from './worktree.mjs';
 import { forwardRemoteOperation } from './remote-operation.mjs';
+import { queueIncludedJob } from './usage-queue.mjs';
 
 export async function executeRoutedTask(task, options = {}) {
   const remote = await forwardRemoteOperation('route', task, { ...options, execute: true });
@@ -19,6 +20,13 @@ export async function executeRoutedTask(task, options = {}) {
   const cwd = options.cwd || process.cwd();
   if (!isGitRepo(cwd)) throw new Error('Routed execution writes on its own branch, so it must run inside a git repository');
   const route = options.route || await routeTask(task, options);
+  const replay = { kind: 'route', gate: options.gate === true, gateOptions: options.gateOptions };
+  if (!route.selected && route.deferred) {
+    const blocked = { ok: false, failureKind: 'quota', error: 'The included usage allowance is exhausted.', resetsAt: route.deferred.resetsAt };
+    const job = await queueIncludedJob({ agent: route.deferred.harness, cwd, prompt: task }, blocked,
+      { role: 'Routed', replay, launchPrevented: true });
+    return { ...blocked, route, attempts: [], queued: true, queueId: job.id };
+  }
   if (!route.selected) return { ok: false, route, attempts: [], error: 'No harness can take this task right now.' };
   const node = localExecutionNode(options, route.placement);
   const pool = options.pool || (await resolvePool(options)).ready.map(h => h.id);
@@ -35,9 +43,10 @@ export async function executeRoutedTask(task, options = {}) {
     const directory = createWorktree(cwd, { branch });
     const attempt = { harness, branch: null, commit: null, gate: null, escalatedFrom: previous };
     attempts.push(attempt);
+    let stopped;
     try {
       const prompt = `Work only in this checkout. Do not commit; the harness commits your changes.\nTask:\n${task}${diagnostic ? `\n\nA previous attempt by ${previous} failed. Diagnostic:\n${diagnostic}` : ''}`;
-      const result = await dispatchWithReceipt({ agent: harness, node, cwd: directory, contextCwd: cwd, contextTask: task, prompt, permissions: { read: true, write: true }, allowUnknownAuth: options.allowUnknownAuth === true }, { dispatchFn: options.dispatchFn, role: 'Routed', complexityScore: route.complexity?.score, escalatedFrom: previous });
+      const result = await dispatchWithReceipt({ agent: harness, node, cwd: directory, contextCwd: cwd, contextTask: task, prompt, permissions: { read: true, write: true }, allowUnknownAuth: options.allowUnknownAuth === true }, { dispatchFn: options.dispatchFn, role: 'Routed', complexityScore: route.complexity?.score, escalatedFrom: previous, replay, retryId: options.retryId });
       attempt.ok = result.ok === true;
       attempt.durationMs = result.durationMs;
       attempt.output = result.response || null;
@@ -51,6 +60,7 @@ export async function executeRoutedTask(task, options = {}) {
       } else {
         attempt.error = result.error;
         attempt.failureKind = result.failureKind;
+        if (result.queued || result.queueError || (result.failureKind === 'quota' && options.retryId) || result.failureKind === 'billing-policy') stopped = result;
       }
       if (attempt.ok && options.gate) {
         linkDependencies(cwd, directory);
@@ -74,6 +84,7 @@ export async function executeRoutedTask(task, options = {}) {
     }
 
     if (attempt.ok) return { ok: true, route, gateApplied: Boolean(options.gate), branch: attempt.branch, commit: attempt.commit, harness, attempts, alerts };
+    if (stopped) return { ...stopped, route, attempts, alerts };
 
     const remaining = pool.filter(item => !tried.has(item));
     const next = remaining.length ? evaluateGateCascade(harness, { testsPassed: false }, remaining) : null;

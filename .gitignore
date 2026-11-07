@@ -162,3 +162,6 @@ WINDSURF.md
 
 # Internal project records live in a private repository, cloned here
 docs/projects/
+
+# Plugin state written by commands run in this checkout (SSSS VFS). Private, never published.
+/.ssss/

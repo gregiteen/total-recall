@@ -80,11 +80,10 @@ export const CLIENTS = {
   },
   openclaw: {
     label: 'OpenClaw',
-    mode: 'openclaw',
+    mode: 'symlink',
     enforcement: 'enforced',
     enforcementReason: 'before_tool_call hook denies unreceipted tool calls with exit 2',
-    memoryTarget: 'MEMORY.md',
-    agentsTarget: 'AGENTS.md',
+    target: 'AGENTS.md',
   },
   cursor: {
     label: 'Cursor',
@@ -880,32 +879,6 @@ export default async function connect(args) {
       result.notes.push(`  DeepSeek Harness MEMORY.md → ${globalMemPath}`);
     }
     result.notes.push(`  DeepSeek Harness AGENTS.md → INSTRUCTIONS.md`);
-  } else if (preset.mode === 'openclaw') {
-    // OpenClaw: write MEMORY.md + symlink AGENTS.md in cwd
-    const instructions = readInstructions(cwd, agentDir);
-    if (!instructions) throw new Error('No INSTRUCTIONS.md found. Run npx total-recall init or compile first.');
-    // MEMORY.md — curated facts extracted from instructions
-    const memPath = path.join(cwd, preset.memoryTarget);
-    if (!fs.existsSync(memPath) || opts.force) {
-      fs.writeFileSync(memPath, instructions, 'utf8');
-    }
-    // AGENTS.md — symlink to INSTRUCTIONS.md
-    const agentsPath = path.join(cwd, preset.agentsTarget);
-    if (pathExists(agentsPath)) {
-      if (opts.force) {
-        try {
-          fs.unlinkSync(agentsPath);
-        } catch {
-          fs.rmSync(agentsPath, { force: true, recursive: true });
-        }
-        fs.symlinkSync('INSTRUCTIONS.md', agentsPath);
-      }
-    } else {
-      fs.symlinkSync('INSTRUCTIONS.md', agentsPath);
-    }
-    result.projection = { targetPath: memPath, action: 'written' };
-    result.notes.push(`  OpenClaw MEMORY.md written to ${memPath}`);
-    result.notes.push(`  OpenClaw AGENTS.md → INSTRUCTIONS.md`);
   } else if (preset.mode === 'vault') {
     result.projection = writeVaultProjection(agentDir, preset, opts);
     const folderName = result.projection.folderName || preset.folderName;

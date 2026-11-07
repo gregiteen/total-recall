@@ -81,6 +81,11 @@ export async function callLocalRuntime(prompt, system, config, dependencies = {}
       model: agent.model || undefined, write: false, role: 'Reasoning', allowUnknownAuth: config.allowUnknownAuth === true,
     });
     if (result.ok === true || result.success === true) return result.response || '';
+    if (result.queued || result.queueError || result.failureKind === 'billing-policy') {
+      const error = new Error(result.queued ? `Included usage exhausted. Queued as ${result.queueId}.` : result.queueError || result.error);
+      error.queueId = result.queueId;
+      throw error;
+    }
     failures.push(`${agent.name}: ${result.error || 'dispatch failed'}`);
   }
   throw new Error(`All CLI agents failed (${failures.join('; ')})`);

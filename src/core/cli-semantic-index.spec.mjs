@@ -3,26 +3,18 @@ import path from 'node:path';
 import fs from 'node:fs';
 import os from 'node:os';
 
-vi.mock('./config.mjs', async importOriginal => ({
+vi.mock('./embeddings.mjs', async importOriginal => ({
   ...await importOriginal(),
-  googleApiKey: 'auth-fixture-key',
-  openAiApiKey: undefined
+  getEmbedding: vi.fn(async text => {
+    const vector = new Array(768).fill(0);
+    const isRemember = text.startsWith('total-recall remember:') || text === 'remember facts in vault';
+    vector[isRemember ? 0 : 1] = 1;
+    return vector;
+  }),
 }));
 
 vi.mock('./logger.mjs', () => ({
   logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() },
-}));
-
-vi.mock('./throttled-fetch.mjs', () => ({
-  throttledFetch: vi.fn(async () => ({
-    ok: true,
-    json: async () => ({
-      embedding: { values: new Array(768).fill(0.1) },
-      data: [{ embedding: new Array(768).fill(0.1) }],
-      models: [{ name: 'models/gemini-embedding-2' }],
-    }),
-    text: async () => '',
-  })),
 }));
 
 import {

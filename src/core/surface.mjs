@@ -620,7 +620,7 @@ const CLIENT_SHIMS = {
   'hermes-agent':     ['AGENTS.md'],
   dsh:                ['AGENTS.md'],
   'deepseek-harness': ['AGENTS.md'],
-  openclaw:           ['MEMORY.md', 'AGENTS.md']
+  openclaw:           ['AGENTS.md']
 };
 
 /**
@@ -739,13 +739,13 @@ async function compilePointers(instructionsFile, skillsDir, nodes = [], { vaultD
  */
 /**
  * The rule nodes a project's instruction surfaces are built from: the global
- * brain's rules plus the project's own. A project node with the same slug
+ * brain's rules plus the project's own. A project rule with the same slug
  * wins, so a repo can override a global rule; everything else in the global
  * vault stays search-only. Without this every repo carried only its own vault,
  * and a rule saved with `remember --global` reached no repo at all.
  */
 export function mergeGlobalRuleNodes(projectNodes, globalNodes) {
-  const own = new Set(projectNodes.map((n) => n.slug));
+  const own = new Set(projectNodes.filter((n) => RULE_CATEGORIES.has(n.category)).map((n) => n.slug));
   const inherited = globalNodes
     .filter((n) => RULE_CATEGORIES.has(n.category) && !own.has(n.slug))
     .map((n) => ({ ...n, _layer: 'global' }));

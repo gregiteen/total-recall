@@ -61,6 +61,7 @@ async function printCompacted({ query, actions, budget, format, version, rulesHa
     if (format !== 'json') return result.context;
     const payload = { ready: true, compacted: true, ranking: result.ranking, context: result.context, counts: result.counts,
       stats: { version, rules_hash: rulesHash, budget, retrieval: summarizeRetrieval(knowledge?.summary), token_measurement: 'estimated_chars_divided_by_four' } };
+    if (result.evidenceStart !== undefined) payload.evidence_start = result.evidenceStart;
     for (let index = 0; index < 10; index++) {
       const tokens = estimateTokens(`${JSON.stringify(payload)}\n`);
       if (tokens === payload.stats.total_tokens) break;

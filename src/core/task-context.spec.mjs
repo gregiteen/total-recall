@@ -56,6 +56,17 @@ describe('TASK-CONTEXT-01 task evidence', () => {
     expect(result.summary.coverage[0]).toMatchObject({ compatibleVectors: 0, repositoryFilesIndexed: false });
   });
 
+  it('requires word boundaries for lexical matches and retains hyphen-delimited source terms', async () => {
+    const nodes = [fact('bracken', 'Project Bracken receipt is OTTER-2947. Source: BRACKEN-DECISION/R2.')];
+    const lookup = query => retrieveTaskKnowledge({ ...options, query, nodes, semantic: false, loadIndex: () => ({}) });
+    const housekeeping = await lookup('Housekeeping checkpoint for the calibration exercise. Reply exactly ACK.');
+    expect(housekeeping.summary.selected).toBe(0);
+    expect(housekeeping.contributions.map(row => row.text).join('\n')).not.toContain('OTTER-2947');
+    const direct = await lookup('DECISION');
+    expect(direct.summary.selected).toBe(1);
+    expect(direct.contributions.map(row => row.text).join('\n')).toContain('BRACKEN-DECISION/R2');
+  });
+
   it('budgets an identical passage once and retains the next distinct evidence', async () => {
     const nodes = [fact('planned', 'Inspect the password rotation plan.'), fact('complete', 'Inspect the password rotation plan.'),
       fact('provider-receipt', 'Confirm the password was changed at its provider.')];
