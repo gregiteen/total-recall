@@ -1,3 +1,16 @@
+## 3.43.2 — 2026-11-06
+
+- Fix automatic maintenance stripping dev dependencies from every repository it installed in. The
+  daemon runs with `NODE_ENV=production`, and npm omits dev dependencies under it. Installs no longer
+  inherit that setting.
+- Fix an absent dev dependency being treated as an old version, which made every run try to install
+  it and fail. Its pin stays current and nothing is installed. A checkout gets its dev tree when
+  someone runs `npm install` there.
+- Fix `release verify` failing a checkout that keeps no dev copy of a package. It reports those
+  separately. A stale copy and an absent runtime dependency still fail.
+- Fix maintenance retrying every 5 minutes because of a mesh peer with no update transport. Fast
+  retry now follows this machine's own failures.
+
 ## 3.43.1 — 2026-11-06
 
 - Fix `release verify` testing the wrong thing. It compared each consumer's install against the
