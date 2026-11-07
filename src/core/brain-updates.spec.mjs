@@ -65,11 +65,64 @@ describe('uniform brain updates', () => {
 
   it('pins aliases in their original section and verifies the actual install', async () => {
     const root = manifest(path.join(tmp, 'app'), { devDependencies: { '@ssss/cli': '^0.10.1' } });
+    installed(root, '@ssss/cli', '0.10.1');
     const exec = execWithInstall(() => { installed(root, '@ssss/cli', '0.11.0'); return { status: 0 }; });
     const result = await run([root], exec, { dryRun: false });
     expect(result.updated).toBe(1);
     expect(JSON.parse(fs.readFileSync(path.join(root, 'package.json')))).toEqual({ devDependencies: { '@ssss/cli': 'npm:@gregiteen/ssss-cli@0.11.0' } });
     expect(result.results[0].packages[0].installed).toBe('0.11.0');
+  });
+
+  describe('dev dependencies under automatic maintenance', () => {
+    const installArgs = (exec) => exec.mock.calls.filter(([, args]) => args[0] === 'install');
+
+    it('never lets NODE_ENV=production strip a full consumer', async () => {
+      vi.stubEnv('NODE_ENV', 'production');
+      vi.stubEnv('npm_config_omit', 'dev');
+      try {
+        const root = manifest(path.join(tmp, 'app'), { devDependencies: { 'total-recall-brain': '3.39.0' } });
+        installed(root, 'total-recall-brain', '3.39.0');
+        const exec = execWithInstall(() => { installed(root, 'total-recall-brain', '3.39.1'); return { status: 0 }; });
+        const result = await run([root], exec, { dryRun: false });
+        expect(result.updated).toBe(1);
+        const [[, args, options]] = installArgs(exec);
+        expect(args).not.toContain('--omit=dev');
+        expect(args).not.toContain('--package-lock-only');
+        expect(options.env.NODE_ENV).toBeUndefined();
+        expect(options.env.npm_config_omit).toBeUndefined();
+        expect(options.env.PATH).toBe(process.env.PATH);
+      } finally { vi.unstubAllEnvs(); }
+    });
+
+    it('keeps an absent dev dependency absent, and its pin current', async () => {
+      const root = manifest(path.join(tmp, 'app'), { devDependencies: { 'total-recall-brain': '3.39.0' } });
+      const exec = execWithInstall();
+      const result = await run([root], exec, { dryRun: false });
+      expect(result.failed).toBe(0);
+      expect(result.updated).toBe(1);
+      const [[, args]] = installArgs(exec);
+      expect(args).toContain('--package-lock-only');
+      expect(fs.existsSync(path.join(root, 'node_modules'))).toBe(false);
+      expect(JSON.parse(fs.readFileSync(path.join(root, 'package.json'))).devDependencies['total-recall-brain']).toBe('3.39.1');
+    });
+
+    it('leaves an absent dev dependency alone once its pin is current', async () => {
+      const root = manifest(path.join(tmp, 'app'), { devDependencies: { 'total-recall-brain': '3.39.1' } });
+      const exec = execWithInstall();
+      const result = await run([root], exec, { dryRun: false });
+      expect(result.failed).toBe(0);
+      expect(result.results.find(r => r.root === root).status).toBe('up_to_date');
+      expect(installArgs(exec)).toEqual([]);
+    });
+
+    it('still installs an absent runtime dependency, and fails when it does not arrive', async () => {
+      const root = manifest(path.join(tmp, 'app'), { dependencies: { 'total-recall-brain': '3.39.1' } });
+      const exec = execWithInstall();
+      const result = await run([root], exec, { dryRun: false });
+      const [[, args]] = installArgs(exec);
+      expect(args).not.toContain('--package-lock-only');
+      expect(result.failed).toBe(1);
+    });
   });
 
   it('migrates a shared dependency link without changing its former target', async () => {

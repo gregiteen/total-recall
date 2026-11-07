@@ -185,6 +185,22 @@ function targetSpec(key, version) {
 }
 
 /** Dry by default. Resolve releases once; install independently; verify actual resolution. */
+/**
+ * A checkout that keeps no copy of a dev dependency runs under the shared install, so it has no
+ * old version to replace. Its pin stays current, and its dev tree is its owner's to install: one
+ * plugin's tree is about 460 MB, so restoring them all automatically could fill a disk.
+ */
+const absentDevDep = (dep) => dep.section === 'devDependencies' && !dep.file;
+
+/**
+ * The daemon runs with NODE_ENV=production, and under that npm and pnpm remove dev dependencies
+ * from whatever they install in. An install that wants a runtime tree says so with a flag.
+ */
+function installEnv(env = process.env) {
+  const { NODE_ENV, npm_config_omit, NPM_CONFIG_OMIT, npm_config_production, NPM_CONFIG_PRODUCTION, ...kept } = env;
+  return kept;
+}
+
 export async function updateAllBrains(opts = {}) {
   const dryRun = opts.dryRun !== false;
   const exec = opts.exec || spawnSync;
@@ -245,9 +261,12 @@ export async function updateAllBrains(opts = {}) {
       row.status = 'failed'; row.error = 'Newer local/preview package; refusing an implicit downgrade'; continue;
     }
     const shared = isLink(path.join(owner.owner, 'node_modules')) || isLink(path.join(consumer.root, 'node_modules'));
-    const needsChange = shared || consumer.deps.some(dep => dep.version !== versions[dep.package]
-      || (!consumer.runtimeOnly && dep.declared !== targetSpec(dep.key, versions[dep.package]))
-      || !dep.file?.startsWith(path.join(owner.owner, 'node_modules') + path.sep));
+    const needsChange = shared || consumer.deps.some(dep => {
+      const pinLags = !consumer.runtimeOnly && dep.declared !== targetSpec(dep.key, versions[dep.package]);
+      if (absentDevDep(dep)) return pinLags;
+      return pinLags || dep.version !== versions[dep.package]
+        || !dep.file?.startsWith(path.join(owner.owner, 'node_modules') + path.sep);
+    });
     if (!needsChange) continue;
     row.status = dryRun ? 'would_update' : 'pending';
     if (!groups.has(owner.owner)) groups.set(owner.owner, { ...owner, consumers: [] });
@@ -264,8 +283,8 @@ export async function updateAllBrains(opts = {}) {
     const runtimeOnly = group.consumers.every(({ consumer }) => consumer.runtimeOnly);
     const unpinned = runtimeOnly && group.manager === 'npm';
     const needsInstall = group.consumers.some(({ consumer }) =>
-      isLink(path.join(consumer.root, 'node_modules')) || consumer.deps.some(dep =>
-        dep.version !== versions[dep.package] || !dep.file?.startsWith(path.join(group.owner, 'node_modules') + path.sep)));
+      isLink(path.join(consumer.root, 'node_modules')) || consumer.deps.some(dep => !absentDevDep(dep)
+        && (dep.version !== versions[dep.package] || !dep.file?.startsWith(path.join(group.owner, 'node_modules') + path.sep))));
     try {
       lockFd = acquireBrainUpdateLock(lock, opts.lockWaitMs === undefined ? {} : { waitMs: opts.lockWaitMs });
       for (const name of ['package-lock.json', 'npm-shrinkwrap.json', 'pnpm-lock.yaml']) {
@@ -294,7 +313,7 @@ export async function updateAllBrains(opts = {}) {
       if (unpinned) args.push('--no-save', ...new Set(group.consumers.flatMap(({ consumer }) =>
         consumer.deps.map(dep => `${dep.key}@${targetSpec(dep.key, versions[dep.package])}`))));
       else if (!needsInstall) args.push(group.manager === 'pnpm' ? '--lockfile-only' : '--package-lock-only');
-      const install = exec(group.manager, args, { cwd: group.owner, encoding: 'utf8',
+      const install = exec(group.manager, args, { cwd: group.owner, env: installEnv(), encoding: 'utf8',
         timeout: 600000, maxBuffer: 8 * 1024 * 1024 });
       if (install.status !== 0) throw new Error(install.error?.message || install.stderr?.trim().slice(-1500) || `Install exited ${install.status}`);
       for (const { consumer, row } of group.consumers) {
@@ -309,6 +328,7 @@ export async function updateAllBrains(opts = {}) {
         const placed = (file) => Boolean(file) && allowedRoots.some((root) => file.startsWith(root));
         const bad = consumer.deps.find(dep => {
           const actual = installedBrainPackage(consumer.root, dep.key);
+          if (absentDevDep(dep) && !actual.file) return false;
           return actual.version !== versions[dep.package] || !placed(actual.file);
         });
         // A link is only a fault when it escapes every legitimate root; a self-contained one is fine.

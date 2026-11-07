@@ -40,7 +40,9 @@ export async function runAutomaticBrainUpdates({brainDir,fleet=false,force=false
   if(!force && !isPackageAutoUpdateEnabled())return {skipped:true,reason:'disabled',results:[]};
   const file=path.join(brainDir,'memory-derived/automatic-brain-updates.json');
   let saved;try{saved=JSON.parse(fs.readFileSync(file,'utf8'));}catch{}
-  const delay=saved?.failed?Math.min(intervalMs,5*60*1000):intervalMs;
+  // Fast retry is for this machine's own failures. A peer with no update transport fails every
+  // run, and counting it made maintenance run back to back forever.
+  const delay=(saved?.local_failed??saved?.failed)?Math.min(intervalMs,5*60*1000):intervalMs;
   if(!force && !skipThrottle && saved?.checkedAt && now()>=saved.checkedAt && now()-saved.checkedAt<delay)return {skipped:true,reason:'throttled',results:[]};
   fs.mkdirSync(path.dirname(file),{recursive:true});
   const lock=`${file}.lock`;

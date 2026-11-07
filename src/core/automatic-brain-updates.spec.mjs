@@ -15,6 +15,27 @@ const temporary=[];
 afterEach(()=>{vi.useRealTimers();for(const root of temporary.splice(0))fs.rmSync(root,{recursive:true,force:true});});
 const brain=()=>{const dir=fs.mkdtempSync(path.join(os.tmpdir(),'tr-automatic-'));temporary.push(dir);return dir;};
 describe('daemon automatic package maintenance',()=>{
+  it('retries fast for its own failures, and at the normal interval for a peer with no way to update', async () => {
+    const dir=fs.mkdtempSync(path.join(os.tmpdir(),'tr-automatic-retry-'));
+    const brain=path.join(dir,'brain');
+    fs.mkdirSync(brain,{recursive:true});
+    const start=10000000;
+    const compile=vi.fn().mockResolvedValue({ok:true,results:[]});
+    const update=vi.fn().mockResolvedValue({versions:{'total-recall-brain':'3.40.2'},failed:0,results:[]});
+    const meshUpdate=vi.fn().mockResolvedValue({failed:3,results:[{status:'failed',error:'Mesh peer has no configured update transport'}]});
+    const first=await runAutomaticBrainUpdates({brainDir:brain,update,compile,meshUpdate,fleet:true,now:()=>start});
+    expect(first.failed).toBe(3);
+    expect(first.local_failed).toBe(0);
+    const tenMinutes=start+10*60*1000;
+    expect((await runAutomaticBrainUpdates({brainDir:brain,update,compile,meshUpdate,fleet:true,now:()=>tenMinutes})).reason).toBe('throttled');
+    const local=vi.fn().mockResolvedValue({versions:{'total-recall-brain':'3.40.2'},failed:1,results:[]});
+    const later=start+2*60*60*1000;
+    expect((await runAutomaticBrainUpdates({brainDir:brain,update:local,compile,meshUpdate,fleet:true,now:()=>later})).local_failed).toBe(1);
+    const retried=await runAutomaticBrainUpdates({brainDir:brain,update,compile,meshUpdate,fleet:true,now:()=>later+6*60*1000});
+    expect(retried.reason).toBeUndefined();
+    fs.rmSync(dir,{recursive:true,force:true});
+  });
+
   it('updates the shared plugin folder and counts their failures',async()=>{
     const brainDir=path.join(brain(),'.agent','skills','total-recall');
     const update=vi.fn().mockResolvedValue({versions:{'total-recall-brain':'3.40.2'},failed:0,results:[]});

@@ -197,11 +197,13 @@ export function consumerState(root, pkg, version = null) {
   const declaredFiles = [];
   const pkgFile = path.join(root, 'package.json');
   let declared = null;
+  let devOnly = false;
   if (fs.existsSync(pkgFile)) {
     try {
       const j = JSON.parse(fs.readFileSync(pkgFile, 'utf8'));
       const all = { ...(j.dependencies || {}), ...(j.devDependencies || {}), ...(j.optionalDependencies || {}) };
       declared = all[pkg] ?? null;
+      devOnly = Boolean(j.devDependencies?.[pkg]) && !j.dependencies?.[pkg] && !j.optionalDependencies?.[pkg];
       if (declared) declaredFiles.push(pkgFile);
     } catch {
       /* unreadable package.json is reported as unknown, not as satisfied */
@@ -242,6 +244,10 @@ export function consumerState(root, pkg, version = null) {
     } catch {
       /* keep looking */
     }
+  }
+  // A checkout with no copy of a dev dependency runs under the shared install. Nothing there is stale.
+  if (!installed && devOnly) {
+    return { root, declared, want, range, installed: null, satisfied: true, pinBehind: false, devNotInstalled: true, reason: 'dev-not-installed' };
   }
   // What a consumer runs is what counts, and the version named is the question. A pin can lag on
   // purpose, because `update` installs plugin copies with --no-save. Comparing against the pin
@@ -285,6 +291,7 @@ export function verifyConsumers(pkg, version, opts = {}) {
     failing: failing.length,
     failures: failing.map((s) => ({ root: s.root, declared: s.declared, installed: s.installed, reason: s.reason })),
     pin_behind: relevant.filter((s) => s.pinBehind).map((s) => ({ root: s.root, declared: s.declared, installed: s.installed })),
+    dev_not_installed: relevant.filter((s) => s.devNotInstalled).map((s) => s.root),
   };
 }
 
@@ -369,6 +376,7 @@ export async function run(argv = process.argv, deps = {}) {
       }
       log(`  ✓ ${pkg}@${version} verified: registry + ${consumers.consumers}/${consumers.consumers} consumers`);
       if (consumers.pin_behind.length) log(`    ${consumers.pin_behind.length} run it with an older pin in package.json, such as ${consumers.pin_behind[0].root}`);
+      if (consumers.dev_not_installed.length) log(`    ${consumers.dev_not_installed.length} keep no dev copy of it and run under the shared install`);
       continue;
     }
 

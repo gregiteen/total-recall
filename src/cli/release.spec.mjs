@@ -17,9 +17,9 @@ function tmp() {
   return fs.mkdtempSync(path.join(os.tmpdir(), 'tr-release-'));
 }
 
-function fakeRepo({ deps = {}, installed = null, aliasInstalled = null } = {}) {
+function fakeRepo({ deps = {}, devDeps = {}, installed = null, aliasInstalled = null } = {}) {
   const root = tmp();
-  fs.writeFileSync(path.join(root, 'package.json'), JSON.stringify({ name: 'consumer', dependencies: deps }, null, 2));
+  fs.writeFileSync(path.join(root, 'package.json'), JSON.stringify({ name: 'consumer', dependencies: deps, devDependencies: devDeps }, null, 2));
   if (installed) {
     const dir = path.join(root, 'node_modules', '@gregiteen', 'ssss-cli');
     fs.mkdirSync(dir, { recursive: true });
@@ -225,6 +225,21 @@ describe('consumerState', () => {
     expect(s.pinBehind).toBe(false);
   });
 
+  it('does not call an absent dev dependency stale: the checkout runs under the shared install', () => {
+    const root = fakeRepo({ devDeps: { '@gregiteen/ssss-cli': '0.14.4' } });
+    const s = consumerState(root, '@gregiteen/ssss-cli', '0.14.4');
+    expect(s.satisfied).toBe(true);
+    expect(s.reason).toBe('dev-not-installed');
+    expect(s.devNotInstalled).toBe(true);
+  });
+
+  it('still fails a dev dependency that is installed at an old version', () => {
+    const root = fakeRepo({ devDeps: { '@gregiteen/ssss-cli': '0.14.4' }, installed: '0.14.3' });
+    const s = consumerState(root, '@gregiteen/ssss-cli', '0.14.4');
+    expect(s.satisfied).toBe(false);
+    expect(s.reason).toBe('installed-mismatch');
+  });
+
   it('reads an npm: alias against the version named too', () => {
     const root = fakeRepo({ deps: { '@ssss/cli': 'npm:@gregiteen/ssss-cli@0.10.3' }, aliasInstalled: '0.14.4' });
     expect(consumerState(root, '@ssss/cli', '0.14.4').satisfied).toBe(true);
@@ -272,6 +287,15 @@ describe('verifyConsumers', () => {
     expect(r.failing).toBe(1);
     expect(r.failures[0].root).toBe(stale);
     expect(r.pin_behind).toEqual([{ root: copy, declared: '0.14.3', installed: '0.14.4' }]);
+  });
+
+  it('reports absent dev dependencies without failing, and an absent runtime one as a failure', () => {
+    const idle = fakeRepo({ devDeps: { '@gregiteen/ssss-cli': '0.14.4' } });
+    const broken = fakeRepo({ deps: { '@gregiteen/ssss-cli': '0.14.4' } });
+    const r = verifyConsumers('@gregiteen/ssss-cli', '0.14.4', { roots: [idle, broken] });
+    expect(r.failing).toBe(1);
+    expect(r.failures[0].root).toBe(broken);
+    expect(r.dev_not_installed).toEqual([idle]);
   });
 
   it('passes when every declaring consumer is satisfied', () => {
