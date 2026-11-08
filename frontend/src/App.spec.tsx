@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import App from './App';
 import * as api from './api';
 import * as onboarding from './utils/onboarding';
@@ -11,9 +11,10 @@ vi.mock('./api', () => ({
   fetchHealth: vi.fn(),
   getApiBase: vi.fn(),
   setApiBase: vi.fn(),
-  // App calls fetchPlugins() on mount. A mock module that omits it makes
-  // vitest throw "No fetchPlugins export is defined on the ./api mock", which
-  // unmounts the whole tree and left every assertion staring at an empty div.
+}));
+
+vi.mock('./api/plugins', async importOriginal => ({
+  ...await importOriginal<typeof import('./api/plugins')>(),
   fetchPlugins: vi.fn().mockResolvedValue([]),
 }));
 
@@ -28,7 +29,6 @@ vi.mock('./pages/LoginPage', () => ({
 vi.mock('./pages/MemoryPage', () => ({ default: () => <div data-testid="memory-page" /> }));
 vi.mock('./pages/SettingsPage', () => ({ default: () => <div data-testid="settings-page" /> }));
 vi.mock('./pages/TasksPage', () => ({ default: () => <div data-testid="tasks-page" /> }));
-vi.mock('./pages/PluginsPage', () => ({ default: () => <div data-testid="plugins-page" /> }));
 vi.mock('./components/BrainSelector', () => ({ default: () => <div data-testid="brain-selector" /> }));
 vi.mock('./pages/HelpPage', () => ({ default: () => <div data-testid="help-page" /> }));
 vi.mock('./pages/GraphPage', () => ({ default: () => <div data-testid="graph-page" /> }));
@@ -60,8 +60,11 @@ describe('App', () => {
     vi.mocked(onboarding.isOnboardingComplete).mockReturnValue(true);
     render(<App />);
 
+    const handle = await screen.findByRole('button', { name: 'Workspace navigation' });
+    fireEvent.click(handle);
+    expect(screen.getByRole('button', { name: 'Plugins' })).toBeInTheDocument();
+    fireEvent.click(screen.getByText('Memory', { selector: 'summary' }));
     await waitFor(() => {
-      // Sidebar should contain core memory and capabilities
       expect(screen.queryByText('Chat')).not.toBeInTheDocument();
       expect(screen.queryByText('Skills')).not.toBeInTheDocument();
       expect(screen.queryByText('IDEs')).not.toBeInTheDocument();
@@ -71,6 +74,8 @@ describe('App', () => {
       // Default route / redirects to /memory when onboarding is complete
       expect(screen.getByTestId('memory-page')).toBeInTheDocument();
     });
+    fireEvent.click(screen.getByText('Account', { selector: 'summary' }));
+    expect(screen.getByRole('link', { name: 'Secrets & Keys' })).toBeInTheDocument();
   });
 
   it('redirects /chat to /memory', async () => {
@@ -90,9 +95,49 @@ describe('App', () => {
     vi.mocked(onboarding.isOnboardingComplete).mockReturnValue(true);
     render(<App />);
 
-    await waitFor(() => {
-      expect(screen.getByTestId('plugins-page')).toBeInTheDocument();
-    });
+    await waitFor(() => expect(window.location.search).toBe('?plugin=meta-harness'));
+    expect(window.location.pathname).toBe('/memory');
+    fireEvent.click(screen.getByRole('button', { name: 'Workspace navigation' }));
+    expect(screen.getByRole('button', { name: 'Plugins' })).toHaveAttribute('aria-expanded', 'true');
+  });
+
+  it('opens the legacy plugin link while onboarding', async () => {
+    window.history.replaceState({}, '', '/plugins?id=mesh');
+    vi.mocked(api.checkSession).mockResolvedValue(true);
+    vi.mocked(onboarding.isOnboardingComplete).mockReturnValue(false);
+    render(<App />);
+    await waitFor(() => expect(window.location.pathname).toBe('/onboarding'));
+    expect(window.location.search).toBe('?plugin=mesh');
+  });
+
+  it('opens workspace navigation and closes it after selecting a page', async () => {
+    vi.mocked(api.checkSession).mockResolvedValue(true);
+    vi.mocked(onboarding.isOnboardingComplete).mockReturnValue(true);
+    render(<App />);
+    const toggle = await screen.findByRole('button', { name: 'Workspace navigation' });
+    expect(toggle).toHaveAttribute('aria-expanded', 'false');
+    fireEvent.click(toggle);
+    expect(toggle).toHaveAttribute('aria-expanded', 'true');
+    fireEvent.click(screen.getByText('Memory', { selector: 'summary' }));
+    fireEvent.click(screen.getByRole('link', { name: 'Vault' }));
+    expect(toggle).toHaveAttribute('aria-expanded', 'false');
+  });
+
+  it('closes an idle drawer and restores focus to its handle', async () => {
+    vi.mocked(api.checkSession).mockResolvedValue(true);
+    vi.mocked(onboarding.isOnboardingComplete).mockReturnValue(true);
+    render(<App />);
+    const toggle = await screen.findByRole('button', { name: 'Workspace navigation' });
+    vi.useFakeTimers();
+    try {
+      fireEvent.click(toggle);
+      screen.getByRole('button', { name: 'Plugins' }).focus();
+      act(() => vi.advanceTimersByTime(5000));
+      expect(toggle).toHaveAttribute('aria-expanded', 'false');
+      expect(toggle).toHaveFocus();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('redirects to onboarding if not complete', async () => {

@@ -31,8 +31,8 @@ import {
 } from './plugin-bundle.mjs';
 import { writeVfsDocument, patchVfsDocument, deleteVfsDocument, appendVfsEvent } from './ssss-operation-service.mjs';
 import { findVfsDocumentByPath } from './vfs-documents.mjs';
-import { readActivationRecord, projectActivationOverride } from './plugin-state.mjs';
-import { REQUIRED_INSTALLATION_PLUGIN_IDS } from './default-plugins.mjs';
+import { readActivationRecord, projectActivationOverride, pluginActivation } from './plugin-state.mjs';
+import { DEFAULT_PLUGIN_IDS, REQUIRED_INSTALLATION_PLUGIN_IDS } from './default-plugins.mjs';
 
 const execFileAsync = promisify(execFile);
 const ID_PATTERN = /^[a-z][a-z0-9-]{1,63}$/;
@@ -237,9 +237,18 @@ export async function patchProjectActivationRecord(id, projectRoot, runtimeEnabl
 }
 
 /** Facts about one installed plugin, merged with its record. */
-export function describePlugin(plugin) {
+export function describePlugin(plugin, projectRoot = process.cwd()) {
   const record = readPluginRecord(plugin);
   const m = plugin.manifest || {};
+  const required = REQUIRED_INSTALLATION_PLUGIN_IDS.includes(plugin.id);
+  let activation;
+  try {
+    const { state, enabled } = pluginActivation(plugin, { projectRoot });
+    activation = { state, enabled, required };
+  } catch {
+    // An unreadable repository policy is an error, never shared enablement.
+    activation = { state: 'error', enabled: false, required };
+  }
   let current = null;
   try {
     current = hashPluginDir(plugin.dir);
@@ -248,6 +257,7 @@ export function describePlugin(plugin) {
   const taskRuns = record?.task_runs || {};
   return {
     id: plugin.id,
+    core: DEFAULT_PLUGIN_IDS.includes(plugin.id),
     name: m.name || plugin.id,
     version: m.version || '0.0.0',
     description: m.description || '',
@@ -285,12 +295,12 @@ export function describePlugin(plugin) {
     configuration: m.configuration || null,
     manifest: m,
     card_face: record?.card_face || m.card_face || null,
-    activation: { state: plugin.valid && record?.runtime_enabled !== false ? 'active' : 'inactive', enabled: plugin.valid && record?.runtime_enabled !== false }
+    activation
   };
 }
 
 export function listInstalledPlugins(projectRoot = process.cwd()) {
-  return discoverPlugins(projectRoot).map(describePlugin);
+  return discoverPlugins(projectRoot).map(plugin => describePlugin(plugin, projectRoot));
 }
 
 /** Bundled plugins shipped in the package, flagged with whether they are installed here. */

@@ -48,6 +48,7 @@ export interface CardFaceConfig {
 
 export interface PluginInfo {
   id: string
+  core?: boolean
   name: string
   version: string
   description: string
@@ -81,7 +82,7 @@ export interface PluginInfo {
   store_deployed?: boolean
   secrets?: Array<{ key: string; description?: string; required?: boolean }>
   manifest?: Record<string, unknown>
-  activation?: { state: 'active' | 'inactive'; enabled: boolean }
+  activation?: { state: 'active' | 'inactive' | 'error'; enabled: boolean; required?: boolean }
   ui?: { elements: Array<{ id: string; kind: string; tag: string; module: string; description?: string }> } | null
 }
 
@@ -155,14 +156,11 @@ async function post(url: string, body: unknown, method = "POST"): Promise<Result
 }
 
 export async function fetchPlugins(): Promise<PluginInfo[]> {
-  try {
-    const res = await apiFetch(`${API_BASE}/api/plugins`)
-    if (!res.ok) return []
-    const data = await readJson(res)
-    return Array.isArray(data.plugins) ? data.plugins : []
-  } catch {
-    return []
-  }
+  const res = await apiFetch(`${API_BASE}/api/plugins`)
+  if (!res.ok) throw new Error(`Could not load plugins (${res.status})`)
+  const data = await readJson(res)
+  if (!Array.isArray(data.plugins)) throw new Error("The server did not return a plugin list")
+  return data.plugins
 }
 
 export async function fetchPlugin(id: string): Promise<PluginInfo | null> {

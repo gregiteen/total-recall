@@ -16,6 +16,7 @@ interface BrainInfo {
 interface BrainSelectorProps {
   activeBrainId: string
   onBrainChange: (brainId: string) => void
+  onSelectionComplete?: () => void
 }
 
 function layerDot(layer: string, multi = false): string {
@@ -31,7 +32,7 @@ function layerBadge(layer: string): string {
   return 'P'
 }
 
-export default function BrainSelector({ activeBrainId, onBrainChange }: BrainSelectorProps) {
+export default function BrainSelector({ activeBrainId, onBrainChange, onSelectionComplete }: BrainSelectorProps) {
   const [brains, setBrains] = useState<BrainInfo[]>([])
   const [expanded, setExpanded] = useState(false)
   const [loading, setLoading] = useState(true)
@@ -121,6 +122,7 @@ export default function BrainSelector({ activeBrainId, onBrainChange }: BrainSel
   const handleSelectOnly = (id: string) => {
     setSelection([id])
     setExpanded(false)
+    onSelectionComplete?.()
   }
 
   if (loading) {
@@ -224,7 +226,7 @@ export default function BrainSelector({ activeBrainId, onBrainChange }: BrainSel
           data-testid="brain-selector-menu"
           style={{
             position: 'absolute',
-            bottom: '100%',
+            top: '100%',
             left: 0,
             right: 0,
             marginBottom: 6,
@@ -360,6 +362,10 @@ export default function BrainSelector({ activeBrainId, onBrainChange }: BrainSel
               </div>
             )
           })}
+          {onSelectionComplete && <button type="button" className="btn btn-ghost btn-sm" onClick={() => {
+            setExpanded(false)
+            onSelectionComplete()
+          }}>Done</button>}
         </div>
       )}
     </div>

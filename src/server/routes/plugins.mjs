@@ -277,7 +277,7 @@ router.get("/api/plugins/:id", requireAuth, requireScope("config:read"), (req, r
   try {
     const plugin = getPluginById(req.params.id, projectRoot());
     if (!plugin) return res.status(404).json({ success: false, error: `Plugin ${req.params.id} not found` });
-    res.json({ success: true, plugin: { ...describePlugin(plugin), manifest: plugin.manifest } });
+    res.json({ success: true, plugin: { ...describePlugin(plugin, projectRoot()), manifest: plugin.manifest } });
   } catch (err) {
     serverError(res, err);
   }

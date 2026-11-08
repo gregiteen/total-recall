@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { discoverPlugins, globalPluginsDir } from './plugin-loader.mjs';
-import { patchPluginRecord } from './plugin-store.mjs';
+import { describePlugin, listInstalledPlugins, patchPluginRecord } from './plugin-store.mjs';
 import { patchProjectActivationRecord } from './plugin-store.mjs';
 import { pluginActivation } from './plugin-state.mjs';
 import { setPluginActive } from './plugin-activation.mjs';
@@ -120,6 +120,9 @@ describe('per-repository activation of a shared plugin', () => {
     expect(activationFor(repoA)).toMatchObject({ enabled: false, state: 'inactive', source: 'project', overridden: true });
     // The other repository is untouched, and the shared record was not changed.
     expect(activationFor(repoB)).toMatchObject({ enabled: true, source: 'shared' });
+    expect(listInstalledPlugins(repoA).find(plugin => plugin.id === 'shared-demo').activation).toMatchObject({ enabled: false, state: 'inactive' });
+    const plugin = discoverPlugins(repoB).find(plugin => plugin.id === 'shared-demo');
+    expect(describePlugin(plugin, repoB).activation).toMatchObject({ enabled: true, state: 'active' });
   });
 
   it('re-enables one repository over a shared setting that is off', async () => {
