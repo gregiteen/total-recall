@@ -546,14 +546,14 @@ export default function MemoryPage({ activeBrainId }: { activeBrainId?: string }
 
   return (
     <div className="page">
-      <div className="page-header" style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", marginBottom: 20 }}>
+      <div className="page-header memory-header">
         <div>
           <h1>Memory Vault</h1>
           <p>Browse, audit, and resolve contradictions in your SSSS knowledge graph</p>
         </div>
         
         {/* Tab Selection */}
-        <div style={{ display: "flex", background: "rgba(12, 18, 32, 0.72)", backdropFilter: "blur(16px)", padding: 4, borderRadius: "var(--radius-md, 10px)", border: "1px solid var(--border)" }}>
+        <div className="memory-tabs">
           <button 
             className={`btn btn-sm ${activeTab === "vault" ? "btn-purple" : "btn-ghost"}`}
             onClick={() => { setActiveTab("vault"); setSelected(null); setSearchParams({}); }}
@@ -591,28 +591,20 @@ export default function MemoryPage({ activeBrainId }: { activeBrainId?: string }
       {error && <div className="badge badge-error" style={{ alignSelf: "flex-start", marginBottom: 15 }}>{error}</div>}
 
       {activeTab === "vault" ? (
-        <div className="memory-layout">
-          <div className="memory-sidebar">
-            <h3 style={{ margin: "0 0 12px 0" }}>Categories</h3>
-            {CATEGORIES.map(c => (
-              <button
-                key={c}
-                className={`category-btn ${category === c ? "active" : ""}`}
-                onClick={() => { setCategory(c); setSearchParams({}); setIsCreating(false); setIsEditing(false); }}
-              >
-                <span>{c === "all" ? "All Nodes" : c}</span>
-                {c === "all"
-                  ? <span className="category-count">{nodes.length}</span>
-                  : categoryCounts[c]
-                    ? <span className="category-count">{categoryCounts[c]}</span>
-                    : null
-                }
-              </button>
-            ))}
-            
+        <div className="memory-main">
+          <div className="memory-toolbar">
+            <select className="select" aria-label="Memory category" value={category}
+              onChange={event => { setCategory(event.target.value); setSearchParams({}); setIsCreating(false); setIsEditing(false); }}>
+              {CATEGORIES.map(c => <option key={c} value={c}>
+                {c === "all" ? `All Nodes${category === "all" ? ` (${nodes.length})` : ""}`
+                  : `${c}${categoryCounts[c] ? ` (${categoryCounts[c]})` : ""}`}
+              </option>)}
+            </select>
+            <input className="input" id="memory-search" type="search" aria-label="Search memory nodes"
+              placeholder="Search memory nodes…" value={query} onChange={event => setQuery(event.target.value)} />
+            <button className="btn btn-ghost btn-sm" onClick={fetchNodes}>Refresh</button>
             <button
               className="btn btn-purple"
-              style={{ width: "100%", marginTop: 20, display: "flex", alignItems: "center", justifyContent: "center", gap: 8, fontSize: 13, minHeight: 44, borderRadius: "var(--radius-md, 10px)", fontWeight: 600 }}
               onClick={() => {
                 setSelected(null);
                 setSearchParams({});
@@ -636,17 +628,7 @@ export default function MemoryPage({ activeBrainId }: { activeBrainId?: string }
               Create New Node
             </button>
           </div>
-          <div className="memory-main">
-            <div className="memory-search">
-              <input
-                id="memory-search"
-                type="text"
-                placeholder="Search memory nodes…"
-                value={query}
-                onChange={e => setQuery(e.target.value)}
-              />
-              <button className="btn btn-ghost btn-sm" onClick={fetchNodes}>Refresh</button>
-            </div>
+          <div>
             {loading ? (
               <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
                 {[1, 2, 3].map(i => <div key={i} className="skeleton" style={{ height: 60 }} />)}

@@ -152,6 +152,8 @@ export default async function configCommand(args) {
   Commands:
     get [key]      Retrieve the value of a configuration key. If key is omitted, lists all keys.
     set <key> <v>  Set the value of a configuration key. Converts inputs to correct type.
+    drawer <right|bottom>                 Read a workspace drawer as JSON
+    drawer <right|bottom> --file <json>   Save a workspace drawer configuration
 
   Options:
     --global       Explicitly target the global brain configuration (~/.agent/)
@@ -174,6 +176,20 @@ export default async function configCommand(args) {
     npx total-recall config set daily_cap_usd 10.0 --global
     npx total-recall config set allowed_origins "http://localhost:8000"
 `);
+    return;
+  }
+
+  if (command === 'drawer') {
+    const { readDrawerConfig, writeDrawerConfig } = await import('../core/workspace-drawers.mjs');
+    const [, edge, fileFlag, file] = remainingArgs;
+    if (!edge || (remainingArgs.length !== 2 && (remainingArgs.length !== 4 || fileFlag !== '--file' || !file))) {
+      throw new Error('Usage: total-recall config drawer <right|bottom> [--file <json>] [--global|--project]');
+    }
+    const brain = layer === 'auto' && process.env.TR_BRAIN ? path.resolve(process.env.TR_BRAIN) : resolveBrainDir(layer);
+    const current = readDrawerConfig(brain, edge);
+    if (file && fs.statSync(file).size > 512 * 1024) throw new Error('Drawer file exceeds 512 KiB.');
+    const result = file ? await writeDrawerConfig(brain, edge, JSON.parse(fs.readFileSync(file, 'utf8')), current.version) : current;
+    console.log(JSON.stringify(result, null, 2));
     return;
   }
 

@@ -113,7 +113,7 @@ Instructions here.
     expect(fs.existsSync(path.join(dir, 'ui', 'panel.js'))).toBe(false);
     expect(fs.existsSync(path.join(dir, 'ui', 'card.js'))).toBe(false);
     expect(manifest.scaffold).toBe(true);
-    expect(fs.readFileSync(path.join(dir, 'README.md'), 'utf8')).toMatch(/no card face is generated.*by hand/s);
+    expect(fs.readFileSync(path.join(dir, 'README.md'), 'utf8')).toContain('total-recall plugin chunks validate <file>');
   });
 
   it('--api-key scaffolds a token CLI and a declared secret, but no generated face', async () => {

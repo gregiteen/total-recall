@@ -803,8 +803,7 @@ app.get('/chat', (req, res) => {
 
 // SPA fallback — serve index.html for all unmatched routes
 app.get(/^(.*)$/, (req, res) => {
-  const indexPath = path.join(frontendDist, 'index.html');
-  res.sendFile(indexPath, (err) => {
+  res.sendFile('index.html', { root: frontendDist }, (err) => {
     if (err) {
       // Frontend not built yet — return a helpful message
       res.status(200).json({
@@ -874,7 +873,7 @@ const server = app.listen(PORT, HOST, () => {
 
   // Only meaningful once the socket is up: asking before the callback fires
   // reads an empty set, which is "unknown", so the watch never armed.
-  if (isReachableFromOtherDevices() === false) {
+  if (bindResolution.usedLoopbackFallback && isReachableFromOtherDevices() === false) {
     logger.warn(
       'server',
       `Bound to loopback only — no other device can reach this brain at :${PORT}. `

@@ -7,12 +7,13 @@ import {
 } from '../../api/plugins'
 import { PluginPanel, pluginElements } from './PluginPanel'
 import { PluginSettings } from './PluginSettings'
+import { PluginChunkLibrary } from '../workspace/PluginChunkLibrary'
 
 type Notice = { text: string; error?: boolean }
 
 interface WorkspaceProps {
   activeBrainId: string
-  renderShell: (folder: ReactNode, page: ReactNode) => ReactNode
+  renderShell: (folder: ReactNode, page: ReactNode, plugins: PluginInfo[] | null) => ReactNode
   onOpenPlugin: () => void
 }
 
@@ -96,7 +97,7 @@ export default function PluginWorkspace({ activeBrainId, renderShell, onOpenPlug
   </section>
 
   return <>
-    {renderShell(folder, page)}
+    {renderShell(folder, page, plugins)}
     {browse && <PluginInstaller onClose={() => setBrowse(false)} onChange={refresh} />}
   </>
 }
@@ -123,7 +124,7 @@ function PluginDetail({ plugin, stale, onChange, onClose }: {
   const activation = plugin.activation
   const error = !plugin.valid || activation?.state === 'error'
   const enabled = activation?.enabled === true && !error
-  const [tab, setTab] = useState<'interface' | 'settings' | 'commands'>(enabled && panels.length ? 'interface' : 'settings')
+  const [tab, setTab] = useState<'interface' | 'settings' | 'commands' | 'blocks'>(enabled && panels.length ? 'interface' : 'settings')
   const [panelId, setPanelId] = useState(panels[0]?.id)
   const [busy, setBusy] = useState(false)
   const [notice, setNotice] = useState<Notice>()
@@ -172,6 +173,8 @@ function PluginDetail({ plugin, stale, onChange, onClose }: {
     <nav className="plugin-drawer-actions" aria-label={`${plugin.name} views`}>
       {panel && <button className={`btn ${tab === 'interface' ? 'btn-primary' : 'btn-ghost'}`} aria-pressed={tab === 'interface'}
         onClick={() => setTab('interface')}>Interface</button>}
+      {enabled && !stale && <button className={`btn ${tab === 'blocks' ? 'btn-primary' : 'btn-ghost'}`} aria-pressed={tab === 'blocks'}
+        onClick={() => setTab('blocks')}>Blocks</button>}
       <button className={`btn ${tab === 'settings' ? 'btn-primary' : 'btn-ghost'}`} aria-pressed={tab === 'settings'}
         onClick={() => setTab('settings')}>Settings</button>
       {plugin.cli && <button className={`btn ${tab === 'commands' ? 'btn-primary' : 'btn-ghost'}`} aria-pressed={tab === 'commands'}
@@ -203,6 +206,7 @@ function PluginDetail({ plugin, stale, onChange, onClose }: {
       </details>
     </>}
     {tab === 'commands' && plugin.cli && <PluginCommands plugin={plugin} enabled={enabled && !stale} />}
+    {tab === 'blocks' && enabled && !stale && <PluginChunkLibrary plugin={plugin} />}
   </section>
 }
 

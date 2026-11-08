@@ -26,6 +26,7 @@ Usage:
 Commands:
   list                      Installed plugins (project & global) with source and sharing
   library [--plugin ID]      Installed CLI operation library (--json for agents)
+  chunks [query]            Search installed SSSS UI chunks and validate owner files
   refresh                   Rebuild installed command inventories and instruction surfaces
   copies [dir] [--apply]    Audit repository copies of shared defaults. --apply deletes only
                             bundled matches. Add --archive-stale to preserve older differing copies.
@@ -71,7 +72,7 @@ Commands:
                               --category <cat>      Declare an SSSS memory category
                               --with-cli            Generate CLI command handler
                               --with-generator      Generate context generator
-                              --with-ui             Generate token-driven panel element
+                              --with-ui             Include owner UI authoring instructions
                               --with-task           Declare a selected-node scheduled task
                               --task-command <cmd>  Task CLI subcommand (requires --with-task)
                               --task-schedule <cron> Five-field local-time schedule
@@ -139,6 +140,11 @@ export async function run(argv = []) {
   if (command === 'card' || command === 'card-face' || command === 'skin') {
     await managePluginCard(rest);
     return;
+  }
+
+  if (command === 'chunks') {
+    const { runPluginChunks } = await import('./chunks.mjs');
+    return runPluginChunks(rest);
   }
 
   if (rest.includes('--help') || rest.includes('-h')) {

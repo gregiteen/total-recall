@@ -111,6 +111,7 @@ describe('App', () => {
   });
 
   it('opens workspace navigation and closes it after selecting a page', async () => {
+    window.history.replaceState({}, '', '/rules');
     vi.mocked(api.checkSession).mockResolvedValue(true);
     vi.mocked(onboarding.isOnboardingComplete).mockReturnValue(true);
     render(<App />);

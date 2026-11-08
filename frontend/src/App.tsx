@@ -10,14 +10,13 @@ import NetworkPage from './pages/NetworkPage'
 import { WebhooksPage } from './pages/WebhooksPage'
 import BrainSelector from './components/BrainSelector'
 import RulesPage from './pages/RulesPage'
-import HelpPage from './pages/HelpPage'
 import GraphPage from './pages/GraphPage'
 import PluginWorkspace from './components/plugins/PluginWorkspace'
 import OnboardingPage from './pages/OnboardingPage'
 import { NotificationsPage } from './pages/NotificationsPage'
 import { isOnboardingComplete } from './utils/onboarding'
 import BrandMark from './components/brand/BrandMark'
-import ContextualHelp from './components/ContextualHelp'
+import { WorkspaceDrawers, type WorkspaceEdge } from './components/workspace/WorkspaceDrawers'
 
 // ─── Auth state type ──────────────────────────────────────────────────────────
 type AuthState = 'loading' | 'authed' | 'unauthed'
@@ -118,7 +117,6 @@ const ACCOUNT_LINKS = [
   ['secrets', 'Secrets & Keys'],
   ['notifications', 'Notifications'],
   ['settings', 'Settings'],
-  ['help', 'Help'],
 ] as const
 
 function AccountMenu({ health, onLogout }: { health: HealthData | null; onLogout: () => void }) {
@@ -167,7 +165,7 @@ function AccountMenu({ health, onLogout }: { health: HealthData | null; onLogout
 function OnboardingRedirect() {
   const location = useLocation()
   // First visit: force guided onboarding until complete (local flag or vault profile)
-  if (!isOnboardingComplete() && !['/onboarding', '/plugins'].includes(location.pathname)) {
+  if (!isOnboardingComplete() && !['/onboarding', '/plugins', '/help'].includes(location.pathname)) {
     return <Navigate to="/onboarding" replace />
   }
 
@@ -205,7 +203,7 @@ function MainContent({ activeBrainId }: { activeBrainId: string }) {
           <Route path="/webhooks" element={<WebhooksPage />} />
           <Route path="/secrets" element={<Navigate to="/plugins?id=auth" replace />} />
           <Route path="/notifications" element={<NotificationsPage />} />
-          <Route path="/help" element={<HelpPage />} />
+          <Route path="/help" element={<Navigate to={isOnboardingComplete() ? '/memory?drawer=help' : '/onboarding?drawer=help'} replace />} />
           {/* Legacy OS-control-plane routes → core product */}
           <Route path="/vault" element={<Navigate to="/memory" replace />} />
           <Route path="/inbox" element={<Navigate to="/tasks" replace />} />
@@ -232,10 +230,20 @@ function MainContent({ activeBrainId }: { activeBrainId: string }) {
 const BRAIN_STORAGE_KEY = 'total-recall-active-brain'
 const SIDEBAR_IDLE_MS = 5000
 
-function App() {
+function Dashboard() {
+  const location = useLocation()
+  const requestedEdge = new URLSearchParams(location.search).get('drawer') === 'help' ? 'right' : null
+  const [drawerEntry, setDrawerEntry] = useState<{ key: string; edge: WorkspaceEdge | null }>(
+    () => ({ key: location.key, edge: requestedEdge })
+  )
+  if (drawerEntry.key !== location.key) setDrawerEntry({ key: location.key, edge: requestedEdge })
+  const edge = drawerEntry.key === location.key ? drawerEntry.edge : requestedEdge
+  const setEdge = useCallback((edge: WorkspaceEdge | null) => {
+    setDrawerEntry({ key: location.key, edge })
+  }, [location.key])
   const [authState, setAuthState] = useState<AuthState>('loading')
   const [health, setHealth] = useState<HealthData | null>(null)
-  const [sidebarOpen, setSidebarOpen] = useState(false)
+  const sidebarOpen = edge === 'left'
   const sidebarToggle = useRef<HTMLButtonElement>(null)
   const sidebarTimer = useRef<number | undefined>(undefined)
   const [activeBrainId, setActiveBrainId] = useState(
@@ -276,6 +284,7 @@ function App() {
 
   async function handleLogout() {
     await logout()
+    setEdge(null)
     setAuthState('unauthed')
   }
 
@@ -284,9 +293,14 @@ function App() {
   }
 
   const closeSidebar = useCallback(() => {
-    setSidebarOpen(false)
+    setEdge(null)
     if (document.activeElement?.closest('#workspace-sidebar')) sidebarToggle.current?.focus()
-  }, [])
+  }, [setEdge])
+
+  const closeDrawer = useCallback(() => {
+    if (edge === 'left') closeSidebar()
+    else setEdge(null)
+  }, [edge, closeSidebar, setEdge])
 
   const queueSidebarClose = useCallback(() => {
     window.clearTimeout(sidebarTimer.current)
@@ -324,20 +338,20 @@ function App() {
 
   // Authed — render full dashboard
   return (
-    <BrowserRouter>
       <PluginWorkspace activeBrainId={activeBrainId} onOpenPlugin={closeSidebar}
-        renderShell={(pluginFolder, pluginPage) => (
+        renderShell={(pluginFolder, pluginPage, plugins) => (
           <div className="app-layout">
             <Sidebar health={health} activeBrainId={activeBrainId} onBrainChange={setActiveBrainId}
               open={sidebarOpen} onClose={closeSidebar} onActivity={queueSidebarClose} pluginFolder={pluginFolder} />
-            {sidebarOpen && <div className="sidebar-scrim" aria-hidden="true" onClick={closeSidebar} />}
+            {edge && <div className="sidebar-scrim" aria-hidden="true" onClick={closeDrawer} />}
             <button type="button" className="sidebar-handle" ref={sidebarToggle} aria-label="Workspace navigation"
-              aria-controls="workspace-sidebar" aria-expanded={sidebarOpen} onClick={() => setSidebarOpen(open => !open)}>
+              aria-controls="workspace-sidebar" aria-expanded={sidebarOpen} onClick={() => setEdge(sidebarOpen ? null : 'left')}
+              onKeyDown={event => { if (event.key === 'Escape' && sidebarOpen) closeSidebar() }}>
               <svg width="14" height="18" viewBox="0 0 14 18" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true">
                 <path d={sidebarOpen ? 'M9 4 4 9l5 5' : 'm5 4 5 5-5 5'} />
               </svg>
             </button>
-            <div className="workspace-main">
+            <div className="workspace-main" inert={edge !== null}>
               <div className="workspace-toolbar">
                 <AccountMenu health={health} onLogout={handleLogout} />
               </div>
@@ -346,12 +360,13 @@ function App() {
               </div>
               {pluginPage}
             </div>
+            <WorkspaceDrawers edge={edge} onChange={setEdge} plugins={plugins} activeBrainId={activeBrainId} />
           </div>
         )}
       />
-      <ContextualHelp />
-    </BrowserRouter>
   )
 }
 
-export default App
+export default function App() {
+  return <BrowserRouter><Dashboard /></BrowserRouter>
+}

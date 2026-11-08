@@ -493,7 +493,7 @@ export default generateContext;
   if (category) lines.push(`- **SSSS Category**: \`${category}\``);
   if (withCli) lines.push(`- **CLI Command**: \`npx total-recall ${id}\``);
   if (withTask) lines.push(`- **Scheduled task**: \`${taskCommand}\` at \`${taskSchedule}\` (selected node; implement the command and choose a node before use)`);
-  if (asksForUi) lines.push('- **UI**: no card face is generated. Author `ui/card.js` and `ui/DESIGN.md` by hand for this plugin\'s own function, then declare the face in `ui.elements[]`');
+  if (asksForUi) lines.push('- **UI**: author the plugin workspace and its native panels for this plugin’s own function. Declare the panels in `ui.elements[]`.');
   if (apiKeys.length) lines.push('- **API key**: paste it in the plugin UI (`save-token` event) or pipe it to `npx total-recall ' + id + ' token set --stdin`; stored as `' + apiKeys[0] + '` in the secrets store');
   lines.push(
     "",
@@ -507,6 +507,20 @@ export default generateContext;
     ""
   );
 
+  lines.push(
+    "## Authoring generative UI",
+    "",
+    "Keep a bespoke `DESIGN.md` at the plugin root. Describe the palette, typography, layout, interaction and accessibility. Work with the user on the design and assets. Package this file and the authored blocks with the plugin.",
+    "",
+    "Author one SSSS Markdown document per reusable block at `ui/chunks/<id>.md`. Use `type: ui-chunk:chunk`, the manifest ID as `plugin`, the filename stem as `id`, a `title`, `description`, ISO `timestamp`, meaningful `intents` and supported `surfaces` from `page`, `left`, `right` and `bottom`. Use raw HTML for the body.",
+    "",
+    "Use HTML and CSS for presentation, and an optional `panel` reference to a declared native UI element for live actions. Declare any plugin operations behind that panel using the existing plugin contract. Keep credentials and private conversation data out of source files and routing metadata.",
+    "",
+    "Find the extension with `total-recall plugin chunks registry` and verify each block with `total-recall plugin chunks validate <file>`. Use `total-recall plugin chunks <intent> --surface <surface>` to find installed blocks. Add `--decision` for an explicit Decision request with an approved, concise intent. The result identifies a block by its stable `plugin:id`.",
+    "",
+    "Keep packaged defaults in the owner repository. Users can choose and arrange installed blocks, provide their own HTML and edit the design with their agent. Submit broadly useful owner changes to the plugin repository.",
+    ""
+  );
   fs.writeFileSync(path.join(pluginDir, "README.md"), lines.join("\n"), "utf8");
 
   // ── Standalone repository files ──────────────────────────────────────────

@@ -1,0 +1,23 @@
+{
+  "registry": "ui-chunk",
+  "extends": "ssss",
+  "version": "1.0.0",
+  "description": "Portable owner-authored HTML chunks for Total Recall workspace surfaces.",
+  "document_primitives": {
+    "chunk": {
+      "family": "capability",
+      "append_only": false,
+      "portability": "structural",
+      "filename_convention": "A kebab-case chunk ID under ui/chunks/ with the .md extension.",
+      "required_fields": ["type", "title", "description", "timestamp", "plugin", "id", "intents", "surfaces"],
+      "optional_fields": ["panel"],
+      "immutable_fields": ["plugin", "id"],
+      "enums": { "surfaces": ["page", "left", "right", "bottom"] },
+      "patterns": {
+        "plugin": "^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$",
+        "id": "^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$"
+      },
+      "notes": "The body holds HTML. The host validates surface membership, file ownership and native panel bindings before publishing the catalog."
+    }
+  }
+}
