@@ -26,7 +26,7 @@ let listFailure: boolean
 const requests: Array<{ path: string; init?: RequestInit }> = []
 
 function json(body: unknown, status = 200) {
-  return Promise.resolve(new Response(JSON.stringify(body), { status }))
+  return Promise.resolve(new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } }))
 }
 
 beforeEach(() => {
@@ -45,6 +45,7 @@ beforeEach(() => {
       return json({ success: true })
     }
     if (path.endsWith('/ui/inventory')) return Promise.resolve(new Response('customElements.define("demo-inventory", class extends HTMLElement {})'))
+    if (path.startsWith('/api/ui-chunks?')) return json({ chunks: [] })
     if (path.endsWith('/configuration')) return json({ fields: [], values: {} })
     if (path.endsWith('/auth/secrets')) return json([])
     if (path.endsWith('/available')) return json({ plugins: [] })
@@ -85,15 +86,15 @@ describe('PluginWorkspace', () => {
     expect(requests.some(request => request.path.endsWith('/ui/card') || request.path.endsWith('/run'))).toBe(false)
   })
 
-  it('uses settings for a card-only package and preserves its explicit commands', async () => {
+  it('opens declared operations from Home without executing or loading a legacy card', async () => {
     installed = [{ ...plugin, ui: { elements: [ownerCard] } }]
     renderWorkspace('/memory?plugin=demo')
     const view = within(await screen.findByRole('region', { name: 'Demo plugin' }))
-    expect(view.getByText('This package has no installed workspace panel.')).toBeInTheDocument()
+    expect(view.getByRole('button', { name: 'Home' })).toHaveAttribute('aria-pressed', 'true')
     expect(view.queryByRole('button', { name: 'Interface' })).not.toBeInTheDocument()
-    fireEvent.click(view.getByRole('button', { name: 'Commands' }))
+    fireEvent.click(view.getByRole('button', { name: 'inventory' }))
     expect(view.getByRole('option', { name: 'inventory' })).toBeInTheDocument()
-    expect(requests.some(request => request.path.endsWith('/ui/card'))).toBe(false)
+    expect(requests.some(request => request.path.endsWith('/ui/card') || request.path.endsWith('/run'))).toBe(false)
   })
 
   it('reads the saved activation after switching off', async () => {

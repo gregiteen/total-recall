@@ -6,7 +6,7 @@
  * non-zero on any failure and prints the real reason. Nothing here trusts a
  * declaration: every check reads the actual files or runs the actual command.
  *
- *   node record.mjs <pluginDir> [--manifest|--card|--secrets|--scaffold|--reuse|--json]
+ *   node record.mjs <pluginDir> [--manifest|--home|--card|--secrets|--scaffold|--reuse|--json]
  *
  * Checks are marked PASS, FAIL or WARN. A WARN is a judgement call the agent
  * must resolve; a FAIL is a rejection.
@@ -18,7 +18,7 @@ import { pathToFileURL } from 'node:url';
 
 const args = process.argv.slice(2);
 const json = args.includes('--json');
-const only = ['--manifest', '--card', '--secrets', '--scaffold', '--reuse'].filter((f) => args.includes(f));
+const only = ['--manifest', '--home', '--card', '--secrets', '--scaffold', '--reuse'].filter((f) => args.includes(f));
 const root = path.resolve(args.find((a) => !a.startsWith('-')) || '.');
 const want = (section) => only.length === 0 || only.includes(section);
 
@@ -91,11 +91,11 @@ if (manifest && want('--manifest')) {
   } else {
     record('manifest', 'PASS', 'no template', 'no card_layout');
   }
-  if (faces.length === 0) {
+  if (faces.length === 0 && !manifest.ui?.home) {
     record('manifest', 'FAIL', 'card declared', 'every plugin has a card; ui.elements declares none');
   } else if (faces.length > 1) {
     record('manifest', 'FAIL', 'card declared', `${faces.length} faces declared; exactly one is allowed`);
-  } else {
+  } else if (faces.length === 1) {
     const face = faces[0];
     record('manifest', 'PASS', 'card declared', `<${face.tag}> → ${face.module}`);
     if (!exists(face.module)) record('manifest', 'FAIL', 'card module resolves', `${face.module} does not exist`);
@@ -122,6 +122,35 @@ if (manifest && want('--manifest')) {
     else if (sub.effect && sub.effect !== 'read') record('manifest', 'FAIL', 'status binds', `status.command '${status.command}' is not a read`);
     else record('manifest', 'PASS', 'status binds', status.command);
   }
+}
+
+if (want('--home') && manifest && (manifest.ui?.home || only.includes('--home'))) {
+  const home = manifest.ui?.elements?.find(element => element.id === manifest.ui.home);
+  const validHome = home && ['panel', 'form', 'list', 'detail', 'widget'].includes(home.kind) && exists(home.module);
+  record('home', validHome ? 'PASS' : 'FAIL', 'Home element', validHome ? home.id : 'Declare a valid native ui.home.');
+  const hasDesign = manifest.ui?.design_tokens === 'DESIGN.md' && !!read('DESIGN.md').trim();
+  record('home', hasDesign ? 'PASS' : 'FAIL', 'Owner design', hasDesign ? 'DESIGN.md' : 'Package and declare root DESIGN.md.');
+  const covered = new Set();
+  let pageBlocks = 0;
+  for (const file of walk(root).filter(file => /^ui\/chunks\/[^/]+\.md$/.test(file))) {
+    try {
+      const output = execFileSync(process.env.TOTAL_RECALL_BIN || 'total-recall',
+        ['plugin', 'chunks', 'validate', path.join(root, file), '--plugin-dir', root, '--json'],
+        { cwd: root, encoding: 'utf8', timeout: 15000, stdio: ['ignore', 'pipe', 'pipe'] });
+      const { chunk } = JSON.parse(output);
+      if (chunk.surfaces.includes('page')) {
+        pageBlocks++;
+        for (const operation of chunk.operations || []) covered.add(operation);
+      }
+      record('home', 'PASS', 'SSSS block', chunk.key);
+    } catch (error) {
+      record('home', 'FAIL', 'SSSS block', `${file}: ${String(error.stdout || error.message).trim().slice(0, 500)}`);
+    }
+  }
+  if (!pageBlocks) record('home', 'FAIL', 'Page blocks', 'Home has no validated page blocks.');
+  const missing = (manifest.cli?.subcommands || []).map(operation => operation.name).filter(name => !covered.has(name));
+  if (missing.length) record('home', 'FAIL', 'Operation coverage', missing.join(', '));
+  else if (pageBlocks) record('home', 'PASS', 'Operation coverage', 'All declared operations have page blocks.');
 }
 
 /* ── reuse ───────────────────────────────────────────────────────────────── */
@@ -183,7 +212,7 @@ if (want('--reuse') && manifest) {
 
 /* ── card ────────────────────────────────────────────────────────────────── */
 
-if (want('--card') && manifest) {
+if (want('--card') && manifest && (!manifest.ui?.home || only.includes('--card'))) {
   const face = (manifest.ui?.elements || []).find((e) => e && e.kind === 'card');
   const src = face ? read(face.module) : '';
   if (!src) {

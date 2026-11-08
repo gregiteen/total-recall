@@ -8,6 +8,7 @@ import {
 import { PluginPanel, pluginElements } from './PluginPanel'
 import { PluginSettings } from './PluginSettings'
 import { PluginChunkLibrary } from '../workspace/PluginChunkLibrary'
+import { PluginHome } from '../workspace/PluginHome'
 
 type Notice = { text: string; error?: boolean }
 
@@ -90,6 +91,7 @@ export default function PluginWorkspace({ activeBrainId, renderShell, onOpenPlug
   </>
   let page: ReactNode = null
   if (selected) page = <PluginDetail key={selected.id} plugin={selected} stale={loadError}
+    decisionAvailable={plugins?.some(plugin => plugin.id === 'decision' && plugin.valid && plugin.activation?.enabled === true) ?? false}
     onClose={() => select(null)} onChange={refresh} />
   else if (id && (loadError || plugins)) page = <section className="plugin-workspace-page" aria-label="Plugin unavailable">
     <p role="alert">{loadError ? 'Could not load plugins.' : `No installed plugin matches ${id}.`}</p>
@@ -117,14 +119,15 @@ function PluginDialog({ title, children, onClose }: { title: string; children: R
   </div>
 }
 
-function PluginDetail({ plugin, stale, onChange, onClose }: {
-  plugin: PluginInfo; stale: boolean; onChange: () => Promise<void>; onClose: () => void
+function PluginDetail({ plugin, stale, decisionAvailable, onChange, onClose }: {
+  plugin: PluginInfo; stale: boolean; decisionAvailable: boolean; onChange: () => Promise<void>; onClose: () => void
 }) {
   const panels = pluginElements(plugin).filter(element => !['card', 'card-face', 'settings'].includes(element.kind))
   const activation = plugin.activation
   const error = !plugin.valid || activation?.state === 'error'
   const enabled = activation?.enabled === true && !error
-  const [tab, setTab] = useState<'interface' | 'settings' | 'commands' | 'blocks'>(enabled && panels.length ? 'interface' : 'settings')
+  const [tab, setTab] = useState<'home' | 'interface' | 'settings' | 'commands' | 'blocks'>('home')
+  const [initialCommand, setInitialCommand] = useState<string>()
   const [panelId, setPanelId] = useState(panels[0]?.id)
   const [busy, setBusy] = useState(false)
   const [notice, setNotice] = useState<Notice>()
@@ -171,6 +174,8 @@ function PluginDetail({ plugin, stale, onChange, onClose }: {
     {error && <p role="alert">{plugin.errors[0] || 'The activation policy could not be read.'}</p>}
     {notice && <p role={notice.error ? 'alert' : 'status'}>{notice.text}</p>}
     <nav className="plugin-drawer-actions" aria-label={`${plugin.name} views`}>
+      <button className={`btn ${tab === 'home' ? 'btn-primary' : 'btn-ghost'}`} aria-pressed={tab === 'home'}
+        onClick={() => setTab('home')}>Home</button>
       {panel && <button className={`btn ${tab === 'interface' ? 'btn-primary' : 'btn-ghost'}`} aria-pressed={tab === 'interface'}
         onClick={() => setTab('interface')}>Interface</button>}
       {enabled && !stale && <button className={`btn ${tab === 'blocks' ? 'btn-primary' : 'btn-ghost'}`} aria-pressed={tab === 'blocks'}
@@ -180,6 +185,12 @@ function PluginDetail({ plugin, stale, onChange, onClose }: {
       {plugin.cli && <button className={`btn ${tab === 'commands' ? 'btn-primary' : 'btn-ghost'}`} aria-pressed={tab === 'commands'}
         onClick={() => setTab('commands')}>Commands</button>}
     </nav>
+    {tab === 'home' && (enabled && !stale
+      ? <PluginHome plugin={plugin} decisionAvailable={decisionAvailable} onCommand={name => {
+        setInitialCommand(name)
+        setTab('commands')
+      }} />
+      : <p className="plugin-muted">An active plugin is needed to open its Home tools.</p>)}
     {tab === 'interface' && panel && <>
       {panels.length > 1 && <label>Panel
         <select className="select" value={panel.id} onChange={event => setPanelId(event.target.value)}>
@@ -205,14 +216,14 @@ function PluginDetail({ plugin, stale, onChange, onClose }: {
         </div>
       </details>
     </>}
-    {tab === 'commands' && plugin.cli && <PluginCommands plugin={plugin} enabled={enabled && !stale} />}
+    {tab === 'commands' && plugin.cli && <PluginCommands plugin={plugin} enabled={enabled && !stale} initialCommand={initialCommand} />}
     {tab === 'blocks' && enabled && !stale && <PluginChunkLibrary plugin={plugin} />}
   </section>
 }
 
-function PluginCommands({ plugin, enabled }: { plugin: PluginInfo; enabled: boolean }) {
+function PluginCommands({ plugin, enabled, initialCommand }: { plugin: PluginInfo; enabled: boolean; initialCommand?: string }) {
   const commands = plugin.cli?.subcommands ?? []
-  const [command, setCommand] = useState(commands[0]?.name ?? '')
+  const [command, setCommand] = useState(initialCommand || commands[0]?.name || '')
   const [args, setArgs] = useState('')
   const [output, setOutput] = useState<Notice>()
   const [busy, setBusy] = useState(false)

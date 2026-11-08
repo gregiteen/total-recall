@@ -83,7 +83,7 @@ export interface PluginInfo {
   secrets?: Array<{ key: string; description?: string; required?: boolean }>
   manifest?: Record<string, unknown>
   activation?: { state: 'active' | 'inactive' | 'error'; enabled: boolean; required?: boolean }
-  ui?: { elements: Array<{ id: string; kind: string; tag: string; module: string; description?: string }> } | null
+  ui?: { home?: string; elements: Array<{ id: string; kind: string; tag: string; module: string; description?: string }> } | null
 }
 
 export interface BundledPlugin {

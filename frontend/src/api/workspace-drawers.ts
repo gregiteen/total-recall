@@ -17,7 +17,17 @@ export interface WorkspaceChunk {
   description: string
   surfaces: string[]
   panel?: string
+  operations?: string[]
+  data?: string[]
   sha256: string
+}
+
+export function suggestWorkspaceChunks(plugin: string, query: string, signal?: AbortSignal) {
+  return request<{ chunks: WorkspaceChunk[]; selection: { source: 'lexical' | 'decision'; keys: string[]; reason?: string } }>(
+    '/api/ui-chunks/suggest', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ plugin, query }), signal,
+    },
+  )
 }
 
 async function request<T>(path: string, options?: RequestInit): Promise<T> {

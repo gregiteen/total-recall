@@ -1,5 +1,5 @@
 import { expect, it } from 'vitest';
-import { chooseUiChunk } from './chunks.mjs';
+import { chooseUiChunk, chooseUiComposition } from '../../core/ui-chunk-choice.mjs';
 
 const candidates = [
   { key: 'example:overview', title: 'Overview', description: 'General activity', intents: ['see activity'] },
@@ -13,4 +13,17 @@ it('bounds the Decision request to eligible metadata and rejects an invented cho
     return { ok: true, answers: { selected_chunk: { act: true, confidence: 0.99, choice: 'outside:private' } } };
   });
   expect(picked).toEqual({ source: 'decision', key: null, reason: 'invalid-choice' });
+});
+
+it('assembles ordered blocks and drops low-confidence secondary choices', async () => {
+  const third = { key: 'example:guide', title: 'Guide', description: 'Reference', intents: ['read guidance'] };
+  const picked = await chooseUiComposition([...candidates, third], 'review alerts', async (_state, questions) => {
+    expect(Object.keys(questions)).toEqual(['selected_chunk', 'supporting_chunk', 'reference_chunk']);
+    return { ok: true, answers: {
+      selected_chunk: { act: true, confidence: 0.91, choice: 'example:alerts' },
+      supporting_chunk: { act: true, confidence: 0.83, choice: 'example:overview' },
+      reference_chunk: { act: true, confidence: 0.28, choice: 'example:guide' },
+    } };
+  });
+  expect(picked.keys).toEqual(['example:alerts', 'example:overview']);
 });

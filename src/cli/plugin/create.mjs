@@ -514,9 +514,9 @@ export default generateContext;
     "",
     "Author one SSSS Markdown document per reusable block at `ui/chunks/<id>.md`. Use `type: ui-chunk:chunk`, the manifest ID as `plugin`, the filename stem as `id`, a `title`, `description`, ISO `timestamp`, meaningful `intents` and supported `surfaces` from `page`, `left`, `right` and `bottom`. Use raw HTML for the body.",
     "",
-    "Use HTML and CSS for presentation, and an optional `panel` reference to a declared native UI element for live actions. Declare any plugin operations behind that panel using the existing plugin contract. Keep credentials and private conversation data out of source files and routing metadata.",
+    "Declare the native workspace entry in `ui.home` and its design in `ui.design_tokens`. Bind each block to exact manifest operation names in `operations` and verified fields in `data` using `operation:/json/pointer`. Use HTML and CSS for presentation and an optional `panel` reference for live actions. Keep credentials and private data out of routing metadata.",
     "",
-    "Find the extension with `total-recall plugin chunks registry` and verify each block with `total-recall plugin chunks validate <file>`. Use `total-recall plugin chunks <intent> --surface <surface>` to find installed blocks. Add `--decision` for an explicit Decision request with an approved, concise intent. The result identifies a block by its stable `plugin:id`.",
+    "Find the extension with `total-recall plugin chunks registry` and verify each block with `total-recall plugin chunks validate <file>`. Compare `total-recall plugin chunks coverage --plugin <id>` with the owner inventory. Use `total-recall plugin chunks <intent> --surface <surface>` to find blocks. Add `--decision` to request an explicit typed choice. The result identifies a block by its stable `plugin:id`.",
     "",
     "Keep packaged defaults in the owner repository. Users can choose and arrange installed blocks, provide their own HTML and edit the design with their agent. Submit broadly useful owner changes to the plugin repository.",
     ""

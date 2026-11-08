@@ -513,6 +513,32 @@ code, pre { font-family: var(--font-mono); }
   border-inline-start: 1px solid var(--border);
 }
 
+.plugin-home, .plugin-home-focus {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+}
+.plugin-home-focus label {
+  display: grid;
+  gap: 6px;
+}
+.plugin-home-operations {
+  display: grid;
+  gap: 2px;
+  padding: 0;
+  list-style: none;
+}
+.plugin-home-operations li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  column-gap: 12px;
+  padding: 4px 0;
+  border-bottom: 1px solid var(--border);
+}
+.plugin-home-operations span {
+  color: var(--text-secondary);
+}
 .plugin-drawer-header, .plugin-drawer-actions, .plugin-detail-status dd {
   display: flex;
   align-items: center;

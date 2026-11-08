@@ -15,10 +15,10 @@ Then work the list, and record the actual outcome of each. Do not tick a box you
 - [ ] Each shared dependency uses its existing owner command or a vendored brick. The reuse gate passes and the workflow tests exercise the declared interfaces.
 - [ ] Every operation has typed arguments and an effect.
 - [ ] `--json` works on every subcommand; failures exit non-zero; `--help` works without credentials.
-- [ ] No secret value appears in `argv`, stdout, stderr, a log or the card state.
-- [ ] The card declares exactly one element of kind `card`, and no `card_layout`.
-- [ ] Every value on the card came from a command; failures render as failures; unknown values render an em dash.
-- [ ] The card renders on the real dark dashboard at 360, 768 and 1280 px with no horizontal overflow.
+- [ ] No secret value appears in `argv`, stdout, stderr, logs or UI state.
+- [ ] The Home and its bespoke design are declared. The owner inventory and the operation and data bindings cover the same workflows.
+- [ ] Every displayed value came from an actual operation. Failures and unknown values are explicit.
+- [ ] Home and its assembled blocks render at 360, 768 and 1280 px with no horizontal overflow.
 - [ ] Every state renders: credential present, missing, provider unreachable, rejected call, empty, stale.
 - [ ] The suite passes — per-subcommand unit tests including failure paths, a manifest test, a secrets test.
 - [ ] No seeded value, placeholder or example default survives anywhere in the plugin.

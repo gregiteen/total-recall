@@ -125,6 +125,18 @@ function readChunk(root, manifest, id) {
     if (!isId(data.panel)) throw new UiChunkFileError('Invalid panel ID.');
     nativePanel(manifest, data.panel, root);
   }
+  const operations = new Set(manifest.cli?.subcommands?.map(command => command.name));
+  if (data.operations !== undefined && !validList(data.operations, 24, operation => operations.has(operation))) {
+    throw new UiChunkFileError('operations must name distinct CLI operations declared by this plugin.');
+  }
+  if (data.data !== undefined && !validList(data.data, 24, ref => {
+    if (!isText(ref, 200)) return false;
+    const separator = ref.indexOf(':');
+    return separator > 0 && operations.has(ref.slice(0, separator)) &&
+      /^(?:\/(?:[^~/]|~[01])*)+$/u.test(ref.slice(separator + 1));
+  })) {
+    throw new UiChunkFileError('data must name declared operations and JSON pointers in the form operation:/path.');
+  }
   const html = result.body.trim();
   if (!html.startsWith('<') || html.includes('\0')) {
     throw new UiChunkFileError('Chunk body must contain raw HTML.');
@@ -138,6 +150,8 @@ function readChunk(root, manifest, id) {
     intents: data.intents.map(intent => intent.trim()),
     surfaces: data.surfaces,
     ...(data.panel === undefined ? {} : { panel: data.panel }),
+    ...(data.operations === undefined ? {} : { operations: data.operations }),
+    ...(data.data === undefined ? {} : { data: data.data }),
     sha256: createHash('sha256').update(contents).digest('hex'),
     html,
   };
@@ -177,7 +191,7 @@ function scoreChunk(chunk, query, terms) {
   if (!query) return 0;
   if (query === chunk.key || query === chunk.id) return Number.MAX_SAFE_INTEGER;
   const identity = tokens(chunk.key + ' ' + chunk.title);
-  const intents = tokens(chunk.intents.join(' '));
+  const intents = tokens([...chunk.intents, ...(chunk.operations || []), ...(chunk.data || [])].join(' '));
   const description = tokens(chunk.description);
   let score = 0;
   for (const term of terms) {
@@ -226,7 +240,7 @@ export function searchUiChunks({ projectRoot = process.cwd(), plugin, surface, q
     }
   }
   chunks.sort((a, b) => b.score - a.score || a.chunk.key.localeCompare(b.chunk.key, 'en'));
-  return { chunks: chunks.slice(0, limit).map(entry => entry.chunk), diagnostics, retrieval: 'lexical' };
+  return { chunks: chunks.slice(0, limit).map(entry => entry.chunk), total: chunks.length, diagnostics, retrieval: 'lexical' };
 }
 
 export function getUiChunk(plugin, id, { projectRoot = process.cwd(), surface } = {}) {
@@ -244,4 +258,34 @@ export function getUiChunk(plugin, id, { projectRoot = process.cwd(), surface } 
   } catch {
     return null;
   }
+}
+
+export function auditUiChunkCoverage({ projectRoot = process.cwd(), plugin } = {}) {
+  if (plugin !== undefined && !isId(plugin)) throw new UiChunkInputError('Invalid plugin ID.');
+  return discoverPlugins(projectRoot).filter(owner => !plugin || owner.id === plugin).map(owner => {
+    let design = null;
+    for (const file of ['DESIGN.md', 'ui/DESIGN.md']) {
+      try {
+        ownerFile(fs.realpathSync(owner.dir), file);
+        design = file;
+        break;
+      } catch { /* Check the other supported owner path. */ }
+    }
+    const { chunks, total, diagnostics } = searchUiChunks({ projectRoot, plugin: owner.id, surface: 'page', limit: 200 });
+    const covered = new Set(chunks.flatMap(chunk => chunk.operations || []));
+    const operations = owner.manifest?.cli?.subcommands?.map(command => command.name) || [];
+    const missing = operations.filter(operation => !covered.has(operation));
+    return {
+      plugin: owner.id,
+      active: owner.valid && pluginActivation(owner, { projectRoot }).enabled,
+      design,
+      panels: (owner.manifest?.ui?.elements || []).filter(element =>
+        ['panel', 'form', 'list', 'detail', 'widget'].includes(element.kind)).map(element => element.id),
+      pageBlocks: total,
+      dataBindings: [...new Set(chunks.flatMap(chunk => chunk.data || []))].sort(),
+      operations: { total: operations.length, missing },
+      partial: chunks.length < total,
+      diagnostics,
+    };
+  });
 }

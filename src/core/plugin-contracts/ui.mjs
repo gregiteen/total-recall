@@ -117,13 +117,13 @@ function normalizeElement(raw, index, errors) {
 /**
  * Validates and normalizes a manifest `ui` block.
  * @param {object} ui
- * @returns {{ design_tokens?: string, elements: object[] }}
+ * @returns {{ design_tokens?: string, home?: string, elements: object[] }}
  * @throws {UiSpecError}
  */
 export function normalizeUiSpec(ui) {
   const errors = [];
   if (!isPlainObject(ui)) throw new UiSpecError(["'ui' must be an object"]);
-  unknownKeys(ui, ['design_tokens', 'elements'], 'ui', errors);
+  unknownKeys(ui, ['design_tokens', 'elements', 'home'], 'ui', errors);
   const spec = { elements: [] };
   if (ui.design_tokens !== undefined) {
     if (!isSafePluginPath(ui.design_tokens, /\.md$/)) {
@@ -142,6 +142,12 @@ export function normalizeUiSpec(ui) {
     tags.add(el.tag);
     spec.elements.push(el);
   });
+  if (ui.home !== undefined) {
+    if (!spec.elements.some(el => el.id === ui.home && ['panel', 'form', 'list', 'detail', 'widget'].includes(el.kind))) {
+      errors.push("'ui.home' must name a declared non-card content element");
+    } else spec.home = ui.home;
+    if (!spec.design_tokens) errors.push("'ui.home' requires 'ui.design_tokens'");
+  }
   if (errors.length) throw new UiSpecError(errors);
   return spec;
 }

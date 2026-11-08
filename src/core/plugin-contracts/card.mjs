@@ -107,8 +107,8 @@ export function validateCardContract(manifest) {
 
 /**
  * Every plugin has a card face: bespoke owner code, declared once in
- * ui.elements[]. A plugin without one is incomplete, and a plugin that declares
- * a shared template is invalid.
+ * ui.elements[]. An owner may instead designate a bespoke non-card Home.
+ * Shared card templates are invalid.
  *
  * The *scaffold* emitted by `plugin create` deliberately contains no card: a
  * face is authored by hand once the plugin's function is understood. A scaffold
@@ -121,8 +121,7 @@ function validateCardFace(manifest, errors, warnings) {
     errors.push("'card_layout' is not supported: a card face is bespoke owner code in ui.elements[], never a shared template");
   }
   const elements = manifest.ui?.elements;
-  // A brick is distributed as capability code alone. It carries no UI, so it
-  // has no face; every other plugin still requires exactly one.
+  // A brick is distributed as capability code alone and has no UI.
   if (manifest.brick === true) {
     validateCapability(manifest, errors);
     if (manifest.ui !== undefined && Array.isArray(elements) && elements.length > 0) {
@@ -142,11 +141,11 @@ function validateCardFace(manifest, errors, warnings) {
     errors.push("'ui.elements' must declare the plugin's card face; every plugin has one, authored by hand");
     return;
   }
-  // One face, and as many secondary screens as the plugin needs. Cardinality is
-  // checked for `card` alone, so panels may be declared in any number and on
-  // either side of the face.
+  // Older owners can keep one card while adding a native Home.
   const faces = elements.filter((element) => plain(element) && element.kind === 'card');
-  if (faces.length === 0) errors.push("'ui.elements' must declare an element of kind 'card'");
+  if (faces.length === 0 && manifest.ui?.home === undefined) {
+    errors.push("'ui.elements' must declare an element of kind 'card' or designate a non-card 'ui.home'");
+  }
   if (faces.length > 1) errors.push("'ui.elements' must declare exactly one card face; further screens use kind 'panel'");
 }
 

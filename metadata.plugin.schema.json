@@ -517,6 +517,10 @@
           "pattern": "\\.md$",
           "description": "Plugin-relative default DESIGN.md, used when the app supplies none."
         },
+        "home": {
+          "type": "string",
+          "description": "ID of the plugin's declared non-card Home element."
+        },
         "elements": {
           "type": "array",
           "items": {
