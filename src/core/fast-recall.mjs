@@ -73,7 +73,7 @@ function readIndex(file) {
 
 /** Local retrieval never imports the whole-vault cache or a provider. */
 export function fastSearch(query, { derivedDir, vaultDir, top_k = 5, category = null,
-  tags = null, modality = null, importance = null, priority = null, fullText = false } = {}) {
+  tags = null, modality = null, importance = null, priority = null, fullText = false, rankResults = null } = {}) {
   const started = performance.now();
   const stats = { mode: fullText ? 'local-full-text' : 'local-metadata', index: 'missing',
     freshness: 'index-snapshot; selected documents verified against canonical Markdown', hydrated_documents: 0, stale_documents: 0 };
@@ -114,7 +114,7 @@ export function fastSearch(query, { derivedDir, vaultDir, top_k = 5, category = 
   candidates.sort((a, b) => b.score - a.score);
   stats.match_ms = performance.now() - started - stats.index_ms;
   const hydration = performance.now();
-  for (const candidate of candidates) {
+  for (const candidate of rankResults ? rankResults(candidates) : candidates) {
     if (results.length >= Math.max(1, Math.min(20, top_k))) break;
     if (!vaultDir) { results.push(candidate); continue; }
     const relative = candidate.relative || (isSafeVaultName(candidate.category) && isSafeVaultName(candidate.slug) ? `${candidate.category}/${candidate.slug}.md` : null);

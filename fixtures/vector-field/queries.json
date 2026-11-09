@@ -1,0 +1,6 @@
+[
+  { "query": "deploy", "relevant": ["b-current-guide"] },
+  { "query": "rollback", "relevant": ["b-current-guide", "c-recovery-policy"] },
+  { "query": "restore", "relevant": ["c-recovery-policy", "d-storage-guide"] },
+  { "query": "storage", "relevant": ["d-storage-guide"] }
+]

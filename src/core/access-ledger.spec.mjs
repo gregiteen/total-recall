@@ -8,14 +8,31 @@ import { recordCapsuleAccess } from './context-compiler.mjs';
 describe('memory access ledger (DECAY-01)', () => {
   const temp = () => fs.mkdtempSync(path.join(os.tmpdir(), 'tr-ledger-'));
 
+  it('adds trend counts to legacy entries and retains only three active days per updated entry', () => {
+    const dir = temp();
+    try {
+      fs.writeFileSync(path.join(dir, 'access-ledger.json'), JSON.stringify({
+        a: { count: 20, last_accessed: '2026-10-01T00:00:00Z' }, _active_days: ['2026-10-01'],
+      }));
+      for (const day of ['2026-11-01', '2026-11-03', '2026-11-07', '2026-11-09']) {
+        recordAccess(dir, ['a', 'a'], new Date(`${day}T12:00:00Z`));
+      }
+      expect(readAccess(dir).a).toMatchObject({ count: 24,
+        daily_counts: { '2026-11-03': 1, '2026-11-07': 1, '2026-11-09': 1 } });
+      expect(Object.keys(readAccess(dir).a.daily_counts)).toHaveLength(3);
+    } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+  });
+
   it('records each use with its time and count, and reads a missing or damaged ledger as empty', () => {
     const dir = temp();
     expect(readAccess(dir)).toEqual({});
     expect(recordAccess(dir, ['a', 'b', 'a'], new Date('2026-11-01T00:00:00Z'))).toBe(true);
     expect(recordAccess(dir, ['a'], new Date('2026-11-02T00:00:00Z'))).toBe(true);
     const ledger = readAccess(dir);
-    expect(ledger.a).toEqual({ last_accessed: '2026-11-02T00:00:00.000Z', count: 2 });
-    expect(ledger.b).toEqual({ last_accessed: '2026-11-01T00:00:00.000Z', count: 1 });
+    expect(ledger.a).toEqual({ last_accessed: '2026-11-02T00:00:00.000Z', count: 2,
+      daily_counts: { '2026-11-01': 1, '2026-11-02': 1 } });
+    expect(ledger.b).toEqual({ last_accessed: '2026-11-01T00:00:00.000Z', count: 1,
+      daily_counts: { '2026-11-01': 1 } });
     expect(activeDays(ledger)).toEqual(['2026-11-01', '2026-11-02']);
     expect(activeDaysSince(ledger, new Date('2026-11-01T12:00:00Z').getTime())).toBe(1);
     fs.writeFileSync(path.join(dir, 'access-ledger.json'), '{ broken');

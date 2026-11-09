@@ -98,7 +98,8 @@ export async function semanticSearch(query, {
   tags = null,
   modality = null,
   importance = null,
-  priority = null
+  priority = null,
+  rankResults = null
 } = {}) {
   const k = Math.min(Number(top_k) || 5, 20);
 
@@ -234,7 +235,7 @@ export async function semanticSearch(query, {
   }
 
   // Slice top results
-  for (const { node, score } of blendedRanked.slice(0, k)) {
+  for (const { node, score } of blendedRanked.slice(0, rankResults ? undefined : k)) {
     if (node) {
       const similarity = similarityBySlug.get(node.slug);
       results.push({
@@ -297,7 +298,7 @@ export async function semanticSearch(query, {
   }
 
   results.sort((a, b) => b.score - a.score);
-  const finalResults = results.slice(0, k);
+  const finalResults = (rankResults ? rankResults(results) : results).slice(0, k);
   if (!queryEmbedding || vaultEntries.length === 0) {
     finalResults.degradedTextSearch = true;
     // Say WHICH failure this is. The caller renders remediation from it, and
