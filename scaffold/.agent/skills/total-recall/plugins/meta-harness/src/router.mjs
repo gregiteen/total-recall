@@ -1,5 +1,5 @@
 /**
- * Meta Harness Smart Router
+ * Metaharness Smart Router
  * Manages honest quota/readiness tracking, benchmark matrices, RouteLLM complexity routing,
  * and cost-vs-frontier harness selection.
  *

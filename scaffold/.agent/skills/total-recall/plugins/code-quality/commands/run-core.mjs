@@ -17,7 +17,7 @@ export function findSkillDir(start = process.cwd()) {
 
 export function runCore(script, args) {
   if (!fs.existsSync(stateDir())) {
-    const error = new Error('No code-quality state in this repository (.agent/skills/code-quality). Create it: total-recall code-quality init');
+    const error = new Error('No code-quality state in this repository (.agent/skills/code-quality). Create configuration: total-recall code-quality detect --apply');
     error.exitCode = 2;
     throw error;
   }

@@ -80,7 +80,7 @@ function loadConfig() {
   if (!existsSync(CONFIG_PATH)) {
     fail(
       `No config.json at ${CONFIG_PATH}\n` +
-      `Run:  total-recall skill config code-quality init`
+      `Run:  total-recall code-quality detect --apply`
     );
   }
   let cfg;
@@ -754,6 +754,7 @@ async function main() {
 
   const startedAt = new Date().toISOString();
   const startedMs = Date.now();
+  const testedHead = gitHead();
   console.error(` [code-quality] ${config.toolchain} — ${checks.length} check(s) in ${REPO_ROOT}`);
 
   const dependencies = await ensureDependencies();
@@ -794,7 +795,7 @@ async function main() {
     startedAt,
     finishedAt: new Date().toISOString(),
     durationMs: Date.now() - startedMs,
-    gitHead: gitHead(),
+    gitHead: testedHead,
     sourceFileCount: sources.length,
     dependencies,
     checks: results.map(({ raw, findings: _f, ...meta }) => meta),

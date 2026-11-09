@@ -23,13 +23,21 @@ export function automation(ctx, source, key, data) {
     enabled: null, state: 'unknown', runner_available: null, last_run: null, actions: [], ...data };
 }
 export function scheduledTasks(plugins = [], ctx = { node_id: 'local' }) {
-  return plugins.flatMap(plugin => (Array.isArray(plugin.tasks) ? plugin.tasks : []).map(task => automation(ctx, 'plugin-tasks', `${plugin.id}:${task.command}`, {
-    name: text(task.intent || `${plugin.name || plugin.id} · ${task.command}`), origin: `plugin:${plugin.id}`,
-    plugin_id: plugin.id, plugin_name: plugin.name, command: task.command, intent: text(task.intent), schedule: task.schedule,
-    trigger: { kind: 'cron', summary: text(task.schedule) }, placement: task.placement || 'per-node',
-    enabled: plugin.activation?.enabled ?? null, state: plugin.valid === false ? 'invalid' : plugin.activation?.enabled === false ? 'disabled' : 'declared',
-    valid: plugin.valid, last_handled_slot: task.last_run || null,
-  })));
+  return plugins.flatMap(plugin => (Array.isArray(plugin.tasks) ? plugin.tasks : []).map(task => {
+    const selected_node = typeof plugin.task_nodes?.[task.command] === 'string' ? plugin.task_nodes[task.command].trim() || null : null;
+    const placement_state = task.placement !== 'selected-node' ? 'per-node'
+      : !Object.hasOwn(plugin, 'task_nodes') ? 'unknown' : selected_node ? 'selected' : 'unplaced';
+    return automation(ctx, 'plugin-tasks', `${plugin.id}:${task.command}`, {
+      name: text(task.intent || `${plugin.name || plugin.id} · ${task.command}`), origin: `plugin:${plugin.id}`,
+      plugin_id: plugin.id, plugin_name: plugin.name, command: task.command, intent: text(task.intent), schedule: task.schedule,
+      trigger: { kind: 'cron', summary: text(task.schedule) }, placement: task.placement || 'per-node',
+      selected_node, placement_state,
+      enabled: plugin.activation?.enabled ?? null, state: plugin.valid === false ? 'invalid' : plugin.activation?.enabled === false ? 'disabled' : placement_state === 'unplaced' ? 'unplaced' : 'declared',
+      runner_available: placement_state === 'unplaced' ? false : null,
+      valid: plugin.valid, last_handled_slot: task.last_run || null,
+      last_handled_outcome: task.last_run ? { slot: task.last_run, state: 'unknown' } : null,
+    });
+  }));
 }
 
 export async function boundedCommand(file, args, options = {}) {
@@ -111,17 +119,33 @@ export async function sourceAdapters(ctx) {
   return {
     'plugin-tasks': async () => {
       const store = await load('plugin-store');
-      const records = scheduledTasks(store.listInstalledPlugins(ctx.projectRoot), ctx);
+      const plugins = store.listInstalledPlugins(ctx.projectRoot).map(plugin => ({ ...plugin }));
+      if (plugins.some(plugin => plugin.tasks?.some(task => task.placement === 'selected-node'))) {
+        const loader = await load('plugin-loader');
+        const discovered = new Map(loader.discoverPlugins(ctx.projectRoot).map(plugin => [plugin.id, plugin]));
+        for (const plugin of plugins) {
+          if (!plugin.tasks?.some(task => task.placement === 'selected-node')) continue;
+          const source = discovered.get(plugin.id);
+          if (source) plugin.task_nodes = store.readPluginRecord(source)?.task_nodes || {};
+        }
+      }
+      const records = scheduledTasks(plugins, ctx);
       const events = await load('ssss-operation-service');
       const payloads = [];
       for (const brain of ctx.brains) for (const event of await events.listVfsEvents({ vaultRoot: path.join(brain.brainDir, 'memory-vault') })) {
         let payload = event?.payload || event?.content; if (typeof payload === 'string') { try { payload = JSON.parse(payload); } catch { continue; } }
-        if (payload?.kind === 'plugin.task_run') payloads.push({ ...payload, at: event.timestamp || event.created_at || null });
+        if (payload?.kind === 'plugin.task_run' && (!payload.node_id || payload.node_id === ctx.node_id)) payloads.push({ ...payload, at: event.timestamp || event.created_at || payload.at || null });
       }
+      const eventTime = event => Date.parse(event.at || event.slot || '') || 0;
+      const outcome = event => ({ at: event.at || event.slot || null, slot: event.slot || null,
+        state: event.ok === true ? 'success' : event.ok === false ? 'failed' : 'unknown', exit_code: event.exit_code ?? null });
       for (const record of records) {
-        const last = payloads.filter(event => event.plugin_id === record.plugin_id && event.command === record.command)
-          .sort((a, b) => String(a.at || a.slot || '').localeCompare(String(b.at || b.slot || ''))).at(-1);
-        if (last) record.last_run = { at: last.at || last.slot, state: last.ok ? 'success' : 'failed', exit_code: last.exit_code ?? null };
+        const matching = payloads.filter(event => event.plugin_id === record.plugin_id && event.command === record.command)
+          .sort((a, b) => eventTime(a) - eventTime(b));
+        const last = matching.at(-1);
+        if (last) record.last_run = outcome(last);
+        const handled = record.last_handled_slot && matching.filter(event => event.slot === record.last_handled_slot).at(-1);
+        if (handled) record.last_handled_outcome = outcome(handled);
       }
       return records;
     },

@@ -16,6 +16,7 @@ import { getTokenStatus, setTokenValue } from './src/token.mjs';
 import { lintWikiHubs } from './src/lint.mjs';
 import { generateWiki } from './src/generate.mjs';
 import { retrieveContext } from './src/context-provider.mjs';
+import { refreshDiagnostics } from './src/refresh-diagnostics.mjs';
 
 /**
  * Regenerate the generated pages of every registered project that carries them.
@@ -25,7 +26,14 @@ import { retrieveContext } from './src/context-provider.mjs';
  * Defaults to a report; --apply performs the refreshes, because regenerating a
  * repository's documentation is a write to that repository.
  */
-async function refreshCommand(args) {
+export async function refreshCommand(args, {
+  read = readProjects, dueFor = isDue, refresh = refreshProjectAsync,
+  getKey = resolveKey, configFor = loadOpenWikiConfig,
+} = {}) {
+  if (args.includes('--help') || args.includes('-h')) {
+    console.log('Usage: total-recall openwiki refresh [--repo <name>] [--apply] [--force] [--diagnostics [--slot <local-minute>]] [--json]');
+    return;
+  }
   const json = args.includes('--json');
   const apply = args.includes('--apply');
   const force = args.includes('--force');
@@ -37,7 +45,7 @@ async function refreshCommand(args) {
 
   let projects;
   try {
-    projects = readProjects();
+    projects = read();
   } catch (err) {
     if (json) console.log(JSON.stringify({ ok: false, error: err.message }));
     else console.error(`OpenWiki refresh: ${err.message}`);
@@ -52,20 +60,28 @@ async function refreshCommand(args) {
     return;
   }
 
+  if (args.includes('--diagnostics')) {
+    const slotIndex = args.indexOf('--slot');
+    const result = await refreshDiagnostics({ projects, slot: slotIndex >= 0 ? args[slotIndex + 1] : null });
+    console.log(JSON.stringify(result, null, 2));
+    if (!result.ok) process.exitCode = 1;
+    return;
+  }
+
   const reports = [];
   for (const project of projects) {
     let state;
     try {
-      state = force ? { due: true, ...staleness(project.root) } : isDue(project);
+      state = dueFor(project, { force });
     } catch (err) {
-      reports.push({ ...project, action: 'skipped', reason: err.message });
+      reports.push({ ...project, action: 'failed', reason: err.message });
       continue;
     }
     if (!state.due) {
       if (state.skipped) {
         reports.push({ ...project, action: 'skipped', reason: state.reason });
       } else {
-        reports.push({ ...project, action: 'current', generatedAt: state.generatedAt, commitsSince: state.commitsSince });
+        reports.push({ ...project, action: 'current', reason: state.reason, generationCommit: state.generationCommit, generationTime: state.generationTime, generatedAt: state.generatedAt, commitsSince: state.commitsSince });
       }
       continue;
     }
@@ -73,7 +89,10 @@ async function refreshCommand(args) {
       ...project,
       action: 'due',
       uninitialized: Boolean(state.uninitialized),
+      mode: state.mode,
       generatedAt: state.generatedAt,
+      generationCommit: state.generationCommit,
+      generationTime: state.generationTime,
       commitsSince: state.commitsSince,
       reason: state.reason
     });
@@ -82,8 +101,8 @@ async function refreshCommand(args) {
   const due = reports.filter((r) => r.action === 'due');
   let payloadBudgetNote = null;
   if (apply && due.length) {
-    const config = loadOpenWikiConfig();
-    const { key, from } = resolveKey({ provider: config.provider });
+    const config = configFor();
+    const { key, from } = getKey({ provider: config.provider });
     if (!key) {
       const keyName = config.provider === 'google' ? 'GOOGLE_API_KEY' : 'OPENROUTER_API_KEY';
       const error = `No model credential for provider '${config.provider}'. Save via: total-recall auth secret set ${keyName} --stdin`;
@@ -109,20 +128,25 @@ async function refreshCommand(args) {
       while (queueIndex < due.length) {
         const itemIndex = queueIndex++;
         const entry = due[itemIndex];
-        const mode = entry.uninitialized ? 'init' : 'update';
+        const mode = entry.mode || (entry.uninitialized ? 'init' : 'update');
         if (!json) {
           console.log(`[${itemIndex + 1}/${due.length}] ▶ ${entry.name.padEnd(28)} starting ${mode}...`);
         }
-        const result = await refreshProjectAsync(
-          { name: entry.name, root: entry.root },
-          { key, model: config.model, provider: config.provider, timeoutMs: config.timeout_ms }
-        );
+        let result;
+        try {
+          result = await refresh(
+            { name: entry.name, root: entry.root },
+            { key, model: config.model, provider: config.provider, timeoutMs: config.timeout_ms }
+          );
+        } catch (error) {
+          result = { action: 'failed', reason: error.message.split(key).join('[REDACTED]') };
+        }
         completedCount++;
         const index = reports.findIndex((r) => r.root === entry.root);
         reports[index] = { ...reports[index], ...result, credential: from };
         if (!json) {
-          const duration = Math.round((Date.now() - (result.startedAt || Date.now())) / 1000);
-          const icon = result.action === 'failed' ? '✖' : '✔';
+          const duration = Math.round((result.durationMs || 0) / 1000);
+          const icon = ['failed', 'partial'].includes(result.action) ? '✖' : '✔';
           console.log(`[${completedCount}/${due.length}] ${icon} ${entry.name.padEnd(28)} ${result.action} (${duration}s)${result.reason ? ` — ${result.reason}` : ''}`);
         }
       }
@@ -133,8 +157,9 @@ async function refreshCommand(args) {
   }
 
   const failed = reports.filter((r) => r.action === 'failed');
+  const partial = reports.filter((r) => r.action === 'partial');
   const payload = {
-    ok: failed.length === 0,
+    ok: failed.length === 0 && partial.length === 0,
     applied: apply,
     retention: describeRetention(),
     note: payloadBudgetNote,
@@ -145,6 +170,8 @@ async function refreshCommand(args) {
       uninitialized: reports.filter((r) => r.uninitialized).length,
       refreshed: reports.filter((r) => r.action === 'refreshed' || r.action === 'initialized').length,
       failed: failed.length,
+      partial: partial.length,
+      skipped: reports.filter((r) => r.action === 'skipped').length,
       current: reports.filter((r) => r.action === 'current').length,
     },
     reports,
@@ -152,15 +179,17 @@ async function refreshCommand(args) {
   if (json) console.log(JSON.stringify(payload, null, 2));
   else {
     console.log(`OpenWiki refresh (${apply ? 'apply' : 'report'}): ${payload.counts.registered} registered, ${payload.counts.due} due (${payload.counts.uninitialized} uninitialized)`);
-    for (const r of reports) {
+    // Put failures last so bounded scheduler tails retain their causes.
+    for (const r of [...reports].sort((a, b) => Number(['failed', 'partial'].includes(a.action)) - Number(['failed', 'partial'].includes(b.action)))) {
       if (r.action === 'current') continue;
-      const age = r.uninitialized ? 'uninitialized' : (r.generatedAt ? `generated ${r.generatedAt.slice(0, 10)}` : 'never generated');
+      const age = r.action === 'skipped' ? 'outside repository generation' : r.generationTime ? `generated ${r.generationTime} at ${r.generationCommit}` : r.uninitialized ? 'uninitialized' : (r.generatedAt ? `last attempt ${r.generatedAt}; generation commit unknown` : 'never generated');
       console.log(`  ${r.action.padEnd(9)} ${r.name.padEnd(28)} ${age}${Number.isFinite(r.commitsSince) && r.commitsSince !== Infinity ? `, ${r.commitsSince} commits since` : ''}${r.reason ? ` — ${r.reason}` : ''}`);
     }
     if (payloadBudgetNote) console.log(payloadBudgetNote);
     if (!apply && due.length) console.log('Re-run with --apply to regenerate. Pages are a projection; vault content is never touched.');
   }
-  if (failed.length) process.exitCode = 1;
+  if (!payload.ok) process.exitCode = 1;
+  return payload;
 }
 
 async function probeCommand(args) {

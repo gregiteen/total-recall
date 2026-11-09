@@ -1,5 +1,5 @@
 /**
- * Meta Harness — Multi-Agent Coordination & Inspection Console
+ * Metaharness — Multi-Agent Coordination & Inspection Console
  *
  * Bespoke operator interface for terminal coding agent fleet management.
  * Displays real-time agent discovery matrix, mesh node targets, authentication
@@ -855,9 +855,9 @@ export class CommandFleetCard extends HTMLElement {
 
       <div class="header">
         <div class="brand-group">
-          <div class="wordmark-badge">META HARNESS</div>
+          <div class="wordmark-badge">METAHARNESS</div>
           <div class="title-meta">
-            <h3 class="plugin-title">Meta Harness Fleet</h3>
+            <h3 class="plugin-title">Metaharness Fleet</h3>
             <p class="plugin-subtitle">Multi-agent runtime coordination, quotas & benchmarks</p>
           </div>
         </div>

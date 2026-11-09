@@ -1,5 +1,5 @@
 /**
- * Meta Harness Universal Cross-Model Adversarial Code Review Engine
+ * Metaharness Universal Cross-Model Adversarial Code Review Engine
  *
  * Runs automated code reviews across integrated agent platforms (claude, codex, agy,
  * grok, dsh, hermes, etc.).
@@ -19,6 +19,7 @@ import { resolvePool, localExecutionNode } from './pool.mjs';
 import { lastJsonWith } from './json-reply.mjs';
 import { createWorktree, removeWorktree, commitAll, headCommit } from './worktree.mjs';
 import { forwardRemoteOperation } from './remote-operation.mjs';
+import { recordReview } from './reviews.mjs';
 
 const MAX_DIFF = 30000;
 // Generated surfaces say nothing a reviewer can act on, and they crowd out the source.
@@ -129,10 +130,12 @@ export function buildReviewPrompt(diff, context = {}) {
 You are an independent, highly critical senior security and architecture engineer performing an adversarial code review.
 You did NOT write this code. Do not rubber-stamp. Look for vulnerabilities, silent failures, regressions, anti-patterns, and test coverage gaps.
 
-${task}${branch}${context.stat ? `Files changed:\n${context.stat}\n\n` : ''}${context.untracked?.length ? `New untracked files, not in the diff; read them too:\n${context.untracked.slice(0, 100).join('\n')}\n\n` : ''}${diff.length > MAX_DIFF ? `This diff is cut at ${MAX_DIFF} of ${diff.length} characters. Read the remainder from the repository and say so if you could not.\n` : ''}GIT DIFF TO REVIEW:
+${task}${branch}${context.evidence ? `Job evidence (recorded by Metaharness, not by the author):\n${JSON.stringify(context.evidence, null, 2).slice(0, 8000)}\n\n` : ''}${context.stat ? `Files changed:\n${context.stat}\n\n` : ''}${context.untracked?.length ? `New untracked files, not in the diff; read them too:\n${context.untracked.slice(0, 100).join('\n')}\n\n` : ''}${diff.length > MAX_DIFF ? `This diff is cut at ${MAX_DIFF} of ${diff.length} characters. Read the remainder from the repository and say so if you could not.\n` : ''}GIT DIFF TO REVIEW:
 \`\`\`diff
 ${diff.slice(0, MAX_DIFF)}
 \`\`\`
+
+Judge the diff. Use the job evidence for claims about how the job ran (questions asked, replies, the goal check, the gate). A claim you cannot verify from the diff or the evidence is a "suggestion" marked unverified in its issue text; it is never "critical" or blocking. Mark a finding "critical" only for a defect in the diff itself.
 
 Evaluate the diff against these strict criteria:
 1. Security & Blast Radius (privilege escalation, token leakage, unhandled exceptions)
@@ -166,14 +169,39 @@ export function parseReviewVerdict(response) {
   return { verdict: 'NEEDS_DISCUSSION', parsed: false, riskScore: null, summary: text.slice(0, 300) || 'The reviewer returned nothing readable.', findings: [] };
 }
 
+export function reviewBlocksPush(result) {
+  if (result?.ok !== true) return true;
+  if (result.verdict === 'NO_DIFF') return false;
+  const review = result.review;
+  // R45.8: only blocking findings stop the push; other findings go to the job result.
+  // An unreadable review cannot clear a push, so it blocks.
+  return !review || review.parsed === false ||
+    review.findings?.some(f => f.blocking === true || ['blocking', 'critical'].includes(f.severity)) === true;
+}
+
 export async function executeCodeReview(options = {}) {
   const remote = await forwardRemoteOperation('review', null, options);
   if (remote) return remote;
   localExecutionNode(options);
+  const selection = { workspace: options.cwd || process.cwd(), target: options.target || (options.staged ? '--staged' : 'working tree'), reviewer: options.reviewer || null };
+  let result;
+  try { result = await executeLocalReview(options, selection); }
+  catch (error) {
+    // Preserve the existing CLI error contract, but retain failed attempts too.
+    try { recordReview({ ok: false, error: error.message }, selection); }
+    catch (storeError) { throw new Error(`${error.message}; review store failed: ${storeError.message}`); }
+    throw error;
+  }
+  try { return { ...result, reviewId: recordReview(result, selection).id }; }
+  catch (error) { return { ...result, ok: false, reviewStoreError: error.message }; }
+}
+
+async function executeLocalReview(options, selection) {
   const cwd = options.cwd || process.cwd();
   const author = options.author || null;
   const diffResult = extractGitDiff({ cwd, target: options.target, staged: options.staged });
   if (!diffResult.ok) throw new Error(`Failed to read the diff: ${diffResult.error}`);
+  Object.assign(selection, { diff: diffResult.diff, untracked: diffResult.untracked, target: diffResult.target, commit: headCommit(cwd) });
   if (!diffResult.diff && !diffResult.untracked?.length) return { ok: true, verdict: 'NO_DIFF', target: diffResult.target, summary: `Nothing to review for ${diffResult.target}.` };
 
   const { ready, excluded } = await resolvePool(options);
@@ -184,13 +212,16 @@ export async function executeCodeReview(options = {}) {
   const reviewerFamily = ADAPTER_CATALOG[reviewer.id]?.family || reviewer.family || null;
   if (author && (reviewer.id === author || (authorFamily && authorFamily === reviewerFamily))) throw new Error(`${reviewer.id} shares a model family with the author ${author}, so it cannot review this independently`);
   const independence = author ? 'verified' : 'unverified: the author was not named';
+  selection.reviewer = reviewer.id;
   const truncated = diffResult.diff.length > MAX_DIFF;
   const snapshot = reviewSnapshot(cwd, diffResult);
+  selection.commit = snapshot.commit;
   let result;
   try { result = await dispatchWithReceipt({
     agent: reviewer.id, node: 'local', cwd: snapshot.directory, contextCwd: cwd, contextTask: options.task || `Review the code changes in ${diffResult.target}`,
-    prompt: buildReviewPrompt(diffResult.diff, { task: options.task, branch: options.branch || diffResult.target, stat: diffResult.stat, untracked: diffResult.untracked }),
+    prompt: buildReviewPrompt(diffResult.diff, { task: options.task, evidence: options.evidence, branch: options.branch || diffResult.target, stat: diffResult.stat, untracked: diffResult.untracked }),
     permissions: { read: true, write: false }, allowUnknownAuth: options.allowUnknownAuth === true,
+    ...(reviewer.id === 'codex' ? { reviewTarget: { type: 'custom', instructions: buildReviewPrompt(diffResult.diff, { task: options.task, evidence: options.evidence, branch: diffResult.target }) } } : {}),
   }, { dispatchFn: options.dispatchFn, role: 'Reviewer' }); }
   finally { removeWorktree(cwd, snapshot.directory); }
   if (!result.ok) return { ok: false, target: diffResult.target, reviewer: reviewer.id, error: result.error, failureKind: result.failureKind, excluded };

@@ -9,6 +9,7 @@ const BOOLEAN_FLAGS = {
 };
 const VALUE_FLAGS = {
   mode: '--mode', orchestrator: '--orchestrator', explorer: '--explorer', architect: '--architect', implementer: '--implementer',
+  goal: '--goal', maxTurns: '--max-turns', maxBudgetUsd: '--max-budget-usd', maxTokens: '--max-tokens', approvalPolicy: '--approvals', questionTimeoutMs: '--question-timeout-ms', resultSchema: '--result-schema',
   verifier: '--verifier', reviewer: '--reviewer', author: '--author', threadId: '--thread', branch: '--branch',
 };
 const OPERATION_KEYS = {
@@ -33,9 +34,12 @@ export async function forwardRemoteOperation(operation, task, options = {}) {
     if (typeof task !== 'string' || !task.trim()) throw new Error('Remote operation requires a task description');
     argv.push(task);
   }
-  for (const key of OPERATION_KEYS[operation]) {
+  const controls = ['route', 'coordinate'].includes(operation) ? ['goal', 'maxTurns', 'maxBudgetUsd', 'maxTokens', 'approvalPolicy', 'questionTimeoutMs', 'resultSchema'] : [];
+  for (const key of [...OPERATION_KEYS[operation], ...controls]) {
     if (BOOLEAN_FLAGS[key]) { if (options[key] === true) argv.push(BOOLEAN_FLAGS[key]); }
     else if (options[key] !== undefined && options[key] !== null) {
+      if (['maxTurns', 'maxBudgetUsd', 'maxTokens', 'questionTimeoutMs'].includes(key)) { argv.push(VALUE_FLAGS[key], String(options[key])); continue; }
+      if (key === 'resultSchema' && typeof options[key] !== 'string') { argv.push('--result-schema-json', JSON.stringify(options[key])); continue; }
       if (typeof options[key] !== 'string' || !options[key] || /\0/.test(options[key])) throw new Error(`Invalid remote ${key}`);
       argv.push(VALUE_FLAGS[key], options[key]);
     }

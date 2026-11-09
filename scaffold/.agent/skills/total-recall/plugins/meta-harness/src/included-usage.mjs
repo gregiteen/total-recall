@@ -195,7 +195,7 @@ export function queryCodexAccount(cwd, { env = process.env, timeoutMs = 10000 } 
         child.kill('SIGTERM');
       }
     });
-    send({ id: 1, method: 'initialize', params: { clientInfo: { name: 'meta_harness', title: 'Meta Harness', version: '1' } } });
+    send({ id: 1, method: 'initialize', params: { clientInfo: { name: 'meta_harness', title: 'Metaharness', version: '1' } } });
   });
 }
 

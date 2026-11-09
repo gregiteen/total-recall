@@ -12,6 +12,7 @@
  * Status, most severe first:
  *   missing         no report file
  *   unreadable      report file is not valid JSON or has an unknown shape
+ *   foreign         report belongs to a different repository root
  *   infrastructure  a gate failed to spawn or timed out; results are incomplete
  *   unparsed-failure a gate exited non-zero with no parseable findings
  *   failed          findings or a failing gate
@@ -21,27 +22,34 @@
  *   partial         clean, but higher-tier gates were skipped
  *   clean           every gate ran, nothing changed since
  */
-import { readFileSync, existsSync, statSync } from 'node:fs';
+import { readFileSync, existsSync, statSync, realpathSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { stateDir } from './state.mjs';
 
 const SOURCE_EXTS = new Set(['.ts', '.tsx', '.js', '.jsx', '.mjs', '.cjs', '.py', '.vue', '.svelte']);
 
 function git(cwd, args) {
-  return execFileSync('git', args, { cwd, encoding: 'utf8', maxBuffer: 64 * 1024 * 1024, timeout: 20_000 });
+  return execFileSync('git', args, { cwd, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'], maxBuffer: 64 * 1024 * 1024, timeout: 20_000 });
+}
+
+// Resolve the caller's working tree independently of cached report metadata.
+function repositoryRoot(cwd) {
+  try { return realpathSync(git(cwd, ['rev-parse', '--show-toplevel']).trim()); }
+  catch { return realpathSync(cwd); }
 }
 
 /** Returns { head, changed } or null when git cannot be read. */
-function freshness(report) {
+function freshness(report, repoRoot) {
   try {
-    const head = git(report.repoRoot, ['rev-parse', 'HEAD']).trim();
+    const head = git(repoRoot, ['rev-parse', '--verify', 'HEAD']).trim();
     const startedMs = Date.parse(report.startedAt);
     const changed = [];
-    for (const rel of git(report.repoRoot, ['ls-files', '-z']).split('\0')) {
+    for (const rel of git(repoRoot, ['ls-files', '-z']).split('\0')) {
       if (!rel || !SOURCE_EXTS.has(path.extname(rel))) continue;
       try {
-        if (statSync(path.join(report.repoRoot, rel)).mtimeMs > startedMs) changed.push(rel);
+        if (statSync(path.join(repoRoot, rel)).mtimeMs > startedMs) changed.push(rel);
       } catch { /* deleted since the run */ }
     }
     return { head, changed };
@@ -50,10 +58,13 @@ function freshness(report) {
   }
 }
 
-export function buildReportView(reportFile, { now = Date.now(), inspectGit = true } = {}) {
-  const base = { reportFile, status: 'missing', reasons: [] };
+export function buildReportView(reportFile, { now = Date.now(), inspectGit = true, cwd = process.cwd() } = {}) {
+  const base = { reportFile, status: 'missing', clean: false, reasons: [] };
   if (!existsSync(reportFile)) {
-    return { ...base, reasons: ['No report file. Run code-quality-check, then reload.'] };
+    const configured = existsSync(path.join(stateDir(cwd), 'config.json'));
+    return { ...base, reasons: [configured
+      ? 'No report file. Run code-quality-check, then reload.'
+      : 'No code-quality configuration. Run total-recall code-quality detect --apply, then run code-quality-check.'] };
   }
   let report;
   try {
@@ -65,6 +76,19 @@ export function buildReportView(reportFile, { now = Date.now(), inspectGit = tru
       report.checks.some(check => !check || typeof check.id !== 'string' || typeof check.ok !== 'boolean') ||
       [report.findings, report.skippedChecks].some(rows => rows !== undefined && (!Array.isArray(rows) || rows.some(row => !row || typeof row !== 'object')))) {
     return { ...base, status: 'unreadable', reasons: ['Report does not have the code-quality schema (checks, ranChecks, startedAt).'] };
+  }
+
+  if (typeof report.repoRoot !== 'string' || !path.isAbsolute(report.repoRoot)) {
+    return { ...base, status: 'unreadable', reasons: ['Report has no absolute repository root. Run code-quality-check in this repository.'] };
+  }
+  let repoRoot;
+  try {
+    repoRoot = repositoryRoot(cwd);
+    if (realpathSync(report.repoRoot) !== repoRoot) {
+      return { ...base, status: 'foreign', reasons: ['Report belongs to another repository. Run code-quality-check in this repository.'] };
+    }
+  } catch {
+    return { ...base, status: 'unreadable', reasons: ['Cannot verify report repository root. Run code-quality-check in this repository.'] };
   }
 
   const findings = Array.isArray(report.findings) ? report.findings : [];
@@ -87,8 +111,9 @@ export function buildReportView(reportFile, { now = Date.now(), inspectGit = tru
     (c) => !c.ok && !c.spawnError && !c.timedOut && !findings.some((f) => f.check === c.id)
   );
   const zeroScope = report.checks.filter((c) => c.scanned === 0);
-  const fresh = inspectGit ? freshness(report) : null;
-  const headMoved = Boolean(fresh && report.gitHead && fresh.head !== report.gitHead);
+  const fresh = inspectGit ? freshness(report, repoRoot) : null;
+  const revisionKnown = typeof report.gitHead === 'string' && /^(?:[a-f0-9]{40}|[a-f0-9]{64})$/i.test(report.gitHead);
+  const headMoved = Boolean(fresh && revisionKnown && fresh.head !== report.gitHead);
 
   const reasons = [];
   let status = 'clean';
@@ -102,7 +127,8 @@ export function buildReportView(reportFile, { now = Date.now(), inspectGit = tru
   }
   if (report.ranChecks.length === 0) set('zero-scope', 'No gates ran');
   if (zeroScope.length) set('zero-scope', `${zeroScope.map((c) => c.id).join(', ')}: scanned 0 files`);
-  if (fresh === null && inspectGit) set('unknown-freshness', 'git could not be read; cannot tell whether this report matches the tree');
+  if (!revisionKnown) set('unknown-freshness', 'Report has no verified revision. Run code-quality-check in this repository.');
+  if (fresh === null) set('unknown-freshness', 'git freshness could not be verified; cannot tell whether this report matches the tree');
   else if (fresh && (fresh.changed.length || headMoved)) {
     set('stale', headMoved
       ? `HEAD moved from ${String(report.gitHead).slice(0, 8)} to ${fresh.head.slice(0, 8)}`
@@ -116,7 +142,7 @@ export function buildReportView(reportFile, { now = Date.now(), inspectGit = tru
     reasons,
     clean: status === 'clean',
     toolchain: report.toolchain,
-    repoRoot: report.repoRoot,
+    repoRoot,
     tier: report.tier,
     gitHead: report.gitHead ?? null,
     currentHead: fresh?.head ?? null,
@@ -172,7 +198,7 @@ export async function printCachedReport(args, reportFile) {
 }
 
 export function defaultReportFile() {
-  return path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', 'reports', 'latest.json');
+  return path.join(stateDir(), 'reports', 'latest.json');
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {

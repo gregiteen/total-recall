@@ -4,7 +4,7 @@ import { readReceipts, activeQuotaWalls } from './learner.mjs';
 
 const SEVERITY = { info: 'info', warning: 'high', high: 'high', critical: 'critical' };
 
-export async function notifyAlert({ title = 'Meta Harness', message = '', severity = 'info', eventId, dryRun = false } = {}) {
+export async function notifyAlert({ title = 'Metaharness', message = '', severity = 'info', eventId, dryRun = false } = {}) {
   const args = ['alerts', 'send', '--title', title, '--message', message, '--severity', SEVERITY[severity] || 'info', '--source', 'meta-harness'];
   if (eventId) args.push('--event-id', eventId);
   if (dryRun) args.push('--dry-run');
@@ -20,13 +20,13 @@ export async function notifyAlert({ title = 'Meta Harness', message = '', severi
 export async function checkAlerts({ quotas = {}, threshold = 85, dryRun = false } = {}) {
   const walls = activeQuotaWalls(await readReceipts());
   const candidates = Object.entries(walls).map(([harness, wall]) => ({
-    title: `Meta Harness: ${harness} is out of quota`,
+    title: `Metaharness: ${harness} is out of quota`,
     message: `${wall.message || 'Quota wall observed.'} Routing avoids ${harness} until ${wall.until}.`,
     severity: 'warning', eventId: `meta-harness-wall-${harness}-${wall.until}`,
   }));
   for (const [id, quota] of Object.entries(quotas)) {
     if (typeof quota?.usagePercent === 'number' && quota.usagePercent > threshold && quota.billingModel !== 'local') candidates.push({
-      title: `Meta Harness: ${id} is at ${quota.usagePercent}%`, message: `Measured usage on ${id} is above ${threshold}%.`,
+      title: `Metaharness: ${id} is at ${quota.usagePercent}%`, message: `Measured usage on ${id} is above ${threshold}%.`,
       severity: 'warning', eventId: `meta-harness-usage-${id}-${new Date().toISOString().slice(0, 10)}`,
     });
   }

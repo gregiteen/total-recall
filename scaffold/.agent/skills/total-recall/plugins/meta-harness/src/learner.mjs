@@ -2,7 +2,6 @@
  * Execution receipts and the learning loop.
  * Receipts are an append-only SSSS ledger. Scorecards, quota walls and proposals fold from it.
  */
-import { spawnSync } from 'node:child_process';
 import { computeEmpiricalScorecard } from '../capability/index.mjs';
 import { receiptsFile } from './paths.mjs';
 import { classifyFailure } from './worker.mjs';
@@ -105,18 +104,10 @@ export function activeCredentialBlocks(entries = [], now = Date.now(), holdMs = 
   return blocks;
 }
 
-/** With `emit`, proposals are written through the memory owner. A failed write is reported, never hidden. */
-export async function learnFromHistory({ emit = false, runner = spawnSync } = {}) {
+/** Read the same receipts the router uses. Proposals stay in this report. */
+export async function learnFromHistory() {
   const entries = await readReceipts();
   const scorecard = computeEmpiricalScorecard(entries);
   const proposals = proposalsFrom(scorecard, entries);
-  const emitted = [];
-  if (emit) for (const proposal of proposals) {
-    const result = runner(process.env.TOTAL_RECALL_BIN || 'total-recall', ['remember', 'fact', `${proposal.reason} ${proposal.recommendation}`, '--project', '--slug', proposal.id, '--tags', `meta-harness,${proposal.id}`], { encoding: 'utf8', timeout: 30000 });
-    const output = `${result.stdout || ''}\n${result.stderr || ''}`;
-    // The slug is the proposal's identity, so an open proposal is reported once, however often learn runs.
-    const existing = result.status !== 0 && /already exists/i.test(output);
-    emitted.push({ id: proposal.id, ok: result.status === 0 || existing, ...(existing ? { existing: true } : {}), error: result.status === 0 || existing ? undefined : String(result.stderr || result.error || 'remember failed').slice(0, 300) });
-  }
-  return { ok: emitted.every(row => row.ok), totalHistoryRuns: entries.length, scorecard, walls: activeQuotaWalls(entries), credentialBlocks: activeCredentialBlocks(entries), proposals, ...(emit ? { emitted } : {}) };
+  return { ok: true, totalHistoryRuns: entries.length, scorecard, walls: activeQuotaWalls(entries), credentialBlocks: activeCredentialBlocks(entries), proposals };
 }

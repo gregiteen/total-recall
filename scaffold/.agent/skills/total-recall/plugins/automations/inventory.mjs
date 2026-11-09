@@ -40,6 +40,7 @@ export async function meshAutomationInventory(packageRoot, options = {}) {
   if (!nodes.some(node => node.self || (node.ip && node.ip === self.ip))) nodes = [{ ...self, self: true }, ...nodes];
   nodes = [...new Map(nodes.map(node => [node.ip || node.hostname, node])).values()];
   const local = options.local || await collectLocalAutomations(packageRoot, { ...options, node_id: selfId });
+  const execPeer = options.execPeer || mesh.execMeshCommand;
   let authorization = options.authorization;
   if (!options.localOnly && authorization === undefined) {
     try { authorization = await (await coreModule(packageRoot, 'mesh-auth')).getMeshSyncAuthorization(); } catch { authorization = null; }
@@ -52,26 +53,28 @@ export async function meshAutomationInventory(packageRoot, options = {}) {
     if (base.self) return nodeResult(base, verifyLocalResult(local));
     const unavailable = (status, error) => ({ ...base, status, ...(error ? { error } : {}), coverage: unavailableCoverage(status === 'unreachable' ? 'error' : status, checked_at) });
     if (!node.online) return unavailable('offline');
-    if (!authorization) return unavailable('unauthorized', 'Mesh inventory authorization is unavailable');
     const port = node.brain_port || Number(process.env.TR_SERVER_PORT || process.env.PORT || 3000);
     try {
-      const response = await fetchImpl(peerUrl(node.ip, '/api/plugins/automations/run', port), { method: 'POST', headers: { Authorization: authorization, 'Content-Type': 'application/json' }, body: JSON.stringify({ subcommand: 'list', args: ['--local', '--json'] }) }, 15000);
-      if ([401, 403].includes(response.status)) return unavailable('unauthorized', `HTTP ${response.status}`);
-      if (response.ok) {
-        const wrapper = await response.json();
-        if (wrapper.success === false) return unavailable('error', 'Peer automation command failed');
-        const inventory = parseInventoryOutput(wrapper.output);
-        if (inventory.schema_version !== 1 || !Array.isArray(inventory.nodes)) throw new Error('Unsupported peer inventory version');
-        const remote = inventory.nodes.find(item => item.self) || inventory.nodes[0];
-        return nodeResult(base, verifyLocalResult(remote));
+      if (execPeer) {
+        try {
+          // Mesh owns the authenticated transport. The command is fixed and read-only.
+          // A mesh-sync token is not a PAT for the generic plugin-run HTTP route.
+          const result = await execPeer(node_id, 'total-recall automations list --local --json', { timeoutMs: 15000 });
+          if (result.success && result.exitCode === 0) {
+            const inventory = parseInventoryOutput(result.stdout);
+            if (inventory.schema_version !== 1 || !Array.isArray(inventory.nodes) || inventory.nodes.length !== 1 || inventory.nodes[0].self !== true) throw new Error('Unsupported peer inventory');
+            return nodeResult(base, verifyLocalResult(inventory.nodes[0]));
+          }
+        } catch { /* Retain metadata through its separate mesh-auth contract below. */ }
       }
-      if (response.status !== 404) return unavailable('error', `HTTP ${response.status}`);
-      // Old hosts expose plugin schedules only. Keep that evidence, explicitly partial.
+      if (!authorization) return unavailable('unauthorized', 'Full peer inventory is unavailable; mesh metadata authorization is unavailable');
+      // Old or unreachable CLI hosts may still expose plugin declarations.
       const fallback = await fetchImpl(peerUrl(node.ip, '/api/mesh/plugins/installed', port), { headers: { Authorization: authorization } }, 5000);
       if (!fallback.ok) return unavailable(fallback.status === 404 ? 'unsupported' : [401, 403].includes(fallback.status) ? 'unauthorized' : 'error', `HTTP ${fallback.status}`);
       const data = await fallback.json();
       if (!Array.isArray(data.plugins)) throw new Error('Invalid legacy peer response');
-      return nodeResult(base, { automations: scheduledTasks(data.plugins, { node_id }), coverage: SOURCES.map(source => ({ source, status: source === 'plugin-tasks' ? 'ok' : 'unsupported', checked_at, ...(source !== 'plugin-tasks' ? { error: 'Peer automation collector is unavailable' } : {}) })) });
+      return nodeResult(base, { automations: scheduledTasks(data.plugins, { node_id }), coverage: SOURCES.map(source => ({ source, status: source === 'plugin-tasks' ? 'partial' : 'unsupported', checked_at,
+        error: source === 'plugin-tasks' ? 'Peer metadata reports declarations only; placement and outcome evidence may be missing' : 'Full peer inventory is unavailable' })) });
     } catch (error) { return unavailable('unreachable', error.name === 'SyntaxError' ? 'Invalid peer JSON' : error.message); }
   }));
   return { schema_version: 1, checked_at, complete: records.every(node => node.status === 'ok'), nodes: records };

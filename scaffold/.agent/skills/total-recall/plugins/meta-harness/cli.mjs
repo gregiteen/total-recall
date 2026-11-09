@@ -5,10 +5,11 @@ import { pathToFileURL } from 'node:url';
 import { configDir } from './src/paths.mjs';
 import { inspectAgents, getActiveAdapters, getCustomAdaptersDirs, loadCustomAdapters, validateCustomAdapter, adapterPath } from './src/worker.mjs';
 import { inspectNode, listTargets, executeCommand, executeOnNode } from './src/executor.mjs';
-import { DOC_SOURCES, documentationStatus, refreshDocumentation, ensureDocumentation, maintainDocumentation, readDocumentation, searchDocumentation } from './src/documentation.mjs';
+import { DOC_SOURCES, documentationStatus, refreshDocumentation, ensureDocumentation, readDocumentation, searchDocumentation } from './src/documentation.mjs';
 import { manageRuntime, validateRuntimeOperation } from './src/runtime.mjs';
 import { validateDispatchRequest } from './src/dispatch-request.mjs';
 import { setupIntegrations } from './src/setup.mjs';
+import { maintainIntegrations } from './src/maintenance.mjs';
 import { inspectUpstreamFleet, getAgentChangelog } from './src/tracker.mjs';
 import { inspectQuotas, getBenchmarks, routeTask } from './src/router.mjs';
 import { coordinateTask } from './src/coordinator.mjs';
@@ -18,11 +19,17 @@ import { resolvePool } from './src/pool.mjs';
 import { checkAlerts, notifyAlert } from './src/alerts.mjs';
 import { learnFromHistory, voidReceipts } from './src/learner.mjs';
 import { decomposeTask } from './capability/index.mjs';
-import { listThreads, getThread, createThread, updateThread, closeThread, deleteThread } from './src/threads.mjs';
+import { listThreads, getThread, createThread, updateThread, closeThread, deleteThread, cleanupFixtureThreads } from './src/threads.mjs';
+import { readReviews } from './src/reviews.mjs';
 import { executeCodeReview } from './src/review.mjs';
-import { stopOnTermination } from './src/termination.mjs';
+import { stopOnTermination, finishCancellation } from './src/termination.mjs';
+import { cancellationResult } from './src/worker.mjs';
+import { startJob, newJobId, cancelJob, resolveJob } from './src/jobs.mjs';
+import { appendCommand, waitingRequests } from './src/control.mjs';
+import { sessionOptions } from './src/session/run.mjs';
+import { continueJob } from './src/session-jobs.mjs';
 
-const VALUE_FLAGS = ['--node', '--mode', '--orchestrator', '--branch', '--reviewer', '--thread', '--status', '--platform', '--agent', '--url', '--query', '--tier', '--threshold', '--author', '--explorer', '--architect', '--implementer', '--verifier', '--title', '--summary', '--cwd', '--tools', '--setting-sources', '--model', '--name', '--tail', '--timeout-ms', '--void', '--reason'];
+const VALUE_FLAGS = ['--result-schema-json', '--goal', '--max-turns', '--max-budget-usd', '--max-tokens', '--result-schema', '--at', '--node', '--mode', '--orchestrator', '--branch', '--reviewer', '--thread', '--status', '--platform', '--agent', '--url', '--query', '--tier', '--threshold', '--author', '--explorer', '--architect', '--implementer', '--verifier', '--title', '--summary', '--cwd', '--tools', '--setting-sources', '--model', '--name', '--tail', '--timeout-ms', '--void', '--reason', '--approvals', '--question-timeout-ms'];
 export function parseArguments(args) {
   const positional = [];
   for (let index = 1; index < args.length; index += 1) {
@@ -38,30 +45,68 @@ export function parseArguments(args) {
   return { positional, value, has: name => args.includes(name) };
 }
 
-export async function run(argv = []) {
+export async function run(argv = [], { backgroundJobId } = {}) {
+  // MCP owns stdin/stdout for its whole lifetime. The CLI result wrapper must stay out of that stream.
+  if (argv[3] === 'mcp' && !argv.includes('--help') && !argv.includes('-h')) {
+    try { await runOperation(argv); }
+    catch (error) { console.error(`Metaharness MCP: ${error.message}`); process.exitCode = 1; }
+    return;
+  }
   stopOnTermination();
-  try { await runOperation(argv); }
+  let job, result;
+  const previousJob = process.env.TR_METAHARNESS_JOB;
+  try {
+    const args = argv.slice(3), operation = args[0];
+    if (!args.includes('--help') && !args.includes('-h') && !args.includes('--background') &&
+        (['dispatch', 'fork', 'resume'].includes(operation) || (['route', 'coordinate', 'orchestrate'].includes(operation) && args.includes('--execute')))) {
+      job = startJob(operation, backgroundJobId ? { id: backgroundJobId } : {});
+      process.env.TR_METAHARNESS_JOB = job.job;
+    }
+    result = await runOperation(argv);
+  }
   catch (error) {
     const message = String(error?.message || error);
-    if (argv.includes('--json')) console.log(JSON.stringify({ ok: false, error: message }));
-    else console.error(`meta-harness: ${message}`);
+    result = { ok: false, error: message };
+    if (!argv.includes('--json')) console.error(`meta-harness: ${message}`);
     process.exitCode = 1;
   }
+  result = finishCancellation(result);
+  if (result !== undefined) {
+    if (job) {
+      if (result.execution?.remote && result.job) result.execution = { ...result.execution, remoteJob: result.job };
+      result = { ...result, job: job.job };
+    }
+    job?.finish(result);
+    if (!backgroundJobId) console.log(JSON.stringify(result));
+  }
+  if (previousJob === undefined) delete process.env.TR_METAHARNESS_JOB;
+  else process.env.TR_METAHARNESS_JOB = previousJob;
 }
 
 /** The host stops a plugin command after 10 minutes, so long runs detach and report through their thread and log. */
 async function detachRun(argv) {
   const directory = path.join(configDir(), 'jobs');
   fs.mkdirSync(directory, { recursive: true, mode: 0o700 });
-  const log = path.join(directory, `${Date.now().toString(36)}.log`);
+  const id = newJobId();
+  const log = path.join(directory, `${id}.log`);
   const output = fs.openSync(log, 'a', 0o600);
   const entry = new URL('./cli.mjs', import.meta.url).href;
-  const child = spawn(process.execPath, ['--input-type=module', '-e', `import(${JSON.stringify(entry)}).then(m=>m.run(${JSON.stringify(argv.filter(arg => arg !== '--background'))}))`], { cwd: process.cwd(), detached: true, stdio: ['ignore', output, output], env: process.env });
+  const input = argv[3] === 'dispatch' ? fs.readFileSync(0, 'utf8') : null;
+  const child = spawn(process.execPath, ['--input-type=module', '-e', `import(${JSON.stringify(entry)}).then(m=>m.run(${JSON.stringify(argv.filter(arg => arg !== '--background'))}, {backgroundJobId:${JSON.stringify(id)}}))`], { cwd: process.cwd(), detached: true, stdio: [input === null ? 'ignore' : 'pipe', output, output], env: process.env });
+  if (input !== null) { child.stdin.on('error', () => {}); child.stdin.end(input); }
   try {
     await new Promise((resolve, reject) => { child.once('spawn', resolve); child.once('error', reject); });
+    const deadline = Date.now() + 10_000;
+    while (!fs.statSync(log).size) {
+      if (child.exitCode !== null || Date.now() > deadline) {
+        child.kill('SIGTERM');
+        throw new Error(`The background job did not record its PID. Log: ${log}`);
+      }
+      await new Promise(resolve => setTimeout(resolve, 20));
+    }
     child.unref();
   } finally { fs.closeSync(output); }
-  return { ok: true, background: true, pid: child.pid, log, follow: `The final JSON result is written to ${log}; a pipeline also records a thread.` };
+  return { ok: true, background: true, job: id, pid: child.pid, log, follow: `The final JSON result is written to ${log}; a pipeline also records a thread.` };
 }
 
 async function runOperation(argv) {
@@ -81,7 +126,12 @@ async function runOperation(argv) {
     for(const command of manifest.cli.subcommands)console.log(`  ${command.name} ${(command.args || []).map(arg=>arg.flag?`${arg.flag} <${arg.name}>`:`<${arg.name}>`).join(' ')} — ${command.description}`);
     return;
   }
-  if (has('--background') && ['route', 'coordinate', 'orchestrate'].includes(operation) && has('--execute')) { console.log(JSON.stringify(await detachRun(argv))); return; }
+  if (has('--background') && (['dispatch', 'fork', 'resume'].includes(operation) || (['route', 'coordinate', 'orchestrate'].includes(operation) && has('--execute')))) return detachRun(argv);
+  const controls = () => sessionOptions({ cwd: value('--cwd') || process.cwd(),
+    ...(value('--result-schema-json') !== undefined ? { resultSchema: JSON.parse(value('--result-schema-json')) } : {}),
+    ...Object.fromEntries([['goal', '--goal'], ['maxTurns', '--max-turns'], ['maxBudgetUsd', '--max-budget-usd'], ['maxTokens', '--max-tokens'],
+      ['resultSchema', '--result-schema'], ['approvalPolicy', '--approvals'], ['questionTimeoutMs', '--question-timeout-ms']]
+      .filter(([, flag]) => value(flag) !== undefined).map(([key, flag]) => [key, ['maxTurns', 'maxBudgetUsd', 'maxTokens', 'questionTimeoutMs'].includes(key) ? Number(value(flag)) : value(flag)])) });
   let result;
   if (operation === 'status') result = {...await inspectNode(value('--node') || 'local'),documentation:documentationStatus()};
   else if (operation === 'catalog') result = { adapters: getActiveAdapters(), permissions: ['read', 'write', 'send', 'destructive'] };
@@ -122,7 +172,7 @@ async function runOperation(argv) {
   else if (operation === 'route') {
     const task = positional.join(' ');
     if (!task) throw new Error('route requires a task description');
-    const options = { jev: has('--jev'), preferLocal: has('--prefer-local'), preferFrontier: has('--prefer-frontier'), node: value('--node'), cwd: value('--cwd'), allowUnknownAuth: has('--allow-unknown-auth'), ...remoteTimeout() };
+    const options = { ...controls(), jev: has('--jev'), preferLocal: has('--prefer-local'), preferFrontier: has('--prefer-frontier'), node: value('--node'), cwd: value('--cwd'), allowUnknownAuth: has('--allow-unknown-auth'), ...remoteTimeout() };
     result = has('--execute') ? await executeRoutedTask(task, { ...options, gate: has('--gate'), gateOptions: { tier: value('--tier') || 'fast' } }) : await routeTask(task, options);
     if (!result.ok) process.exitCode = 1;
   }
@@ -136,7 +186,7 @@ async function runOperation(argv) {
     const task = positional.join(' ');
     if (!task) throw new Error(`${operation} requires a task description`);
     result = await coordinateTask(task, {
-      mode: value('--mode') || 'pipeline', execute: has('--execute'), orchestrator: value('--orchestrator'), explorer: value('--explorer'), architect: value('--architect'), implementer: value('--implementer'), verifier: value('--verifier'),
+      ...controls(), mode: value('--mode') || 'pipeline', execute: has('--execute'), orchestrator: value('--orchestrator'), explorer: value('--explorer'), architect: value('--architect'), implementer: value('--implementer'), verifier: value('--verifier'),
       branch: value('--branch'), subagents: !has('--no-subagents'), autoReview: has('--auto-review'), gate: has('--gate'), gateOptions: { tier: value('--tier') || 'fast' }, allowSameFamily: has('--allow-same-family'), reviewer: value('--reviewer'),
       node: value('--node') || 'local', cwd: value('--cwd'), allowUnknownAuth: has('--allow-unknown-auth'), ...remoteTimeout(),
     });
@@ -151,6 +201,8 @@ async function runOperation(argv) {
         status: statusIdx >= 0 ? args[statusIdx + 1] : undefined,
         platform: platformIdx >= 0 ? args[platformIdx + 1] : undefined
       });
+    } else if (sub === 'cleanup-fixtures') {
+      result = cleanupFixtureThreads({ dryRun: has('--dry-run') });
     } else if (sub === 'show' || sub === 'get') {
       const id = args[2];
       if (!id) throw new Error('threads show requires a thread id');
@@ -181,14 +233,16 @@ async function runOperation(argv) {
       throw new Error(`Unsupported threads operation: ${sub}`);
     }
   }
+  else if (operation === 'reviews') result = { ok: true, reviews: readReviews() };
   else if (operation === 'review') {
     result = await executeCodeReview({ target: positional[0] || null, reviewer: value('--reviewer'), author: value('--author'), threadId: value('--thread'), staged: has('--staged'), node: value('--node') || 'local', cwd: value('--cwd'), allowUnknownAuth: has('--allow-unknown-auth'), ...remoteTimeout() });
     if (!result.ok) process.exitCode = 1;
   }
   else if (operation === 'learn') {
+    if (has('--emit')) throw new Error('learn --emit was removed. Routing reads run receipts directly.');
     result = value('--void') !== undefined
       ? await voidReceipts({ ids: String(value('--void')).split(',').map(id => id.trim()).filter(Boolean), reason: value('--reason') })
-      : await learnFromHistory({ emit: has('--emit') });
+      : await learnFromHistory();
     if (!result.ok) process.exitCode = 1;
   }
   else if (operation === 'alerts') {
@@ -196,7 +250,7 @@ async function runOperation(argv) {
     if (sub === 'check') {
       const { quotas } = await inspectQuotas({});
       result = await checkAlerts({ quotas, threshold: Number(value('--threshold')) || 85, dryRun: has('--dry-run') });
-    } else if (sub === 'test') result = await notifyAlert({ title: 'Meta Harness: test alert', message: 'Alert delivery check.', dryRun: has('--dry-run') });
+    } else if (sub === 'test') result = await notifyAlert({ title: 'Metaharness: test alert', message: 'Alert delivery check.', dryRun: has('--dry-run') });
     else throw new Error(`Unsupported alerts operation: ${sub}`);
     if (!result.ok) process.exitCode = 1;
   }
@@ -256,11 +310,7 @@ async function runOperation(argv) {
         const { syncModelCatalog } = await import('./src/model-catalog.mjs');
         result = await syncModelCatalog();
       } else {
-        const setup=await setupIntegrations();
-        const { installAll } = await import('./src/gate-adapters/index.mjs');
-        const gates=await installAll();
-        const docs=await maintainDocumentation(options);
-        result={...docs,ok:docs.ok!==false&&gates.ok,setup,gates};
+        result=await maintainIntegrations(options);
       }
     } else result = operation==='docs-status' ? documentationStatus(options) : operation==='docs-ensure' ? await ensureDocumentation(options) : await refreshDocumentation(options);
     if(!result.ok)process.exitCode=1;
@@ -296,11 +346,60 @@ async function runOperation(argv) {
       result = { ok: true, logs: await processes.getAgentLogs(target, Number(value('--tail') || 50)) };
     } else throw new Error(`Unsupported process operation: ${action}`);
   }
+  else if (operation === 'fork' || operation === 'resume') {
+    if (positional.length !== (operation === 'fork' ? 1 : 2)) throw new Error(`${operation} requires a job${operation === 'resume' ? ' and quoted text' : ''}.`);
+    result = await continueJob(positional[0], operation === 'fork' ? 'Continue from this session.' : positional[1], { fork: operation === 'fork', atTurn: value('--at') });
+    if (!result.ok) process.exitCode = 1;
+  }
+  else if (operation === 'cancel') {
+    result = await cancelJob(positional[0]);
+  }
+  else if (['reply', 'approve', 'interrupt', 'goal'].includes(operation)) {
+    if (!positional[0]) throw new Error(`${operation} requires a job ID.`);
+    if (positional.length !== (operation === 'approve' ? 3 : operation === 'interrupt' ? 1 : 2)) {
+      throw new Error(`${operation}: supply a job${operation === 'approve' ? ', request ID, and allow or deny' : operation === 'interrupt' ? '' : ' and quoted text'}.`);
+    }
+    result = await appendCommand(positional[0], { type: operation,
+      ...(operation === 'approve' ? { requestId: positional[1], value: positional[2] } : operation === 'interrupt' ? {} : { text: positional[1] }) },
+    { local: has('--local-delivery') });
+  }
+  else if (operation === 'mcp') {
+    const { runMcpServer, QUESTION_TIMEOUT_MS } = await import('./src/mcp-server.mjs');
+    await runMcpServer({ approvalPolicy: value('--approvals') || 'auto',
+      questionTimeoutMs: value('--question-timeout-ms') === undefined ? QUESTION_TIMEOUT_MS : Number(value('--question-timeout-ms')) });
+    return;
+  }
+  else if (operation === 'watch') {
+    // A-107: a dispatched agent's live status and latest events, by log path or job prefix.
+    const target = positional[0];
+    const jobs = path.join(configDir(), 'jobs');
+    let file = target && target.endsWith('.events.jsonl') ? path.resolve(target) : null;
+    if (target && !file) {
+      try {
+        const job = resolveJob(target);
+        const canonical = path.join(jobs, `${job.id}.events.jsonl`);
+        if (fs.existsSync(canonical)) file = canonical;
+      } catch (error) {
+        if (!error.message.startsWith('No job log matches')) throw error;
+      }
+    }
+    if (!file) {
+      const names = fs.existsSync(jobs) ? fs.readdirSync(jobs).filter(name => name.endsWith('.events.jsonl') && (!target || name.startsWith(target))) : [];
+      const newest = names.map(name => ({ name, at: fs.statSync(path.join(jobs, name)).mtimeMs })).sort((a, b) => b.at - a.at)[0];
+      if (!newest) throw new Error(target ? `No job log matches ${target}` : 'No dispatched job has a live log yet');
+      file = path.join(jobs, newest.name);
+    }
+    const { readProgress } = await import('./src/worker.mjs');
+    result = { ok: true, file, ...readProgress(file, Number(value('--tail') || 20)), waiting: waitingRequests(file) };
+  }
   else if(operation==='dispatch') {
     if(!args.includes('--stdin'))throw new Error('Task requests must arrive through stdin: pass --stdin with JSON {agent, cwd, prompt}');
     const input=fs.readFileSync(0,'utf8');if(Buffer.byteLength(input)>65536)throw new Error('Task request too large');
-    const request=validateDispatchRequest(JSON.parse(input));
-    result=await dispatchWithReceipt(request,{node:request.node || 'local',role:'Dispatch'});
+    const request=validateDispatchRequest({...JSON.parse(input),...controls()});
+    // A-107: a local dispatch streams its agent's events to a live log, announced before it starts.
+    const progressFile=(request.node||'local')==='local'?path.join(configDir(),'jobs',`${process.env.TR_METAHARNESS_JOB || `dispatch-${Date.now().toString(36)}-${request.agent}`}.events.jsonl`):undefined;
+    if(progressFile)console.error(JSON.stringify({progress:progressFile,agent:request.agent}));
+    result=await dispatchWithReceipt(progressFile?{...request,progressFile}:request,{node:request.node || 'local',role:'Dispatch',manageWrites:true});
     if(!result.ok)process.exitCode=1;
   }
   else if (operation === 'inspect') {
@@ -321,6 +420,7 @@ async function runOperation(argv) {
     result = await executeCommand({ ...request, plugin });
     if (!result.ok) process.exitCode = 1;
   } else throw new Error(`Unknown operation: ${operation}`);
-  console.log(JSON.stringify(result));
+  if (cancellationResult()) process.exitCode = cancellationResult().exitCode;
+  return result;
 }
 export default run;

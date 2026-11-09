@@ -1,9 +1,9 @@
-# DESIGN.md — Meta Harness
+# DESIGN.md — Metaharness
 
 ```yaml
 tokens:
-  brand-name: "Meta Harness"
-  wordmark: "META HARNESS"
+  brand-name: "Metaharness"
+  wordmark: "METAHARNESS"
   color-primary: "#3b82f6"
   color-background: "#0c1427"
   color-surface: "#1e293b"
@@ -20,8 +20,8 @@ tokens:
 ```
 
 ## Brand & Typographic Wordmark
-- **Name**: Meta Harness
-- **Wordmark Logo**: `META HARNESS` (clean typographic badge, no invented cyber delimiters)
+- **Name**: Metaharness
+- **Wordmark Logo**: `METAHARNESS` (clean typographic badge, no invented cyber delimiters)
 - **Palette**: Primary `#3b82f6`, Surface `#0c1427`, Secondary Surface `#1e293b`, Accent `#38bdf8`, Line `#1e293b`, Text `#f1f5f9`.
 - **States**: Verified Pass `#10b981`, Warning `#f59e0b`, Danger `#ef4444`.
 

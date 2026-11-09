@@ -1,4 +1,4 @@
-# Meta Harness Capability Brick
+# Metaharness Capability Brick
 
 A zero-dependency, host-free pure ES module providing universal agent harness discovery, two-stage complexity classification, cost-vs-frontier routing, gate cascade evaluation, and execution envelope construction.
 

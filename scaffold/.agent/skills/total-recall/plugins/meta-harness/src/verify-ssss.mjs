@@ -47,8 +47,8 @@ async function verifyEvents(documentPath, primitive, expectedCount) {
 async function verifyTarget(targetArgument) {
   const target = fs.realpathSync(path.resolve(targetArgument));
   const readJson = file => JSON.parse(fs.readFileSync(readTargetFile(target, file), 'utf8'));
-  assert.equal(readJson('package.json').name, 'tr-plugin-meta-harness', 'Select a Meta Harness checkout');
-  assert.equal(readJson('plugin.json').id, owner, 'The target must own Meta Harness state');
+  assert.equal(readJson('package.json').name, 'tr-plugin-meta-harness', 'Select a Metaharness checkout');
+  assert.equal(readJson('plugin.json').id, owner, 'The target must own Metaharness state');
 
   const scratch = fs.mkdtempSync(path.join(os.tmpdir(), 'meta-harness-ssss-gate-'));
   const previousBrain = process.env.TR_SECRETS_BRAIN;
@@ -94,7 +94,7 @@ async function verifyTarget(targetArgument) {
 
 try {
   const [flag, target, ...rest] = process.argv.slice(2);
-  if (flag !== '--target' || !target || rest.length) throw new Error('Supply an explicit Meta Harness checkout with --target <directory>');
+  if (flag !== '--target' || !target || rest.length) throw new Error('Supply an explicit Metaharness checkout with --target <directory>');
   process.stdout.write(`${JSON.stringify(await verifyTarget(target))}\n`);
 } catch (error) {
   process.stdout.write(`${JSON.stringify({ ok: false, error: error.message })}\n`);

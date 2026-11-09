@@ -18,6 +18,10 @@ Each source reports its own coverage. A missing integration, unreadable definiti
 
 A declared schedule does not prove a running scheduler. Last handled slot is not a successful run. Observed execution outcomes come from source-owned records/events; unavailable telemetry stays unknown. Individual daemon watcher registration is not reported by the current owner, so those records remain unknown even when the daemon itself is running.
 
+Selected-node tasks report `selected_node` and `placement_state`. A task without a canonical selection is `unplaced`. Peer metadata without selection evidence stays `unknown`. `last_run` includes the observed slot. `last_handled_outcome` reports the event for the exact stored handled slot. It stays unknown when no matching event exists.
+
+Full peer reads use mesh's authenticated command transport with a fixed local inventory command. If that read is unavailable, the plugin requests mesh-authenticated plugin metadata and marks coverage partial. It never sends a mesh-sync token to the PAT-protected plugin-run route.
+
 The card and panel use the same CLI contracts. Cancellation requires a pending local durable task and an owner that supports a conditional pending-to-cancelled transition. The plugin checks the saved owner state before reporting success. Older hosts can still inventory automations. Mesh peers use the plugin's local inventory operation and can report incomplete coverage. [Owner acceptance tracker](docs/projects/in-progress/ALL_AUTOMATIONS/ALL_AUTOMATIONS_PROJECT_TRACKER.md)
 
 ## Scheduled plugin tasks

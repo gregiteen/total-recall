@@ -16,6 +16,8 @@ import { isGitRepo, isDirty, headCommit, createWorktree, removeWorktree, commitA
 import { lastJsonWith } from './json-reply.mjs';
 import { runQualityGate } from './gate.mjs';
 import { forwardRemoteOperation } from './remote-operation.mjs';
+import { cancellationResult } from './worker.mjs';
+import { sessionOptions } from './session/run.mjs';
 
 const OPEN_THREADS = new Set();
 const MAX_BLUEPRINT = 20000;
@@ -101,9 +103,12 @@ async function runPipeline(task, poolInfo, options) {
   const branch = options.branch || `meta-harness/${thread.id}`;
   const run = async (stage, harness, prompt, { workdir = cwd, permissions, role = stage.role } = {}) => {
     stage.status = 'running';
-    const result = await dispatchWithReceipt({ agent: harness.id, node: 'local', cwd: workdir, contextCwd: cwd, contextTask: task, prompt, permissions: permissions || stage.permissions, allowUnknownAuth: options.allowUnknownAuth === true }, { dispatchFn: options.dispatchFn, role, complexityScore: complexity.score });
-    stage.status = result.ok ? 'completed' : result.queued ? 'queued' : 'failed';
+    const result = await dispatchWithReceipt({ agent: harness.id, node: 'local', cwd: workdir, contextCwd: cwd, contextTask: task, prompt,
+      ...sessionOptions({ ...options, cwd }), goal: stage.role === 'Implementer' ? options.goal || task : prompt.slice(0, 4000),
+      permissions: permissions || stage.permissions, allowUnknownAuth: options.allowUnknownAuth === true }, { dispatchFn: options.dispatchFn, role, complexityScore: complexity.score });
+    stage.status = result.cancelled ? 'cancelled' : result.ok ? 'completed' : result.queued ? 'queued' : 'failed';
     stage.output = result.response || result.error || null;
+    for (const key of ['goalCheck', 'structured', 'sessionId', 'progressFile', 'usage']) if (result[key] !== undefined) stage[key] = result[key];
     stage.failureKind = result.ok ? undefined : result.failureKind;
     if (result.queueId) stage.queueId = result.queueId;
     appendThreadTurn(thread.id, { role: role.toLowerCase(), agent: harness.id, content: stage.output || '' });
@@ -128,17 +133,14 @@ async function runPipeline(task, poolInfo, options) {
     const implementer = await run(stage('Implementer'), roles.implementer, `[ROLE: IMPLEMENTER]\nWork only in this checkout. Implement the task and its tests. Do not commit; the harness commits your changes.\nTask:\n${task}\n\nBlueprint:\n${blueprint}`, { workdir: implementerDir });
     if (!implementer.ok) { ok = false; return finish(); }
     commit = commitAll(implementerDir, `meta-harness: ${task.slice(0, 60)}\n\nImplementer: ${roles.implementer.id}`);
-    if (!commit) {
-      Object.assign(stage('Implementer'), { status: 'failed', failureKind: 'agent', output: 'The Implementer reported success but changed no files.' });
-      await recordRunReceipt({ harness: roles.implementer.id, role: 'Implementer', task, success: false, failureKind: 'no-change', error: 'The Implementer reported success but changed no files.' });
-      ok = false; return finish();
-    }
+    if (!commit) commit = baseCommit;
     stage('Implementer').commit = commit;
     updateThread(thread.id, { branch, worktreePath: null });
 
     if (options.gate) {
       linkDependencies(cwd, implementerDir);
       gate = await (options.gateFn || runQualityGate)(implementerDir, options.gateOptions);
+      if (cancellationResult()) { ok = false; return finish(); }
       if (!gate.passed) { ok = false; stage('Verifier').status = 'skipped'; stage('Verifier').output = `Quality gate did not pass: ${gate.summary}`; return finish(); }
     }
 
@@ -165,16 +167,24 @@ async function runPipeline(task, poolInfo, options) {
     return finish();
   } finally {
     removeWorktree(cwd, implementerDir);
-    if (implementerDir && (!commit || !ok)) deleteBranch(cwd, branch);
+    if (implementerDir && (!commit || (!ok && !cancellationResult()))) deleteBranch(cwd, branch);
   }
 
   function finish() {
+    const cancelled = cancellationResult();
+    if (cancelled) {
+      ok = false;
+      if (implementerDir) commit = commitAll(implementerDir, 'meta-harness: unfinished pipeline from a cancelled job') || commit;
+    }
     return (async () => {
       for (const item of stages) if (item.status === 'planned') item.status = 'skipped';
       OPEN_THREADS.delete(thread.id);
-      updateThread(thread.id, { status: ok ? 'completed' : 'failed', branch: ok && commit ? branch : null, commit, baseCommit });
-      const alert = await notifyAlert({ title: ok ? 'Meta Harness: pipeline passed' : 'Meta Harness: pipeline failed', message: `${task.slice(0, 80)}${commit ? ` (branch ${branch})` : ''}`, severity: ok ? 'info' : 'warning' });
-      return { ...base, ok, threadId: thread.id, branch: ok && commit ? branch : null, commit, baseCommit, gate, warnings, durationMs: Date.now() - started, alert };
+      updateThread(thread.id, { status: ok ? 'completed' : 'failed', branch: (ok || cancelled) && commit ? branch : null, commit, baseCommit });
+      const alert = cancelled ? null : await notifyAlert({ title: ok ? 'Metaharness: pipeline passed' : 'Metaharness: pipeline failed', message: `${task.slice(0, 80)}${commit ? ` (branch ${branch})` : ''}`, severity: ok ? 'info' : 'warning' });
+      const limited = stages.find(item => item.failureKind === 'limit');
+      return { ...base, ok, ...cancelled, ...(limited ? { failureKind: 'limit', error: limited.output } : {}), goalCheck: stage('Implementer')?.goalCheck, structured: stage('Implementer')?.structured,
+        sessionId: stage('Implementer')?.sessionId, progressFile: stage('Implementer')?.progressFile,
+        threadId: thread.id, branch: (ok || cancelled) && commit ? branch : null, commit, baseCommit, gate, warnings, durationMs: Date.now() - started, alert };
     })();
   }
 }
@@ -187,14 +197,15 @@ async function runCouncil(task, poolInfo, options) {
   if (!seats.length) throw new Error('No harness can take work right now');
   const cwd = options.cwd || process.cwd();
   const votes = await Promise.all(seats.map(async harness => {
-    const result = await dispatchWithReceipt({ agent: harness, node: 'local', cwd, contextTask: task, prompt: `[ROLE: COUNCIL MEMBER]\nDo not change any file. Assess this proposal, with its trade-offs and risks:\n${task}\n\nEnd your reply with exactly one JSON object: {"vote":"APPROVE"|"REJECT","reason":"..."}`, permissions: READ, allowUnknownAuth: options.allowUnknownAuth === true }, { dispatchFn: options.dispatchFn, role: 'Council' });
-    return { harness, ok: result.ok === true, ...(result.ok ? parseVote(result.response) : { vote: 'ABSTAIN', reason: null, error: result.error }),
+    const result = await dispatchWithReceipt({ agent: harness, node: 'local', cwd, contextTask: task, ...sessionOptions({ ...options, cwd }), prompt: `[ROLE: COUNCIL MEMBER]\nDo not change any file. Assess this proposal, with its trade-offs and risks:\n${task}\n\nEnd your reply with exactly one JSON object: {"vote":"APPROVE"|"REJECT","reason":"..."}`, permissions: READ, allowUnknownAuth: options.allowUnknownAuth === true }, { dispatchFn: options.dispatchFn, role: 'Council' });
+    return { harness, ok: result.ok === true, failureKind: result.failureKind, ...(result.ok ? parseVote(result.response) : { vote: 'ABSTAIN', reason: null, error: result.error }),
       ...(result.queueId ? { queueId: result.queueId } : {}), feedback: result.response || null };
   }));
   const count = vote => votes.filter(item => item.vote === vote).length;
   const majority = votes.length / 2;
   const consensus = count('APPROVE') > majority ? 'approved' : count('REJECT') > majority ? 'rejected' : 'no-consensus';
-  return { ok: votes.some(item => item.ok), mode: 'council', task, executedLive: true, consensus, excluded: poolInfo.excluded, votes };
+  const limited = votes.some(item => item.failureKind === 'limit');
+  return { ok: !limited && votes.some(item => item.ok), ...(limited ? { failureKind: 'limit' } : {}), ...cancellationResult(), mode: 'council', task, executedLive: true, consensus, excluded: poolInfo.excluded, votes };
 }
 
 async function runRace(task, poolInfo, options) {
@@ -212,12 +223,20 @@ async function runRace(task, poolInfo, options) {
     try {
       const started = Date.now();
       directory = createWorktree(cwd, { branch });
-      const result = await dispatchWithReceipt({ agent: harness, node: 'local', cwd: directory, contextCwd: cwd, contextTask: task, prompt: `[ROLE: IMPLEMENTER]\nWork only in this checkout. Implement the task and its tests. Do not commit.\nTask:\n${task}`, permissions: WRITE, allowUnknownAuth: options.allowUnknownAuth === true }, { dispatchFn: options.dispatchFn, role: 'Race' });
-      const commit = result.ok ? commitAll(directory, `meta-harness race: ${task.slice(0, 60)}\n\nAgent: ${harness}`) : null;
-      if (commit && options.gate) linkDependencies(cwd, directory);
-      const gate = commit ? await (options.gateFn || runQualityGate)(directory, options.gateOptions) : null;
-      keep = Boolean(commit) && gate?.passed === true;
-      return { harness, branch: keep ? branch : null, commit: keep ? commit : null, ok: keep, gate, completedAt: Date.now(), durationMs: Date.now() - started, error: result.ok ? (commit ? (keep ? undefined : 'The quality gate failed') : 'No files changed') : result.error,
+      const result = await dispatchWithReceipt({ agent: harness, node: 'local', cwd: directory, contextCwd: cwd, contextTask: task, ...sessionOptions({ ...options, cwd }), goal: options.goal || task, prompt: `[ROLE: IMPLEMENTER]\nWork only in this checkout. Implement the task and its tests. Do not commit.\nTask:\n${task}`, permissions: WRITE, allowUnknownAuth: options.allowUnknownAuth === true }, { dispatchFn: options.dispatchFn, role: 'Race' });
+      const commit = result.ok || result.cancelled ? commitAll(directory, `meta-harness race: ${task.slice(0, 60)}\n\nAgent: ${harness}`) : null;
+      if (result.cancelled) {
+        keep = Boolean(commit);
+        return { ...result, harness, branch: keep ? branch : null, wip: commit };
+      }
+      if (result.ok && options.gate) linkDependencies(cwd, directory);
+      const gate = result.ok ? await (options.gateFn || runQualityGate)(directory, options.gateOptions) : null;
+      if (cancellationResult()) {
+        keep = Boolean(commit);
+        return { ...cancellationResult(), harness, branch: keep ? branch : null, commit };
+      }
+      keep = result.ok === true && gate?.passed === true;
+      return { harness, branch: keep ? branch : null, commit: keep ? commit : null, ok: keep, gate, goalCheck: result.goalCheck, structured: result.structured, failureKind: result.failureKind, completedAt: Date.now(), durationMs: Date.now() - started, error: result.ok ? keep ? undefined : 'The quality gate failed' : result.error,
         ...(result.queueId ? { queueId: result.queueId } : {}) };
     } catch (error) {
       return { harness, branch: null, commit: null, ok: false, gate: null, durationMs: null, error: String(error.message) };
@@ -227,10 +246,12 @@ async function runRace(task, poolInfo, options) {
     }
   }));
   const finishers = entries.filter(entry => entry.ok).sort((a, b) => a.completedAt - b.completedAt);
-  return { ok: finishers.length > 0, mode: 'race', task, executedLive: true, gateApplied: true, verification: finishers.length ? 'passed' : 'failed', winner: finishers[0]?.harness || null, excluded: poolInfo.excluded, candidates: entries };
+  const limited = entries.some(item => item.failureKind === 'limit');
+  return { ok: !limited && finishers.length > 0, ...(limited ? { failureKind: 'limit' } : {}), ...cancellationResult(), mode: 'race', task, executedLive: true, gateApplied: true, verification: !limited && finishers.length ? 'passed' : 'failed', winner: limited ? null : finishers[0]?.harness || null, excluded: poolInfo.excluded, candidates: entries };
 }
 
 export async function coordinateTask(taskDescription, options = {}) {
+  if (cancellationResult()) return cancellationResult();
   const task = String(taskDescription || '').trim();
   if (!task) throw new Error('Task description is required for coordination');
   const remote = await forwardRemoteOperation('coordinate', task, options);

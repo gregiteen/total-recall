@@ -90,9 +90,9 @@ export async function inspectFleetAdoption({ node, inventory = listTargets, read
           argv: ['total-recall', 'meta-harness', 'adoption', '--json'],
         });
         try { report = JSON.parse(result.output); } catch { /* The installed CLI did not supply an adoption report. */ }
-        if (report?.error === 'Unknown operation: adoption') return { ...row, status: 'update-required', error: 'The installed Meta Harness does not support adoption reports.' };
+        if (report?.error === 'Unknown operation: adoption') return { ...row, status: 'update-required', error: 'The installed Metaharness does not support adoption reports.' };
         if (!report || !Array.isArray(report.agents) || typeof report.pluginVersion !== 'string' || typeof report.ok !== 'boolean' || (report.ok && !result.ok)) {
-          return { ...row, status: 'adoption-unavailable', error: 'The installed Meta Harness did not return an adoption report. Verify its version and CLI availability.' };
+          return { ...row, status: 'adoption-unavailable', error: 'The installed Metaharness did not return an adoption report. Verify its version and CLI availability.' };
         }
       }
       return { ...row, status: report.ok ? 'inspected' : 'partial', report };

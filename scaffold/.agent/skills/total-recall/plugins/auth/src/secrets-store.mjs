@@ -771,13 +771,24 @@ export function listUsageEvents(brainDir, { limit = 100, key_ref = null, days = 
 /**
  * True if any secret value appears in text (for surface/openwiki conformance).
  */
+export function isSettingValue(val) {
+  if (/^[a-z]+$/.test(val)) return true;
+  if (/^(?=.{4,253}$)([a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$/i.test(val)) return true;
+  if (/^[^\s@:/]+@([a-z0-9-]+\.)+[a-z]{2,63}$/i.test(val)) return true;
+  if (/^https?:\/\/[^\s@/]+(\/[^\s@]*)?$/i.test(val)) return true;
+  return false;
+}
+
 export async function textContainsSecrets(brainDir, text) {
   if (!text) return { leak: false, keys: [] };
   const secrets = await loadSecrets(brainDir);
   const leaked = [];
   for (const [key, val] of Object.entries(secrets)) {
     if (key === META_KEY) continue;
-    if (typeof val === 'string' && val.length >= 8 && text.includes(val)) {
+    // Settings, not credentials: a single lowercase word (DEPLOY_ENV=production), a hostname
+    // (MAILCOW_HOST), an email address, or a URL without user info. Matching them would refuse
+    // ordinary text. A URL that carries user:password@ is still checked, as is every other value.
+    if (typeof val === 'string' && val.length >= 8 && !isSettingValue(val) && text.includes(val)) {
       leaked.push(key);
     }
   }

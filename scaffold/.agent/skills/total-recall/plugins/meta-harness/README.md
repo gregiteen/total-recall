@@ -1,4 +1,4 @@
-# Meta Harness
+# Metaharness
 
 Built-in and validated custom adapters share one plugin. Use `dispatch` or
 `route --execute` for agent work. `runtime <agent> ...` accepts supported maintenance
@@ -17,10 +17,12 @@ is removed after execution. Setup failure or an unready context stops dispatch.
 `docs-refresh`, `docs-ensure`, `docs-status`, `docs-read` and `docs-search` manage
 downloaded official documentation rather than a list of links. Content is hashed,
 bounded and refreshed after 24 hours. Maintenance uses the existing Total Recall
-daemon's plugin task, refreshing one stale adapter per run. Failed pages remain
+daemon's plugin task, attempting every stale adapter per run. Failed pages remain
 visible as failures and cannot certify complete coverage; successful cached
 content remains readable. `setup --node <recorded-node>` selects maintenance
-placement without creating a second scheduler.
+placement for `maintenance`, `maintenance --models` and `alerts check` without
+creating a second scheduler. Each maintenance step reports its failures. A failed
+setup or gate install does not prevent documentation refresh for other harnesses.
 
 Standalone Total Recall owner for CLI-agent discovery and explicit mesh command execution. Install with `total-recall plugin install <path-or-private-git-url>`. Installation rebuilds the plugin inventory, CLI library and connected instruction surfaces. No model account is created or selected automatically.
 
@@ -43,7 +45,7 @@ The report separates native login and hook configuration from recent hook
 decisions and completed managed runs. Its run evidence is historical; use the
 timestamps and last attempt to see whether an agent has since stopped working.
 Native hook activity alone does not prove that an agent was launched through
-Meta Harness. A fleet report lists offline nodes, missing CLI access, and
+Metaharness. A fleet report lists offline nodes, missing CLI access, and
 installed versions that cannot provide adoption evidence.
 
 `request.json` selects one installed plugin operation, its literal arguments, a node and an agent:
@@ -61,7 +63,7 @@ installed versions that cannot provide adoption evidence.
 }
 ```
 
-For remote nodes, supply `execution.cwd` as an explicit absolute workspace. `agent: "direct"` runs the actual installed Total Recall CLI without a model. A remote agent task enters the destination's installed Meta Harness and records its receipt there. Remote access comes from recorded mesh entities and verified SSH configuration; unavailable nodes or binaries produce errors. Secrets are never accepted in an agent prompt. Existing account metadata is inspected without printing credentials or substituting provider API keys.
+For remote nodes, supply `execution.cwd` as an explicit absolute workspace. `agent: "direct"` runs the actual installed Total Recall CLI without a model. A remote agent task enters the destination's installed Metaharness and records its receipt there. Remote access comes from recorded mesh entities and verified SSH configuration; unavailable nodes or binaries produce errors. Secrets are never accepted in an agent prompt. Existing account metadata is inspected without printing credentials or substituting provider API keys.
 
 The four permissions are strict boolean **command-effect admission controls**. They allow or deny the selected plugin command before dispatch. They are not a network policy or an OS sandbox for every action a model might propose. Supported adapter write modes are scoped through the vendor CLI; vendor approval and sandbox defaults stay enabled. The host's authenticated authorization still applies.
 
@@ -75,9 +77,9 @@ Run `total-recall meta-harness included-enforce` to limit this node's managed di
 
 To approve OpenRouter on this node, run `total-recall meta-harness openrouter-bind <harness> <auth-key-name> --model <openrouter-model-id> --json`. Then select that harness by name when dispatching. Automatic routing continues to choose from the included subscription pool.
 
-Run `total-recall harness dispatch codex "Run pwd and report the output" --json` to see the final reply and `toolResults`. Codex, Claude, DSH, Pi, Hermes and OpenClaw report native tool outcomes, available exit codes and bounded output. OpenClaw reports `toolEvidenceError` if its gateway cannot return the run's tool results. Adoption receipts retain the outcomes without the output text.
+Run `total-recall harness dispatch codex "Run pwd and report the output" --json` to see the final reply and `toolResults`. Codex, Claude, DSH, Pi, Hermes and OpenClaw report native tool outcomes, available exit codes and bounded output. OpenClaw reports `toolEvidenceError` if its gateway cannot return the run's tool results. For background jobs, run `total-recall meta-harness process logs <job-id> --json` and read `toolResults` in the completion record. Adoption receipts retain the outcomes without the output text.
 
-For Claude Max, sign in on the execution host with `claude auth login --claudeai`. Check that Usage credits are off in the account's Usage settings. Pass `{"organization":"<orgId from claude auth status>","usageCreditsEnabled":false}` to `included-bind-claude-plan --stdin`. Meta Harness prefers the bound plan and checks the native login on every turn. Keep Usage credits off on that account. Claude manages that switch and enforces the plan limits. [Claude's subscription and SDK billing](https://support.claude.com/en/articles/15036540-use-the-claude-agent-sdk-with-your-claude-plan)
+For Claude Max, sign in on the execution host with `claude auth login --claudeai`. Check that Usage credits are off in the account's Usage settings. Pass `{"organization":"<orgId from claude auth status>","usageCreditsEnabled":false}` to `included-bind-claude-plan --stdin`. Metaharness prefers the bound plan and checks the native login on every turn. Keep Usage credits off on that account. Claude manages that switch and enforces the plan limits. [Claude's subscription and SDK billing](https://support.claude.com/en/articles/15036540-use-the-claude-agent-sdk-with-your-claude-plan)
 
 Before using `included-bind-claude --stdin`, verify the Max credit grant, key hint and organization in Claude Console. Supply `keyName` (the Total Recall Auth entry), `organization`, the masked `keyHint`, `expiresAt`, `creditSource: "claude-max"`, `paidBalanceCents: 0` and false values for `autoReload`, `paymentMethod` and `invoiced`. The binding expires with the observed grant. Reverify after a key or billing change.
 
@@ -126,6 +128,20 @@ SSSS execution receipts. Actual process exit and finish metadata are distinct fr
 verification results; unavailable model metadata remains null. Thread operations
 include list, show, create, update, close and delete, using native SSSS state.
 
+Every review result is stored in an append-only SSSS ledger beside the thread
+store. It retains the selected diff, commit, reviewer, verdict and disposition,
+including failed reviews and `NO_DIFF`. `reviews --json` reads the ledger.
+Deleting a thread does not remove its reviews. A failed ledger write returns
+`ok: false` with `reviewStoreError` and the completed result.
+
+`learn` reports scorecards, walls and proposals from run receipts. Routing reads
+these receipts directly. The memory emit option has been removed.
+
+`threads cleanup-fixtures --dry-run` previews the one-time cleanup of exact test
+fixture titles. `threads cleanup-fixtures` applies it and stores the removed IDs,
+titles, statuses, source test files and retained IDs in the same SSSS operation.
+Real end-to-end job threads stay in place, including failed attempts.
+
 Custom adapter declarations preserve scoped credentials, optional authentication
 probes and HTTPS documentation URLs. IDs and paths reject traversal and symbolic
 links. Credentials reach only the declaring runner through the auth store. A
@@ -148,14 +164,14 @@ The active five-file suite and evidence live in
 owner/core suites, plugin/scaffold validation, real dashboard inspection and
 recorded acceptance evidence. Fixture tests do not certify live accounts, remote
 execution or recurring maintenance. The operator requires completing verification
-before Meta Harness runs task work.
+before Metaharness runs task work.
 
 Cloudroom setup material remains under `cloudroom/`. Its plugin implementation
 follows this foundation and requires its own current audit and plan.
 
 ### Installed and standalone verification
 
-Use the installed plugin for CLI execution and maintenance. The repository has a pure planning capability under `capability/`. The current manifest does not declare it for vendoring. See the [Meta Harness tracker](docs/projects/in-progress/META_HARNESS_UNIFICATION/META_HARNESS_UNIFICATION_PROJECT_TRACKER.md) for current package, execution and hook acceptance.
+Use the installed plugin for CLI execution and maintenance. The repository has a pure planning capability under `capability/`. The current manifest does not declare it for vendoring. See the [Metaharness tracker](docs/projects/in-progress/META_HARNESS_UNIFICATION/META_HARNESS_UNIFICATION_PROJECT_TRACKER.md) for current package, execution and hook acceptance.
 
 ## Using this from an agent
 
