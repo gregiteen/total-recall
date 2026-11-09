@@ -18,5 +18,7 @@ it('calls remember with literal content, a pinned brain, provenance and guarded 
 });
 it('keeps the real remember hard limit and propagates its refusal without a canonical write', async () => {
   await expect(rememberLessonRule('X'.repeat(801), { brainDir: brain, sourceRef: 'fixture' })).rejects.toThrow('limit 800');
-  expect(fs.existsSync(path.join(brain, 'memory-vault'))).toBe(false);
+  // remember may create the empty vault folder at startup; the refusal must leave no memory file.
+  const files = d => fs.existsSync(d) ? fs.readdirSync(d, { withFileTypes: true }).flatMap(e => e.isDirectory() ? files(path.join(d, e.name)) : [e.name]) : [];
+  expect(files(path.join(brain, 'memory-vault')).filter(f => f.endsWith('.md'))).toEqual([]);
 });

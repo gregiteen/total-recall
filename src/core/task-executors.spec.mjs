@@ -25,16 +25,24 @@ describe('task-executors.mjs', () => {
       category: 'memory-maintenance' }, {})).toMatchObject({ success: false, error: 'unsupported' });
   });
 
-  it.each(['skill-engineering', 'self-evaluation', 'exploration', 'unknown-category'])
+  it.each(['exploration', 'unknown-category'])
   ('does not acknowledge category %s as completed work', async category => {
     expect(await dispatchTask({ slug: 'category-task', category }, { runtimeConfig: {} }))
       .toMatchObject({ success: false, error: 'unsupported' });
   });
 
-  it('preserves the handling paths for skill and lesson work', () => {
-    for (const category of ['skill-engineering', 'self-evaluation']) {
-      expect(resolveExecutor({ slug: 'owner-work', category }).id).toBe('legacy');
-    }
+  // U4/U5: skill gaps go to skill-manager and self-evaluation to the lesson review; without their
+  // inputs they fail with the reason, never acknowledge.
+  it.each([['skill-engineering', /Skill gap requires a topic/], ['self-evaluation', /Lesson review requires a session/]])
+  ('routes category %s to its owner and fails without its inputs', async (category, reason) => {
+    const result = await dispatchTask({ slug: 'category-task', category }, { runtimeConfig: {} });
+    expect(result.success).toBe(false);
+    expect(result.error).toMatch(reason);
+  });
+
+  it('routes skill and lesson work to their owners', () => {
+    expect(resolveExecutor({ slug: 'owner-work', category: 'skill-engineering' }).id).toBe('skill-manager');
+    expect(resolveExecutor({ slug: 'owner-work', category: 'self-evaluation' }).id).toBe('lesson-review');
     expect(resolveExecutor({ slug: 'orphan', category: 'exploration' })).toBeNull();
   });
 
