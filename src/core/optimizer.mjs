@@ -4,6 +4,7 @@ import crypto from 'crypto';
 import matter from './frontmatter.mjs';
 import { writeNode } from './vault.mjs';
 import { getNodes } from './vault-cache.mjs';
+import { readAccess, lastUsedMs, activeDaysSince } from './access-ledger.mjs';
 import { logger } from './logger.mjs';
 import { brainDir } from './config.mjs';
 
@@ -379,6 +380,14 @@ export async function evaluateProposalGate(proposal, runtimeConfig, vaultDir = n
     return stamp('accepted');
   }
 
+  // smart-decay is verified mechanically against live state: the memory still exists, is
+  // active and unprotected, and the access ledger shows no use since it was judged and for
+  // the full decay age. Only then may it reach `accepted` and auto-apply (DECAY-01).
+  if (proposal.category === 'smart-decay') {
+    const reason = verifySmartDecay(proposal, vaultDir);
+    return reason ? stamp('rejected', { rejection_reason: reason }) : stamp('accepted');
+  }
+
   // stale-knowledge-refresh no longer produces tickets at all — the work is
   // handed to the research queue, which can actually perform it. If one is
   // somehow generated, it is not something to auto-accept.
@@ -422,41 +431,67 @@ Output ONLY valid JSON.`;
  *
  * @param {string} vaultDir
  * @param {object} runtimeConfig
- * @param {number} [ageThresholdDays=60]  Minimum age before considering decay
+ * @param {number} [ageThresholdDays=60]  Active days of the brain without a use before considering decay
  * @returns {object[]} decay proposals
  */
-export async function runSmartDecay(vaultDir, runtimeConfig, ageThresholdDays = 60) {
-  const { callLocalRuntime } = await import('./runtime.mjs');
+/** Active days (days the brain was used), never calendar days: an idle brain never decays. */
+export const DECAY_AGE_DAYS = 60;
+
+/**
+ * Why a smart-decay proposal may not be applied, or null when live state supports it.
+ * Shared by the gate and the applier so both check the same facts.
+ */
+export function verifySmartDecay(proposal, vaultDir, { now = Date.now(), ageThresholdDays = DECAY_AGE_DAYS } = {}) {
+  if (!vaultDir) return 'No vault to verify against.';
+  const slug = String(proposal.target_path || '').trim();
+  const node = getNodes(vaultDir).find(n => n.slug === slug);
+  if (!node) return `Memory ${slug} no longer exists.`;
+  if (node.status !== 'active') return `Memory ${slug} is already ${node.status}.`;
+  if (isDecayProtected(node)) return `Memory ${slug} is protected from decay.`;
+  const ledger = readAccess(path.join(path.dirname(vaultDir), 'memory-derived'));
+  const used = lastUsedMs(node, ledger);
+  if (proposal.decay_last_used_at && used > new Date(proposal.decay_last_used_at).getTime()) return `Memory ${slug} was used after it was judged.`;
+  if (activeDaysSince(ledger, used) < ageThresholdDays) return `Memory ${slug} was used within the brain's last ${ageThresholdDays} active days.`;
+  return null;
+}
+
+/** Memories decay never touches: rules, absolute-priority and importance-5 memories. */
+export function isDecayProtected(node) {
+  return node.priority === 'absolute' || node.importance >= 5
+    || ['invariants', 'preferences', 'anti-patterns'].includes(node.category);
+}
+
+/** Active, unprotected memories unused for at least `ageThresholdDays` of the brain's active days. */
+export function decayCandidates(nodes, ledger, { now = Date.now(), ageThresholdDays = DECAY_AGE_DAYS } = {}) {
+  return nodes
+    .filter(n => n.status === 'active' && n.type !== 'proposal' && !isDecayProtected(n))
+    .filter(n => activeDaysSince(ledger, lastUsedMs(n, ledger)) >= ageThresholdDays)
+    .sort((a, b) => lastUsedMs(a, ledger) - lastUsedMs(b, ledger));
+}
+
+export async function runSmartDecay(vaultDir, runtimeConfig, ageThresholdDays = DECAY_AGE_DAYS, { derivedDir = path.join(path.dirname(vaultDir), 'memory-derived'), call } = {}) {
+  const callLocalRuntime = call || (await import('./runtime.mjs')).callLocalRuntime;
   const nodes = getNodes(vaultDir);
   const now = Date.now();
-  const ageThresholdMs = ageThresholdDays * 24 * 60 * 60 * 1000;
+  const ledger = readAccess(derivedDir);
   const proposals = [];
 
-  // Candidates: active, not absolute priority, not accessed recently
-  const candidates = nodes.filter(n => {
-    if (n.status !== 'active') return false;
-    if (n.priority === 'absolute') return false;
-    if (n.importance >= 5) return false;
-    const lastAccessed = new Date(n.last_accessed || n.updated || 0).getTime();
-    return (now - lastAccessed) > ageThresholdMs;
-  });
-
-  // Process up to 5 candidates per run to avoid excessive LLM calls
-  const batch = candidates.slice(0, 5);
+  // Oldest unused first, up to 5 per run to bound model calls.
+  const batch = decayCandidates(nodes, ledger, { now, ageThresholdDays }).slice(0, 5);
 
   for (const node of batch) {
-    const ageDays = Math.floor((now - new Date(node.last_accessed || node.updated || 0).getTime()) / (1000 * 60 * 60 * 24));
+    const ageDays = activeDaysSince(ledger, lastUsedMs(node, ledger));
 
     const prompt = [
       `## Memory Node: ${node.slug}`,
       `Title: "${node.title}"`,
-      `Category: ${node.category} | Importance: ${node.importance} | Age: ${ageDays} days`,
+      `Category: ${node.category} | Importance: ${node.importance} | Unused for ${ageDays} active days of its brain`,
       `Tags: ${(node.tags || []).join(', ')}`,
       '',
       '## Body',
       (node.body || '').slice(0, 800),
       '',
-      `This node has not been accessed in ${ageDays} days. Should it be retained, archived, or decayed?`,
+      `This node has not been used on the last ${ageDays} days its brain was active. Should it be retained, archived, or decayed?`,
     ].join('\n');
 
     try {
@@ -468,15 +503,20 @@ export async function runSmartDecay(vaultDir, runtimeConfig, ageThresholdDays = 
       const verdict = result.verdict || 'RETAINED';
 
       if (verdict !== 'RETAINED') {
-        proposals.push(createProposal(
-          'smart-decay',
-          `Smart Decay [${verdict}]: "${node.title}"`,
-          node.slug,
-          `Age: ${ageDays} days. Reasoning: ${result.reasoning || 'No reasoning provided.'} Confidence adjustment: ${result.confidence_adjustment || 0}`,
-        ));
+        proposals.push({
+          ...createProposal(
+            'smart-decay',
+            `Smart Decay [${verdict}]: "${node.title}"`,
+            node.slug,
+            `Unused for ${ageDays} active days. Reasoning: ${result.reasoning || 'No reasoning provided.'} Confidence adjustment: ${result.confidence_adjustment || 0}`,
+          ),
+          // The gate re-checks that the memory has not been used since this judgement.
+          decay_verdict: verdict,
+          decay_last_used_at: new Date(lastUsedMs(node, ledger)).toISOString(),
+        });
       }
-    } catch {
-      // Skip failed evaluations silently
+    } catch (err) {
+      logger.warn('optimizer', `Smart decay could not evaluate ${node.slug}: ${err.message}`);
     }
   }
 

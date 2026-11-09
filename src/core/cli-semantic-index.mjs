@@ -320,7 +320,7 @@ const CORE_METADATA = {
     effect: 'read'
   },
   harness: {
-    description: 'Meta-harness orchestration, task dispatch, and council consensus.',
+    description: 'Metaharness orchestration, task dispatch, and council consensus.',
     usage: 'total-recall harness [dispatch|council|usage]',
     effect: 'write'
   },

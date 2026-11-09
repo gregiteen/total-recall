@@ -128,3 +128,43 @@ describe('required native auth installation', () => {
     expect(globalPluginsDir()).toBe(path.join(root, 'global', 'skills', 'total-recall', 'plugins'));
   });
 });
+
+describe('shadow plugin links in a repository', () => {
+  it('reports links that duplicate a shared install and any linked default as shadows, and repository-only plugins apart', () => {
+    const root = fixture();
+    const shared = path.join(sharedBrain(root), 'plugins');
+    const project = path.join(root, 'project');
+    const repoPlugins = path.join(project, '.agent', 'skills', 'total-recall', 'plugins');
+    fs.mkdirSync(shared, { recursive: true });
+    fs.mkdirSync(repoPlugins, { recursive: true });
+    const checkout = (name) => { const dir = path.join(root, name); fs.mkdirSync(dir); fs.writeFileSync(path.join(dir, 'plugin.json'), '{"version":"1.0.0"}'); return dir; };
+    const optional = checkout('tr-plugin-optional');
+    const sharedHarness = checkout('meta-harness-release');
+    const oldHarness = checkout('tr-plugin-cli-agents');
+    const repoOnly = checkout('tr-plugin-repo-only');
+    fs.symlinkSync(optional, path.join(shared, 'optional'));
+    fs.symlinkSync(optional, path.join(repoPlugins, 'optional'));
+    fs.symlinkSync(sharedHarness, path.join(shared, 'meta-harness'));
+    fs.symlinkSync(oldHarness, path.join(repoPlugins, 'meta-harness'));
+    fs.symlinkSync(repoOnly, path.join(repoPlugins, 'repo-only'));
+    const audit = auditProjectPluginCopies(project, { sharedDir: shared });
+    const shadows = audit.copies.filter((c) => c.shadow).map((c) => c.id).sort();
+    expect(shadows).toEqual(['meta-harness', 'optional']);
+    expect(audit.copies.find((c) => c.id === 'repo-only')).toMatchObject({ repoOnly: true, shadow: false, linked: true });
+  });
+});
+
+describe('repository copies of optional shared plugins', () => {
+  it('reports an older real copy of a shared optional plugin as stale', () => {
+    const root = fixture();
+    const shared = path.join(sharedBrain(root), 'plugins');
+    const project = path.join(root, 'project');
+    const repoPlugins = path.join(project, '.agent', 'skills', 'total-recall', 'plugins');
+    fs.mkdirSync(path.join(shared, 'companion'), { recursive: true });
+    fs.mkdirSync(path.join(repoPlugins, 'companion'), { recursive: true });
+    fs.writeFileSync(path.join(shared, 'companion', 'plugin.json'), '{"version":"0.3.2"}');
+    fs.writeFileSync(path.join(repoPlugins, 'companion', 'plugin.json'), '{"version":"0.1.0"}');
+    const [row] = auditProjectPluginCopies(project, { sharedDir: shared }).copies;
+    expect(row).toMatchObject({ id: 'companion', linked: false, shadow: false, stale: true, edited: null });
+  });
+});

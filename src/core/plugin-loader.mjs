@@ -48,7 +48,7 @@ export function resolveProjectRoot(projectRoot, vaultDir) {
   return fs.existsSync(path.join(parent, '.agent')) ? parent : (projectRoot || process.cwd());
 }
 
-/** True when a 5-field cron expression is syntactically plausible. Semantics are checked by plugin-tasks. */
+/** True when a 5-field cron expression is syntactically plausible. The scheduling owner checks semantics. */
 export function isCronExpression(expr) {
   if (typeof expr !== 'string') return false;
   const fields = expr.trim().split(/\s+/);
@@ -277,6 +277,13 @@ export function validatePluginManifest(manifest) {
         if (!/^[a-z][a-z0-9-]*$/.test(name) || !isSafeRelativePath(file)) errors.push(`Invalid runtime module ${name}`);
       }
       if (runtime.routers !== undefined && (!Array.isArray(runtime.routers) || runtime.routers.some(file => !isSafeRelativePath(file)))) errors.push('runtime.routers must contain safe relative paths');
+      // Daemon services name declared runtime modules; the daemon starts each one.
+      if (runtime.daemon !== undefined) {
+        if (!Array.isArray(runtime.daemon)) errors.push('runtime.daemon must be an array of runtime module names');
+        else for (const name of runtime.daemon) {
+          if (typeof name !== 'string' || !Object.hasOwn(runtime.modules || {}, name)) errors.push(`runtime.daemon names undeclared module ${name}`);
+        }
+      }
     }
   }
 
@@ -411,9 +418,11 @@ export function discoverPlugins(projectRoot = process.cwd()) {
   const seen = new Set();
   const plugins = [];
   const global = globalPluginsDir();
-  const project = projectPluginsDir(projectRoot);
+  // Nothing is installed per repository: every plugin lives in the shared
+  // folder, and a repository only switches it on or off. A leftover repository
+  // plugin folder is never read (`plugin copies` reports and removes it).
+  // `projectRoot` stays in the signature for callers; discovery no longer depends on it.
   const sources = [
-    ...(path.resolve(project) === path.resolve(global) ? [] : [[project, 'project']]),
     [global, 'global'],
     [path.join(PACKAGE_ROOT, 'scaffold', '.agent', 'skills', 'total-recall', 'plugins'), 'scaffold']
   ];

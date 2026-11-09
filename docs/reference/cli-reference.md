@@ -347,7 +347,7 @@ Control-server (Headscale) mesh administration, cluster capability auditing, and
 ---
 
 ### `harness`
-Meta-Harness orchestration across connected external IDEs, CLI tools, and local neural models.
+Metaharness orchestration across connected external IDEs, CLI tools, and local neural models.
 - **Usage**:
   ```bash
   npx total-recall harness <command> [options]

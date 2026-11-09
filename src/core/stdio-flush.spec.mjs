@@ -33,8 +33,9 @@ describe('stdout survives process exit through a pipe', () => {
     fs.rmSync(root, { recursive: true, force: true });
   });
 
-  function installPlugin(project, source) {
-    const dir = path.join(project, '.agent', 'skills', 'total-recall', 'plugins', 'bulk');
+  // Plugins are installed only in the shared folder, so each case gets its own.
+  function installPlugin(agentDir, source) {
+    const dir = path.join(agentDir, 'skills', 'total-recall', 'plugins', 'bulk');
     fs.mkdirSync(dir, { recursive: true });
     fs.writeFileSync(path.join(dir, 'cli.mjs'), source);
     fs.mkdirSync(path.join(dir, 'ui'));
@@ -48,16 +49,20 @@ describe('stdout survives process exit through a pipe', () => {
 
   it('a plugin command piped from the host CLI arrives whole and parses', () => {
     const project = path.join(root, 'host');
-    installPlugin(project, `export async function run() { console.log(JSON.stringify({ keys: 'x'.repeat(${SIZE}) })); }`);
-    const r = throughPipe(`${quote(process.execPath)} ${quote(BIN)} bulk report`, { cwd: project, env: { AGENT_DIR: path.join(root, 'agent') } });
+    const agentDir = path.join(root, 'host-agent');
+    fs.mkdirSync(project, { recursive: true });
+    installPlugin(agentDir, `export async function run() { console.log(JSON.stringify({ keys: 'x'.repeat(${SIZE}) })); }`);
+    const r = throughPipe(`${quote(process.execPath)} ${quote(BIN)} bulk report`, { cwd: project, env: { AGENT_DIR: agentDir } });
     expect(r.stderr).not.toContain('Unknown command');
     expect(JSON.parse(r.stdout).keys.length).toBe(SIZE);
   }, 60_000);
 
   it('a plugin that exits non-zero keeps its output and its exit status', () => {
     const project = path.join(root, 'failing');
-    installPlugin(project, `export async function run() { console.log(JSON.stringify({ keys: 'x'.repeat(${SIZE}) })); process.exitCode = 3; }`);
-    const r = throughPipe(`{ ${quote(process.execPath)} ${quote(BIN)} bulk report; echo "status=$?" >&2; }`, { cwd: project, env: { AGENT_DIR: path.join(root, 'agent') } });
+    const agentDir = path.join(root, 'failing-agent');
+    fs.mkdirSync(project, { recursive: true });
+    installPlugin(agentDir, `export async function run() { console.log(JSON.stringify({ keys: 'x'.repeat(${SIZE}) })); process.exitCode = 3; }`);
+    const r = throughPipe(`{ ${quote(process.execPath)} ${quote(BIN)} bulk report; echo "status=$?" >&2; }`, { cwd: project, env: { AGENT_DIR: agentDir } });
     expect(JSON.parse(r.stdout).keys.length).toBe(SIZE);
     expect(r.stderr).toContain('status=3');
   }, 60_000);

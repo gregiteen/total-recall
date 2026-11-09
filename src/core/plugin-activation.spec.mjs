@@ -2,10 +2,9 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { installPlugin, patchPluginRecord } from './plugin-store.mjs';
+import { installPlugin } from './plugin-store.mjs';
 import { getPlugin as discoverPlugin } from './plugin-loader.mjs';
 import { setPluginActive, pluginActivation } from './plugin-activation.mjs';
-import { runDuePluginTasks } from './plugin-tasks.mjs';
 import { runPluginCommand } from './plugin-runner.mjs';
 import { loadPluginModule } from './plugin-runtime.mjs';
 
@@ -26,23 +25,19 @@ describe('plugin host activation lifecycle', () => {
   });
   afterEach(() => { if (previous === undefined) delete process.env._TR_TEST_AGENT_DIR; else process.env._TR_TEST_AGENT_DIR = previous; fs.rmSync(root, { recursive: true, force: true }); });
 
-  it('off gates execution and scheduled work; on restores it and both rebuild catalogs and surfaces', async () => {
+  it('off gates execution and daemon services; on restores it and both rebuild catalogs and surfaces', async () => {
     const plugin = discoverPlugin('activation-demo', root);
-    await patchPluginRecord(plugin, { task_runs: { tick: '2026-01-01T12:00' } });
     const off = await setPluginActive(plugin.id, false, { projectRoot: root });
     expect(off.compilation.ok).toBe(true); expect(pluginActivation(plugin, { projectRoot: root }).state).toBe('inactive');
     const library = () => JSON.parse(fs.readFileSync(path.join(root, '.agent/skills/total-recall/memory-derived/cli-library.json')));
     expect(library().plugins.find(p => p.id === plugin.id).activation.state).toBe('inactive');
-    expect(fs.readFileSync(path.join(root, 'AGENTS.md'), 'utf8')).toMatch(/activation-demo.*inactive/);
-    let calls = 0; const runner = async () => { calls++; return { ok: true, exitCode: 0 }; };
-    expect(await runDuePluginTasks({ projectRoot: root, now: new Date(2026, 0, 1, 12, 1), runner })).toEqual([]);
+    // ODC-R4: activation state lives in the library above, not in an entry file.
+    expect(fs.readFileSync(path.join(root, 'AGENTS.md'), 'utf8')).not.toContain('activation-demo');
     await expect(runPluginCommand(plugin, { subcommand: 'tick', cwd: root })).rejects.toThrow(/inactive/);
     // The runtime boundary denies execution before importing owner code.
     await expect(loadPluginModule(plugin.id, 'example', { projectRoot: root, activeRequired: true })).rejects.toThrow(/inactive/);
     const on = await runPluginCommand(plugin, { subcommand: 'on', cwd: root });
     expect(on.ok).toBe(true); expect(library().plugins.find(p => p.id === plugin.id).activation.state).toBe('active');
-    expect(await runDuePluginTasks({ projectRoot: root, now: new Date(2026, 0, 1, 12, 2), runner })).toHaveLength(1);
-    expect(calls).toBe(1);
   });
 
   it('keeps changed state and reports actual compilation failures', async () => {

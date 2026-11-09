@@ -331,7 +331,10 @@ export async function updateAllBrains(opts = {}) {
       if (runtimeOnly) args.push(group.manager === 'pnpm' ? '--prod' : '--omit=dev');
       if (unpinned) args.push('--no-save', ...new Set(group.consumers.flatMap(({ consumer }) =>
         consumer.deps.map(dep => `${dep.key}@${targetSpec(dep.key, versions[dep.package])}`))));
-      else if (!needsInstall) args.push(group.manager === 'pnpm' ? '--lockfile-only' : '--package-lock-only');
+      // A lockfile-only update builds no tree, so it runs no lifecycle scripts: npm still
+      // ran a checkout's own postinstall here, which fails in a repository that was never
+      // installed (a postinstall calling a tool that is not yet installed, 2026-11-09).
+      else if (!needsInstall) args.push(group.manager === 'pnpm' ? '--lockfile-only' : '--package-lock-only', '--ignore-scripts');
       const install = exec(group.manager, args, { cwd: group.owner, env: installEnv(), encoding: 'utf8',
         timeout: 600000, maxBuffer: 8 * 1024 * 1024 });
       if (install.status !== 0) throw new Error(install.error?.message || install.stderr?.trim().slice(-1500) || `Install exited ${install.status}`);

@@ -1,7 +1,45 @@
 /** Generic in-process extension loading. Domain behavior stays with its owner. */
+import os from 'node:os';
 import { pathToFileURL } from 'node:url';
 import { discoverPlugins, resolvePluginFile, PACKAGE_ROOT } from './plugin-loader.mjs';
 import { pluginActivation } from './plugin-state.mjs';
+import { logger } from './logger.mjs';
+
+/**
+ * Start every daemon service an active plugin declares in `runtime.daemon`.
+ * Each named runtime module exports `start({ projectRoot })` and may return a
+ * stop function. Services run against the global brain (home), never the
+ * directory the daemon happens to start in. One failing service is logged and
+ * never stops the others.
+ * @returns {Promise<{ started: string[], failed: string[], stop: Function }>}
+ */
+export async function startPluginDaemonServices({ projectRoot = os.homedir(), load = loadPluginModule } = {}) {
+  const stops = [];
+  const started = [];
+  const failed = [];
+  for (const plugin of discoverPlugins(projectRoot).filter(item => item.valid)) {
+    const names = plugin.manifest.runtime?.daemon || [];
+    if (!names.length || !pluginActivation(plugin, { projectRoot }).enabled) continue;
+    for (const name of names) {
+      const label = `${plugin.id}:${name}`;
+      try {
+        const module = await load(plugin.id, name, { projectRoot, activeRequired: true });
+        if (typeof module.start !== 'function') throw new Error('daemon module must export start()');
+        const stop = await module.start({ projectRoot });
+        if (typeof stop === 'function') stops.push(stop);
+        started.push(label);
+      } catch (err) {
+        failed.push(label);
+        logger.warn('plugin-runtime', `Daemon service ${label} failed to start: ${err.message}`);
+      }
+    }
+  }
+  return {
+    started,
+    failed,
+    stop: () => { for (const stop of stops) { try { stop(); } catch { /* already stopped */ } } },
+  };
+}
 
 export async function loadPluginModule(id, name, { activeRequired = false, requireValid = true, projectRoot = process.cwd() } = {}) {
   const plugin = discoverPlugins(projectRoot).find(item => item.id === id);
@@ -18,7 +56,8 @@ export async function loadPluginModule(id, name, { activeRequired = false, requi
   }
   process.env.TR_PACKAGE_ROOT = PACKAGE_ROOT;
   const file = resolvePluginFile(plugin.dir, relative);
-  return import(process.platform === 'win32' ? pathToFileURL(file).href : file);
+  // A file URL is unambiguous on every platform and under every module loader.
+  return import(pathToFileURL(file).href);
 }
 
 export async function loadPluginRouters() {

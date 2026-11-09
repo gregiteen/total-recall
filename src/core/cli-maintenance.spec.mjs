@@ -2,6 +2,8 @@ import {describe,it,expect,vi} from 'vitest';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+const registry=vi.hoisted(()=>({brains:[]}));
+vi.mock('./brain-registry.mjs',()=>({listLocalBrains:()=>registry.brains}));
 import {maintainCliSurfaces} from './cli-maintenance.mjs';
 describe('automatic CLI surfaces',()=>{
  it('compiles changed inputs, retries failures, and forces SSSS-only release refresh',async()=>{
@@ -20,5 +22,19 @@ describe('automatic CLI surfaces',()=>{
    expect((await maintainCliSurfaces({...options,force:true})).results[0].status).toBe('refreshed');
    expect(run.mock.calls[0][1]).toContain('refresh');
   }finally{fs.rmSync(root,{recursive:true,force:true});}
+ });
+ it('by default maintains only the global brain and never fans out to registered projects (ODC-R6)',async()=>{
+  const root=fs.mkdtempSync(path.join(os.tmpdir(),'tr-surface-global-'));
+  try{
+   const brain=name=>{const brainDir=path.join(root,name,'.agent/skills/total-recall');fs.mkdirSync(brainDir,{recursive:true});return brainDir;};
+   registry.brains=[{root:path.join(root,'home'),brainDir:brain('home'),exists:true,enabled:true,kind:'global'},
+     ...['a','b','c'].map(name=>({root:path.join(root,name),brainDir:brain(name),exists:true,enabled:true,kind:'project'}))];
+   const run=vi.fn().mockResolvedValue({code:0});
+   const result=await maintainCliSurfaces({brainDir:registry.brains[0].brainDir,run,fingerprint:()=>'one'});
+   expect(result.results).toHaveLength(1);
+   expect(result.results[0].root).toBe(path.join(root,'home'));
+   expect(run).toHaveBeenCalledOnce();
+   expect(run.mock.calls[0][1]).toContain('--global');
+  }finally{fs.rmSync(root,{recursive:true,force:true});registry.brains=[];}
  });
 });

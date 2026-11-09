@@ -219,9 +219,13 @@ describe('Plugin Loader & Schema Validation', () => {
     // only ever pass on one machine — and the plugin they depended on is gone
     // even there. Build the manifest we assert against instead.
     let fixtureRoot;
+    let previousAgentDir;
 
     beforeAll(() => {
       fixtureRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'tr-plugin-loader-'));
+      // Plugins are discovered only from the shared folder, so the fixture is that folder.
+      previousAgentDir = process.env._TR_TEST_AGENT_DIR;
+      process.env._TR_TEST_AGENT_DIR = path.join(fixtureRoot, '.agent');
       const pluginDir = path.join(fixtureRoot, '.agent', 'skills', 'total-recall', 'plugins', 'scientific-frontiers');
       fs.mkdirSync(path.join(pluginDir, 'watched'), { recursive: true });
       fs.writeFileSync(
@@ -247,10 +251,12 @@ describe('Plugin Loader & Schema Validation', () => {
     });
 
     afterAll(() => {
+      if (previousAgentDir === undefined) delete process.env._TR_TEST_AGENT_DIR;
+      else process.env._TR_TEST_AGENT_DIR = previousAgentDir;
       fs.rmSync(fixtureRoot, { recursive: true, force: true });
     });
 
-    it('discovers plugins in project root', () => {
+    it('discovers plugins in the shared folder', () => {
       const plugins = discoverPlugins(fixtureRoot);
       const sf = plugins.find(p => p.id === 'scientific-frontiers');
       expect(sf).toBeDefined();

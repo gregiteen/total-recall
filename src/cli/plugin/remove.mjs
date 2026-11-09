@@ -8,7 +8,7 @@ export async function removePlugin(args = []) {
 
   if (!id) {
     console.error('❌ Error: Missing plugin ID to remove.');
-    console.error('   Usage: total-recall plugin remove <id> [--global]\n');
+    console.error('   Usage: total-recall plugin remove <id>\n');
     process.exit(1);
   }
 

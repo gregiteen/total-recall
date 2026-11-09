@@ -259,7 +259,7 @@ import { releaseLease } from './leader-election.mjs';
  * daemon.log across three separate SIGTERMs. The fallback timer bounds that, so
  * even a wedged iteration cannot keep the daemon alive indefinitely.
  */
-let stopPluginTasks = null;
+let stopPluginServices = null;
 let stopCliMaintenance = null;
 let stopAutomaticUpdates = null;
 
@@ -269,7 +269,7 @@ function shutdown(signal) {
   logger.info({ subsystem: 'daemon-loop', message: `${signal} received — shutting down gracefully` });
   running = false;
   if (vaultWatcher) vaultWatcher.stop();
-  if (stopPluginTasks) stopPluginTasks();
+  if (stopPluginServices) stopPluginServices();
   stopCliMaintenance?.();
   stopAutomaticUpdates?.();
 
@@ -453,13 +453,15 @@ async function main() {
 
   let emptyTicks = 0;
 
-  // Plugin tasks are per node (a plugin installed here runs here), so they are
-  // scheduled on their own timer rather than inside the leader-only task loop.
+  // Per-node services owned by plugins (scheduled plugin tasks belong to
+  // user-automations) start here; core runs whatever active plugins declare.
   try {
-    const { startPluginTaskScheduler } = await import('./plugin-tasks.mjs');
-    stopPluginTasks = startPluginTaskScheduler();
+    const { startPluginDaemonServices } = await import('./plugin-runtime.mjs');
+    const services = await startPluginDaemonServices();
+    stopPluginServices = services.stop;
+    logger.info('daemon-loop', `Plugin daemon services started: ${services.started.join(', ') || 'none'}${services.failed.length ? `; failed: ${services.failed.join(', ')}` : ''}`);
   } catch (err) {
-    logger.warn('daemon-loop', `Plugin task scheduler failed to start: ${err.message}`);
+    logger.warn('daemon-loop', `Plugin daemon services failed to start: ${err.message}`);
   }
 
   while (running) {

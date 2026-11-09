@@ -48,10 +48,11 @@ describe('plugin inventory and CLI library lifecycle', () => {
     const cli = spawnSync(process.execPath, [path.join(PACKAGE_ROOT, 'bin/total-recall.mjs'), 'plugin', 'library', '--plugin', 'catalog-example', '--json'], { cwd: root, env: process.env, encoding: 'utf8', timeout: 30000 });
     expect(cli.status, cli.stderr).toBe(0);
     expect(JSON.parse(cli.stdout).commands[0].command).toBe('total-recall example list');
-    expect(fs.readFileSync(path.join(root, 'AGENTS.md'), 'utf8')).toContain('plugin library --json');
-    expect(fs.readFileSync(path.join(root, 'AGENTS.md'), 'utf8')).toContain('catalog-example');
-    for (const file of ['INSTRUCTIONS.md', 'CLAUDE.md', '.agents/rules/AGENTS.md']) {
-      expect(fs.readFileSync(path.join(root, file), 'utf8')).toContain('plugin library --json');
+    // ODC-R4: the plugin reaches agents through the library above, never as a list in an entry file.
+    for (const file of ['AGENTS.md', 'INSTRUCTIONS.md', 'CLAUDE.md', '.agents/rules/AGENTS.md']) {
+      const entry = fs.readFileSync(path.join(root, file), 'utf8');
+      expect(entry).toContain('total-recall plugin library');
+      expect(entry).not.toContain('catalog-example');
     }
     const removed = await uninstallPlugin('catalog-example', { projectRoot: root });
     expect(removed.compilation.ok).toBe(true);
@@ -91,7 +92,7 @@ describe('plugin inventory and CLI library lifecycle', () => {
     expect(result.compilation.ok).toBe(false);
     expect(result.compilation.error).toContain('instruction surface');
     expect(fs.existsSync(path.join(result.plugin.dir, 'plugin.json'))).toBe(true);
-    expect(fs.existsSync(path.join(root, '.agent/skills/total-recall/memory-vault/system/plugins/catalog-example.md'))).toBe(true);
+    expect(fs.existsSync(path.join(root, 'global-agent/skills/total-recall/memory-vault/system/plugins/catalog-example.md'))).toBe(true);
   });
 
   it('compiles a linked instruction target without replacing the link or authored wording', async () => {
@@ -102,7 +103,8 @@ describe('plugin inventory and CLI library lifecycle', () => {
     expect(result.compilation.ok).toBe(true);
     expect(fs.lstatSync(path.join(root, 'CLAUDE.md')).isSymbolicLink()).toBe(true);
     expect(fs.readFileSync(target, 'utf8')).toContain('Keep this wording.');
-    expect(fs.readFileSync(target, 'utf8')).toContain('catalog-example');
+    expect(fs.readFileSync(target, 'utf8')).toContain('Total Recall: start here');
+    expect(fs.readFileSync(target, 'utf8')).not.toContain('catalog-example');
   });
 
   it('reports an out-of-project linked instruction target without touching it', async () => {

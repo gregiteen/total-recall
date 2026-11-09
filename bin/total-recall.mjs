@@ -76,7 +76,7 @@ async function printHelp() {
     daemon <cmd>        Background worker (start|stop|status)
     skill <cmd>         Skills registry, deploy, multi-repo sync
     plugin <cmd>        Plugin manager: list, install, search, remove, info
-    harness <cmd>       Meta-harness manager: list, usage (5h/weekly quotas), dispatch, council
+    harness <cmd>       Metaharness manager: list, usage (5h/weekly quotas), dispatch, council
     agent <cmd>         Process controller: spawn, list, logs, kill across mesh
     brain <cmd>         Register / ensure any project brain
     status / doctor     Health and diagnostics

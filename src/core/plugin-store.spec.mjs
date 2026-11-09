@@ -21,12 +21,13 @@ import { writeFixturePlugin } from './testing/plugin-fixture.mjs';
 
 const FORBIDDEN = /rating|review|install_?count|download|verified|stars?\b/i;
 
-function vaultFile(root, ...rest) {
-  return path.join(root, '.agent', 'skills', 'total-recall', 'memory-vault', ...rest);
+// Every install lands in the shared folder; its records live in the shared brain's vault.
+function sharedVaultFile(...rest) {
+  return path.join(path.dirname(globalPluginsDir()), 'memory-vault', ...rest);
 }
 
-function readEvents(root) {
-  const dir = vaultFile(root, '.events');
+function readEvents() {
+  const dir = sharedVaultFile('.events');
   if (!fs.existsSync(dir)) return [];
   return fs.readdirSync(dir)
     .filter(f => f.endsWith('.jsonl'))
@@ -62,31 +63,47 @@ describe('plugin-store', () => {
     for (const id of ids) {
       const res = await installPlugin(id, { projectRoot: projA });
       expect(res.source.kind).toBe('bundled');
-      expect(fs.existsSync(path.join(projectPluginsDir(projA), id, 'plugin.json'))).toBe(true);
+      expect(fs.existsSync(path.join(globalPluginsDir(), id, 'plugin.json'))).toBe(true);
+      expect(fs.existsSync(path.join(projectPluginsDir(projA), id))).toBe(false);
     }
     expect(listAvailableBundled(projA).every(p => p.installed)).toBe(true);
   }, 60_000); // Installs every bundled plugin; about 20 s on the Mini, more under load.
 
+  it('refuses a repository install; every repository resolves the shared folder', async () => {
+    const id = listBundledPlugins()[0].id;
+    await expect(installPlugin(id, { projectRoot: projB, project: true })).rejects.toThrow(/only in the shared folder.*plugin on\|off/);
+    expect(fs.existsSync(path.join(projectPluginsDir(projB), id))).toBe(false);
+    await installPlugin(id, { projectRoot: projA });
+    expect(listInstalledPlugins(projB).map(p => [p.id, p.scope])).toContainEqual([id, 'global']);
+  });
+
+  it('discovers nothing from a repository plugin folder', async () => {
+    const dir = path.join(projectPluginsDir(projA), 'stray');
+    fs.mkdirSync(dir, { recursive: true });
+    writeFixturePlugin(dir, { id: 'stray', name: 'Stray', version: '0.1.0', description: 'Left in a repository' }, { fs, path });
+    expect(discoverPlugins(projA).map(p => p.id)).not.toContain('stray');
+  });
+
   it('writes a plugin_record and an installed event through the Core Contract', async () => {
     const res = await installPlugin('git-sentinel', { projectRoot: projA });
-    const record = fs.readFileSync(vaultFile(projA, 'system', 'plugins', 'git-sentinel.md'), 'utf8');
+    const record = fs.readFileSync(sharedVaultFile('system', 'plugins', 'git-sentinel.md'), 'utf8');
     expect(record).toContain('type: plugin_record');
     expect(record).toContain(`sha256: ${res.sha256}`);
     expect(record).toContain('kind: bundled');
-    expect(readEvents(projA)).toContain('plugin.installed');
+    expect(readEvents()).toContain('plugin.installed');
   });
 
   it('describes installed plugins with verifiable facts only', async () => {
     await installPlugin('code-quality', { projectRoot: projA });
     const [p] = listInstalledPlugins(projA);
-    expect(p).toMatchObject({ id: 'code-quality', scope: 'project', shared: false, modified_since_install: false });
+    expect(p).toMatchObject({ id: 'code-quality', scope: 'global', shared: false, modified_since_install: false });
     expect(p.sha256).toMatch(/^[0-9a-f]{64}$/);
     expect(Object.keys(p).filter(k => FORBIDDEN.test(k))).toEqual([]);
   });
 
   it('flags a plugin whose files changed since install', async () => {
     await installPlugin('git-sentinel', { projectRoot: projA });
-    fs.appendFileSync(path.join(projectPluginsDir(projA), 'git-sentinel', 'README.md'), '\nlocal edit\n');
+    fs.appendFileSync(path.join(globalPluginsDir(), 'git-sentinel', 'README.md'), '\nlocal edit\n');
     expect(listInstalledPlugins(projA)[0].modified_since_install).toBe(true);
   });
 
@@ -100,7 +117,7 @@ describe('plugin-store', () => {
     await setPluginShared('git-sentinel', true, { projectRoot: projA });
     expect(listSharedPlugins(projA).map(p => p.id)).toEqual(['git-sentinel']);
     expect(packPublicPlugin('git-sentinel', projA)?.id).toBe('git-sentinel');
-    expect(readEvents(projA)).toContain('plugin.shared');
+    expect(readEvents()).toContain('plugin.shared');
 
     await setPluginShared('git-sentinel', false, { projectRoot: projA });
     expect(listSharedPlugins(projA)).toEqual([]);
@@ -121,6 +138,8 @@ describe('plugin-store', () => {
     await setPluginShared('git-sentinel', true, { projectRoot: projA });
     const listing = { plugins: listSharedPlugins(projA).map(({ _plugin, ...rest }) => rest) };
     const bundle = packSharedPlugin('git-sentinel', projA);
+    // One shared folder per machine: clear it so this machine receives the peer's copy.
+    await uninstallPlugin('git-sentinel', { projectRoot: projA });
     const peerDeps = {
       peers: [{ hostname: 'node-a', ip: '100.64.0.5', online: true }],
       authorization: 'Bearer t',
@@ -143,6 +162,7 @@ describe('plugin-store', () => {
     await setPluginShared('git-sentinel', true, { projectRoot: projA });
     const bundle = packSharedPlugin('git-sentinel', projA);
     const source = `https://plugins.example.com/api/public/plugins/git-sentinel/bundle#sha256=${bundle.sha256}`;
+    await uninstallPlugin('git-sentinel', { projectRoot: projA });
     const publicDeps = {
       lookup: async () => [{ address: '8.8.8.8' }],
       request: (_url, _options, callback) => {
@@ -162,7 +182,7 @@ describe('plugin-store', () => {
     await uninstallPlugin('git-sentinel', { projectRoot: projB });
 
     await expect(installPlugin(source.replace(bundle.sha256, '0'.repeat(64)), { projectRoot: projB, publicDeps })).rejects.toThrow(/does not match the advertised/);
-    expect(fs.existsSync(path.join(projectPluginsDir(projB), 'git-sentinel'))).toBe(false);
+    expect(fs.existsSync(path.join(globalPluginsDir(), 'git-sentinel'))).toBe(false);
   });
 
   it('rejects a tampered peer bundle and writes nothing', async () => {
@@ -171,6 +191,7 @@ describe('plugin-store', () => {
     const listing = { plugins: listSharedPlugins(projA).map(({ _plugin, ...rest }) => rest) };
     const bundle = packSharedPlugin('git-sentinel', projA);
     bundle.files[0].data_b64 = Buffer.from('tampered').toString('base64');
+    await uninstallPlugin('git-sentinel', { projectRoot: projA });
     const peerDeps = {
       peers: [{ hostname: 'node-a', ip: '100.64.0.5', online: true }],
       authorization: 'Bearer t',
@@ -178,7 +199,8 @@ describe('plugin-store', () => {
     };
 
     await expect(installPlugin('peer:node-a/git-sentinel', { projectRoot: projB, peerDeps })).rejects.toThrow(/hash mismatch/);
-    expect(fs.existsSync(projectPluginsDir(projB)) ? fs.readdirSync(projectPluginsDir(projB)) : []).toEqual([]);
+    expect(fs.existsSync(path.join(globalPluginsDir(), 'git-sentinel'))).toBe(false);
+    expect(fs.existsSync(projectPluginsDir(projB))).toBe(false);
   });
 
   it('installs globally and removes cleanly with its record', async () => {
@@ -198,7 +220,7 @@ describe('plugin-store', () => {
     writeFixturePlugin(src, { id: 'my-plugin', name: 'Mine', version: '0.1.0', description: 'Local plugin' }, { fs, path });
     const res = await installPlugin(src, { projectRoot: projA, link: true });
     expect(res.source.kind).toBe('link');
-    expect(fs.lstatSync(path.join(projectPluginsDir(projA), 'my-plugin')).isSymbolicLink()).toBe(true);
+    expect(fs.lstatSync(path.join(globalPluginsDir(), 'my-plugin')).isSymbolicLink()).toBe(true);
     await expect(installPlugin(src, { projectRoot: projA })).rejects.toThrow(/already installed/);
   });
 
@@ -228,13 +250,13 @@ describe('plugin-store', () => {
     let last;
     for (const n of [1, 2, 3, 4]) {
       // The installed copy carries dependencies, as a real install does.
-      const installed = path.join(projectPluginsDir(projA), 'churn');
+      const installed = path.join(globalPluginsDir(), 'churn');
       fs.mkdirSync(path.join(installed, 'node_modules', 'dep'), { recursive: true });
       fs.writeFileSync(path.join(installed, 'node_modules', 'dep', 'big.bin'), 'x'.repeat(1000));
       fs.writeFileSync(path.join(source, 'content.txt'), `v${n}`);
       last = await installPlugin(source, { projectRoot: projA, replace: true });
     }
-    const archive = replacementArchiveDir(projectPluginsDir(projA));
+    const archive = replacementArchiveDir(globalPluginsDir());
     const left = fs.readdirSync(archive).filter((name) => name.startsWith('churn-'));
     expect(left).toEqual([path.basename(last.previousDirectory)]);
     expect(fs.readFileSync(path.join(last.previousDirectory, 'content.txt'), 'utf8')).toBe('v3');

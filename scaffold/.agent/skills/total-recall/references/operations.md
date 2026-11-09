@@ -16,7 +16,7 @@ Publication/deployment use the owning push/deploy procedures when authorized. Sh
 
 Use `brain status` to check the current project and physical global storage. Preview `brain relocate-global <dir>` before adding `--apply`. The destination must be a new private directory outside Git on the same filesystem as home. The home skills path links to the relocated tree. Keep repository brains in their own directories.
 
-Run normal preflight from home for global orchestration. Pass a repository working directory when routing repository work through Meta Harness. Use `plugin copies` to audit old project copies of shared defaults. `--apply` deletes verified bundled matches. Add `--archive-stale` to retain differing older copies in the replacement archive and use the shared versions.
+Run normal preflight from home for global orchestration. Pass a repository working directory when routing repository work through Metaharness. Use `plugin copies` to audit old project copies of shared defaults. `--apply` deletes verified bundled matches. Add `--archive-stale` to retain differing older copies in the replacement archive and use the shared versions.
 
 ## Optional developer API
 

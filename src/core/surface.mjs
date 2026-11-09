@@ -496,13 +496,8 @@ function injectDirectives(fileContent, rulesBlock) {
     return prependDirectives(authored, rulesBlock);
   }
   
-  let content = fileContent.trimEnd();
-  const baseline = '# 🔴 MANDATORY FIRST STEP ON EVERY TURN: TOTAL RECALL FIRST\n1. Run `total-recall --help` (or `node bin/total-recall.mjs --help`) to discover all tools, plugins, and commands.\n2. Read and follow .agent/skills/total-recall/SKILL.md before doing ANYTHING.\n3. Run `total-recall context "<task>"` and `total-recall recall "<topic>" --local` before any decision or action.\nTotal Recall is the mandatory working memory and toolset across all tasks and harnesses. Never skip this.';
-  if (!content.includes('total-recall/SKILL.md')) {
-    content = baseline + '\n\n' + content;
-  }
-  
-  return prependDirectives(content, rulesBlock);
+  // The managed block carries the start-here instructions; authored text stays as written.
+  return prependDirectives(fileContent.trimEnd(), rulesBlock);
 }
 
 function prependDirectives(authored, rulesBlock) {
@@ -516,14 +511,28 @@ function prependDirectives(authored, rulesBlock) {
 /**
  * Write or update a platform instruction shim with the pointer and active rules.
  */
+/**
+ * The whole managed part of every client entry file (ON-DEMAND-CONTEXT-01). It is static: no rule
+ * bodies, CLI list, plugin table or command list, so a rule or plugin change rewrites no repository.
+ * The rules for a task are compiled when the agent acknowledges preflight, and commands are looked
+ * up when needed.
+ */
+export const ENTRY_BLOCK = `# Total Recall: start here
+
+This repository uses Total Recall. Its rules are not copied into this file: they are compiled for your task when you acknowledge preflight.
+
+1. Read \`.agent/skills/total-recall/SKILL.md\`.
+2. Run \`total-recall tr-preflight --ack --task "<task>" --action read,edit,test\` and read everything it prints. Those are the rules for this task. Until it passes, working tools are denied.
+3. Route the task through Metaharness with \`total-recall meta-harness route "<task>" --json\` and follow the route.
+4. Look commands up only when you need them: \`total-recall --help\`, \`total-recall <namespace> --help\`, \`total-recall plugin library\`.`;
+
 async function writeShim(shimPath, skillsDir, nodes = [], { vaultDir, derivedDir, force = false } = {}) {
   const shimDir = path.dirname(shimPath);
-  const rulesBlock = await buildRulesBlock(skillsDir, nodes, { vaultDir, derivedDir, bootstrap: true });
-  const baseline = '# 🔴 MANDATORY FIRST STEP ON EVERY TURN: TOTAL RECALL FIRST\n1. Run `total-recall --help` (or `node bin/total-recall.mjs --help`) to discover all tools, plugins, and commands.\n2. Read and follow .agent/skills/total-recall/SKILL.md before doing ANYTHING.\n3. Run `total-recall context "<task>"` and `total-recall recall "<topic>" --local` before any decision or action.\nTotal Recall is the mandatory working memory and toolset across all tasks and harnesses. Never skip this.\n';
+  const rulesBlock = ENTRY_BLOCK;
   const mdcHeader = shimPath.endsWith('.mdc')
-    ? '---\ndescription: "Total Recall — Auto-generated behavioral memory surface."\nglobs:\nalwaysApply: true\n---\n\n'
+    ? '---\ndescription: "Total Recall — start here."\nglobs:\nalwaysApply: true\n---\n\n'
     : '';
-  const fullContent = prependDirectives(`${mdcHeader}${baseline}`, rulesBlock);
+  const fullContent = prependDirectives(mdcHeader, rulesBlock);
 
   try {
     const normShim = path.normalize(shimPath);
@@ -772,45 +781,49 @@ export async function compileSurface({ vaultDir, skillsDir, derivedDir, instruct
     ? mergeGlobalRuleNodes(nodes, getNodes(globalVault))
     : nodes;
 
-  // ── Incremental compilation: vault content hash check ──
-  // The global rules hash lives in its own file: vault-hash.txt is served by
-  // /api/vault/hash and must keep describing this vault alone.
+  // ── Each output has its own trigger (ON-DEMAND-CONTEXT-01) ──
+  // Entry files are static: they change only with the entry block or the client list.
+  // Indexes change only with this vault. The CLI index changes only with this brain's
+  // plugin catalog. A plugin or global-rule change therefore rewrites no repository's
+  // entry files and starts no embeddings pass; rules reach agents at preflight.
   const hashFile = path.join(derivedDir, 'vault-hash.txt');
   const currentHash = computeVaultHash(vaultDir);
-  const globalHashFile = path.join(derivedDir, 'global-rules-hash.txt');
-  const globalHash = globalVault && fs.existsSync(globalVault) ? computeVaultHash(globalVault) : '';
-  // Commands and skills feed the surface too; a change to either must recompile
-  // even when no memory node changed.
   const inputsHashFile = path.join(derivedDir, 'surface-inputs-hash.txt');
+  const cliHashFile = path.join(derivedDir, 'cli-index-hash.txt');
   const files = instructionFiles(instructionsFile, skillsDir);
   const surfaceDir = path.dirname(instructionsFile);
   const artifactsFile = path.join(derivedDir, 'surface-artifacts.json');
-  const inputsHash = sourceHash(SURFACE_SOURCE) + catalog.fingerprint + JSON.stringify(files) + surfaceInputsHash({ commandDirs: commandDirsFor(skillsDir), skillsDir });
+  const inputsHash = crypto.createHash('sha256').update(ENTRY_BLOCK).update(JSON.stringify(files.map(file => path.relative(surfaceDir, file)))).digest('hex');
+  const stored = file => (fs.existsSync(file) ? fs.readFileSync(file, 'utf8').trim() : null);
+  const entryCurrent = !force && stored(inputsHashFile) === inputsHash && instructionArtifactsMatch(files, surfaceDir, artifactsFile);
+  const vaultCurrent = !force && stored(hashFile) === currentHash;
+  const cliCurrent = !force && stored(cliHashFile) === catalog.fingerprint;
 
-  if (!force && fs.existsSync(hashFile)) {
-    const storedHash = fs.readFileSync(hashFile, 'utf8').trim();
-    const storedGlobal = fs.existsSync(globalHashFile) ? fs.readFileSync(globalHashFile, 'utf8').trim() : '';
-    const storedInputs = fs.existsSync(inputsHashFile) ? fs.readFileSync(inputsHashFile, 'utf8').trim() : '';
-    if (storedHash === currentHash && storedGlobal === globalHash && storedInputs === inputsHash &&
-        instructionArtifactsMatch(files, surfaceDir, artifactsFile)) {
-      return {
-        nodesProcessed: nodes.length,
-        skillsInjected: 0,
-        semanticIndexed: 0,
-        semanticUnavailable: false,
-        skipped: true,
-        reason: 'vault-hash-unchanged'
-      };
-    }
+  if (entryCurrent && vaultCurrent && cliCurrent) {
+    return {
+      nodesProcessed: nodes.length,
+      skillsInjected: 0,
+      semanticIndexed: 0,
+      semanticUnavailable: false,
+      skipped: true,
+      reason: 'vault-hash-unchanged'
+    };
   }
 
-  // 1. Write pointer and active rules to all instruction shims
-  const skillsInjected = await compilePointers(instructionsFile, skillsDir, ruleNodes, { vaultDir, derivedDir, force, files });
-
-  // 2. Build derived indexes (powers semantic search API)
   if (!fs.existsSync(derivedDir)) {
     fs.mkdirSync(derivedDir, { recursive: true });
   }
+
+  // 1. Entry files, only when the entry block or client list changed (or a file drifted).
+  const skillsInjected = entryCurrent ? 0 : await compilePointers(instructionsFile, skillsDir, ruleNodes, { vaultDir, derivedDir, force, files });
+  if (!entryCurrent) {
+    atomicWrite(inputsHashFile, inputsHash);
+    atomicWrite(artifactsFile, JSON.stringify({ version: 1, files: files.map(file => describeInstruction(file, surfaceDir)) }, null, 2));
+  }
+
+  // 2. Derived indexes, only when this vault changed.
+  let semanticResult = { indexed: 0, skipped: nodes.length, unavailable: false };
+  if (!vaultCurrent) {
 
   const graphIndex = nodes.map(n => ({
     slug: n.slug,
@@ -844,7 +857,7 @@ export async function compileSurface({ vaultDir, skillsDir, derivedDir, instruct
   //     caller could detect any of it.
   // Awaiting is cheap in steady state: buildEmbeddingsIndex skips nodes whose
   // content hash is unchanged, so only genuinely new or edited nodes cost a call.
-  let semanticResult = { indexed: 0, skipped: nodes.length, unavailable: true };
+  semanticResult = { indexed: 0, skipped: nodes.length, unavailable: true };
   if (!semantic || process.env.TR_EMBEDDINGS_DISABLED === '1') {
     logger.info('surface', 'Semantic embeddings explicitly disabled; local indexes updated.', { derivedDir });
   } else try {
@@ -869,9 +882,18 @@ export async function compileSurface({ vaultDir, skillsDir, derivedDir, instruct
     semanticResult = { indexed: 0, skipped: nodes.length, unavailable: true, error: err.message };
   }
 
-  // 3b. Build or update the CLI semantic index.
-  let cliIndexResult = { built: 0, skipped: 0, failed: 0 };
+  // 4. Generate Obsidian Canvas
   try {
+    generateCanvas(nodes, vaultDir);
+  } catch { /* non-fatal */ }
+
+  atomicWrite(hashFile, currentHash);
+  writeProjectionManifest(derivedDir, currentHash);
+  }
+
+  // 3. The CLI semantic index, only when this brain's plugin catalog changed.
+  let cliIndexResult = { built: 0, skipped: 0, failed: 0 };
+  if (!cliCurrent) try {
     const { buildCliSemanticIndex } = await import('./cli-semantic-index.mjs');
     const projectRoot = skillsDir ? path.dirname(path.dirname(skillsDir)) : process.cwd();
     cliIndexResult = await buildCliSemanticIndex({
@@ -884,21 +906,10 @@ export async function compileSurface({ vaultDir, skillsDir, derivedDir, instruct
     if (cliIndexResult.built > 0) {
       logger.info('surface', `CLI semantic index: ${cliIndexResult.built} indexed, ${cliIndexResult.skipped} skipped.`, { derivedDir });
     }
+    atomicWrite(cliHashFile, catalog.fingerprint);
   } catch (err) {
     logger.warn('surface', `CLI semantic index build non-fatal warning: ${err.message}`, { derivedDir });
   }
-
-  // 4. Generate Obsidian Canvas
-  try {
-    generateCanvas(nodes, vaultDir);
-  } catch { /* non-fatal */ }
-
-  // 5. Write vault hash + projection manifest
-  atomicWrite(hashFile, currentHash);
-  atomicWrite(globalHashFile, globalHash);
-  atomicWrite(inputsHashFile, inputsHash);
-  atomicWrite(artifactsFile, JSON.stringify({ version: 1, files: files.map(file => describeInstruction(file, surfaceDir)) }, null, 2));
-  writeProjectionManifest(derivedDir, currentHash);
 
   return {
     nodesProcessed: nodes.length,

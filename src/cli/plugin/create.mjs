@@ -1,9 +1,8 @@
 import fs from "node:fs";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
-import { validatePluginManifest } from "../../core/plugin-loader.mjs";
+import { validatePluginManifest, isCronExpression } from "../../core/plugin-loader.mjs";
 import { installPlugin } from "../../core/plugin-store.mjs";
-import { parseCron } from "../../core/plugin-cron.mjs";
 
 function toTitleCase(kebab) {
   return kebab
@@ -111,7 +110,7 @@ customElements.define('${id}-panel', ${panelClass});
 }
 
 export async function createPlugin(args = []) {
-  const isGlobal = args.includes("--global") || args.includes("-g");
+  // Every plugin is installed in the shared folder; --global is accepted and changes nothing.
   let withCli = args.includes("--with-cli");
   const withGenerator = args.includes("--with-generator");
   // A card face is bespoke owner code, authored by hand once the plugin's
@@ -212,7 +211,7 @@ export async function createPlugin(args = []) {
 
   if (!id) {
     console.error("❌ Error: Missing plugin id.");
-    console.error("   Usage: total-recall plugin create <id> [--from-skill <path>] [--capability] [--name <name>] [--description <desc>] [--category <cat>] [--global]\n");
+    console.error("   Usage: total-recall plugin create <id> [--from-skill <path>] [--capability] [--name <name>] [--description <desc>] [--category <cat>]\n");
     process.exit(1);
   }
 
@@ -226,7 +225,7 @@ export async function createPlugin(args = []) {
     if (!taskCommand || !/^[a-z][a-z0-9-]*$/.test(taskCommand) || !taskSchedule || !taskIntent) {
       throw new Error('--with-task requires --task-command <subcommand>, --task-schedule "<five-field cron>", and --task-intent <description>');
     }
-    parseCron(taskSchedule);
+    if (!isCronExpression(taskSchedule)) throw new Error(`--task-schedule must be a five-field cron expression, got "${taskSchedule}"`);
   } else if (taskCommand || taskSchedule || taskIntent) {
     throw new Error('--task-* options require --with-task');
   }
@@ -589,7 +588,7 @@ test('every file the manifest references exists', () => {
   // ── Install: a link to the repo, so the repo is what runs ───────────────
   let installed = false;
   if (!skipInstall) {
-    await installPlugin(pluginDir, { link: true, global: isGlobal, projectRoot: process.cwd() });
+    await installPlugin(pluginDir, { link: true, projectRoot: process.cwd() });
     installed = true;
   }
 
@@ -613,7 +612,7 @@ test('every file the manifest references exists', () => {
   if (withCli) {
     console.log(`   CLI Handler: \x1b[32m${path.join(pluginDir, "cli.mjs")}\x1b[0m`);
   }
-  console.log(`   Installed:  ${installed ? `linked into ${isGlobal ? 'the global' : 'this project\'s'} plugins` : 'no (--no-install)'}`);
+  console.log(`   Installed:  ${installed ? `linked into the shared plugin folder` : 'no (--no-install)'}`);
   console.log(`   GitHub:     ${githubUrl || (createGithub ? 'creation failed' : 'not created (re-run with --github, or: gh repo create tr-plugin-' + id + ' --private --source ' + pluginDir + ')')}`);
   console.log(`\nNext steps:`);
   console.log(`   Test:    \x1b[32mcd ${pluginDir} && npm test\x1b[0m`);

@@ -1,11 +1,11 @@
-/** Compatibility facade only. Adapter contracts, auth, usage and execution belong to Meta Harness. */
+/** Compatibility facade only. Adapter contracts, auth, usage and execution belong to Metaharness. */
 import { loadPluginModule } from './plugin-runtime.mjs';
 
 let owner, ownerError;
 try { owner = await loadPluginModule('meta-harness', 'harness-compat'); }
 catch (error) { ownerError = error; }
 function implementation() {
-  if (!owner) throw new Error(`Meta Harness is unavailable: ${ownerError?.message || 'install the plugin'}`);
+  if (!owner) throw new Error(`Metaharness is unavailable: ${ownerError?.message || 'install the plugin'}`);
   return owner;
 }
 

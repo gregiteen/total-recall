@@ -247,6 +247,7 @@ import {
   generateStaleKnowledgeRefreshProposals,
   evaluateProposalGate,
   dedupeProposals,
+  runSmartDecay,
 } from './optimizer.mjs';
 import { applyAcceptedProposals } from './proposal-applier.mjs';
 
@@ -444,7 +445,7 @@ export function evaluateCandidates(candidates, existingNodes, conflictsDir) {
  * Main Dream Cycle execution.
  */
 export async function runDreamCycle({
-  vaultDir, skillsDir, derivedDir, conflictsDir, instructionsFile
+  vaultDir, skillsDir, derivedDir, conflictsDir, instructionsFile, runtimeConfig
 }) {
   const sessionsDir = path.join(brainDir, 'sessions');
 
@@ -525,13 +526,23 @@ export async function runDreamCycle({
       ? await generateStaleKnowledgeRefreshProposals(vaultDir)
       : [];
 
+    // DECAY-01: memories the access ledger shows unused for the decay age are judged by the
+    // local reasoning runtime; the gate and applier below verify each one before it applies.
+    let decayProposals = [];
+    try {
+      decayProposals = await runSmartDecay(vaultDir, runtimeConfig, undefined, { derivedDir });
+      logger.info('dream', `Smart decay: ${decayProposals.length} proposal(s).`);
+    } catch (err) {
+      logger.error('dream', `Smart decay failed: ${err.message}`);
+    }
+
     // The generators are pure functions of vault state, so every cycle produces
     // the SAME proposals as the last one — a node stale on Monday is still stale
     // on Tuesday. Without this gate each cycle re-filed all of them under fresh
     // random slugs; the global vault accumulated 16,401 proposals for 594 real
     // targets (~28 copies each, ~5k/day) until proposals were 95% of the vault.
     const { kept: allProposals, suppressed } = dedupeProposals(
-      [...cleanupProposals, ...staleProposals],
+      [...cleanupProposals, ...staleProposals, ...decayProposals],
       vaultDir,
     );
     if (suppressed > 0) {

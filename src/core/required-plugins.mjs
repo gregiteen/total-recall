@@ -195,23 +195,45 @@ export function auditProjectPluginCopies(projectRoot, { sharedDir = globalPlugin
     return { copies: [], count: 0, sourceDir };
   }
   const copies = [];
-  for (const id of DEFAULT_PLUGIN_IDS) {
+  const realpath = (p) => { try { return fs.realpathSync(p); } catch { return null; } };
+  // A link in a repository that resolves to the same plugin as the shared
+  // install only shadows it: state and records split between brains and the
+  // repository can drift onto another checkout. Defaults never belong to a
+  // repository, so any linked default is a shadow too.
+  const isShadowLink = (id, copyDir, shared) => {
+    if (!fs.lstatSync(copyDir).isSymbolicLink() || !fs.existsSync(shared)) return false;
+    return DEFAULT_PLUGIN_IDS.includes(id) || realpath(copyDir) === realpath(shared);
+  };
+  const entries = fs.readdirSync(pluginsDir).filter((name) => !name.startsWith('.'));
+  const ids = [...new Set([...DEFAULT_PLUGIN_IDS, ...entries])];
+  for (const id of ids) {
     const copyDir = path.join(pluginsDir, id);
-    if (!fs.existsSync(copyDir)) continue;
+    if (!fs.lstatSync(copyDir, { throwIfNoEntry: false })) continue;
     const source = path.join(sourceDir, id);
     const shared = path.join(sharedDir, id);
+    const linked = fs.lstatSync(copyDir).isSymbolicLink();
+    // The source checkout a shared link points at is not a copy.
+    if (!linked && fs.existsSync(shared) && realpath(shared) === realpath(copyDir)) continue;
+    const shadow = isShadowLink(id, copyDir, shared);
+    // Nothing is installed per repository. A plugin found only here must be
+    // installed in the shared folder before its repository entry can go.
+    const repoOnly = !fs.existsSync(shared);
     const row = {
       id, dir: copyDir,
       sourceDir: fs.existsSync(source) ? source : null,
       sharedDir: fs.existsSync(shared) ? shared : null,
       edited: null, version: null, sourceVersion: null, sharedVersion: null,
-      linked: fs.lstatSync(copyDir).isSymbolicLink(),
+      linked,
+      shadow,
+      repoOnly,
+      target: fs.lstatSync(copyDir).isSymbolicLink() ? fs.readlinkSync(copyDir) : null,
     };
     const version = (dir) => { try { return JSON.parse(fs.readFileSync(path.join(dir, 'plugin.json'), 'utf8')).version; } catch { return null; } };
     row.version = version(copyDir);
     row.sourceVersion = row.sourceDir ? version(row.sourceDir) : null;
     row.sharedVersion = row.sharedDir ? version(row.sharedDir) : null;
-    row.edited = row.sourceDir ? !sameTree(copyDir, row.sourceDir) : null;
+    // A link is owned by its target checkout, so its tree is never "edited" here; a dangling link has no tree.
+    row.edited = row.linked || !fs.existsSync(copyDir) ? null : row.sourceDir ? !sameTree(copyDir, row.sourceDir) : null;
     // Older copies shadow the shared install. Version skew identifies stale
     // candidates for archival but does not prove the local source is disposable.
     row.stale = Boolean(row.version && row.sharedVersion && comparePackageVersions(row.version, row.sharedVersion) < 0);

@@ -1,6 +1,9 @@
 /** Local task capsules: explicit required rules, ranked supporting knowledge, complete-render accounting. */
 
+import path from 'node:path';
 import { getNodes } from './vault-cache.mjs';
+import { recordAccess } from './access-ledger.mjs';
+import { brainDir as globalBrainDir } from './local-config.mjs';
 import crypto from 'node:crypto';
 import { selectRules, assembleContext, curatedRules, ruleFingerprint, RULE_CATEGORIES } from './context-policy.mjs';
 import { retrieveTaskKnowledge, summarizeRetrieval } from './task-context.mjs';
@@ -142,7 +145,24 @@ export async function compileContext({
   result.stats.slots = { invariants: { nodes: rules.filter(n => n.category === 'invariants').length,
     tokens: result.stats.required_tokens } };
   result.stats.slots_filled = result.stats.contributions.length;
+  // DECAY-01: a capsule is a real use of the rules and memories it carries.
+  recordCapsuleAccess(derivedDir, rules, knowledge.contributions);
   return result;
+}
+
+/**
+ * Record each rule and memory a capsule carries in the ledger of the brain that owns it, so
+ * decay in the global brain sees global rules used by every project.
+ */
+export function recordCapsuleAccess(derivedDir, rules = [], contributions = [], globalDerivedDir = path.join(globalBrainDir, 'memory-derived')) {
+  const owned = { project: [], global: [] };
+  for (const node of rules) (node._layer === 'global' ? owned.global : owned.project).push(node.slug);
+  for (const { id } of contributions || []) {
+    const match = /^vault:(global|project):(.+)$/.exec(String(id || ''));
+    if (match) owned[match[1]].push(match[2]);
+  }
+  if (derivedDir) recordAccess(derivedDir, owned.project);
+  recordAccess(derivedDir && path.resolve(derivedDir) === path.resolve(globalDerivedDir) ? derivedDir : globalDerivedDir, owned.global);
 }
 
 /**

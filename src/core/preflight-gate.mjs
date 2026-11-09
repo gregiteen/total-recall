@@ -15,7 +15,7 @@
  *      session must have acknowledged. Another agent's receipt does not count. An agent is not
  *      bound to one repository: its acknowledgement goes with it, and it is told once about each
  *      other project brain it starts working under, including one a folder borrows from a parent.
- *      With no session id there is no agent to follow, so the directory needs its own receipt. Subagents and runs Meta Harness started are
+ *      With no session id there is no agent to follow, so the directory needs its own receipt. Subagents and runs Metaharness started are
  *      delegated, so they never stop to acknowledge.
  *   5. With a receipt, a repository-wide source sweep still needs a recent
  *      Total Recall consult (the rule DSH enforced alone until now).

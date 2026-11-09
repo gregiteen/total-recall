@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-/** Legacy command door. Native harness behavior is owned by the Meta Harness plugin. */
+/** Legacy command door. Native harness behavior is owned by the Metaharness plugin. */
 import { checkAnyReceipt, findRoot, ACK_COMMAND } from '../core/preflight-receipt.mjs';
 import path from 'node:path';
 
@@ -11,9 +11,9 @@ async function callPlugin(subcommand, args, options = {}) {
   const result = await runPluginCommand(plugin, { subcommand, args: [...args, '--json'], timeoutMs: 600000, ...options });
   let data;
   try { data = JSON.parse(result.output); }
-  catch { throw new Error(`Meta Harness returned invalid JSON for ${subcommand}`); }
+  catch { throw new Error(`Metaharness returned invalid JSON for ${subcommand}`); }
   if (!result.ok || data?.ok === false) {
-    const error = new Error(data?.error || `Meta Harness ${subcommand} failed`);
+    const error = new Error(data?.error || `Metaharness ${subcommand} failed`);
     error.result = data;
     throw error;
   }
@@ -32,7 +32,7 @@ export async function run(argv = []) {
   const asJson = args.includes('--json');
   try {
     if (args.includes('--help') || args.includes('-h') || args[0] === 'help') {
-      console.log('Usage: total-recall harness list|usage [--node ID] [--json] | dispatch <id> <task> [--node ID --cwd /remote/workspace] [--write] [--allow-unknown-auth] [--json] | council <task> [--allow-unknown-auth] [--json]. Harness operations delegate to the Meta Harness plugin.');
+      console.log('Usage: total-recall harness list|usage [--node ID] [--json] | dispatch <id> <task> [--node ID --cwd /remote/workspace] [--write] [--allow-unknown-auth] [--json] | council <task> [--allow-unknown-auth] [--json]. Harness operations delegate to the Metaharness plugin.');
       return;
     }
     const command = args[0] || 'list', positional = [];

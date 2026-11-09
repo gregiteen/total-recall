@@ -27,8 +27,11 @@ Commands:
   list                      Installed plugins (project & global) with source and sharing
   library [--plugin ID]      Installed CLI operation library (--json for agents)
   refresh                   Rebuild installed command inventories and instruction surfaces
-  copies [dir] [--apply]    Audit repository copies of shared defaults. --apply deletes only
-                            bundled matches. Add --archive-stale to preserve older differing copies.
+  copies [dir] [--apply]    Audit repository copies of shared defaults and shadow links. --apply
+                            deletes bundled matches, unlinks shadows (on/off records are kept)
+                            and removes install records of plugins installed nowhere.
+                            Add --archive-stale to preserve older differing copies, and
+                            --drop-repo-only to delete plugins that exist only in the repository.
   replacements [--prune] [--keep N] [--project] [--json]
                             Copies kept by install --replace (default: shared folder). Reports
                             the space; --prune keeps the newest N per plugin (default 1) and
@@ -49,7 +52,8 @@ Commands:
                               <path>              a local directory
                               --link, -l    Symlink a local directory instead of copying
                               --replace     Replace an install, retain previous source and restore on failure
-                              --global, -g  Install for every project on this machine
+                            Every plugin installs into the shared folder for all repositories;
+                            a repository switches it with 'plugin on|off <id>'.
   update [--check] [--json]  Reinstall every plugin whose git repo, mesh peer or source
                             directory moved ahead (--check only reports; also runs hourly
                             in 'update --automatic')
@@ -57,7 +61,7 @@ Commands:
   unshare <id>              Stop offering it
   publish <id>              Publish plugin to the Store and lock release (--no-lock)
   monetize <id>             Configure plugin pricing, period, and payout recipient
-  remove <id>               Uninstall (--global for the machine-wide copy)
+  remove <id>               Uninstall from the shared folder
   license <id> [cmd]        Check or activate plugin license (status, activate, checkout, verify)
   info <id>                 Manifest, provenance, hash and task history
   vendor <source> [dir]     Add a plugin to this project as a brick (default bricks/<id>); the

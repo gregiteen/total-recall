@@ -12,16 +12,12 @@ describe('install.mjs', () => {
     expect(typeof installPlugin).toBe('function');
   });
 
-  it('compiles the layer it installed into instead of assuming a project brain', () => {
-    // A bare `plugin install` from a directory with no project brain writes to
-    // the global brain (projectPluginsDir(cwd) === globalPluginsDir() when cwd is
-    // home) but used to request `layer: 'project'`, which threw and printed
-    // "Auto-compile failed: No project brain found" after a SUCCESSFUL install.
-    // The layer must be derived from whether a project brain actually resolves.
+  it('installs only into the shared folder and compiles the shared layer', () => {
+    // Nothing is installed per repository: --project is refused and the shared
+    // (global) layer is the one compiled after an install.
     const src = fs.readFileSync(path.join(here, 'install.mjs'), 'utf8');
-    expect(src).toMatch(/resolveBrainDir\('project'\)/);
-    expect(src).toMatch(/targetLayer = 'global'/);
-    expect(src).toMatch(/autoCompileSurfaces\(\{ layer: targetLayer/);
-    expect(src).not.toMatch(/autoCompileSurfaces\(\{ layer: isGlobal \? 'global' : 'project'/);
+    expect(src).toMatch(/args\.includes\('--project'\)/);
+    expect(src).toMatch(/autoCompileSurfaces\(\{ layer: 'global'/);
+    expect(src).not.toMatch(/layer: 'project'/);
   });
 });

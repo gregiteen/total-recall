@@ -20,7 +20,7 @@
 - Fix `update --all-brains` moving a consumer's SSSS dependency but not the `@ssss/cli` override that
   shadows it, which left every plugin asking for two versions of the engine.
 - Bundles Auth 1.2.9, which adds `auth secret gh-login status|adopt|use-store` and stops the mesh
-  sync undoing a `gh` login changed on the machine. Also bundles SSSS 0.1.3, Meta Harness 0.3.9,
+  sync undoing a `gh` login changed on the machine. Also bundles SSSS 0.1.3, Metaharness 0.3.9,
   Mesh 0.2.9, OpenWiki 0.1.10, Composable CLI 0.2.5, Code Quality 0.2.6, Security 0.3.6,
   Embeddings 0.1.3 and Git Sentinel 1.1.5, all on SSSS 0.14.5.
 - Plugin state written by commands run inside a checkout (`.ssss/`) is ignored.
@@ -77,7 +77,7 @@
 
 ## 3.43.0 — 2026-11-05
 
-- Add a preflight gate for every harness. Total Recall ships the hooks and Meta Harness ships an
+- Add a preflight gate for every harness. Total Recall ships the hooks and Metaharness ships an
   adapter per harness, so `init`, `update` and `preflight install` set them up with no hand
   edits, and installing never changes a vault. An agent reads the rules and acknowledges before
   it works. The acknowledgement belongs to its session, follows it across repositories, and
@@ -93,7 +93,7 @@
   a link. A linked plugin is never replaced.
 - Fix default plugins that changed without a new version never reaching existing installs. A new
   release check, `check:plugin-versions`, fails a release that forgets.
-- Add a preflight gate for OpenClaw. It is a small OpenClaw plugin, shipped by Meta Harness and
+- Add a preflight gate for OpenClaw. It is a small OpenClaw plugin, shipped by Metaharness and
   installed by `init`, `update` and `preflight install` through OpenClaw's own CLI. A running
   gateway loads it without a restart. Warnings reach the agent inside the tool's result. If the
   gate cannot run, work stays denied, while reading, plain Total Recall commands and changes
@@ -125,7 +125,7 @@
 
 ## 3.42.0 — 2026-11-05
 
-- Meta Harness owns harness, process and reasoning execution. `src/core/meta-harness.mjs`,
+- Metaharness owns harness, process and reasoning execution. `src/core/meta-harness.mjs`,
   `agent-manager.mjs` and `runtime.mjs` now delegate to the plugin. Unknown auth needs an
   explicit opt-in, failures exit nonzero and `--json` prints one result.
 - Task context retrieves supporting knowledge by default: hybrid vault search, explicit
@@ -140,7 +140,7 @@
   versions. Plugins stay in the shared folder. Repositories initialised earlier keep their
   copies until `plugin copies --apply`, which removes only identical ones.
 - `decision` and `meta-harness` skills now ship from their owner plugins, not the scaffold.
-- Bundled plugins: Meta Harness routing, gated escalation, worktree isolation, whole-job
+- Bundled plugins: Metaharness routing, gated escalation, worktree isolation, whole-job
   budgets and receipt voiding; OpenWiki's task context provider; auth `provider-keys` and
   rotation fixes.
 

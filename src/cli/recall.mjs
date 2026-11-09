@@ -226,6 +226,15 @@ export default async function recall(args) {
     allResults.sort((a, b) => (b.score || 0) - (a.score || 0));
     allResults = allResults.slice(0, top_k);
 
+    // DECAY-01: a recalled memory is a used memory; record it in the brain it came from.
+    try {
+      const { recordAccess } = await import('../core/access-ledger.mjs');
+      for (const target of searchTargets) {
+        const slugs = allResults.filter(r => r._layer === target.label).map(r => r.slug || r.id).filter(Boolean);
+        recordAccess(path.join(target.brainDir, 'memory-derived'), slugs);
+      }
+    } catch { /* access accounting never breaks recall */ }
+
     if (format === 'json') {
       for (const error of searchErrors) console.error(`Search failed for ${error.label}: ${error.message.split('\n')[0]}`);
       if (searchErrors.length && !allResults.length) process.exitCode = 1;

@@ -1,11 +1,11 @@
-/** Compatibility facade; process lifecycle, isolation, metadata and receipts belong to Meta Harness. */
+/** Compatibility facade; process lifecycle, isolation, metadata and receipts belong to Metaharness. */
 import { loadPluginModule } from './plugin-runtime.mjs';
 
 let owner, ownerError;
 try { owner = await loadPluginModule('meta-harness', 'process-manager'); }
 catch (error) { ownerError = error; }
 function implementation() {
-  if (!owner) throw new Error(`Meta Harness processes are unavailable: ${ownerError?.message || 'install the plugin'}`);
+  if (!owner) throw new Error(`Metaharness processes are unavailable: ${ownerError?.message || 'install the plugin'}`);
   return owner;
 }
 export const loadAgentState = (...args) => implementation().loadAgentState(...args);

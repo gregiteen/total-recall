@@ -444,7 +444,7 @@ describe('receipts count per session', () => {
     expect(child.code).toBe(0);
     expect(child.answer.warned).toBeUndefined();
   });
-  it('never stops a run Meta Harness started', () => {
+  it('never stops a run Metaharness started', () => {
     const run = gate({ ...WORK, session_id: 'dispatched-child' }, { TR_META_HARNESS_RUN: '1' });
     expect(run.code).toBe(0);
     expect(run.answer.warned).toBeUndefined();
@@ -646,7 +646,7 @@ describe('an agent is not bound to one repo', () => {
     expect(acknowledge({ root: repo, task: 'spec', home, run: ready }).ok).toBe(true);
     expect(gate(repo, WORK).code).toBe(0);
   });
-  it('never stops a subagent or a Meta Harness run in another repository', () => {
+  it('never stops a subagent or a Metaharness run in another repository', () => {
     const child = gate(other, { ...WORK, session_id: 'unacked-parent', agent_id: 'sub' });
     expect(child.code).toBe(0);
     expect(child.answer.warned).toBeUndefined();

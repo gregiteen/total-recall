@@ -9,9 +9,13 @@ describe('Plugin Evolving Context Injections', () => {
   // point at a developer's private project root, so they could only pass on one
   // machine, and the plugin they expected is gone even there.
   let fixtureRoot;
+  let previousAgentDir;
 
   beforeAll(() => {
     fixtureRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'tr-plugin-context-'));
+    // Plugins are discovered only from the shared folder, so the fixture is that folder.
+    previousAgentDir = process.env._TR_TEST_AGENT_DIR;
+    process.env._TR_TEST_AGENT_DIR = path.join(fixtureRoot, '.agent');
     const pluginDir = path.join(fixtureRoot, '.agent', 'skills', 'total-recall', 'plugins', 'scientific-frontiers');
     fs.mkdirSync(pluginDir, { recursive: true });
     fs.writeFileSync(
@@ -37,6 +41,8 @@ describe('Plugin Evolving Context Injections', () => {
   });
 
   afterAll(() => {
+    if (previousAgentDir === undefined) delete process.env._TR_TEST_AGENT_DIR;
+    else process.env._TR_TEST_AGENT_DIR = previousAgentDir;
     fs.rmSync(fixtureRoot, { recursive: true, force: true });
   });
 

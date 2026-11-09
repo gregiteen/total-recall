@@ -12,6 +12,9 @@ describe('Plugin Creation CLI (cli/plugin/create.mjs)', () => {
   let tmpProject;
   let tmpSkillDir;
   let logSpy;
+  let previousAgentDir;
+  // `plugin create` links the new plugin into the shared folder; keep that folder private to the test.
+  const sharedPlugin = (id) => path.join(tmpParent, 'shared-agent', 'skills', 'total-recall', 'plugins', id);
 
   beforeEach(() => {
     // `plugin create` writes its standalone repo beside the project
@@ -20,6 +23,8 @@ describe('Plugin Creation CLI (cli/plugin/create.mjs)', () => {
     tmpParent = fs.mkdtempSync(path.join(os.tmpdir(), 'tr-create-'));
     tmpProject = path.join(tmpParent, 'project');
     fs.mkdirSync(tmpProject);
+    previousAgentDir = process.env._TR_TEST_AGENT_DIR;
+    process.env._TR_TEST_AGENT_DIR = path.join(tmpParent, 'shared-agent');
     tmpSkillDir = fs.mkdtempSync(path.join(os.tmpdir(), 'tr-source-skill-'));
     logSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
 
@@ -41,6 +46,8 @@ Instructions here.
 
   afterEach(() => {
     logSpy.mockRestore();
+    if (previousAgentDir === undefined) delete process.env._TR_TEST_AGENT_DIR;
+    else process.env._TR_TEST_AGENT_DIR = previousAgentDir;
     if (fs.existsSync(tmpParent)) fs.rmSync(tmpParent, { recursive: true, force: true });
     if (fs.existsSync(tmpSkillDir)) fs.rmSync(tmpSkillDir, { recursive: true, force: true });
   });
@@ -61,14 +68,8 @@ Instructions here.
 
     cwdSpy.mockRestore();
 
-    const pluginDir = path.join(
-      tmpProject,
-      '.agent',
-      'skills',
-      'total-recall',
-      'plugins',
-      'packaged-cap'
-    );
+    const pluginDir = sharedPlugin('packaged-cap');
+    expect(fs.existsSync(path.join(tmpProject, '.agent', 'skills', 'total-recall', 'plugins'))).toBe(false);
 
     expect(fs.existsSync(pluginDir)).toBe(true);
 
@@ -105,7 +106,7 @@ Instructions here.
     try {
       await createPlugin(['daily-review', '--name', 'Daily Review', '--with-task', '--task-command', 'refresh', '--task-schedule', '0 6 * * *', '--task-intent', 'Refresh the review', '--with-ui']);
     } finally { cwdSpy.mockRestore(); }
-    const dir = path.join(tmpProject, '.agent', 'skills', 'total-recall', 'plugins', 'daily-review');
+    const dir = sharedPlugin('daily-review');
     const manifest = JSON.parse(fs.readFileSync(path.join(dir, 'plugin.json'), 'utf8'));
     expect(manifest.tasks).toEqual([{ intent: 'Refresh the review', schedule: '0 6 * * *', command: 'refresh', placement: 'selected-node' }]);
     // A card face is bespoke owner code, authored by hand. No generator may
@@ -121,7 +122,7 @@ Instructions here.
     try {
       await createPlugin(['acme-sync', '--name', 'Acme Sync', '--api-key', 'ACME_API_KEY']);
     } finally { cwdSpy.mockRestore(); }
-    const dir = path.join(tmpProject, '.agent', 'skills', 'total-recall', 'plugins', 'acme-sync');
+    const dir = sharedPlugin('acme-sync');
     const manifest = JSON.parse(fs.readFileSync(path.join(dir, 'plugin.json'), 'utf8'));
     expect(manifest.secrets).toEqual([expect.objectContaining({ key: 'ACME_API_KEY', required: true })]);
     // No credential-entry UI is generated: that pattern produced the shared

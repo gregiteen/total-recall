@@ -1,4 +1,4 @@
-/** Pure cron parsing shared by plugin authoring and scheduling. */
+/** Five-field cron parsing and matching for manifest plugin tasks. */
 const FIELD_RANGES = [
   [0, 59], // minute
   [0, 23], // hour
@@ -53,5 +53,3 @@ export function cronMatches(cron, date) {
   if (cron.dowStar) return domOk;
   return domOk || dowOk;
 }
-
-

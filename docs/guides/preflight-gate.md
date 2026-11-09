@@ -12,14 +12,14 @@ total-recall tr-preflight --ack --task "<task>" --action read,edit,test
 
 Without this receipt, working tools are denied. There is no setting to turn this off, and the commands that satisfy it are always allowed, so the gate cannot lock out its own repair.
 
-Each session has to do this for itself. Where the harness sends a session id, another agent's receipt in the same repository does not count. Subagents and runs started by Meta Harness are treated as delegated and are not stopped. In a harness that gives a subagent its own unlinked session, a new session counts as delegated for one receipt window after an acknowledged session starts a subagent, so an unrelated agent starting in that repository during the window also passes.
+Each session has to do this for itself. Where the harness sends a session id, another agent's receipt in the same repository does not count. Subagents and runs started by Metaharness are treated as delegated and are not stopped. In a harness that gives a subagent its own unlinked session, a new session counts as delegated for one receipt window after an acknowledged session starts a subagent, so an unrelated agent starting in that repository during the window also passes.
 
 ## When work goes around a plugin
 
 Two more checks steer work toward the plugin that owns it:
 
 - **Owned commands.** A plugin can declare raw commands it owns. For example, `git-sentinel` owns `git status`.
-- **Routing.** A plugin can declare itself the router for tasks. Meta Harness does.
+- **Routing.** A plugin can declare itself the router for tasks. Metaharness does.
 
 Each one has a mode:
 
@@ -51,7 +51,7 @@ total-recall preflight mode off --router --repo
 
 ## Harness support
 
-`total-recall init` and `total-recall update --all-brains --apply` install the hook for each harness present on the machine, and Meta Harness maintenance keeps it installed. `total-recall preflight mode` shows whether a warning can reach the agent:
+`total-recall init` and `total-recall update --all-brains --apply` install the hook for each harness present on the machine, and Metaharness maintenance keeps it installed. `total-recall preflight mode` shows whether a warning can reach the agent:
 
 | Harness | Hook location | Warning reaches the agent through |
 | --- | --- | --- |

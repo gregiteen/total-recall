@@ -31,7 +31,7 @@ Options:
   --allow-unknown-auth     Explicitly permit a harness without a verified login probe
 
 Auth:
-  The Meta Harness owner probes login and resolves only adapter-declared credentials through auth.
+  The Metaharness owner probes login and resolves only adapter-declared credentials through auth.
 
 Available Harnesses:
   agy, claude, codex, dsh, hermes, openclaw

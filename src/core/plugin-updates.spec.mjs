@@ -5,7 +5,7 @@ import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { installPlugin } from './plugin-distribution.mjs';
 import { readPluginRecord } from './plugin-store.mjs';
-import { discoverPlugins } from './plugin-loader.mjs';
+import { discoverPlugins, globalPluginsDir } from './plugin-loader.mjs';
 import { updateInstalledPlugins } from './plugin-updates.mjs';
 import { writeFixturePlugin } from './testing/plugin-fixture.mjs';
 
@@ -119,7 +119,7 @@ describe('automatic plugin updates', () => {
     await patchPluginRecord(discoverPlugins(proj).find(p => p.id === 'dev-one'), { source: { kind: 'bundled', ref: 'dev-one' } });
     const report = await updateInstalledPlugins({ roots: [proj] });
     expect(report.results.find(r => r.id === 'dev-one').status).toBe('linked');
-    expect(fs.lstatSync(path.join(proj, '.agent', 'skills', 'total-recall', 'plugins', 'dev-one')).isSymbolicLink()).toBe(true);
+    expect(fs.lstatSync(path.join(globalPluginsDir(), 'dev-one')).isSymbolicLink()).toBe(true);
   });
 
   it('reports a copy that records itself as its source as unmanaged, without touching it', async () => {
@@ -150,6 +150,6 @@ describe('automatic plugin updates', () => {
     const report = await updateInstalledPlugins({ roots: [proj] });
     expect(report.results.find(r => r.id === 'linked-one').status).toBe('linked');
     expect(report.results.find(r => r.id === 'maps').status).toBe('failed');
-    expect(fs.existsSync(path.join(proj, '.agent', 'skills', 'total-recall', 'plugins', 'maps', 'plugin.json'))).toBe(true);
+    expect(fs.existsSync(path.join(globalPluginsDir(), 'maps', 'plugin.json'))).toBe(true);
   });
 });

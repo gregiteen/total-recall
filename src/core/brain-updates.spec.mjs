@@ -162,6 +162,8 @@ describe('uniform brain updates', () => {
       expect(result.updated).toBe(1);
       const [[, args]] = installArgs(exec);
       expect(args).toContain('--package-lock-only');
+      // No tree is built, so the checkout's own postinstall (which needs one) never runs.
+      expect(args).toContain('--ignore-scripts');
       expect(fs.existsSync(path.join(root, 'node_modules'))).toBe(false);
       expect(JSON.parse(fs.readFileSync(path.join(root, 'package.json'))).dependencies['total-recall-brain']).toBe('3.39.1');
     });

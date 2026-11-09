@@ -47,6 +47,7 @@ async function runDream(task, ctx) {
     derivedDir: ctx.derivedDir,
     conflictsDir: ctx.conflictsDir,
     instructionsFile: ctx.instructionsFile,
+    runtimeConfig: ctx.runtimeConfig,
   });
   return { success: true, output: 'Dream cycle complete', executor: 'dream' };
 }
