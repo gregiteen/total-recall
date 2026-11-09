@@ -122,7 +122,32 @@ export function prospectiveCommit(ctx, args) {
 /** Scan every local branch and tag that the selected remote does not contain.
  * A missing remote object is not an exclusion. This can over-scan, never under-scan.
  */
+/**
+ * The commits this push would publish: exactly the refs git itself would update
+ * (`git push --dry-run --porcelain` with the same arguments), minus what the remote already has.
+ * Local branches the push does not send are never counted.
+ */
 export function outgoingCommits(ctx, args = []) {
+  const dry = ctx.git(['push', '--dry-run', '--porcelain', ...args.filter(a => a !== '--porcelain' && a !== '--dry-run')]);
+  if (dry.error || ![0, 1].includes(dry.status)) return allUnpushedCommits(ctx, args);
+  const tips = [];
+  let remote = null;
+  for (const line of String(dry.stdout || '').split('\n')) {
+    if (line.startsWith('To ')) { remote = line.slice(3).trim(); continue; }
+    const m = line.match(/^([ +\-*=!])\t([^:\t]*):([^\t]+)\t/);
+    if (!m || m[1] === '=' || m[1] === '-' || m[1] === '!' || !m[2]) continue;
+    const resolved = ctx.git(['rev-parse', '--verify', '--end-of-options', `${m[2]}^{commit}`]);
+    if (resolved.status === 0) tips.push(resolved.stdout.trim());
+  }
+  if (!tips.length) return [];
+  const advertised = remote ? ctx.git(['ls-remote', '--', remote]) : { status: 1, stdout: '' };
+  const excluded = [...new Set(String(advertised.stdout || '').split('\n').map(line => line.split(/\s+/)[0]).filter(oid => /^[a-f0-9]{40,64}$/.test(oid)))]
+    .filter(oid => ctx.git(['cat-file', '-e', `${oid}^{commit}`]).status === 0);
+  return gitText(ctx, ['rev-list', ...new Set(tips), ...(excluded.length ? ['--not', ...excluded] : []), '--']).trim().split('\n').filter(Boolean);
+}
+
+/** Every unpushed local commit: the conservative superset used when git cannot say what a push sends. */
+function allUnpushedCommits(ctx, args = []) {
   const takesValue = new Set(['--repo', '--receive-pack', '--exec', '--push-option', '-o']);
   const positional = [];
   let remoteOption;
