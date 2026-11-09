@@ -590,16 +590,6 @@ async function main() {
         }
 
         try {
-          const { compactAppendLogs } = await import('./append-log.mjs');
-          const compactResult = compactAppendLogs();
-          if (compactResult.logs_compacted > 0) {
-            logger.info({ subsystem: 'daemon-loop', message: `Compacted ${compactResult.logs_compacted} append logs (${compactResult.total_entries} entries)` });
-          }
-        } catch (err) {
-          logger.info({ subsystem: 'daemon-loop', message: `Append log compaction error: ${err.message}` });
-        }
-
-        try {
           await runCrons({ vaultDir: VAULT_DIR, skillsDir: SKILLS_DIR, brainDir: BRAIN_DIR });
         } catch (err) {
           logger.error({ subsystem: 'daemon-loop', message: `Cron execution failed: ${err.message}` });

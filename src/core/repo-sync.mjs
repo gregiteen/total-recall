@@ -92,10 +92,8 @@ export function isGeneratedSurface(relPath) {
 /**
  * Load the project registry from the global brain config.
  */
-function loadProjectRegistry() {
-  const registryPath = path.join(
-    os.homedir(), '.agent', 'skills', 'total-recall', 'config', 'project-registry.json'
-  );
+function loadProjectRegistry(registryBrain = path.join(os.homedir(), '.agent', 'skills', 'total-recall')) {
+  const registryPath = path.join(registryBrain, 'config', 'project-registry.json');
   if (!fs.existsSync(registryPath)) return [];
   try {
     const data = JSON.parse(fs.readFileSync(registryPath, 'utf8'));
@@ -357,8 +355,8 @@ async function syncRepo(project) {
  *
  * @returns {{ repos: Array, totalIngested: number, totalSkipped: number }}
  */
-export async function syncAllRepos() {
-  const registry = loadProjectRegistry();
+export async function syncAllRepos({ registryBrain } = {}) {
+  const registry = loadProjectRegistry(registryBrain);
   const results = [];
   let totalIngested = 0;
   let totalSkipped = 0;

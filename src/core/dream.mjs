@@ -244,7 +244,6 @@ export function autoPruneStorage(brainDir, vaultDir, conflictsDir) {
 
 import { 
   generateMemoryCleanupProposals,
-  generateStaleKnowledgeRefreshProposals,
   evaluateProposalGate,
   dedupeProposals,
   runSmartDecay,
@@ -252,14 +251,6 @@ import {
 import { applyAcceptedProposals } from './proposal-applier.mjs';
 
 const DREAM_PROMOTION_THRESHOLD = 0.7;
-
-// Master switch for the stale-knowledge-refresh *ticket generator* (see PHASE 4).
-// Disabled 2026-08-01: it filed one .md per stale node every cycle (16,401
-// unread tickets at its peak). Its successor, which queued "Verify
-// still-current" research every cycle, was removed too (RESEARCH_SYSTEM2):
-// research runs only when a human asks or a project needs it. Stale nodes are
-// listed for a human by `total-recall proposals stale` / GET /api/proposals/stale.
-const ENABLE_STALE_KNOWLEDGE_REFRESH = false;
 
 /**
  * Phase 1: Light Sleep. Scan for modifications.
@@ -520,15 +511,6 @@ export async function runDreamCycle({
   try {
     const cleanupProposals = await generateMemoryCleanupProposals(vaultDir);
 
-    // Stale-knowledge-refresh generation is DISABLED. It filed one ticket per
-    // high-importance node untouched for 30 days — ~600 of them — and nothing
-    // in this system ever reads or applies a proposal, so every one was write-
-    // only noise. Flip to true to re-enable; the dedupe gate below keeps it
-    // bounded at one open ticket per target if you do.
-    const staleProposals = ENABLE_STALE_KNOWLEDGE_REFRESH
-      ? await generateStaleKnowledgeRefreshProposals(vaultDir)
-      : [];
-
     // DECAY-01: memories the access ledger shows unused for the decay age are judged by the
     // local reasoning runtime; the gate and applier below verify each one before it applies.
     let decayProposals = [];
@@ -546,7 +528,7 @@ export async function runDreamCycle({
     // random slugs; the global vault accumulated 16,401 proposals for 594 real
     // targets (~28 copies each, ~5k/day) until proposals were 95% of the vault.
     const { kept: allProposals, suppressed } = dedupeProposals(
-      [...cleanupProposals, ...staleProposals, ...decayProposals],
+      [...cleanupProposals, ...decayProposals],
       vaultDir,
     );
     if (suppressed > 0) {

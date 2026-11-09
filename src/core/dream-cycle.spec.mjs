@@ -6,7 +6,7 @@ vi.mock('./logger.mjs', () => ({ logger: { info() {}, warn() {}, error() {} } })
 vi.mock('./session-watcher.mjs', () => ({ scanAndIngest: vi.fn(() => ({ ingested: 0 })) }));
 vi.mock('./surface.mjs', () => ({ compileSurface: vi.fn(async () => {}) }));
 vi.mock('./optimizer.mjs', () => ({
-  generateMemoryCleanupProposals: vi.fn(async () => []), generateStaleKnowledgeRefreshProposals: vi.fn(async () => []),
+  generateMemoryCleanupProposals: vi.fn(async () => []),
   evaluateProposalGate: vi.fn(), dedupeProposals: vi.fn(p => ({ kept: p, suppressed: 0 })), runSmartDecay: vi.fn(async () => []),
 }));
 vi.mock('./proposal-applier.mjs', () => ({ applyAcceptedProposals: vi.fn(async () => ({})) }));

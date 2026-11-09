@@ -1,4 +1,3 @@
-import { loadPluginModule as __loadOwnedPlugin } from './plugin-runtime.mjs';
 /**
  * Executor registry for daemon tasks.
  *
@@ -41,7 +40,7 @@ function policyCheck(task) {
 
 async function runDream(task, ctx) {
   const { runDreamCycle } = await import('./dream.mjs');
-  await runDreamCycle({
+  const result = await runDreamCycle({
     vaultDir: ctx.vaultDir,
     skillsDir: ctx.skillsDir,
     derivedDir: ctx.derivedDir,
@@ -49,34 +48,8 @@ async function runDream(task, ctx) {
     instructionsFile: ctx.instructionsFile,
     runtimeConfig: ctx.runtimeConfig,
   });
+  if (result?.status !== 'success') return { success: false, error: result?.errors?.join('; ') || 'unsupported', executor: 'dream' };
   return { success: true, output: 'Dream cycle complete', executor: 'dream' };
-}
-
-async function runSessionIngest(task, ctx) {
-  const { scanAndIngest } = await import('./session-watcher.mjs');
-  const result = scanAndIngest(ctx.sessionsDir);
-  return {
-    success: true,
-    output: `Ingested ${result.ingested} new sessions`,
-    executor: 'session-ingest',
-  };
-}
-
-async function runSurfaceCompile(task, ctx) {
-  const { compileSurface } = await import('./surface.mjs');
-  await compileSurface({
-    vaultDir: ctx.vaultDir,
-    skillsDir: ctx.skillsDir,
-    derivedDir: ctx.derivedDir,
-    instructionsFile: ctx.instructionsFile,
-  });
-  return { success: true, output: 'Surface recompiled', executor: 'surface-compile' };
-}
-
-async function runPrune(task, ctx) {
-  const { autoPruneStorage } = await import('./dream.mjs');
-  autoPruneStorage(ctx.brainDir, ctx.vaultDir, ctx.conflictsDir);
-  return { success: true, output: 'Storage prune complete', executor: 'prune' };
 }
 
 async function runCustom(task, ctx) {
@@ -90,8 +63,8 @@ async function runCustom(task, ctx) {
       message: `Custom task (log only): ${task.slug} — ${intent}`,
     });
     return {
-      success: true,
-      output: `Custom task recorded (no vault write): ${intent}`.slice(0, 500),
+      success: false,
+      error: 'unsupported',
       executor: 'custom',
     };
   }
@@ -325,10 +298,10 @@ async function runLegacyCategoryDispatch(task, ctx) {
     return { success: true, output: 'Maintenance complete', executor: 'maintenance' };
   }
 
-  if (category === 'exploration' || category === 'self-evaluation' || category === 'skill-engineering') {
+  if (category === 'self-evaluation' || category === 'skill-engineering') {
     return {
-      success: true,
-      output: `Acknowledged category ${category} (no-op in core mode)`,
+      success: false,
+      error: 'unsupported',
       executor: category,
     };
   }
@@ -336,7 +309,7 @@ async function runLegacyCategoryDispatch(task, ctx) {
   // Unknown — fail loud
   return {
     success: false,
-    error: `Unknown task executor/category: executor=${task.executor || 'null'} category=${category || 'null'} kind=${task.kind || 'null'} slug=${task.slug}`,
+    error: 'unsupported',
     executor: 'unknown',
   };
 }
@@ -376,7 +349,7 @@ async function runResearchLegacy(task, ctx) {
     // researched — so it is now a no-op (RESEARCH_SYSTEM2).
     const topic = String(task.target || '').trim();
     if (!topic || topic === 'global') {
-      return { success: true, output: 'No research topic on this task — nothing to research.', executor: 'research' };
+      return { success: false, error: 'unsupported', executor: 'research' };
     }
 
     // Prefer deep multi-source research when this came from the research queue
@@ -515,7 +488,7 @@ async function runResearchLegacy(task, ctx) {
       quarantineDir: path.join(BRAIN_DIR, 'memory-inbox', 'quarantine'),
     });
     if (result.skipped) {
-      return { success: true, output: `Conclusion writer: ${result.skipped}`, executor: 'research' };
+      return { success: false, error: 'unsupported', executor: 'research' };
     }
     return {
       success: true,
@@ -526,7 +499,7 @@ async function runResearchLegacy(task, ctx) {
 
   return {
     success: false,
-    error: `No research handler matched slug=${task.slug} category=${task.category}`,
+    error: 'unsupported',
     executor: 'research',
   };
 }
@@ -572,47 +545,8 @@ function findLatestResearchDraftSlug(inboxDir, topic) {
 
 // ─── Registry ───────────────────────────────────────────────────────────────────
 
-async function runSecretsRotationCheck(task, ctx) {
-  const { runSecretsRotationCheck: run } = await __loadOwnedPlugin('auth', 'secrets-rotate');
-  return run(ctx);
-}
-
-async function runSecretsExportEnv(task, ctx) {
-  const { runSecretsExportAll } = await __loadOwnedPlugin('auth', 'secrets-rotate');
-  return runSecretsExportAll(ctx);
-}
-
-async function runSecretsRotationAssist(task, ctx) {
-  // Supervised: ensure prompt is present; does not auto-browser without agent session
-  const key = task.payload?.secret_key || task.slug?.replace(/^secret-rotate-/, '');
-  if (!key) {
-    return { success: false, error: 'missing secret_key', executor: 'secrets-rotation-assist' };
-  }
-  const { getBrowserRotateAssist } = await __loadOwnedPlugin('auth', 'secrets-rotate');
-  const assist = await getBrowserRotateAssist(ctx.brainDir, key);
-  return {
-    success: true,
-    output: `Browser rotation assist ready for ${key}. Console: ${assist.console_url || 'n/a'}. Use browser tools with human 2FA; then secret rotate --export-env.`,
-    executor: 'secrets-rotation-assist',
-    assist: {
-      key: assist.key,
-      console_url: assist.console_url,
-      docs_url: assist.docs_url,
-      overdue: assist.overdue,
-      // prompt available to agent; do not echo secrets
-      prompt: assist.prompt,
-    },
-  };
-}
-
 const EXECUTORS = {
-  'secrets-rotation-check': { id: 'secrets-rotation-check', run: runSecretsRotationCheck },
-  'secrets-export-env': { id: 'secrets-export-env', run: runSecretsExportEnv },
-  'secrets-rotation-assist': { id: 'secrets-rotation-assist', run: runSecretsRotationAssist },
   dream: { id: 'dream', run: runDream },
-  'session-ingest': { id: 'session-ingest', run: runSessionIngest },
-  'surface-compile': { id: 'surface-compile', run: runSurfaceCompile },
-  prune: { id: 'prune', run: runPrune },
   custom: { id: 'custom', run: runCustom },
   research: { id: 'research', run: runResearchLegacy },
   legacy: { id: 'legacy', run: runLegacyDispatch },
@@ -624,31 +558,13 @@ const EXECUTORS = {
 export function resolveExecutor(task) {
   const t = normalizeTask(task);
 
-  if (t.executor && EXECUTORS[t.executor]) {
-    return EXECUTORS[t.executor];
-  }
+  // An explicit unsupported executor must never fall through to kind/category.
+  if (t.executor) return typeof t.executor === 'string' && Object.hasOwn(EXECUTORS, t.executor) ? EXECUTORS[t.executor] : null;
 
   // System / named slugs
   if (t.slug === 'dream' || String(t.slug || '').startsWith('dream-') || t.executor === 'dream') {
     return EXECUTORS.dream;
   }
-  if (String(t.slug || '').startsWith('session-ingest')) return EXECUTORS['session-ingest'];
-  if (String(t.slug || '').startsWith('surface-compile')) return EXECUTORS['surface-compile'];
-  if (String(t.slug || '').startsWith('prune-') || t.slug === 'prune') return EXECUTORS.prune;
-  if (String(t.slug || '').startsWith('secret-rotate-') || t.category === 'secrets-rotation') {
-    return EXECUTORS['secrets-rotation-assist'];
-  }
-  if (String(t.slug || '').startsWith('secrets-rotation-check') || t.executor === 'secrets-rotation-check') {
-    return EXECUTORS['secrets-rotation-check'];
-  }
-  if (String(t.slug || '').startsWith('secrets-export') || t.executor === 'secrets-export-env') {
-    return EXECUTORS['secrets-export-env'];
-  }
-
-  if (t.kind === 'custom' || t.category === 'custom' || t.executor === 'custom') {
-    return EXECUTORS.custom;
-  }
-
   // Known legacy categories still registered
   const legacyCategories = new Set([
     'conscious-enforcement',
@@ -659,12 +575,13 @@ export function resolveExecutor(task) {
     'proactive-research',
     'skill-engineering',
     'self-evaluation',
-    'exploration',
   ]);
 
   if (legacyCategories.has(t.category) || t._research_id || t._is_remote_vault_sync) {
     return EXECUTORS.legacy;
   }
+
+  if (t.category === 'custom' || (t.kind === 'custom' && !t.category)) return EXECUTORS.custom;
 
   if (t.kind === 'research') return EXECUTORS.research;
   if (t.kind === 'system' || t.kind === 'maintenance' || t.kind === 'memory') {
@@ -692,11 +609,12 @@ export async function dispatchTask(task, ctx) {
       `Unknown task executor for slug=${normalized.slug} ` +
       `category=${normalized.category} kind=${normalized.kind} executor=${normalized.executor}`;
     logger.info({ subsystem: 'task-executors', message: msg });
-    return { success: false, error: msg, executor: 'unknown' };
+    return { success: false, error: 'unsupported', executor: 'unknown' };
   }
 
   try {
     const result = await executor.run(normalized, ctx);
+    if (!result || typeof result.success !== 'boolean') return { success: false, error: 'unsupported', executor: executor.id };
     return { ...result, executor: result.executor || executor.id };
   } catch (err) {
     return {

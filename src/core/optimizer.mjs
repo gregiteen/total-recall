@@ -6,7 +6,6 @@ import { writeNode } from './vault.mjs';
 import { getNodes } from './vault-cache.mjs';
 import { readAccess, lastUsedMs, activeDaysSince } from './access-ledger.mjs';
 import { logger } from './logger.mjs';
-import { brainDir } from './config.mjs';
 
 /**
  * Total Recall Optimizer
@@ -168,129 +167,6 @@ export async function generateMemoryCleanupProposals(vaultDir) {
 }
 
 /**
- * Scans skill execution logs (if available) and proposes improvements.
- */
-/**
- * Scan skill files for quality issues and propose improvements.
- * Looks at skill files that haven't been updated in >30 days and
- * checks for common issues: missing examples, vague instructions, outdated commands.
- */
-export async function generateSkillImprovementProposals(vaultDir) {
-  const agentDir = path.join(path.dirname(vaultDir));
-  const skillsDir = path.join(agentDir, 'skills');
-  const proposals = [];
-
-  if (!fs.existsSync(skillsDir)) return proposals;
-
-  const now = Date.now();
-  const staleCutoff = 30 * 24 * 60 * 60 * 1000; // 30 days
-
-  try {
-    const skillDirs = fs.readdirSync(skillsDir, { withFileTypes: true })
-      .filter(d => d.isDirectory())
-      .map(d => path.join(skillsDir, d.name, 'SKILL.md'))
-      .filter(p => fs.existsSync(p));
-
-    for (const skillFile of skillDirs) {
-      const stat = fs.statSync(skillFile);
-      const ageMs = now - stat.mtimeMs;
-      if (ageMs < staleCutoff) continue;
-
-      const raw = fs.readFileSync(skillFile, 'utf8');
-      const hasExamples = /##\s*example/i.test(raw);
-      const hasCaution = /caution|warning|never|must not/i.test(raw);
-      const lineCount = raw.split('\n').length;
-
-      const issues = [];
-      if (!hasExamples) issues.push('No examples section');
-      if (!hasCaution) issues.push('No caution/constraint section');
-      if (lineCount < 20) issues.push('Very short — may lack detail');
-
-      if (issues.length > 0) {
-        const skillName = path.basename(path.dirname(skillFile));
-        proposals.push(createProposal(
-          'skill-improvement',
-          `Improve skill: ${skillName} (${issues.join(', ')})`,
-          skillFile,
-          `Skill file is ${Math.floor(ageMs / 86400000)} days old. Issues: ${issues.join('; ')}`,
-        ));
-      }
-    }
-  } catch (err) {
-    logger.debug('optimizer: generateSkillImprovementProposals failed to read skillsDir', { err: err.message });
-  }
-
-  return proposals;
-}
-
-/**
- * Scan the task queue for stuck or stalled workflows.
- * Tasks that have been 'in-progress' for >1 hour are considered stalled.
- */
-export async function generateWorkflowRepairProposals(vaultDir) {
-  const queueDir = path.join(brainDir, 'scheduler', 'queue');
-  const proposals = [];
-
-  if (!fs.existsSync(queueDir)) return proposals;
-
-  const now = Date.now();
-  const stalledCutoff = 60 * 60 * 1000; // 1 hour
-
-  try {
-    const files = fs.readdirSync(queueDir).filter(f => f.endsWith('.md'));
-    for (const file of files) {
-      const raw = fs.readFileSync(path.join(queueDir, file), 'utf8');
-      const { data } = matter(raw);
-      if (data.status !== 'in-progress') continue;
-
-      const updatedAt = new Date(data.updated_at || data.created || 0).getTime();
-      if (now - updatedAt < stalledCutoff) continue;
-
-      proposals.push(createProposal(
-        'workflow-repair',
-        `Stalled task: ${data.slug || file}`,
-        path.join(queueDir, file),
-        `Task has been in-progress for ${Math.floor((now - updatedAt) / 60000)} minutes. May need retry or cancellation.`,
-      ));
-    }
-  } catch (err) {
-    logger.debug('optimizer: generateWorkflowRepairProposals failed to read queueDir', { err: err.message });
-  }
-
-  return proposals;
-}
-
-/**
- * Analyze the vault's model usage patterns and propose routing improvements.
- * Flags cases where high-priority tasks were sent to the local LLM
- * that should have used a frontier model.
- */
-export async function generateModelRoutingProposals(vaultDir) {
-  const proposals = [];
-  const nodes = getNodes(vaultDir);
-
-  // Find high-importance facts with low confidence — likely needed frontier model
-  const underconfident = nodes.filter(n =>
-    n.status === 'active' &&
-    n.category === 'facts' &&
-    n.importance >= 4 &&
-    n.confidence < 0.6 &&
-    n.source?.agent === 'fact-seeker',
-  );
-
-  for (const node of underconfident.slice(0, 5)) {
-    proposals.push(createProposal(
-      'model-routing',
-      `Re-research with frontier model: "${node.title}"`,
-      node.slug,
-      `High-importance fact (importance: ${node.importance}) has low confidence (${node.confidence}). Originally researched by local model. Frontier model may produce better synthesis.`,
-    ));
-  }
-
-  return proposals;
-}
-
-/**
  * Nodes that are important but have gone untouched — computed on demand.
  *
  * "Which memories are stale?" is a question, not a filing cabinet. Deriving it
@@ -309,21 +185,6 @@ export function findStaleNodes(vaultDir, { days = 30, minImportance = 4 } = {}) 
       && n.importance >= minImportance
       && new Date(n.last_accessed).getTime() < cutoff)
     .sort((a, b) => new Date(a.last_accessed) - new Date(b.last_accessed));
-}
-
-/**
- * @deprecated Wrote tickets nothing reads. Retained because the dream cycle's
- * master switch (ENABLE_STALE_KNOWLEDGE_REFRESH, off) still references it.
- * Stale nodes are surfaced to a human via findStaleNodes instead; nothing
- * re-researches them automatically (RESEARCH_SYSTEM2).
- */
-export async function generateStaleKnowledgeRefreshProposals(vaultDir) {
-  return findStaleNodes(vaultDir, { days: 30, minImportance: 4 }).map(node => createProposal(
-    'stale-knowledge-refresh',
-    `Refresh stale high-importance memory: ${node.title}`,
-    node.slug,
-    'Node has not been accessed in over 30 days but maintains high importance. Requires verification against current state.',
-  ));
 }
 
 /**

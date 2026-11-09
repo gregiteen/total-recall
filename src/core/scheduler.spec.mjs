@@ -42,7 +42,7 @@ function writeTask(dir, slug, overrides = {}) {
 describe('TaskQueue', () => {
   it('enqueues and dequeues by effective priority', () => {
     const q = new TaskQueue();
-    q.enqueue({ slug: 'low', priority: 10, category: 'exploration' });
+    q.enqueue({ slug: 'low', priority: 10, category: 'self-evaluation' });
     q.enqueue({ slug: 'high', priority: 90, category: 'conscious-enforcement' });
     q.enqueue({ slug: 'mid', priority: 50, category: 'memory-maintenance' });
 
@@ -51,7 +51,7 @@ describe('TaskQueue', () => {
     const second = q.dequeue();
     expect(second.slug).toBe('mid'); // 50 * 0.6 = 30
     const third = q.dequeue();
-    expect(third.slug).toBe('low'); // 10 * 0.2 = 2
+    expect(third.slug).toBe('low'); // 10 * 0.3 = 3
   });
 
   it('returns null when empty', () => {

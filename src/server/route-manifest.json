@@ -21,10 +21,6 @@
   },
   {
     "method": "POST",
-    "path": "/api/brains/sync"
-  },
-  {
-    "method": "POST",
     "path": "/api/capture/:source"
   },
   {
@@ -90,18 +86,6 @@
   {
     "method": "POST",
     "path": "/api/context"
-  },
-  {
-    "method": "GET",
-    "path": "/api/context/flash/health"
-  },
-  {
-    "method": "GET",
-    "path": "/api/context/preview"
-  },
-  {
-    "method": "POST",
-    "path": "/api/context/stream"
   },
   {
     "method": "POST",
@@ -809,19 +793,7 @@
   },
   {
     "method": "GET",
-    "path": "/api/ssss"
-  },
-  {
-    "method": "GET",
     "path": "/api/ssss/instructions"
-  },
-  {
-    "method": "GET",
-    "path": "/api/ssss/instructions"
-  },
-  {
-    "method": "GET",
-    "path": "/api/ssss/references"
   },
   {
     "method": "GET",
@@ -833,19 +805,7 @@
   },
   {
     "method": "GET",
-    "path": "/api/ssss/references/:name"
-  },
-  {
-    "method": "GET",
     "path": "/api/ssss/skill/ssss"
-  },
-  {
-    "method": "GET",
-    "path": "/api/ssss/skill/ssss"
-  },
-  {
-    "method": "GET",
-    "path": "/api/ssss/spec"
   },
   {
     "method": "GET",
@@ -874,14 +834,6 @@
   {
     "method": "POST",
     "path": "/api/tasks/:id/retry"
-  },
-  {
-    "method": "DELETE",
-    "path": "/api/tasks/cleanup"
-  },
-  {
-    "method": "GET",
-    "path": "/api/tasks/failed"
   },
   {
     "method": "POST",
@@ -913,15 +865,7 @@
   },
   {
     "method": "POST",
-    "path": "/api/vault/compact"
-  },
-  {
-    "method": "POST",
     "path": "/api/vault/compile"
-  },
-  {
-    "method": "GET",
-    "path": "/api/vault/hash"
   },
   {
     "method": "GET",

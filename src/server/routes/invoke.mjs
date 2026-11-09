@@ -16,6 +16,7 @@ import { invokeAuthority, authorizeInvoke, operationAllowed } from '../invoke-po
 import { restrictedBrainTargets } from '../invoke-targets.mjs';
 import { INVOKE_LIMITS, InvokeError, executeInvokeChild, requireSuccessfulRun, invokeEnvironment, absoluteTarget } from '../invoke-execution.mjs';
 import { syncChangedFiles } from '../invoke-durability.mjs';
+import { CORE_OPERATIONS, validateCoreParams } from '../invoke-core-operations.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../..');
 // Share across router instances in this server; do not race projection refreshes.
@@ -29,6 +30,7 @@ export const OPERATIONS = Object.freeze(Object.fromEntries(Object.entries({
   'composable.run': { scope: 'sandbox:run', family: 'composable' },
   'decision.run': { scope: 'memory:read', family: 'decision' },
   'decision.predict': { scope: 'memory:read', family: 'decision' },
+  ...CORE_OPERATIONS,
 }).map(([name, def]) => [name, Object.freeze(def)])));
 
 const fail = (res, status, operation, code, message, extra = {}) => res.status(status).json({
@@ -106,13 +108,14 @@ export function createInvokeRouter({ auth = requireAuth, store = { loadKeys, key
       };
       revalidate();
       timer = setInterval(revalidate, 250); timer.unref?.();
-      const context = { authority, target, serverBrain, selectedBrain, signal: controller.signal, limits, commandScopes,
+      const context = { authority, target, serverBrain, registryBrain, selectedBrain, signal: controller.signal, limits, commandScopes,
         run: options => {
           revalidate();
           return execute({ ...options, signal: controller.signal, limits });
         } };
       let result;
       if (operation === 'capabilities') result = capabilitiesFor(authority, limits, targetNames);
+      else if (Object.hasOwn(CORE_OPERATIONS, operation)) result = await runCoreOperation(operation, params, context);
       else result = await HANDLERS[operation](params, context);
       if (operation === 'ssss.write' && authority.mode === 'restricted') mutationResult = result;
       revalidate();
@@ -142,6 +145,28 @@ export function createInvokeRouter({ auth = requireAuth, store = { loadKeys, key
 }
 
 export const invokeRouter = createInvokeRouter();
+
+async function runCoreOperation(operation, params, context) {
+  validateCoreParams(operation, params);
+  const run = await context.run({ entry: path.join(root, 'src/server/invoke-core-child.mjs'),
+    cwd: context.target, env: invokeEnvironment(true), timeoutMs: params.timeoutMs,
+    input: JSON.stringify({ operation, params, brain: context.serverBrain, registryBrain: context.registryBrain }) });
+  if (run.termination_reason || run.truncated) {
+    const code = run.termination_reason || 'output-limit';
+    throw new InvokeError(code === 'timeout' ? 504 : code === 'authority-ended' ? 403 : 422,
+      code, 'Owner execution did not complete; a mutation may already have committed.');
+  }
+  let response;
+  try { response = JSON.parse(run.stdout); } catch { /* reject below */ }
+  if (response?.ok === false) {
+    const code = ['brain-unavailable', 'sync-failed'].includes(response.error) ? response.error : 'operation-failed';
+    throw new InvokeError(code === 'brain-unavailable' ? 404 : 502, code, 'Owner operation failed.');
+  }
+  if (run.exit_code !== 0 || response?.ok !== true || !response.result || typeof response.result !== 'object' || Array.isArray(response.result)) {
+    throw new InvokeError(502, 'invalid-owner-output', 'Owner returned invalid output.');
+  }
+  return response.result;
+}
 
 /** The categories `total-recall remember` documents. Singular, and closed. */
 const MEMORY_CATEGORIES = new Set(['invariant', 'preference', 'correction', 'fact', 'concept', 'pattern', 'anti-pattern', 'decision', 'lore']);

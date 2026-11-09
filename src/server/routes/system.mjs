@@ -4,7 +4,6 @@
  * GET  /api/logs/:type           — Read last 200 lines of server or daemon log
  * POST /api/diagnostics/agents   — Run upgrade --agents diagnostics
  * GET  /api/pairing              — Reachable URLs for the mobile pairing QR
- * GET  /api/tasks/failed         — List failed tasks from the DLQ
  * POST /api/tasks/:id/retry      — Re-queue a failed task
  * GET  /api/usage                — Usage ledger + cost summary
  * GET  /api/usage/providers      — Spend as the providers report it
@@ -139,20 +138,6 @@ router.get('/api/pairing', requireAuth, requireScope('config:read'), async (_req
       listenHosts: getBoundHosts(),
     });
     res.json(info);
-  } catch (err) {
-    serverError(res, err);
-  }
-});
-
-/**
- * GET /api/tasks/failed
- * List failed tasks from the scheduler DLQ.
- */
-router.get('/api/tasks/failed', requireAuth, async (req, res) => {
-  try {
-    const { listTasks } = await import('../../core/task-envelope.mjs');
-    const failed = listTasks(QUEUE_DIR, { status: 'failed' });
-    res.json({ total: failed.length, tasks: failed });
   } catch (err) {
     serverError(res, err);
   }

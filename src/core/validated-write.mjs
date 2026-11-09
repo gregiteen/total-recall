@@ -156,6 +156,7 @@ export async function writeNodeValidatedAsync(node, vaultDir, options = {}) {
     agentRole,
     leaseStore,
     eventLogDir,
+    allowLong: options.allowLong === true,
   });
 
   if (result.success && !dryRun) {

@@ -60,24 +60,6 @@ describe('System Router', () => {
     expect(res.body).toHaveProperty('content');
   });
 
-  it('GET /api/tasks/failed returns total and tasks array shape', async () => {
-    vi.doMock('../../core/scheduler.mjs', () => ({
-      loadPendingTasks: vi.fn().mockReturnValue([
-        { slug: 'task-1', status: 'failed' },
-        { slug: 'task-2', status: 'pending' },
-      ]),
-      updateTaskStatus: vi.fn(),
-    }));
-
-    const res = await request(app).get('/api/tasks/failed');
-    // Route exists — may be 200 or 500 depending on scheduler import
-    expect([200, 500]).toContain(res.status);
-    if (res.status === 200) {
-      expect(res.body).toHaveProperty('total');
-      expect(res.body).toHaveProperty('tasks');
-    }
-  });
-
   it('POST /api/daemon/restart restarts the daemon and returns success', async () => {
     vi.doMock('../../core/daemon-control.mjs', () => ({
       stopDaemon: vi.fn(() => true),

@@ -34,7 +34,6 @@ export const LAYER_WEIGHTS = Object.freeze({
   'skill-engineering': 0.5,
   'proactive-research': 0.4,
   'self-evaluation': 0.3,
-  'exploration': 0.2,
 });
 
 // ─── Priority Queue ─────────────────────────────────────────────────────────────
@@ -341,23 +340,6 @@ function generatePostMortemTask(sessionsDir) {
     created_by: 'scheduler-idle',
     reason: `Idle task: post-mortem analysis of session ${target.name}.`,
     body: `## Objective\nRead the session transcript and extract:\n1. New patterns observed (user preferences, coding style)\n2. New facts mentioned (APIs, tools, versions)\n3. Skill gaps (agent struggled with topic X)\n4. Rule violations (did the agent follow all invariants?)\n\nFor each extraction, produce a draft memory node with appropriate x_memory_layer.`,
-  };
-}
-
-/**
- * Generate a cutoff audit task — scans vault for nodes with intrinsic LLM
- * knowledge that may have drifted since the model's training cutoff.
- */
-function generateCutoffAuditTask() {
-  return {
-    type: 'task',
-    slug: `cutoff-audit-${Date.now().toString(36)}`,
-    priority: 60,
-    category: 'cutoff-audit',
-    status: 'pending',
-    created_by: 'scheduler-idle',
-    reason: 'Idle task: scan vault for training-cutoff assumption drift',
-    body: 'Identify memory nodes containing time-sensitive claims based on intrinsic LLM knowledge. Flag high-drift items (API versions, pricing, model specs, framework changes) for verification against current real-world sources.',
   };
 }
 

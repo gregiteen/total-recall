@@ -37,7 +37,7 @@ function printHelp() {
 
   add options:
     --kind <k>         memory | research | maintenance | system | custom (default: custom)
-    --executor <id>    dream | custom | research | session-ingest | surface-compile | prune
+    --executor <id>    dream | custom | research | legacy
     --priority <p>     high | normal | low | absolute | 0-100 (default: normal)
     --cap <list>       Comma-separated capabilities (default: vault:read)
                        Use vault:write to draft results into memory-inbox
