@@ -38,6 +38,14 @@ describe('daemon-loop.mjs', () => {
     expect(writeInterrupt).toBeDefined();
   });
 
+  it('keeps the follower heartbeat sleep and requests only local lesson work', async () => {
+    const scheduler = { next: vi.fn(() => ({ task: null, source: 'empty' })) };
+    const sleep = vi.fn(async () => {});
+    await nextDaemonTask(scheduler, { localOnly: true, sleep });
+    expect(scheduler.next).toHaveBeenCalledWith({ localOnly: true });
+    expect(sleep).toHaveBeenCalledWith(10000);
+  });
+
   it('sleeps through repeated empty queues without writing dream tasks', async () => {
     const scheduler = { next: vi.fn(() => ({ task: null, source: null })) };
     const sleep = vi.fn(async () => {});

@@ -4,7 +4,7 @@ import { loadPluginModule as __loadOwnedPlugin } from './plugin-runtime.mjs';
  *
  * Durable worker over the open task envelope queue.
  * - Dispatches via executor registry (fail-loud on unknown)
- * - Does NOT invent idle work unless TR_IDLE_TASKS=1
+ * - Automations owns scheduled maintenance; empty queues stay empty
  * - Executes dream tasks scheduled by the automations plugin
  * - Ingests sessions on boot; recompiles surfaces every N ticks
  * - Auto-syncs all .md files from registered repos into Total Recall
@@ -62,11 +62,12 @@ const TASK_SLEEP_MS = 10000;
 const EMPTY_SLEEP_MS = 30000;
 
 /** An empty queue only sleeps. Plugin services own recurring task creation. */
-export async function nextDaemonTask(scheduler, { sleep = ms => new Promise(resolve => setTimeout(resolve, ms)) } = {}) {
-  const next = scheduler.next();
+export async function nextDaemonTask(scheduler, { localOnly = false, sleep = ms => new Promise(resolve => setTimeout(resolve, ms)) } = {}) {
+  const next = scheduler.next({ localOnly });
   if (!next.task) {
-    logger.info({ subsystem: 'daemon-loop', message: `Queue empty — sleeping ${EMPTY_SLEEP_MS}ms` });
-    await sleep(EMPTY_SLEEP_MS);
+    const sleepMs = localOnly ? TASK_SLEEP_MS : EMPTY_SLEEP_MS;
+    logger.info({ subsystem: 'daemon-loop', message: `Queue empty — sleeping ${sleepMs}ms` });
+    await sleep(sleepMs);
   }
   return next;
 }
@@ -249,6 +250,7 @@ let running = true;
 let vaultWatcher = null;
 let shuttingDown = false;
 let schedulerProtocolActive = false;
+let lastLessonScan = 0;
 
 // Upper bound on a graceful stop. A loop iteration can be mid-task, so the
 // signal cannot exit instantly — but it must exit *eventually*.
@@ -568,14 +570,20 @@ async function main() {
         }
       }
 
-      if (!await isLeader()) {
-        await new Promise(r => setTimeout(r, TASK_SLEEP_MS));
-        taskCount++;
-        continue;
+      const localOnly = !await isLeader();
+
+      // Local transcripts stay on their node. Followers also queue and run reviews.
+      if (Date.now() - lastLessonScan >= 60_000) {
+        lastLessonScan = Date.now();
+        try {
+          scanAndIngest(SESSIONS_DIR);
+          const { enqueueSessionReviews } = await import('./lessons.mjs');
+          enqueueSessionReviews({ brainDir: BRAIN_DIR });
+        } catch (error) { logger.warn('daemon-loop', `Local lesson ingest failed: ${error.message}`); }
       }
 
       // Periodically recompile surfaces (LEADER ONLY)
-      if (taskCount > 0 && taskCount % RECOMPILE_EVERY_N_TASKS === 0) {
+      if (!localOnly && taskCount > 0 && taskCount % RECOMPILE_EVERY_N_TASKS === 0) {
         logger.info({ subsystem: 'daemon-loop', message: 'Running scheduled surface recompile...' });
         try {
           const { compileSurface } = await import('./surface.mjs');
@@ -635,10 +643,14 @@ async function main() {
         queueDir: QUEUE_DIR,
         vaultDir: VAULT_DIR,
         sessionsDir: SESSIONS_DIR,
+        localOnly,
       });
 
-      const { task, source } = await nextDaemonTask(scheduler);
-      if (!task) continue;
+      const { task, source } = await nextDaemonTask(scheduler, { localOnly });
+      if (!task) {
+        if (localOnly) taskCount++;
+        continue;
+      }
 
       taskCount++;
 
