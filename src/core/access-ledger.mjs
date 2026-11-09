@@ -55,7 +55,11 @@ export function recordAccess(derivedDir, slugs, now = new Date()) {
     if (!days.includes(today)) ledger[ACTIVE_DAYS] = [...days, today].sort();
     for (const slug of unique) {
       const entry = ledger[slug] || { count: 0 };
-      ledger[slug] = { last_accessed: stamp, count: (Number(entry.count) || 0) + 1 };
+      // Three active days are enough for the field's first and second derivatives.
+      const daily = { ...entry.daily_counts, [today]: (Number(entry.daily_counts?.[today]) || 0) + 1 };
+      const recentDays = activeDays(ledger).slice(-3);
+      ledger[slug] = { last_accessed: stamp, count: (Number(entry.count) || 0) + 1,
+        daily_counts: Object.fromEntries(Object.entries(daily).filter(([day]) => recentDays.includes(day))) };
     }
     fs.mkdirSync(derivedDir, { recursive: true });
     atomicWrite(ledgerFile(derivedDir), JSON.stringify(ledger));

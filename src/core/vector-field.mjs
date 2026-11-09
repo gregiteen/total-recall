@@ -20,20 +20,18 @@
 
 import fs from 'node:fs';
 import path from 'node:path';
-import { getNodes } from './vault-cache.mjs';
-import { getEmbedding, cosineSimilarity, nodeToEmbedText, loadEmbeddingsIndex, saveEmbeddingToIndex } from './embeddings.mjs';
+import { loadNodes } from './vault.mjs';
+import { getEmbedding, loadEmbeddingsIndex } from './embeddings.mjs';
 import { inferMemoryLayer } from './memory-layers.mjs';
 import { logger } from './logger.mjs';
 import { brainDir } from './config.mjs';
+import { readAccess, recordAccess, lastUsedMs, activeDays, activeDaysSince } from './access-ledger.mjs';
+import { atomicWrite } from './vault-files.mjs';
 
 const DERIVED_DIR = path.join(brainDir, 'memory-derived');
 
 function fieldPath(derivedDir = DERIVED_DIR) {
   return path.join(derivedDir, 'vector-field.json');
-}
-
-function queryLogPath(derivedDir = DERIVED_DIR) {
-  return path.join(derivedDir, 'query-log.jsonl');
 }
 
 const LN2 = Math.log(2);
@@ -74,12 +72,14 @@ const HALF_LIFE_TABLE = {
  */
 function computeHalfLife(node) {
   // Priority overrides category
-  if (node.priority === 'absolute') return Infinity;
+  if (node.priority === 'absolute' || HALF_LIFE_TABLE[node.category] === Infinity) return Infinity;
+  const configuredDays = Number(node.decay?.half_life_days);
+  const categoryHL = configuredDays > 0 ? configuredDays * 86400000 :
+    (HALF_LIFE_TABLE[node.category] || HALF_LIFE_TABLE.fact);
   if (node.priority === 'high') {
-    const categoryHL = HALF_LIFE_TABLE[node.category] || HALF_LIFE_TABLE.fact;
     return Math.max(categoryHL, HALF_LIFE_TABLE._high);
   }
-  return HALF_LIFE_TABLE[node.category] || HALF_LIFE_TABLE.fact;
+  return categoryHL;
 }
 
 /**
@@ -120,7 +120,7 @@ function computeNovelty(accessCount) {
 /**
  * Compile the full vector field from the vault.
  *
- * 1. Embed every active node → position vectors
+ * 1. Read existing active-node embeddings → position vectors
  * 2. Compute half-life, trajectory, novelty per point
  * 3. Compute full pairwise covariance → coupling matrix
  * 4. Extract dependency graph
@@ -128,133 +128,97 @@ function computeNovelty(accessCount) {
  */
 export async function compileField({ vaultDir, derivedDir = DERIVED_DIR } = {}) {
   const startTime = Date.now();
-  const allNodes = getNodes(vaultDir).filter(n => n.status === 'active');
+  const allNodes = loadNodes(vaultDir || path.join(brainDir, 'memory-vault')).filter(n => n.status === 'active');
   const totalNodes = allNodes.length;
   const now = Date.now();
 
   logger.info('vector-field', `Compiling field from ${totalNodes} nodes...`);
 
-  // ── Load query log for trajectory computation ──
-  const queryHistory = loadQueryHistory(derivedDir);
+  const ledger = readAccess(derivedDir);
 
-  // ── Phase 1: Embed all nodes + compute physics ──
-  const existingIndex = loadEmbeddingsIndex(derivedDir);
+  // ── Phase 1: Read stored vectors and compute physics ──
+  const existingIndex = fs.existsSync(path.join(derivedDir, 'embeddings.db')) ? loadEmbeddingsIndex(derivedDir) : {};
   const points = [];
-  const newlyEmbedded = new Map();
-  let embedded = 0;
   let cached = 0;
+  let missing = 0;
+  let dimensions = null;
 
-  const EMBED_CONCURRENCY = 5;
-  let cursor = 0;
-
-  async function embedWorker() {
-    while (cursor < allNodes.length) {
-      const i = cursor++;
-      const node = allNodes[i];
-      const text = nodeToEmbedText(node);
-
-      let embedding;
-      if (existingIndex[node.slug]?.embedding) {
-        embedding = existingIndex[node.slug].embedding;
-        cached++;
-      } else {
-        try {
-          embedding = await getEmbedding(text);
-          newlyEmbedded.set(node.slug, embedding);
-          embedded++;
-        } catch (err) {
-          logger.error('vector-field', `Failed to embed ${node.slug}: ${err.message}`);
-          continue;
-        }
-      }
-
-      // ── Physics computation ──
-      const decay = node.decay || {};
-      const accessCount = decay.access_count || 0;
-      const lastAccessed = node.last_accessed ? new Date(node.last_accessed).getTime() : 0;
-      const createdAt = node.created ? new Date(node.created).getTime() : now;
-      const ageMs = now - createdAt;
-
-      // Half-life
-      const halfLife = computeHalfLife(node);
-      const lambda = decayConstant(halfLife);
-
-      // Velocity: dR/dt from query log
-      const { velocity, trajectory } = computeTrajectory(node.slug, queryHistory, now);
-
-      // Novelty
-      const novelty = computeNovelty(accessCount);
-
-      // Peak relevance (baseline from importance + priority)
-      const importanceWeight = (node.importance || 3) / 5;
-      const priorityWeight = node.priority === 'absolute' ? 1.0 : node.priority === 'high' ? 0.8 : node.priority === 'normal' ? 0.5 : 0.3;
-      const peakRelevance = Math.max(importanceWeight, priorityWeight);
-
-      // Time since last access (for decay computation at sample time)
-      const timeSinceAccess = lastAccessed > 0 ? now - lastAccessed : ageMs;
-
-      // Dependencies: extract from node.related field
-      const dependencies = node.related ? (Array.isArray(node.related) ? node.related : String(node.related).split(',').map(s => s.trim())) : [];
-
-      // Precompute L2 norm
-      let mag = 0;
-      for (let j = 0; j < embedding.length; j++) mag += embedding[j] * embedding[j];
-      mag = Math.sqrt(mag);
-
-      points.push({
-        slug: node.slug,
-        title: node.title || node.slug,
-        category: node.category || 'unknown',
-        layer: inferMemoryLayer(node),
-        embedding,
-        magnitude: mag,
-        // ── Physics ──
-        half_life: isFinite(halfLife) ? halfLife : null,  // null = infinite
-        lambda,                                            // decay constant
-        peak_relevance: peakRelevance,                     // R₀
-        velocity,                                          // dR/dt
-        trajectory,                                        // d²R/dt² (acceleration)
-        novelty,                                           // information density
-        // ── Metadata ──
-        access_count: accessCount,
-        last_accessed: lastAccessed,
-        created_at: createdAt,
-        time_since_access: timeSinceAccess,
-        importance: node.importance || 3,
-        priority: node.priority || 'normal',
-        dependencies,
-        body_length: (node.body || node.content || '').length,
-      });
+  for (const node of allNodes) {
+    const embedding = existingIndex[node.slug]?.embedding;
+    if (!Array.isArray(embedding) || !embedding.length || !embedding.every(Number.isFinite) ||
+        !embedding.some(value => value !== 0) || (dimensions !== null && embedding.length !== dimensions)) {
+      missing++;
+      continue;
     }
-  }
+    dimensions ??= embedding.length;
+    cached++;
 
-  const workers = Array.from(
-    { length: Math.min(EMBED_CONCURRENCY, allNodes.length) },
-    () => embedWorker()
-  );
-  await Promise.all(workers);
+    // ── Physics computation ──
+    const { accessCount, lastAccessed, elapsedMs, velocity, trajectory } = accessPhysics(node, ledger, now);
+    const createdAt = new Date(node.created || now).getTime();
+    const halfLife = computeHalfLife(node);
+    const lambda = decayConstant(halfLife);
 
-  for (const [slug, embedding] of newlyEmbedded) {
-    saveEmbeddingToIndex(derivedDir, slug, embedding);
+    // Novelty
+    const novelty = computeNovelty(accessCount);
+
+    // Peak relevance (baseline from importance + priority)
+    const importanceWeight = (node.importance || 3) / 5;
+    const priorityWeight = node.priority === 'absolute' ? 1.0 : node.priority === 'high' ? 0.8 : node.priority === 'normal' ? 0.5 : 0.3;
+    const peakRelevance = Math.max(importanceWeight, priorityWeight);
+
+    // Time since last access (for decay computation at sample time)
+    const timeSinceAccess = elapsedMs;
+
+    // Dependencies: extract from node.related field
+    const dependencies = node.related ? (Array.isArray(node.related) ? node.related : String(node.related).split(',').map(s => s.trim())) : [];
+
+    // Precompute L2 norm
+    let mag = 0;
+    for (let j = 0; j < embedding.length; j++) mag += embedding[j] * embedding[j];
+    mag = Math.sqrt(mag);
+
+    points.push({
+      slug: node.slug,
+      title: node.title || node.slug,
+      category: node.category || 'unknown',
+      layer: inferMemoryLayer(node),
+      embedding,
+      magnitude: mag,
+      // ── Physics ──
+      half_life: isFinite(halfLife) ? halfLife : null,  // null = infinite
+      lambda,                                            // decay constant
+      peak_relevance: peakRelevance,                     // R₀
+      velocity,                                          // dR/dt
+      trajectory,                                        // d²R/dt² (acceleration)
+      novelty,                                           // information density
+      // ── Metadata ──
+      access_count: accessCount,
+      last_accessed: lastAccessed,
+      created_at: createdAt,
+      time_since_access: timeSinceAccess,
+      importance: node.importance || 3,
+      priority: node.priority || 'normal',
+      dependencies,
+      body_length: (node.body || node.content || '').length,
+    });
   }
 
   const embedMs = Date.now() - startTime;
-  logger.info('vector-field', `Embedded ${embedded} new + ${cached} cached in ${embedMs}ms`);
+  logger.info('vector-field', `Loaded ${cached} existing vectors; ${missing} missing or incompatible`);
 
   // ── Phase 2: Pairwise covariance matrix ──
   const N = points.length;
   const slugIndex = points.map(p => p.slug);
-  const covariance = new Array(N);
+  const covariance = Array.from({ length: N }, () => new Float32Array(N));
 
   for (let i = 0; i < N; i++) {
-    covariance[i] = new Float32Array(N);
     for (let j = i; j < N; j++) {
       if (i === j) {
         covariance[i][j] = 1.0;
       } else {
         const sim = fastCosine(points[i].embedding, points[j].embedding, points[i].magnitude, points[j].magnitude);
         covariance[i][j] = sim;
-        if (!covariance[j]) covariance[j] = new Float32Array(N);
         covariance[j][i] = sim;
       }
     }
@@ -274,7 +238,8 @@ export async function compileField({ vaultDir, derivedDir = DERIVED_DIR } = {}) 
     meta: {
       total_nodes: totalNodes,
       points_compiled: N,
-      embedded_new: embedded,
+      embedded_new: 0,
+      missing_embeddings: missing,
       embedded_cached: cached,
       embed_ms: embedMs,
       covariance_ms: covMs,
@@ -289,54 +254,51 @@ export async function compileField({ vaultDir, derivedDir = DERIVED_DIR } = {}) 
 
   const outPath = fieldPath(derivedDir);
   fs.mkdirSync(path.dirname(outPath), { recursive: true });
-  fs.writeFileSync(outPath, JSON.stringify(field));
+  atomicWrite(outPath, JSON.stringify(field));
 
   logger.info('vector-field', `Field compiled: ${N} points, ${N * N} couplings, ${field.meta.infinite_halflife} immortal, ${field.meta.with_dependencies} with deps, ${field.meta.compile_ms}ms`);
 
   return field;
 }
 
-// ─── Trajectory Computation ─────────────────────────────────────────────────
-
-/**
- * Compute velocity (dR/dt) and trajectory (d²R/dt²) from query log.
- * Uses 3 time windows to detect acceleration/deceleration.
- */
-function computeTrajectory(slug, queryHistory, now) {
-  const WINDOW = 24 * 60 * 60 * 1000; // 1 day
-
-  // Count hits in 3 windows: [0-24h], [24-48h], [48-72h]
-  let w0 = 0, w1 = 0, w2 = 0;
-  for (const entry of queryHistory) {
-    if (!entry.hits?.includes(slug)) continue;
-    const age = now - entry.t;
-    if (age < WINDOW) w0++;
-    else if (age < 2 * WINDOW) w1++;
-    else if (age < 3 * WINDOW) w2++;
-  }
-
-  // Velocity = first derivative (recent vs previous)
-  const velocity = (w0 - w1) * 0.1;
-
-  // Trajectory = second derivative (acceleration of velocity)
-  const v_prev = (w1 - w2) * 0.1;
-  const trajectory = velocity - v_prev; // positive = accelerating, negative = decelerating
-
-  return {
-    velocity: Math.max(-1, Math.min(1, velocity)),
-    trajectory: Math.max(-1, Math.min(1, trajectory)),
-  };
+/** Read live usage. Old ledgers have no daily counts, so their trend is unknown (zero). */
+function accessPhysics(node, ledger, now) {
+  const entry = ledger[node.slug];
+  const accessCount = Math.max(0, Number(entry?.count ?? node.access_count ?? node.decay?.access_count) || 0);
+  const lastAccessed = lastUsedMs(node, ledger);
+  const days = activeDays(ledger).filter(day => day <= new Date(now).toISOString().slice(0, 10));
+  const counts = [0, 1, 2].map(offset => Number(entry?.daily_counts?.[days.at(-1 - offset)]) || 0);
+  const clamp = value => Math.max(-1, Math.min(1, value));
+  return { accessCount, lastAccessed,
+    elapsedMs: days.length ? activeDaysSince({ _active_days: days }, lastAccessed) * 86400000 : Math.max(0, now - lastAccessed),
+    velocity: clamp((counts[0] - counts[1]) * .1),
+    trajectory: clamp((counts[0] - 2 * counts[1] + counts[2]) * .1) };
 }
 
-function loadQueryHistory(derivedDir = DERIVED_DIR) {
-  try {
-    const logPath = queryLogPath(derivedDir);
-    if (!fs.existsSync(logPath)) return [];
-    const lines = fs.readFileSync(logPath, 'utf8').trim().split('\n');
-    const cutoff = Date.now() - (3 * 24 * 60 * 60 * 1000); // only last 3 days
-    return lines.map(l => { try { return JSON.parse(l); } catch { return null; } })
-      .filter(e => e && e.t > cutoff);
-  } catch { return []; }
+/** Re-rank only recall candidates. No provider call or access write. */
+export function rankWithField(results, { field, derivedDir = DERIVED_DIR, now = Date.now() } = {}) {
+  if (!field) throw new Error('Vector field not compiled. Run total-recall recall --compile-field first.');
+  const ledger = readAccess(derivedDir);
+  const indexes = new Map(field.points.map((point, index) => [point.slug, index]));
+  const ranked = results.map(result => {
+    const index = result.type === 'session' ? undefined : indexes.get(result.slug);
+    if (index === undefined) return result;
+    const point = field.points[index];
+    const physics = accessPhysics({ ...point, last_accessed: point.last_accessed, created: point.created_at }, ledger, now);
+    const relevance = effectiveRelevance(point.peak_relevance, point.lambda, physics.elapsedMs, physics.trajectory);
+    let coupling = 0, peers = 0;
+    for (const candidate of results) {
+      const other = candidate.type === 'session' ? undefined : indexes.get(candidate.slug);
+      if (other === undefined || other === index) continue;
+      coupling += Math.max(0, field.covariance[index][other]) * candidate.score;
+      peers++;
+    }
+    // The base score remains the main signal. Missing vectors and sessions retain their score.
+    const score = result.score * (.7 + .3 * relevance) + .05 * physics.velocity +
+      .05 * computeNovelty(physics.accessCount) + .15 * (peers ? coupling / peers : 0);
+    return { ...result, base_score: result.score, score: round4(score), field_score: round4(score) };
+  });
+  return ranked.sort((a, b) => b.score - a.score);
 }
 
 // ─── Fast Cosine ────────────────────────────────────────────────────────────
@@ -381,7 +343,14 @@ export async function sampleField({
     if (!field) throw new Error('Vector field not compiled. Run compileField() first.');
   }
 
-  const { points, covariance, slugIndex } = field;
+  const ledger = readAccess(derivedDir);
+  const points = field.points.map(point => {
+    const usage = accessPhysics({ ...point, created: point.created_at }, ledger, now);
+    return { ...point, velocity: usage.velocity, trajectory: usage.trajectory,
+      novelty: computeNovelty(usage.accessCount), access_count: usage.accessCount,
+      last_accessed: usage.lastAccessed, time_since_access: usage.elapsedMs };
+  });
+  const { covariance } = field;
   const N = points.length;
   if (N === 0) return { results: [], query_embedding: [], sample_ms: 0, interference: [] };
 
@@ -401,7 +370,7 @@ export async function sampleField({
   const decayedScores = new Float64Array(N);
   for (let i = 0; i < N; i++) {
     const p = points[i];
-    const elapsed = p.last_accessed > 0 ? now - p.last_accessed : p.time_since_access || 0;
+    const elapsed = p.time_since_access || 0;
     const decayedRelevance = effectiveRelevance(p.peak_relevance, p.lambda, elapsed, p.trajectory);
     // Blend: 70% similarity, 30% decayed relevance
     decayedScores[i] = (directScores[i] * 0.7) + (decayedRelevance * 0.3);
@@ -460,7 +429,7 @@ export async function sampleField({
   // ── Format results ──
   const results = topResults.map(({ index, score }) => {
     const p = points[index];
-    const elapsed = p.last_accessed > 0 ? now - p.last_accessed : p.time_since_access || 0;
+    const elapsed = p.time_since_access || 0;
     const remainingHL = p.lambda > 0 ? Math.round((LN2 / p.lambda) / (24 * 60 * 60 * 1000)) : null;
     return {
       slug: p.slug,
@@ -485,7 +454,7 @@ export async function sampleField({
   });
 
   const sampleMs = Date.now() - startTime;
-  logQuery(query, results.map(r => r.slug), derivedDir);
+  recordAccess(derivedDir, results.map(r => r.slug));
 
   logger.info('vector-field', `Sampled in ${sampleMs}ms: ${results.length} results, ${depsPulledIn.length} deps pulled, ${interference.length} interference pairs`);
 
@@ -557,50 +526,23 @@ function round4(n) { return Math.round(n * 10000) / 10000; }
 // ─── Field Loading ──────────────────────────────────────────────────────────
 
 let _cachedField = null;
-let _cachedFieldMtime = 0;
+let _cachedFieldStamp = null;
 
 export function loadField(derivedDir = DERIVED_DIR) {
   try {
     const fp = fieldPath(derivedDir);
     if (!fs.existsSync(fp)) return null;
     const stat = fs.statSync(fp);
-    if (_cachedField && stat.mtimeMs === _cachedFieldMtime) return _cachedField;
+    const stamp = `${path.resolve(fp)}:${stat.mtimeMs}:${stat.ctimeMs}:${stat.size}`;
+    if (_cachedField && stamp === _cachedFieldStamp) return _cachedField;
     const raw = JSON.parse(fs.readFileSync(fp, 'utf8'));
+    if (!Array.isArray(raw.points) || !Array.isArray(raw.covariance) ||
+        raw.covariance.length !== raw.points.length || raw.covariance.some(row =>
+          !Array.isArray(row) || row.length !== raw.points.length || !row.every(Number.isFinite))) return null;
     _cachedField = raw;
-    _cachedFieldMtime = stat.mtimeMs;
+    _cachedFieldStamp = stamp;
     return raw;
   } catch { return null; }
-}
-
-// ─── Query Logging ──────────────────────────────────────────────────────────
-
-function logQuery(query, hitSlugs, derivedDir = DERIVED_DIR) {
-  try {
-    const logPath = queryLogPath(derivedDir);
-    fs.mkdirSync(path.dirname(logPath), { recursive: true });
-    fs.appendFileSync(logPath, JSON.stringify({ t: Date.now(), q: query.slice(0, 200), hits: hitSlugs.slice(0, 20) }) + '\n');
-  } catch { /* fire and forget */ }
-}
-
-// ─── Velocity Recomputation ─────────────────────────────────────────────────
-
-/**
- * Recompute velocity + trajectory vectors from query log.
- * Call periodically (dream cycle) to update the field in-place.
- */
-export function recomputeVelocities(field, derivedDir = DERIVED_DIR) {
-  if (!field) return field;
-  const now = Date.now();
-  const history = loadQueryHistory(derivedDir);
-
-  for (const point of field.points) {
-    const { velocity, trajectory } = computeTrajectory(point.slug, history, now);
-    point.velocity = velocity;
-    point.trajectory = trajectory;
-    point.novelty = computeNovelty(point.access_count);
-  }
-
-  return field;
 }
 
 // ─── Field Statistics ───────────────────────────────────────────────────────

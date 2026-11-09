@@ -1,5 +1,22 @@
 import { resolveAgentDir, resolveBrainDir, parseLayerFlag, getBothBrains } from './agent-dir.mjs';
 import path from 'node:path';
+import fs from 'node:fs';
+
+/** One brain search shared by recall and paired evaluation. Does not record access. */
+export async function searchRecallBrain(query, { semantic = false, forceFast = false, field = false, ...options } = {}) {
+  let rankResults = null;
+  if (field) {
+    const { loadField, rankWithField } = await import('../core/vector-field.mjs');
+    const compiled = loadField(options.derivedDir);
+    if (!compiled) throw new Error('Vector field missing or corrupt. Run total-recall recall --compile-field first.');
+    rankResults = results => rankWithField(results, { field: compiled, derivedDir: options.derivedDir });
+  }
+  const { fastSearch } = await import('../core/fast-recall.mjs');
+  const fastResults = fastSearch(query, { ...options, fullText: !forceFast, rankResults });
+  if (!semantic || fastResults.some(result => (result.base_score ?? result.score) === 1) || forceFast) return fastResults;
+  const { semanticSearch } = await import('../core/search.mjs');
+  return semanticSearch(query, { ...options, rankResults });
+}
 
 function printHelp() {
   console.log(`
@@ -20,7 +37,17 @@ function printHelp() {
     --fast                     Force frontmatter-only search without semantic fallback
     --local                    Search indexed body text without a provider (default)
     --semantic                 Opt into semantic enrichment
+    --field                    Re-rank candidates with the compiled field (opt-in, local)
+    --compile-field            Compile existing embeddings into the selected brain's field
+    --evaluate-field <file>     Compare local recall with/without field on fixed JSON queries
     --timings                  Print local stage timings on stderr
+
+  Field operations (support --project/--global, --top-k, --format):
+    total-recall recall --compile-field --project
+    total-recall recall --evaluate-field queries.json --project --format json
+    Query file: [{ "query": "search terms", "relevant": ["expected-slug"] }]
+    Overlap@k = shared slugs / k. Hit rate@k = queries with a relevant slug / queries.
+    Evaluation does not record access. It uses local recall and requires a compiled field.
 
   Examples:
     npx total-recall recall "Never run tsc directly"
@@ -55,6 +82,7 @@ export default async function recall(args) {
   let forceFast = false;
   let semantic = false;
   let timings = false;
+  let field = false;
 
   for (let i = 1; i < remainingArgs.length; i++) {
     const arg = remainingArgs[i];
@@ -111,8 +139,11 @@ export default async function recall(args) {
       semantic = false;
     } else if (arg === '--timings') {
       timings = true;
+    } else if (arg === '--field') {
+      field = true;
     }
   }
+  top_k = Math.max(1, Math.min(20, top_k));
 
   // Determine which brains to search
   const brains = getBothBrains();
@@ -152,6 +183,26 @@ export default async function recall(args) {
   }
 
   try {
+    if (query === '--compile-field' || query === '--evaluate-field') {
+      const reports = [];
+      const cases = query === '--evaluate-field'
+        ? JSON.parse(fs.readFileSync(remainingArgs[1], 'utf8')) : null;
+      for (const target of searchTargets) {
+        const options = { vaultDir: path.join(target.brainDir, 'memory-vault'),
+          derivedDir: path.join(target.brainDir, 'memory-derived'), top_k, includeSessions: false };
+        if (query === '--evaluate-field') {
+          const { evaluateField } = await import('../core/field-evaluation.mjs');
+          reports.push({ brain: target.label, ...await evaluateField(cases, {
+            topK: top_k, search: (q, enabled) => searchRecallBrain(q, { ...options, field: enabled }),
+          }) });
+        } else {
+          const { compileField } = await import('../core/vector-field.mjs');
+          reports.push({ brain: target.label, ...(await compileField(options)).meta });
+        }
+      }
+      console.log(JSON.stringify(reports, null, 2));
+      return;
+    }
     // Search all target brains and merge results
     let allResults = [];
     let isDegraded = false;
@@ -164,8 +215,7 @@ export default async function recall(args) {
 
       try {
         let results = [];
-        const { fastSearch } = await import('../core/fast-recall.mjs');
-        const fastResults = fastSearch(query, {
+        results = await searchRecallBrain(query, {
           derivedDir,
           vaultDir,
           top_k,
@@ -174,28 +224,12 @@ export default async function recall(args) {
           modality,
           importance,
           priority,
-          fullText: !forceFast,
+          forceFast, semantic, field,
+          includeSessions: includeSessions && target.label !== 'global',
         });
-        if (timings) console.error(JSON.stringify({ brain: target.label, ...fastResults.stats }));
-        if (['missing', 'corrupt', 'metadata-only'].includes(fastResults.stats.index) && !forceFast) {
-          console.error(`Local full-text index for ${target.label}: ${fastResults.stats.index}. Run total-recall compile to rebuild; available metadata results may be incomplete.`);
-        }
-
-        if (!semantic || fastResults.some(result => result.score === 1) || forceFast) {
-          results = fastResults;
-        } else {
-          const { semanticSearch } = await import('../core/search.mjs');
-          results = await semanticSearch(query, {
-            vaultDir,
-            derivedDir,
-            top_k,
-            includeSessions: includeSessions && target.label !== 'global', // sessions only in project/local
-            category,
-            tags,
-            modality,
-            importance,
-            priority
-          });
+        if (timings) console.error(JSON.stringify({ brain: target.label, ...results.stats }));
+        if (['missing', 'corrupt', 'metadata-only'].includes(results.stats?.index) && !forceFast) {
+          console.error(`Local full-text index for ${target.label}: ${results.stats.index}. Run total-recall compile to rebuild; available metadata results may be incomplete.`);
         }
         if (results.degradedTextSearch) {
           isDegraded = true;
