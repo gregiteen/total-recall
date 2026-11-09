@@ -5,7 +5,7 @@ import { loadPluginModule as __loadOwnedPlugin } from './plugin-runtime.mjs';
  * Durable worker over the open task envelope queue.
  * - Dispatches via executor registry (fail-loud on unknown)
  * - Does NOT invent idle work unless TR_IDLE_TASKS=1
- * - Periodically runs dream (system memory consolidation)
+ * - Executes dream tasks scheduled by the automations plugin
  * - Ingests sessions on boot; recompiles surfaces every N ticks
  * - Auto-syncs all .md files from registered repos into Total Recall
  *
@@ -17,7 +17,7 @@ import { DAEMON_PID_FILE } from './daemon-control.mjs';
 import fs from 'fs';
 import { fileURLToPath } from 'node:url';
 import { readProcessCommand, entryPathHint, shouldHonorPidLock } from './pid-lock.mjs';
-import { createScheduler, updateTaskStatus, persistTaskToDisk } from './scheduler.mjs';
+import { createScheduler, updateTaskStatus } from './scheduler.mjs';
 import { scanAndIngest } from './session-watcher.mjs';
 import { syncAllRepos } from './repo-sync.mjs';
 import { refreshProviderUsage } from './usage-fetcher.mjs';
@@ -26,7 +26,7 @@ import { updateQueueItem } from './research-queue.mjs';
 import { agentDir, brainDir, detectProjectBrain } from './config.mjs';
 import { runCrons } from './crons.mjs';
 import { dispatchTask as registryDispatch } from './task-executors.mjs';
-import { buildTaskEnvelope, publishTaskSchedulerProtocol } from './task-envelope.mjs';
+import { publishTaskSchedulerProtocol } from './task-envelope.mjs';
 
 const AGENT_DIR = agentDir;
 const BRAIN_DIR = brainDir;
@@ -61,8 +61,15 @@ const RECOMPILE_EVERY_N_TASKS = 20;
 const TASK_SLEEP_MS = 10000;
 const EMPTY_SLEEP_MS = 30000;
 
-// Run a system dream every N empty ticks (memory consolidation without busy-work)
-const DREAM_EVERY_N_EMPTY = 20;
+/** An empty queue only sleeps. Plugin services own recurring task creation. */
+export async function nextDaemonTask(scheduler, { sleep = ms => new Promise(resolve => setTimeout(resolve, ms)) } = {}) {
+  const next = scheduler.next();
+  if (!next.task) {
+    logger.info({ subsystem: 'daemon-loop', message: `Queue empty — sleeping ${EMPTY_SLEEP_MS}ms` });
+    await sleep(EMPTY_SLEEP_MS);
+  }
+  return next;
+}
 
 function executorContext(runtimeConfig) {
   return {
@@ -451,10 +458,9 @@ async function main() {
     }
   }
 
-  let emptyTicks = 0;
 
   // Per-node services owned by plugins (scheduled plugin tasks belong to
-  // user-automations) start here; core runs whatever active plugins declare.
+  // automations) start here; core runs whatever active plugins declare.
   try {
     const { startPluginDaemonServices } = await import('./plugin-runtime.mjs');
     const services = await startPluginDaemonServices();
@@ -631,41 +637,8 @@ async function main() {
         sessionsDir: SESSIONS_DIR,
       });
 
-      let { task, source } = scheduler.next();
-
-      // Empty queue: optional system dream, then sleep (no busy-work invention)
-      if (!task) {
-        emptyTicks++;
-        if (emptyTicks % DREAM_EVERY_N_EMPTY === 0) {
-          const dreamEnv = buildTaskEnvelope({
-            intent: 'Scheduled system dream cycle',
-            slug: `dream-system-${Date.now().toString(36)}`,
-            kind: 'system',
-            executor: 'dream',
-            category: 'memory-maintenance',
-            priority: 70,
-            system: true,
-            origin: { agent: 'daemon', created_by: 'daemon-system' },
-            capabilities: ['vault:read', 'vault:write'],
-          });
-          persistTaskToDisk(dreamEnv, QUEUE_DIR);
-          task = dreamEnv;
-          source = 'system';
-          logger.info({
-            subsystem: 'daemon-loop',
-            message: `Empty queue → enqueue system dream (${emptyTicks} empty ticks)`,
-          });
-        } else {
-          logger.info({
-            subsystem: 'daemon-loop',
-            message: `Queue empty (tick ${emptyTicks}) — sleeping ${EMPTY_SLEEP_MS}ms`,
-          });
-          await new Promise((r) => setTimeout(r, EMPTY_SLEEP_MS));
-          continue;
-        }
-      } else {
-        emptyTicks = 0;
-      }
+      const { task, source } = await nextDaemonTask(scheduler);
+      if (!task) continue;
 
       taskCount++;
 

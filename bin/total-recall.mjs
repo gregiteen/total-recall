@@ -70,7 +70,8 @@ async function printHelp() {
     preflight <cmd>     ack | check | gate: the receipt every harness hook enforces (alias: tr-preflight)
     auth secret <cmd>   Credentials (the only secrets path): list|get|set|rotate|remote deploy|diff-env|export-env
     compile             Rebuild instruction surfaces
-    dream               Memory consolidation cycle
+    dream               Memory consolidation cycle (--all-brains for this node)
+    server              Repair the macOS server LaunchAgent (ensure --dry-run to preview)
     proposals <cmd>     Review / apply optimizer proposals (list|apply|revert)
     task <cmd>          Enqueue daemon work (open envelope)
     daemon <cmd>        Background worker (start|stop|status)
@@ -139,7 +140,7 @@ async function main() {
     'compile', 'rebuild', 'dream', 'proposals', 'proposal', 'task',
     'daemon', 'skill', 'plugin', 'plugins',
     'harness', 'agent', 'agents', 'brain', 'status',
-    'doctor', 'brief', 'startup', 'init', 'connect', 'new', 'preflight', 'tr-preflight'
+    'doctor', 'brief', 'startup', 'server', 'init', 'connect', 'new', 'preflight', 'tr-preflight'
   ]);
 
   // Consulting Total Recall is what the repository-sweep policy looks for. Never fatal.

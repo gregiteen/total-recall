@@ -148,7 +148,12 @@ export async function startupHealth({ cwd = process.cwd(), brainDir, brainUrl = 
       remoteDaemon = { status: body.daemon === 'running' ? 'running' : ['dead', 'stopped', 'not-started'].includes(body.daemon) ? 'stopped' : 'unknown', source: 'remote-health' };
       if (local) {
         const own = identity(serverFile, path.join(packageRoot, 'src', 'server', 'index.mjs'));
-        if (own.status !== 'running') return { status: own.status === 'conflict' ? 'conflict' : 'unknown', reason: 'server-process-unverified' };
+        if (own.status !== 'running') {
+          const actualRoot = own.entry?.endsWith(path.join('src', 'server', 'index.mjs'))
+            ? path.resolve(path.dirname(own.entry), '../..') : null;
+          return { status: own.status === 'conflict' ? 'conflict' : 'unknown',
+            reason: actualRoot ? `server runs from ${actualRoot}; expected ${packageRoot}; run total-recall server ensure` : 'server-process-unverified' };
+        }
         if (!await listener(own.pid, new URL(brainUrl), { run, cwd })) return { status: 'unknown', reason: 'server-listener-unverified' };
       }
       const drift = local && verdict.status === 'ready' ? serverCodeDrift(verdict.version, onDiskVersion()) : null;

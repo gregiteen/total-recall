@@ -41,7 +41,7 @@ describe('uniform brain updates', () => {
     const exec = execWithInstall();
     const result = await run([root, nested], exec);
     expect(result.consumer_count).toBe(2);
-    expect(result.would_update).toBe(2);
+    expect(result.not_installed).toBe(2);
     expect(fs.readFileSync(path.join(root, 'package.json'), 'utf8')).toBe(before);
     expect(exec.mock.calls.every(([, args]) => args[0] === 'view')).toBe(true);
     expect(fs.existsSync(path.join(root, '.total-recall-update.lock'))).toBe(false);
@@ -122,59 +122,42 @@ describe('uniform brain updates', () => {
       } finally { vi.unstubAllEnvs(); }
     });
 
-    it('keeps an absent dev dependency absent, and its pin current', async () => {
-      const root = manifest(path.join(tmp, 'app'), { devDependencies: { 'total-recall-brain': '3.39.0' } });
-      const exec = execWithInstall();
-      const result = await run([root], exec, { dryRun: false });
-      expect(result.failed).toBe(0);
-      expect(result.updated).toBe(1);
-      const [[, args]] = installArgs(exec);
-      expect(args).toContain('--package-lock-only');
-      expect(fs.existsSync(path.join(root, 'node_modules'))).toBe(false);
-      expect(JSON.parse(fs.readFileSync(path.join(root, 'package.json'))).devDependencies['total-recall-brain']).toBe('3.39.1');
+    it.each(['dependencies', 'devDependencies'])('reports pinned missing %s and installs it on apply', async section => {
+      const root = manifest(path.join(tmp, 'app'), { [section]: { '@gregiteen/ssss-cli': '0.11.0' } });
+      const exec = execWithInstall(() => { installed(root, '@gregiteen/ssss-cli', '0.11.0'); return { status: 0 }; });
+      const before = fs.readFileSync(path.join(root, 'package.json'), 'utf8');
+      const preview = await run([root], exec);
+      expect(preview.not_installed).toBe(1);
+      expect(preview.up_to_date).toBe(0);
+      expect(preview.would_update).toBe(0);
+      expect(preview.results[0].status).toBe('not_installed');
+      expect(installArgs(exec)).toEqual([]);
+      expect(fs.readFileSync(path.join(root, 'package.json'), 'utf8')).toBe(before);
+      const applied = await run([root], exec, { dryRun: false });
+      expect(applied.failed).toBe(0);
+      expect(applied.updated).toBe(1);
+      expect(applied.results[0].packages[0].installed).toBe('0.11.0');
+      expect(installArgs(exec)[0][1]).not.toContain('--package-lock-only');
+      expect((await run([root], exec)).results[0].status).toBe('up_to_date');
     });
 
-    it('leaves an absent dev dependency alone once its pin is current', async () => {
-      const root = manifest(path.join(tmp, 'app'), { devDependencies: { 'total-recall-brain': '3.39.1' } });
+    it('reports a current installed package as up_to_date without installing', async () => {
+      const root = manifest(path.join(tmp, 'app'), { dependencies: { '@gregiteen/ssss-cli': '0.11.0' } });
+      installed(root, '@gregiteen/ssss-cli', '0.11.0');
       const exec = execWithInstall();
-      const result = await run([root], exec, { dryRun: false });
-      expect(result.failed).toBe(0);
-      expect(result.results.find(r => r.root === root).status).toBe('up_to_date');
+      const result = await run([root], exec);
+      expect(result.up_to_date).toBe(1);
+      expect(result.not_installed).toBe(0);
+      expect(result.results[0].status).toBe('up_to_date');
       expect(installArgs(exec)).toEqual([]);
     });
 
-    it('still installs a runtime dependency missing from an existing tree, and fails when it does not arrive', async () => {
+    it('fails verification when a missing package does not arrive', async () => {
       const root = manifest(path.join(tmp, 'app'), { dependencies: { 'total-recall-brain': '3.39.1' } });
-      installed(root, 'left-pad', '1.3.0');
       const exec = execWithInstall();
       const result = await run([root], exec, { dryRun: false });
-      const [[, args]] = installArgs(exec);
-      expect(args).not.toContain('--package-lock-only');
+      expect(installArgs(exec)[0][1]).not.toContain('--package-lock-only');
       expect(result.failed).toBe(1);
-    });
-
-    it('never reinstalls a tree into a checkout that has none, and keeps its runtime pin current', async () => {
-      // A checkout whose node_modules were reclaimed for disk space stays without them.
-      const root = manifest(path.join(tmp, 'app'), { dependencies: { 'total-recall-brain': '3.39.0' } });
-      const exec = execWithInstall();
-      const result = await run([root], exec, { dryRun: false });
-      expect(result.failed).toBe(0);
-      expect(result.updated).toBe(1);
-      const [[, args]] = installArgs(exec);
-      expect(args).toContain('--package-lock-only');
-      // No tree is built, so the checkout's own postinstall (which needs one) never runs.
-      expect(args).toContain('--ignore-scripts');
-      expect(fs.existsSync(path.join(root, 'node_modules'))).toBe(false);
-      expect(JSON.parse(fs.readFileSync(path.join(root, 'package.json'))).dependencies['total-recall-brain']).toBe('3.39.1');
-    });
-
-    it('leaves a tree-less checkout alone once its runtime pin is current', async () => {
-      const root = manifest(path.join(tmp, 'app'), { dependencies: { 'total-recall-brain': '3.39.1' } });
-      const exec = execWithInstall();
-      const result = await run([root], exec, { dryRun: false });
-      expect(result.failed).toBe(0);
-      expect(result.results.find(r => r.root === root).status).toBe('up_to_date');
-      expect(installArgs(exec)).toEqual([]);
     });
   });
 
@@ -262,8 +245,8 @@ describe('uniform brain updates', () => {
     const good = manifest(path.join(tmp, 'good'), { dependencies: { 'total-recall-brain': '3.35.0' } });
     const result = await run([bad, good, path.join(tmp, 'missing')], execWithInstall());
     expect(result.failed).toBe(2);
-    expect(result.would_update).toBe(1);
-    expect(result.results.find(row => row.root === good).status).toBe('would_update');
+    expect(result.not_installed).toBe(1);
+    expect(result.results.find(row => row.root === good).status).toBe('not_installed');
   });
 
   it('descends into .agent so plugin installs are updated too', async () => {

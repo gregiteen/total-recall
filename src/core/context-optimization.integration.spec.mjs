@@ -64,7 +64,7 @@ describe('context optimization populated synthetic walkthrough', () => {
    const nodes=Array.from({length:100},(_,i)=>({slug:`rule-${i}`,title:`Rule ${i}`,category:'invariants',status:'active',body:`constraint ${i} `.repeat(30),tags:[`context:action:${i%2?'test':'publish'}`]}));
    const block=await buildRulesBlock(null,nodes,{bootstrap:true,projectRoot:root});
    // The bootstrap includes the complete built-in inventory, but no action-only rules.
-   // Bound grows with the bundled plugin inventory (11 plugins since user-automations, 2026-11-09).
+   // Bound grows with the bundled plugin inventory (11 plugins since automations, 2026-11-09).
    expect(block.length).toBeLessThan(6500);
    expect(block).toContain('Built-in commands:');
    expect(block).not.toContain('constraint 0');

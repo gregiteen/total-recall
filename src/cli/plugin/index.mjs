@@ -84,10 +84,10 @@ Commands:
 
 Examples:
   npx total-recall plugin available --use-case software-development
-  npx total-recall plugin install git-sentinel
-  npx total-recall plugin share git-sentinel
+  npx total-recall plugin install git
+  npx total-recall plugin share git
   npx total-recall plugin peers
-  npx total-recall plugin install peer:mac-mini/git-sentinel
+  npx total-recall plugin install peer:mac-mini/git
   npx total-recall plugin create reading-list --use-case research --with-cli
 `);
 }

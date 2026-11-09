@@ -5,6 +5,7 @@ export const CLI_COMMANDS = {
   setup:    'setup.mjs',
   start:    'start.mjs',
   startup:  'startup.mjs',
+  server:   'server.mjs',
   deploy:   'deploy.mjs',
   doctor:   'doctor.mjs',
   backup:   'backup.mjs',

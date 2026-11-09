@@ -49,6 +49,11 @@ const CORE_METADATA = {
     usage: 'total-recall startup [check|ensure]',
     effect: 'write'
   },
+  server: {
+    description: 'Repair and verify the macOS server LaunchAgent for this package.',
+    usage: 'total-recall server ensure [--dry-run]',
+    effect: 'write'
+  },
   deploy: {
     description: 'Deploy host runtime layers, daemon services, or launch browser setup.',
     usage: 'total-recall deploy [--ui]',
@@ -66,7 +71,7 @@ const CORE_METADATA = {
   },
   dream: {
     description: 'Trigger memory consolidation sleep cycle.',
-    usage: 'total-recall dream',
+    usage: 'total-recall dream [--all-brains] [--dry-run] [--json]',
     effect: 'write'
   },
   lint: {

@@ -136,7 +136,9 @@ Total Recall partitions your brain memory into two virtual directories:
 
 ## 🌀 The Daemon Loop & Priority Task Scheduler
 
-The background daemon (`dream.mjs`) manages the **Continuous Intelligent Scheduler** ([src/core/scheduler.mjs](../src/core/scheduler.mjs)) and task execution loops:
+The background daemon (`daemon-loop.mjs`) manages the **Continuous Intelligent Scheduler** ([src/core/scheduler.mjs](../src/core/scheduler.mjs)) and task execution loops.
+
+The automations plugin schedules `total-recall dream --all-brains` per node. The cloud daemon runs scheduled tasks on every node through mesh. Dream runs the global brain and registered project brains sequentially. Each brain has its own vault, derived directory, sessions and instruction surface. Phase 4 runs decay for that brain. Empty daemon queues only sleep. `dream --all-brains --dry-run` lists the brains and decay candidates without changes.
 
 ### 1. Priority-Driven Queue Mechanics
 Tasks are enqueued dynamically as standard Markdown files (`type: task`) located in your vault's `scheduler/queue/` directory. The scheduler resolves an **Effective Priority** by multiplying the task's base `priority` (10 to 100) by a strictly-regulated **layer weight** (`LAYER_WEIGHTS`), prioritizing critical correctness and active developer guidance over passive exploration:
@@ -150,10 +152,10 @@ Tasks are enqueued dynamically as standard Markdown files (`type: task`) located
 - `exploration` (Speculative tangents): **0.2**
 
 ### 2. The Dream Cycle Consolidation
-Every 20 task ticks, the background daemon conducts the **Dream Cycle**:
+The automations plugin schedules `dream --all-brains` per node. The cloud daemon runs scheduled tasks on every node through mesh. Each node runs the **Dream Cycle** for each of its brains:
 - **Light Sleep**: Scans for modified files, updates vector embeddings, and purges/re-indexes caches upon detecting embedding model dimension mismatches.
 - **REM**: Promotes candidate memories and records conflicts.
-- **Lucid Dreaming**: Proposes cleanups and runs memory decay on memories the access ledger shows unused for 60 days. The gate verifies each proposal; verified decay is applied with an undo snapshot. See [Memory decay](guides/memory-decay.md).
+- **Lucid Dreaming**: Proposes cleanups and runs memory decay on memories the access ledger shows unused for 60 active days of their brain. The gate verifies each proposal; verified decay is applied with an undo snapshot. See [Memory decay](guides/memory-decay.md).
 - **Deep Sleep**: Re-compiles rules and shims, and writes a daily summary note (`daily/YYYY-MM-DD.md`).
 
 ### 3. Continuous Idle Self-Improvement Loops (The Queue is NEVER Empty)

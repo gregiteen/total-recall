@@ -43,4 +43,12 @@ total-recall proposals revert <proposal-id>
 
 ## Where it runs
 
-Core provides the operations: the ledger, decay, the gate and the applier. The automations plugin owns the schedule. The cloud daemon runs the schedule for every brain on every machine in the mesh. Each brain decays its own memories; brains are never merged.
+Core provides the operations: the ledger, decay, the gate and the applier. The automations plugin schedules `total-recall dream --all-brains` per node. The cloud daemon runs scheduled tasks on every node through mesh. Each node dreams its global brain and its registered project brains, one at a time. Each brain uses its own vault and derived directory.
+
+Preview the brains and their decay candidates without changes:
+
+```bash
+total-recall dream --all-brains --dry-run --json
+```
+
+`--json` prints an array of per-brain results. A failed brain does not stop the remaining brains. The command exits 1 after all brains run if any brain failed. Unknown options exit 2. An empty daemon queue does not create dream tasks.

@@ -127,7 +127,7 @@ export function autoPruneStorage(brainDir, vaultDir, conflictsDir) {
   // Retrieve node slugs of active research projects so we never prune their drafts in progress
   const activeResearchSlugs = new Set();
   try {
-    const queue = loadQueue();
+    const queue = loadQueue(brainDir);
     for (const item of queue) {
       if (item.status === 'pending' || item.status === 'in_progress') {
         if (item.node_slug) {
@@ -447,7 +447,9 @@ export function evaluateCandidates(candidates, existingNodes, conflictsDir) {
 export async function runDreamCycle({
   vaultDir, skillsDir, derivedDir, conflictsDir, instructionsFile, runtimeConfig
 }) {
-  const sessionsDir = path.join(brainDir, 'sessions');
+  const cycleBrainDir = path.dirname(vaultDir);
+  const sessionsDir = path.join(cycleBrainDir, 'sessions');
+  const errors = [];
 
   logger.info('dream', 'PHASE 0 — Session Ingestion (IDE Conversation Logs)');
   try {
@@ -463,7 +465,7 @@ export async function runDreamCycle({
   logger.info('dream', `Modified vault files: ${modified.length}`);
 
   const candidates = collectRemCandidates({
-    brainDirPath: brainDir,
+    brainDirPath: cycleBrainDir,
     sessionsDir,
   });
   logger.info('dream', `REM candidates collected: ${candidates.length}`);
@@ -509,6 +511,7 @@ export async function runDreamCycle({
     await compileSurface({ vaultDir, skillsDir, derivedDir, instructionsFile });
     logger.info('dream', 'Surface recompiled successfully');
   } catch (err) {
+    errors.push(`Deep Sleep compile failed: ${err.message}`);
     logger.error('dream', `Deep Sleep compile failed: ${err.message}`);
   }
 
@@ -533,6 +536,7 @@ export async function runDreamCycle({
       decayProposals = await runSmartDecay(vaultDir, runtimeConfig, undefined, { derivedDir });
       logger.info('dream', `Smart decay: ${decayProposals.length} proposal(s).`);
     } catch (err) {
+      errors.push(`Smart decay failed: ${err.message}`);
       logger.error('dream', `Smart decay failed: ${err.message}`);
     }
 
@@ -571,6 +575,7 @@ export async function runDreamCycle({
       logger.info('dream', `Applied ${applied.applied} proposals (${applied.superseded} superseded, ${applied.failed} failed).`);
     }
   } catch (err) {
+    errors.push(`Optimizer failed: ${err.message}`);
     logger.error('dream', `Optimizer failed: ${err.message}`);
   }
 
@@ -584,18 +589,20 @@ export async function runDreamCycle({
       `Proposals accepted: ${proposalCount}`,
     ]);
   } catch (err) {
+    errors.push(`Daily note write failed: ${err.message}`);
     logger.error('dream', `Daily note write failed: ${err.message}`);
   }
 
   logger.info('dream', 'PHASE 5 — Automatic Storage & Memory Pruning');
   try {
-    autoPruneStorage(brainDir, vaultDir, conflictsDir);
+    autoPruneStorage(cycleBrainDir, vaultDir, conflictsDir);
     logger.info('dream', 'Automated VFS storage pruning completed successfully');
   } catch (err) {
+    errors.push(`Storage pruning failed: ${err.message}`);
     logger.error('dream', `Storage pruning failed: ${err.message}`);
   }
 
-  return { status: 'success' };
+  return errors.length ? { status: 'failed', errors } : { status: 'success' };
 }
 
 // ─── Standalone Daemon Execution ────────────────────────────────────────────────

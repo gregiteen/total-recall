@@ -85,8 +85,8 @@ describe('plugin-store', () => {
   });
 
   it('writes a plugin_record and an installed event through the Core Contract', async () => {
-    const res = await installPlugin('git-sentinel', { projectRoot: projA });
-    const record = fs.readFileSync(sharedVaultFile('system', 'plugins', 'git-sentinel.md'), 'utf8');
+    const res = await installPlugin('git', { projectRoot: projA });
+    const record = fs.readFileSync(sharedVaultFile('system', 'plugins', 'git.md'), 'utf8');
     expect(record).toContain('type: plugin_record');
     expect(record).toContain(`sha256: ${res.sha256}`);
     expect(record).toContain('kind: bundled');
@@ -102,30 +102,30 @@ describe('plugin-store', () => {
   });
 
   it('flags a plugin whose files changed since install', async () => {
-    await installPlugin('git-sentinel', { projectRoot: projA });
-    fs.appendFileSync(path.join(globalPluginsDir(), 'git-sentinel', 'README.md'), '\nlocal edit\n');
+    await installPlugin('git', { projectRoot: projA });
+    fs.appendFileSync(path.join(globalPluginsDir(), 'git', 'README.md'), '\nlocal edit\n');
     expect(listInstalledPlugins(projA)[0].modified_since_install).toBe(true);
   });
 
   it('shares only what the owner marks shared', async () => {
-    await installPlugin('git-sentinel', { projectRoot: projA });
+    await installPlugin('git', { projectRoot: projA });
     await installPlugin('code-quality', { projectRoot: projA });
     expect(listSharedPlugins(projA)).toEqual([]);
-    expect(packSharedPlugin('git-sentinel', projA)).toBeNull();
-    expect(packPublicPlugin('git-sentinel', projA)).toBeNull();
+    expect(packSharedPlugin('git', projA)).toBeNull();
+    expect(packPublicPlugin('git', projA)).toBeNull();
 
-    await setPluginShared('git-sentinel', true, { projectRoot: projA });
-    expect(listSharedPlugins(projA).map(p => p.id)).toEqual(['git-sentinel']);
-    expect(packPublicPlugin('git-sentinel', projA)?.id).toBe('git-sentinel');
+    await setPluginShared('git', true, { projectRoot: projA });
+    expect(listSharedPlugins(projA).map(p => p.id)).toEqual(['git']);
+    expect(packPublicPlugin('git', projA)?.id).toBe('git');
     expect(readEvents()).toContain('plugin.shared');
 
-    await setPluginShared('git-sentinel', false, { projectRoot: projA });
+    await setPluginShared('git', false, { projectRoot: projA });
     expect(listSharedPlugins(projA)).toEqual([]);
-    expect(packPublicPlugin('git-sentinel', projA)).toBeNull();
+    expect(packPublicPlugin('git', projA)).toBeNull();
   });
 
   it('does not publish a legacy mesh-only share', async () => {
-    await installPlugin('git-sentinel', { projectRoot: projA });
+    await installPlugin('git', { projectRoot: projA });
     const plugin = listInstalledPlugins(projA)[0];
     const discovered = (await import('./plugin-loader.mjs')).discoverPlugins(projA)[0];
     await patchPluginRecord(discovered, { shared: true });
@@ -134,12 +134,12 @@ describe('plugin-store', () => {
   });
 
   it('installs from a mesh peer, verifying the content hash', async () => {
-    await installPlugin('git-sentinel', { projectRoot: projA });
-    await setPluginShared('git-sentinel', true, { projectRoot: projA });
+    await installPlugin('git', { projectRoot: projA });
+    await setPluginShared('git', true, { projectRoot: projA });
     const listing = { plugins: listSharedPlugins(projA).map(({ _plugin, ...rest }) => rest) };
-    const bundle = packSharedPlugin('git-sentinel', projA);
+    const bundle = packSharedPlugin('git', projA);
     // One shared folder per machine: clear it so this machine receives the peer's copy.
-    await uninstallPlugin('git-sentinel', { projectRoot: projA });
+    await uninstallPlugin('git', { projectRoot: projA });
     const peerDeps = {
       peers: [{ hostname: 'node-a', ip: '100.64.0.5', online: true }],
       authorization: 'Bearer t',
@@ -151,18 +151,18 @@ describe('plugin-store', () => {
       })
     };
 
-    const res = await installPlugin('peer:node-a/git-sentinel', { projectRoot: projB, peerDeps });
-    expect(res.source).toEqual({ kind: 'peer', ref: 'peer:node-a/git-sentinel', peer_hostname: 'node-a' });
+    const res = await installPlugin('peer:node-a/git', { projectRoot: projB, peerDeps });
+    expect(res.source).toEqual({ kind: 'peer', ref: 'peer:node-a/git', peer_hostname: 'node-a' });
     expect(res.sha256).toBe(listing.plugins[0].sha256);
     expect(listInstalledPlugins(projB)[0].shared).toBe(false);
   });
 
   it('installs from a public share link only when its content hash matches', async () => {
-    await installPlugin('git-sentinel', { projectRoot: projA });
-    await setPluginShared('git-sentinel', true, { projectRoot: projA });
-    const bundle = packSharedPlugin('git-sentinel', projA);
-    const source = `https://plugins.example.com/api/public/plugins/git-sentinel/bundle#sha256=${bundle.sha256}`;
-    await uninstallPlugin('git-sentinel', { projectRoot: projA });
+    await installPlugin('git', { projectRoot: projA });
+    await setPluginShared('git', true, { projectRoot: projA });
+    const bundle = packSharedPlugin('git', projA);
+    const source = `https://plugins.example.com/api/public/plugins/git/bundle#sha256=${bundle.sha256}`;
+    await uninstallPlugin('git', { projectRoot: projA });
     const publicDeps = {
       lookup: async () => [{ address: '8.8.8.8' }],
       request: (_url, _options, callback) => {
@@ -179,38 +179,38 @@ describe('plugin-store', () => {
     const result = await installPlugin(source, { projectRoot: projB, publicDeps });
     expect(result.source.kind).toBe('public');
     expect(result.sha256).toBe(bundle.sha256);
-    await uninstallPlugin('git-sentinel', { projectRoot: projB });
+    await uninstallPlugin('git', { projectRoot: projB });
 
     await expect(installPlugin(source.replace(bundle.sha256, '0'.repeat(64)), { projectRoot: projB, publicDeps })).rejects.toThrow(/does not match the advertised/);
-    expect(fs.existsSync(path.join(globalPluginsDir(), 'git-sentinel'))).toBe(false);
+    expect(fs.existsSync(path.join(globalPluginsDir(), 'git'))).toBe(false);
   });
 
   it('rejects a tampered peer bundle and writes nothing', async () => {
-    await installPlugin('git-sentinel', { projectRoot: projA });
-    await setPluginShared('git-sentinel', true, { projectRoot: projA });
+    await installPlugin('git', { projectRoot: projA });
+    await setPluginShared('git', true, { projectRoot: projA });
     const listing = { plugins: listSharedPlugins(projA).map(({ _plugin, ...rest }) => rest) };
-    const bundle = packSharedPlugin('git-sentinel', projA);
+    const bundle = packSharedPlugin('git', projA);
     bundle.files[0].data_b64 = Buffer.from('tampered').toString('base64');
-    await uninstallPlugin('git-sentinel', { projectRoot: projA });
+    await uninstallPlugin('git', { projectRoot: projA });
     const peerDeps = {
       peers: [{ hostname: 'node-a', ip: '100.64.0.5', online: true }],
       authorization: 'Bearer t',
       fetchImpl: async () => ({ ok: true, status: 200, json: async () => listing, text: async () => JSON.stringify(bundle) })
     };
 
-    await expect(installPlugin('peer:node-a/git-sentinel', { projectRoot: projB, peerDeps })).rejects.toThrow(/hash mismatch/);
-    expect(fs.existsSync(path.join(globalPluginsDir(), 'git-sentinel'))).toBe(false);
+    await expect(installPlugin('peer:node-a/git', { projectRoot: projB, peerDeps })).rejects.toThrow(/hash mismatch/);
+    expect(fs.existsSync(path.join(globalPluginsDir(), 'git'))).toBe(false);
     expect(fs.existsSync(projectPluginsDir(projB))).toBe(false);
   });
 
   it('installs globally and removes cleanly with its record', async () => {
-    await installPlugin('git-sentinel', { projectRoot: projA, global: true });
-    expect(fs.existsSync(path.join(globalPluginsDir(), 'git-sentinel'))).toBe(true);
-    expect(listInstalledPlugins(projB).filter(p => p.id === 'git-sentinel').map(p => [p.id, p.scope])).toEqual([['git-sentinel', 'global']]);
+    await installPlugin('git', { projectRoot: projA, global: true });
+    expect(fs.existsSync(path.join(globalPluginsDir(), 'git'))).toBe(true);
+    expect(listInstalledPlugins(projB).filter(p => p.id === 'git').map(p => [p.id, p.scope])).toEqual([['git', 'global']]);
 
-    await uninstallPlugin('git-sentinel', { projectRoot: projB, global: true });
-    expect(fs.existsSync(path.join(globalPluginsDir(), 'git-sentinel'))).toBe(false);
-    const globalRecord = path.join(path.dirname(globalPluginsDir()), 'memory-vault', 'system', 'plugins', 'git-sentinel.md');
+    await uninstallPlugin('git', { projectRoot: projB, global: true });
+    expect(fs.existsSync(path.join(globalPluginsDir(), 'git'))).toBe(false);
+    const globalRecord = path.join(path.dirname(globalPluginsDir()), 'memory-vault', 'system', 'plugins', 'git.md');
     expect(fs.existsSync(globalRecord)).toBe(false);
   });
 

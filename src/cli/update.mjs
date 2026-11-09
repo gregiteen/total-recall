@@ -137,6 +137,7 @@ export default async function update(args = []) {
     if (opts.json) console.log(JSON.stringify(summary, null, 2));
     else {
       console.log(`\n  Uniform brain updates: ${summary.consumer_count || 0} consumers`);
+      console.log(`  Missing: ${summary.not_installed || 0}; current: ${summary.up_to_date || 0}; would update: ${summary.would_update || 0}; updated: ${summary.updated || 0}; failed: ${summary.failed || 0}`);
       if (summary.reason) console.log(`  ${summary.reason}`);
       for (const row of summary.results) {
         console.log(`  ${row.root}: ${row.status}`);

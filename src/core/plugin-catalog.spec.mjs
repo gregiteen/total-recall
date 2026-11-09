@@ -44,7 +44,7 @@ describe('plugin inventory and CLI library lifecycle', () => {
     const inventory = JSON.parse(fs.readFileSync(path.join(derived(), 'plugin-inventory.json')));
     const library = JSON.parse(fs.readFileSync(path.join(derived(), 'cli-library.json')));
     expect(inventory.plugins.map(p => p.id)).toContain('catalog-example');
-    expect(library.commands.find(c => c.name === 'list')).toMatchObject({ command: 'total-recall example list', declarationComplete: true });
+    expect(library.commands.find(c => c.name === 'list' && c.plugin === 'catalog-example')).toMatchObject({ command: 'total-recall example list', declarationComplete: true });
     const cli = spawnSync(process.execPath, [path.join(PACKAGE_ROOT, 'bin/total-recall.mjs'), 'plugin', 'library', '--plugin', 'catalog-example', '--json'], { cwd: root, env: process.env, encoding: 'utf8', timeout: 30000 });
     expect(cli.status, cli.stderr).toBe(0);
     expect(JSON.parse(cli.stdout).commands[0].command).toBe('total-recall example list');

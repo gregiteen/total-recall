@@ -191,23 +191,6 @@ function targetSpec(key, version) {
   return key === '@ssss/cli' ? `npm:@gregiteen/ssss-cli@${version}` : version;
 }
 
-/** Dry by default. Resolve releases once; install independently; verify actual resolution. */
-/**
- * A checkout that keeps no copy of a dev dependency runs under the shared install, so it has no
- * old version to replace. Its pin stays current, and its dev tree is its owner's to install: one
- * plugin's tree is about 460 MB, so restoring them all automatically could fill a disk.
- */
-const absentDevDep = (dep) => dep.section === 'devDependencies' && !dep.file;
-
-/**
- * A checkout with no install tree stays without one. Automatic maintenance keeps each
- * checkout's tree as found: a repo whose node_modules were reclaimed for disk space
- * gets its pin updated, never a full reinstall it did not ask for (one daemon run put
- * ~10 GB of trees back into idle checkouts this way).
- */
-const noInstallTree = (...roots) => roots.every(root => !fs.existsSync(path.join(root, 'node_modules')));
-const pinOnly = (dep, ...roots) => absentDevDep(dep) || (!dep.file && noInstallTree(...roots));
-
 /**
  * The daemon runs with NODE_ENV=production, and under that npm and pnpm remove dev dependencies
  * from whatever they install in. An install that wants a runtime tree says so with a flag.
@@ -279,12 +262,11 @@ export async function updateAllBrains(opts = {}) {
     const shared = isLink(path.join(owner.owner, 'node_modules')) || isLink(path.join(consumer.root, 'node_modules'));
     const needsChange = shared || (!consumer.runtimeOnly && overridesLag(consumer.pkg, versions)) || consumer.deps.some(dep => {
       const pinLags = !consumer.runtimeOnly && dep.declared !== targetSpec(dep.key, versions[dep.package]);
-      if (pinOnly(dep, consumer.root, owner.owner)) return pinLags;
       return pinLags || dep.version !== versions[dep.package]
         || !dep.file?.startsWith(path.join(owner.owner, 'node_modules') + path.sep);
     });
     if (!needsChange) continue;
-    row.status = dryRun ? 'would_update' : 'pending';
+    row.status = dryRun ? (consumer.deps.some(dep => !dep.version) ? 'not_installed' : 'would_update') : 'pending';
     if (!groups.has(owner.owner)) groups.set(owner.owner, { ...owner, consumers: [] });
     groups.get(owner.owner).consumers.push({ consumer, row });
   }
@@ -299,8 +281,8 @@ export async function updateAllBrains(opts = {}) {
     const runtimeOnly = group.consumers.every(({ consumer }) => consumer.runtimeOnly);
     const unpinned = runtimeOnly && group.manager === 'npm';
     const needsInstall = group.consumers.some(({ consumer }) =>
-      isLink(path.join(consumer.root, 'node_modules')) || consumer.deps.some(dep => !pinOnly(dep, consumer.root, group.owner)
-        && (dep.version !== versions[dep.package] || !dep.file?.startsWith(path.join(group.owner, 'node_modules') + path.sep))));
+      isLink(path.join(consumer.root, 'node_modules')) || consumer.deps.some(dep =>
+        dep.version !== versions[dep.package] || !dep.file?.startsWith(path.join(group.owner, 'node_modules') + path.sep)));
     try {
       lockFd = acquireBrainUpdateLock(lock, opts.lockWaitMs === undefined ? {} : { waitMs: opts.lockWaitMs });
       for (const name of ['package-lock.json', 'npm-shrinkwrap.json', 'pnpm-lock.yaml']) {
@@ -350,7 +332,6 @@ export async function updateAllBrains(opts = {}) {
         const placed = (file) => Boolean(file) && allowedRoots.some((root) => file.startsWith(root));
         const bad = consumer.deps.find(dep => {
           const actual = installedBrainPackage(consumer.root, dep.key);
-          if (pinOnly(dep, consumer.root, group.owner) && !actual.file) return false;
           return actual.version !== versions[dep.package] || !placed(actual.file);
         });
         // A link is only a fault when it escapes every legitimate root; a self-contained one is fine.
@@ -380,5 +361,7 @@ export async function updateAllBrains(opts = {}) {
     updated: results.filter(row => row.status === 'updated').length,
     shared_install: results.filter(row => row.status === 'shared_install').length,
     would_update: results.filter(row => row.status === 'would_update').length,
+    not_installed: results.filter(row => row.status === 'not_installed').length,
+    up_to_date: results.filter(row => row.status === 'up_to_date').length,
     failed: results.filter(row => row.status === 'failed').length, results };
 }

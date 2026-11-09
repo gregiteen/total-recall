@@ -1,0 +1,167 @@
+{
+  "$schema": "https://github.com/gregiteen/total-recall/blob/main/metadata.plugin.schema.json",
+  "id": "automations",
+  "name": "Automations",
+  "version": "1.1.0",
+  "description": "Run scheduled plugin tasks and inspect automation sources, triggers, observed outcomes and coverage across the mesh.",
+  "author": "Total Recall",
+  "license": "MIT",
+  "use_cases": [
+    "automation",
+    "monitoring"
+  ],
+  "gate": {
+    "tasks": ["List scheduled tasks and automations across the mesh", "Check an automation's real outcome", "Cancel a pending local task"],
+    "owned_commands": [
+      { "pattern": "(crontab\\s+-l\\b|launchctl\\s+list\\b)", "use": "total-recall automations list --json" }
+    ]
+  },
+  "cli": {
+    "answers_help": true,
+    "command": "automations",
+    "handler": "./cli.mjs",
+    "subcommands": [
+      {
+        "name": "list",
+        "description": "List automations and source coverage across known nodes",
+        "timeout_ms": 25000,
+        "effect": "read",
+        "output": "json",
+        "args": []
+      },
+      {
+        "name": "status",
+        "description": "Report observed automation states and source coverage",
+        "timeout_ms": 25000,
+        "effect": "read",
+        "output": "json",
+        "args": []
+      },
+      {
+        "name": "show",
+        "description": "Inspect one automation by its stable id",
+        "timeout_ms": 25000,
+        "effect": "read",
+        "output": "json",
+        "args": []
+      },
+      {
+        "name": "dream",
+        "description": "Run dream, including decay, for every brain on this node",
+        "timeout_ms": 600000,
+        "effect": "write",
+        "output": "json",
+        "args": []
+      },
+      {
+        "name": "cancel",
+        "description": "Cancel one pending local durable task through its owner",
+        "effect": "write",
+        "output": "json",
+        "args": []
+      }
+    ]
+  },
+  "tasks": [
+    {
+      "intent": "Dream every brain on this node",
+      "schedule": "40 3 * * *",
+      "command": "dream --all-brains",
+      "placement": "per-node"
+    }
+  ],
+  "runtime": {
+    "modules": {
+      "scheduler": "scheduler.mjs"
+    },
+    "daemon": ["scheduler"]
+  },
+  "ui": {
+    "design_tokens": "ui/DESIGN.md",
+    "elements": [
+      {
+        "id": "automations",
+        "kind": "panel",
+        "tag": "tr-automations",
+        "module": "ui/card.js",
+        "description": "Live automation inventory with per-source node coverage",
+        "events": [],
+        "tokens": [
+          "color-text",
+          "color-text-secondary",
+          "color-surface",
+          "color-border",
+          "color-success",
+          "color-error",
+          "spacing-md",
+          "radius-md"
+        ],
+        "optional_tokens": []
+      },
+      {
+        "id": "card",
+        "kind": "card",
+        "tag": "tr-automations-card",
+        "module": "ui/card.js",
+        "description": "Automations workspace"
+      }
+    ]
+  },
+  "card_face": {
+    "skin": "standard",
+    "theme": "precision-chronometer",
+    "headline": "Automation sources, triggers and outcomes",
+    "primary_color": "#f2bd63",
+    "secondary_color": "#24221c",
+    "accent_color": "#f2bd63",
+    "touch_layout": "comfortable",
+    "interactive": true,
+    "quick_actions": [
+      {
+        "subcommand": "list",
+        "label": "Inspect automations"
+      }
+    ]
+  },
+  "auth": {
+    "plugin": "auth",
+    "methods": [
+      "passkey",
+      "google-oauth2"
+    ],
+    "session_verification": true
+  },
+  "deploy": {
+    "targets": [
+      "ssss-app",
+      "nextjs",
+      "react",
+      "flask"
+    ],
+    "required_ssss_version": ">=0.9.3",
+    "access_grants": [
+      "auth:session:verify",
+      "ssss:vault:read",
+      "ssss:vault:write",
+      "ssss:events:append"
+    ]
+  },
+  "branding": {
+    "name": "Automations",
+    "color": "#f2bd63",
+    "badge": "Source coverage",
+    "font": "space-grotesk"
+  },
+  "status": {
+    "command": "status",
+    "refresh_seconds": 300
+  },
+  "capability": {
+    "entry": "capability/index.mjs",
+    "exports": ["collectSources"]
+  },
+  "distribution": {
+    "tier": "official",
+    "license": "open"
+  }
+}

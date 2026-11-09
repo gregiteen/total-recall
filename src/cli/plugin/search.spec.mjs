@@ -22,7 +22,7 @@ describe('search.mjs', () => {
   it('filters bundled plugins by text', async () => {
     const log = vi.spyOn(console, 'log').mockImplementation(() => {});
     await listAvailable(['git', '--json']);
-    expect(JSON.parse(log.mock.calls[0][0]).map(p => p.id)).toEqual(['git-sentinel']);
+    expect(JSON.parse(log.mock.calls[0][0]).map(p => p.id)).toEqual(['git']);
   });
 
   it('says so when this node is not on a mesh', async () => {

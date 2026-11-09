@@ -52,7 +52,7 @@ const DEFAULT_CORE_PLUGINS = new Set([
   "code-quality",
   "security",
   "embeddings",
-  "git-sentinel"
+  "git"
 ])
 
 const AGENT_RECIPE_PROMPT = `You are my coding agent. Author a bespoke Total Recall plugin for [DOMAIN] following the Total Recall Plugin Recipe:

@@ -11,6 +11,13 @@ const health = { status: 'healthy', version: '1', uptime_seconds: 1, embedding_c
 const run = async () => ({ code: 0, output: 'SSSS tooling', reason: null });
 const fetchGood = async url => url.pathname === '/health' ? new Response(JSON.stringify(health)) : new Response('# Instructions');
 describe('startup health truth and boundaries', () => {
+  it('reports both checkout paths and the repair command for a foreign server', async () => {
+    const report = await startupHealth({ brainDir: '/missing', brainUrl: 'http://localhost:3000',
+      identity: () => ({ status: 'conflict', entry: '/old/checkout/src/server/index.mjs' }), fetchImpl: fetchGood, run });
+    expect(report.server).toMatchObject({ status: 'conflict' });
+    expect(report.server.reason).toBe(`server runs from /old/checkout; expected ${process.cwd()}; run total-recall server ensure`);
+    expect(report.actions).toEqual([]);
+  });
   it('identifies a real child as its own entry and a foreign installation for this daemon', async () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'daemon-real-'));
     let child;

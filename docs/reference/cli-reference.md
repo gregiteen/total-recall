@@ -195,19 +195,24 @@ Performs a deep, cold-start re-compilation of the surface projection.
 ---
 
 ### `dream`
-Trigger an immediate execution of the background consolidation Dream Cycle.
-- **What it does**: Performs garbage-collection on confidence scores, indexes recent relays, resolves pending conflicts, and generates a daily summary journal in your vault (`daily/YYYY-MM-DD.md`).
-- **Usage**:
-  ```bash
-  npx total-recall dream
-  ```
+Run a memory consolidation cycle, including phase 4 decay.
+- **Usage**: `total-recall dream [--global | --project | --all-brains] [--vault <path>] [--dry-run] [--json]`
+- `--all-brains` selects the global brain and registered project brains on this node. It uses project-registry and `TR_SYNC_REPOS` discovery. Brains run one at a time with separate state. It cannot be combined with a layer flag or `--vault`.
+- `--dry-run` lists brains and decay candidates without changes or runtime calls. `--json` prints an array of results. Failures do not stop later brains; exit 1 indicates a failed brain. Invalid options exit 2.
+
+### `server`
+Repair this package's macOS LaunchAgent.
+- **Usage**: `total-recall server ensure [--dry-run]`
+- Dry run prints the plist diff without changes. Secret environment values are redacted.
+- Apply renders the shipped template, preserves operator environment settings, repairs foreign checkout paths and selects the stable PATH node executable. It reloads launchd and verifies the new process before reporting success.
+- Systemd hosts report that server-release owns the server and change nothing.
 
 ---
 
 ### `help`
 Read offline documentation shipped with the CLI.
 - **Usage**: `total-recall help [daemon|server|startup|research|architecture|ssss|settings] --json`
-- `server` selects the `start` documentation; `startup-check` selects `startup`.
+- `startup-check` selects `startup`.
 - Missing reference files are a package installation failure. Repair from the matching canonical package, then verify installed help; do not invent commands.
 
 ### `research`

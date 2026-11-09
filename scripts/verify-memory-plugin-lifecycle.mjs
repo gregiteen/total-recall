@@ -10,7 +10,7 @@ import { promisify } from 'node:util';
 const exec = promisify(execFile);
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const pluginSource = process.argv[2];
-if (!pluginSource) throw new Error('Usage: node scripts/verify-memory-plugin-lifecycle.mjs <git-sentinel-artifact-directory>');
+if (!pluginSource) throw new Error('Usage: node scripts/verify-memory-plugin-lifecycle.mjs <git-plugin-artifact-directory>');
 const fixture = fs.mkdtempSync(path.join(os.tmpdir(), 'tr-native-memory-'));
 const cwd = path.join(fixture, 'repository');
 const agentDir = path.join(fixture, 'agent');
@@ -69,10 +69,10 @@ try {
   const overflow = JSON.parse((await command(['context', 'Inspect memory', '--budget', '1', '--format', 'json', '--global'], 2)).stdout);
   assert.equal(overflow.ready, false);
   await command(['plugin', 'install', path.resolve(pluginSource), '--global']);
-  const installed = JSON.parse((await command(['plugin', 'info', 'git-sentinel', '--json'])).stdout);
+  const installed = JSON.parse((await command(['plugin', 'info', 'git', '--json'])).stdout);
   assert.equal(installed.modified_since_install, false);
   assert.equal(installed.sha256, installed.installed_sha256);
-  await command(['git-sentinel', 'audit', '--json'], 1, env, fixture);
+  await command(['git', 'audit', '--json'], 1, env, fixture);
   const rejectedPlugin = path.join(fixture, 'rejected-plugin');
   fs.mkdirSync(rejectedPlugin);
   fs.writeFileSync(path.join(rejectedPlugin, 'plugin.json'), JSON.stringify({
@@ -80,12 +80,12 @@ try {
     description: 'Invalid confined CLI fixture', cli: { command: 'rejected-plugin', handler: '../outside.mjs' },
   }));
   await command(['plugin', 'install', rejectedPlugin, '--global'], 1);
-  assert.equal(JSON.parse((await command(['plugin', 'info', 'git-sentinel', '--json'])).stdout).sha256, installed.sha256);
-  const audit = JSON.parse((await command(['git-sentinel', 'audit', '--json'])).stdout);
+  assert.equal(JSON.parse((await command(['plugin', 'info', 'git', '--json'])).stdout).sha256, installed.sha256);
+  const audit = JSON.parse((await command(['git', 'audit', '--json'])).stdout);
   assert.equal(audit.isClean, true);
   fs.writeFileSync(path.join(cwd, 'changed.txt'), 'Real untracked fixture\n');
-  assert.equal(JSON.parse((await command(['git-sentinel', 'audit', '--json'])).stdout).untrackedFiles, 1);
-  await command(['plugin', 'remove', 'git-sentinel', '--global']);
+  assert.equal(JSON.parse((await command(['git', 'audit', '--json'])).stdout).untrackedFiles, 1);
+  await command(['plugin', 'remove', 'git', '--global']);
   const declaredPlugin = path.join(fixture, 'declared-plugin');
   fs.mkdirSync(declaredPlugin);
   fs.writeFileSync(path.join(declaredPlugin, 'plugin.json'), JSON.stringify({
@@ -102,14 +102,14 @@ try {
   await command(['declared-verb', '--background'], 1);
   await command(['plugin', 'remove', 'declared-plugin', '--global']);
   await command(['declared-verb', '--json'], 1);
-  await command(['git-sentinel', 'audit', '--json'], 1);
+  await command(['git', 'audit', '--json'], 1);
   const preserved = await command(['recall', 'preserved-fixture', '--local', '--format', 'json', '--global']);
   assert.match(preserved.stdout, /The lifecycle fixture preserves its memory/);
   await command(['plugin', 'install', path.resolve(pluginSource), '--global']);
-  const restored = JSON.parse((await command(['plugin', 'info', 'git-sentinel', '--json'])).stdout);
+  const restored = JSON.parse((await command(['plugin', 'info', 'git', '--json'])).stdout);
   assert.equal(restored.sha256, installed.sha256);
-  await command(['git-sentinel', 'audit', '--json']);
-  await command(['plugin', 'remove', 'git-sentinel', '--global']);
+  await command(['git', 'audit', '--json']);
+  await command(['plugin', 'remove', 'git', '--global']);
   await command(['edit', 'preserved-fixture', 'The lifecycle fixture has updated memory.', '--global']);
   assert.match((await command(['recall', 'preserved-fixture', '--local', '--format', 'json', '--global'])).stdout,
     /The lifecycle fixture has updated memory/);

@@ -44,7 +44,7 @@ describe('plugin daemon services', () => {
     addPlugin('svc-a', { modules: { service: 'service.mjs' }, daemon: ['service'] });
     addPlugin('plain', { modules: { service: 'service.mjs' } });
     const services = await startPluginDaemonServices({ projectRoot: root, load });
-    // Bundled scaffold plugins (user-automations) also declare services; check only the fixtures.
+    // Bundled scaffold plugins (automations) also declare services; check only the fixtures.
     const mine = (labels) => labels.filter((l) => /^(svc-|plain|broken)/.test(l));
     expect(mine(services.started)).toEqual(['svc-a:service']);
     expect(mine(services.failed)).toEqual([]);

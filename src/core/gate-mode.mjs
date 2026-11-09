@@ -4,7 +4,7 @@
  * The preflight receipt is not one of these rules and has no mode.
  *
  * Settings live in `config/gate.json` in a brain:
- *   { "default": "warn", "router": "enforce", "plugins": { "git-sentinel": "enforce" } }
+ *   { "default": "warn", "router": "enforce", "plugins": { "git": "enforce" } }
  * The repository's brain wins over the machine's. This runs on every tool call, so it reads the
  * files directly, and an unreadable file or unknown value counts as unset: a bad settings file
  * must never be what blocks work.
