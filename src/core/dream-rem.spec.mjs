@@ -5,7 +5,6 @@ import os from 'os';
 import matter from 'gray-matter';
 import {
   loadCandidatesFromInbox,
-  loadCandidatesFromSessions,
   collectRemCandidates,
   evaluateCandidates,
 } from './dream.mjs';
@@ -47,7 +46,7 @@ describe('dream REM candidates', () => {
     expect(c[0]._inbox_path).toContain('pending');
   });
 
-  it('extracts preference-like lines from sessions', () => {
+  it('does not extract keywords from unreviewed sessions', () => {
     const sessions = path.join(brain, 'sessions');
     fs.mkdirSync(sessions, { recursive: true });
     const line = JSON.stringify({
@@ -57,13 +56,11 @@ describe('dream REM candidates', () => {
     });
     fs.writeFileSync(path.join(sessions, 's1.jsonl'), line + '\n');
 
-    const c = loadCandidatesFromSessions(sessions);
-    expect(c.length).toBeGreaterThanOrEqual(1);
-    expect(c[0].slug).toMatch(/^session-extract-/);
-    expect(c[0].tags).toContain('dream-rem');
+    const c = collectRemCandidates({ brainDirPath: brain, sessionsDir: sessions });
+    expect(c).toEqual([]);
   });
 
-  it('collectRemCandidates merges inbox + sessions', () => {
+  it('collectRemCandidates takes reviewed inbox drafts only', () => {
     const pending = path.join(brain, 'memory-inbox', 'pending');
     fs.mkdirSync(pending, { recursive: true });
     fs.writeFileSync(
@@ -90,7 +87,7 @@ describe('dream REM candidates', () => {
 
     const all = collectRemCandidates({ brainDirPath: brain, sessionsDir: sessions });
     expect(all.some((c) => c.slug === 'inbox-a')).toBe(true);
-    expect(all.some((c) => String(c.slug).startsWith('session-extract-'))).toBe(true);
+    expect(all.some((c) => String(c.slug).startsWith('session-extract-'))).toBe(false);
   });
 
   it('evaluateCandidates still promotes high-confidence inbox drafts', () => {
@@ -107,5 +104,14 @@ describe('dream REM candidates', () => {
     const result = evaluateCandidates(candidates, [], conflicts);
     expect(result.promoted.length).toBe(1);
     expect(result.promoted[0].status).toBe('active');
+  });
+
+  it('does not promote held lesson drafts even when confidence is high', () => {
+    const pending = path.join(brain, 'memory-inbox/pending');
+    fs.mkdirSync(pending, { recursive: true });
+    fs.writeFileSync(path.join(pending, 'held.md'), matter.stringify('Held lesson', {
+      slug: 'held', status: 'draft', confidence: 1, importance: 5, x_review_hold: true,
+    }));
+    expect(collectRemCandidates({ brainDirPath: brain })).toEqual([]);
   });
 });

@@ -4,6 +4,7 @@ import os from 'os';
 import crypto from 'crypto';
 import { atomicWrite } from './vault.mjs';
 import { logger } from './logger.mjs';
+import { readLessonEntries } from './lesson-sessions.mjs';
 
 /**
  * Total Recall Session Watcher
@@ -30,6 +31,12 @@ const HOME = os.homedir();
  * of unified SSSS session entries.
  */
 const SOURCES = [
+  {
+    name: 'openclaw',
+    root: path.join(HOME, '.openclaw', 'agents'),
+    filter: filename => filename.endsWith('.jsonl'),
+    adapter: file => parseClaudeCode(file).map(entry => ({ ...entry, source: 'openclaw' })),
+  },
   {
     name: 'claude-code',
     root: path.join(HOME, '.claude', 'projects'),
@@ -248,6 +255,15 @@ export function parseClaudeCode(filePath) {
  */
 export function parseCodex(filePath) {
   const raw = fs.readFileSync(filePath, 'utf8');
+  if (/"type"\s*:\s*"(?:response_item|event_msg)"/.test(raw)) {
+    let parentId = null;
+    return readLessonEntries(filePath).map(message => {
+      const entry = createSessionEntry({ ...message, parentId, source: 'codex',
+        type: message.role === 'user' ? 'task' : message.role === 'tool' ? 'tool_call' : 'observation' });
+      parentId = entry.id;
+      return entry;
+    });
+  }
   const lines = raw.split('\n').filter(Boolean);
   const entries = [];
   let prevId = null;
@@ -661,7 +677,9 @@ export function writeSession(entries, sessionsDir, sourceFile) {
   // Skip if already ingested and unchanged
   if (fs.existsSync(sessionFile)) {
     try {
-      if (fs.readFileSync(sessionFile, 'utf8') === jsonl) {
+      const previous = fs.readFileSync(sessionFile, 'utf8');
+      const semantic = rows => JSON.stringify(rows.map(({ role, type, content, source, cwd }) => ({ role, type, content, source, cwd })));
+      if (previous === jsonl || semantic(previous.trim().split('\n').filter(Boolean).map(line => JSON.parse(line))) === semantic(entries)) {
         return null;
       }
     } catch { /* ignore */ }

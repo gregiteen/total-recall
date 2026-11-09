@@ -1,7 +1,6 @@
 import fs from 'fs';
 import path from 'path';
 import os from 'os';
-import crypto from 'crypto';
 import matter from './frontmatter.mjs';
 import { writeNode, walkMd } from './vault.mjs';
 import { updateNodeInPlace } from './validated-write.mjs';
@@ -152,6 +151,13 @@ export function autoPruneStorage(brainDir, vaultDir, conflictsDir) {
           if (activeResearchSlugs.has(baseName)) {
             continue;
           }
+          // Lesson drafts remain reviewable until promotion or explicit disposition.
+          if (dir.startsWith(inboxDir) && file.endsWith('.md')) {
+            try {
+              const { data } = matter(fs.readFileSync(fullPath, 'utf8'));
+              if (data.x_review_hold || data.tags?.includes('post-mortem') || data.tags?.includes('lesson-review')) continue;
+            } catch { continue; }
+          }
           if (now - stat.mtimeMs > maxAge) {
             fs.unlinkSync(fullPath);
           }
@@ -290,6 +296,7 @@ export function loadCandidatesFromInbox(brainDirPath) {
         const { data, content } = matter(raw);
         if (!data || (!data.slug && !data.title && !String(content || '').trim())) continue;
         const status = data.status || 'draft';
+        if (data.x_review_hold === true) continue;
         if (status === 'archived' || status === 'active') continue;
         candidates.push({
           ...data,
@@ -311,90 +318,11 @@ export function loadCandidatesFromInbox(brainDirPath) {
   return candidates;
 }
 
-/**
- * Lightweight session → candidate extraction (deterministic heuristics).
- * User lines that signal durable preferences/rules become draft candidates.
- */
-export function loadCandidatesFromSessions(sessionsDir, { maxFiles = 8, maxCandidates = 20 } = {}) {
-  const candidates = [];
-  if (!fs.existsSync(sessionsDir)) return candidates;
-
-  const signal =
-    /\b(always|never|prefer|remember|must not|must|invariant|don't|do not|from now on)\b/i;
-
-  let files = [];
-  try {
-    files = fs
-      .readdirSync(sessionsDir)
-      .filter((f) => f.endsWith('.jsonl'))
-      .map((f) => ({
-        name: f,
-        mtime: fs.statSync(path.join(sessionsDir, f)).mtimeMs,
-      }))
-      .sort((a, b) => b.mtime - a.mtime)
-      .slice(0, maxFiles);
-  } catch {
-    return candidates;
-  }
-
-  for (const file of files) {
-    let lines;
-    try {
-      lines = fs.readFileSync(path.join(sessionsDir, file.name), 'utf8').split('\n').filter(Boolean);
-    } catch {
-      continue;
-    }
-    for (const line of lines) {
-      if (candidates.length >= maxCandidates) return candidates;
-      let entry;
-      try {
-        entry = JSON.parse(line);
-      } catch {
-        continue;
-      }
-      const content = entry.content || entry.text || '';
-      if (!content || content.length < 24 || content.length > 2000) continue;
-      if (entry.type === 'tool_call') continue;
-      const role = entry.role;
-      if (role && role !== 'user' && role !== 'human') continue;
-      if (!signal.test(content)) continue;
-
-      const hash = crypto.createHash('sha256').update(content).digest('hex').slice(0, 10);
-      candidates.push({
-        slug: `session-extract-${hash}`,
-        category: 'preferences',
-        title: content.slice(0, 80).replace(/\s+/g, ' '),
-        status: 'draft',
-        confidence: 0.55,
-        importance: 3,
-        evidence_count: 1,
-        modality: /must not|never|don't|do not/i.test(content) ? 'must_not' : 'should',
-        subject: 'user',
-        predicate: 'prefers',
-        object: 'behavior',
-        tags: ['session-extract', 'dream-rem'],
-        source: {
-          type: 'session',
-          session_id: path.basename(file.name, '.jsonl'),
-          evidence_count: 1,
-        },
-        body: content,
-      });
-    }
-  }
-  return candidates;
-}
-
-/**
- * Collect all REM candidates (inbox + sessions). Dedupe by slug.
- */
+/** Collect reviewed inbox candidates. Session models run through lesson-review. */
 export function collectRemCandidates({ brainDirPath, sessionsDir }) {
   const bySlug = new Map();
   for (const c of loadCandidatesFromInbox(brainDirPath)) {
     bySlug.set(c.slug, c);
-  }
-  for (const c of loadCandidatesFromSessions(sessionsDir)) {
-    if (!bySlug.has(c.slug)) bySlug.set(c.slug, c);
   }
   return [...bySlug.values()];
 }

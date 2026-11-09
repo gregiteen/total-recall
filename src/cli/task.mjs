@@ -34,6 +34,7 @@ function printHelp() {
     show <slug>        Show one task
     cancel <slug>      Cancel a task, optionally with --expected-status pending
     executors          List registered executor ids
+    idle               Enqueue leader maintenance from an automations manifest task
 
   add options:
     --kind <k>         memory | research | maintenance | system | custom (default: custom)
@@ -58,7 +59,7 @@ function printHelp() {
 
   Policy:
     shell / net:post capabilities are denied by default.
-    Proactive idle fill is off unless TR_IDLE_TASKS=1.
+    Empty queues stay empty. Automations owns the idle schedule.
 `);
 }
 
@@ -167,6 +168,12 @@ export default async function taskCli(argv) {
 
   const brainDir = resolveBrainDir(layer);
   const queueDir = resolveQueueDir(brainDir);
+
+  if (opts.command === 'idle') {
+    const { enqueueScheduledIdleTasks } = await import('../core/scheduler.mjs');
+    console.log(JSON.stringify(await enqueueScheduledIdleTasks({ queueDir, vaultDir: path.join(brainDir, 'memory-vault') })));
+    return;
+  }
 
   if (opts.command === 'executors') {
     console.log('\n  Registered executors:\n');

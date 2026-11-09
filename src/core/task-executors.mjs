@@ -181,7 +181,7 @@ async function runLegacyCategoryDispatch(task, ctx) {
   }
 
   if (category === 'system2-deliberation') {
-    if (process.env.TR_POWER_EXECUTORS !== '1' && !task._research_id) {
+    if (process.env.TR_POWER_EXECUTORS !== '1' && !task._research_id && !(task.created_by === 'automations' && task.payload?.scheduledIdle)) {
       return {
         success: false,
         error: 'system2-deliberation requires TR_POWER_EXECUTORS=1 (or research-queue phase)',
@@ -195,6 +195,7 @@ async function runLegacyCategoryDispatch(task, ctx) {
       inboxDir: path.join(BRAIN_DIR, 'memory-inbox', 'pending'),
       runtimeConfig,
     });
+    if (result.error || result.success === false) return { success: false, error: result.error || 'Inference failed', executor: 'system2' };
     return {
       success: true,
       output: `Inference complete: ${result.conclusions?.length || 0} conclusions`,
@@ -227,7 +228,9 @@ async function runLegacyCategoryDispatch(task, ctx) {
         vaultDir: VAULT_DIR,
         inboxDir: path.join(BRAIN_DIR, 'memory-inbox', 'pending'),
         runtimeConfig,
+        fromTurn: 1,
       });
+      if (result.error) return { success: false, error: result.error, executor: 'post-mortem' };
       return {
         success: true,
         output: `Post-mortem: ${result.nodesCreated || 0} nodes`,
@@ -254,6 +257,7 @@ async function runLegacyCategoryDispatch(task, ctx) {
         inboxDir: path.join(BRAIN_DIR, 'memory-inbox', 'pending'),
         runtimeConfig,
       });
+      if (result.error || result.success === false) return { success: false, error: result.error || 'Clarity review failed', executor: 'clarity' };
       return {
         success: true,
         output: `Clarity review: rewrote=${result.rewrote}`,
@@ -261,17 +265,8 @@ async function runLegacyCategoryDispatch(task, ctx) {
       };
     }
     if (String(task.slug || '').startsWith('memory-compaction-')) {
-      const { runMemoryCompaction } = await import('./fact-seeker.mjs');
-      const result = await runMemoryCompaction({
-        vaultDir: VAULT_DIR,
-        inboxDir: path.join(BRAIN_DIR, 'memory-inbox', 'pending'),
-        runtimeConfig,
-      });
-      return {
-        success: true,
-        output: `Compaction: ${result.consolidatedCount || 0} nodes`,
-        executor: 'compaction',
-      };
+      const { fileCleanupProposals } = await import('./cleanup-task.mjs');
+      return fileCleanupProposals(VAULT_DIR);
     }
     // generic maintenance: lease vacuum
     try {
@@ -545,7 +540,38 @@ function findLatestResearchDraftSlug(inboxDir, topic) {
 
 // ─── Registry ───────────────────────────────────────────────────────────────────
 
+async function runSkillGap(task, ctx) {
+  const { requestSkillGap } = await import('./skill-gap.mjs');
+  const topic = task.payload?.topic || task.target || /topic "([^"]+)"/.exec(task.reason || '')?.[1];
+  const session = task.source_session || task.origin?.session_id;
+  return requestSkillGap(topic, task.payload?.evidence ||
+    (session ? `session://${session}` : null), { projectRoot: ctx.projectRoot || process.cwd() });
+}
+
+async function runLessonReview(task, ctx) {
+  const { runPostMortem } = await import('./post-mortem.mjs');
+  const sessionPath = task.payload?.sessionPath || (task.target && path.join(ctx.sessionsDir, task.target));
+  if (!sessionPath) return { success: false, error: 'Lesson review requires a session transcript and turn range' };
+  const result = await runPostMortem(sessionPath, {
+    vaultDir: ctx.vaultDir, inboxDir: path.join(ctx.brainDir, 'memory-inbox', 'pending'), runtimeConfig: ctx.runtimeConfig,
+    // Scheduled snapshots already contain exactly the requested range.
+    fromTurn: task.payload?.sessionPath ? 1 : task.payload?.fromTurn,
+    toTurn: task.payload?.sessionPath ? Infinity : task.payload?.toTurn,
+    sourceRef: task.payload?.sessionId ? `${task.payload.sessionId}/turns/${task.payload.fromTurn}-${task.payload.toTurn}` : task.slug,
+    hold: task.payload?.hold === true,
+  });
+  if (result.error) return { success: false, error: result.error, executor: 'lesson-review' };
+  if (task.slug?.startsWith('lesson-review-')) {
+    const dir = path.join(ctx.brainDir, 'lesson-reviews');
+    fs.mkdirSync(dir, { recursive: true });
+    atomicWrite(path.join(dir, `${task.slug}.done`), new Date().toISOString());
+  }
+  return { success: true, output: `Lesson review: ${result.patterns?.length || 0} patterns, ${result.facts?.length || 0} facts, ${result.skill_gaps?.length || 0} skill gaps, ${result.violations?.length || 0} violations`, executor: 'lesson-review' };
+}
+
 const EXECUTORS = {
+  'lesson-review': { id: 'lesson-review', run: runLessonReview },
+  'skill-manager': { id: 'skill-manager', run: runSkillGap },
   dream: { id: 'dream', run: runDream },
   custom: { id: 'custom', run: runCustom },
   research: { id: 'research', run: runResearchLegacy },
@@ -557,6 +583,9 @@ const EXECUTORS = {
  */
 export function resolveExecutor(task) {
   const t = normalizeTask(task);
+
+  if (t.category === 'skill-engineering') return EXECUTORS['skill-manager'];
+  if (t.category === 'lesson-review' || t.category === 'self-evaluation') return EXECUTORS['lesson-review'];
 
   // An explicit unsupported executor must never fall through to kind/category.
   if (t.executor) return typeof t.executor === 'string' && Object.hasOwn(EXECUTORS, t.executor) ? EXECUTORS[t.executor] : null;

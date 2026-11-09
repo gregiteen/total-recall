@@ -10,6 +10,7 @@ export const CLI_COMMANDS = {
   doctor:   'doctor.mjs',
   backup:   'backup.mjs',
   dream:    'dream.mjs',
+  lessons:  'lessons.mjs',
   lint:     'lint.mjs',
   daemon:   'daemon.mjs',
   restore:  'restore.mjs',

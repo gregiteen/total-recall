@@ -71,6 +71,7 @@ async function printHelp() {
     auth secret <cmd>   Credentials (the only secrets path): list|get|set|rotate|remote deploy|diff-env|export-env
     compile             Rebuild instruction surfaces
     dream               Memory consolidation cycle (--all-brains for this node)
+    lessons tick        Queue local session lessons at a turn interval or session end
     server              Repair the macOS server LaunchAgent (ensure --dry-run to preview)
     proposals <cmd>     Review / apply optimizer proposals (list|apply|revert)
     task <cmd>          Enqueue daemon work (open envelope)
@@ -137,7 +138,7 @@ async function main() {
   // Core built-in memory and rules commands that always run from core
   const CORE_BUILTINS = new Set([
     'remember', 'forget', 'edit', 'recall', 'context', 'compact', 'rules',
-    'compile', 'rebuild', 'dream', 'proposals', 'proposal', 'task',
+    'compile', 'rebuild', 'dream', 'lessons', 'proposals', 'proposal', 'task',
     'daemon', 'skill', 'plugin', 'plugins',
     'harness', 'agent', 'agents', 'brain', 'status',
     'doctor', 'brief', 'startup', 'server', 'init', 'connect', 'new', 'preflight', 'tr-preflight'
