@@ -3,6 +3,6 @@
 # (about 512 KB per refresh on 2026-11-09).
 # Internal plans: private storage, never in this public repository.
 docs/projects/
-# Generated skill and brain copies: compiled from canonical sources.
+# This checkout's own brain and generated skill copies. The shipped scaffold
+# (scaffold/.agent/) stays in scope: the wiki documents the bundled plugins from it.
 .agent/
-scaffold/.agent/
