@@ -1,0 +1,8 @@
+# Out of scope for the wiki. These paths also stay out of each refresh's
+# changed-path list, which otherwise went to the model on every commit
+# (about 512 KB per refresh on 2026-11-09).
+# Internal plans: private storage, never in this public repository.
+docs/projects/
+# Generated skill and brain copies: compiled from canonical sources.
+.agent/
+scaffold/.agent/
