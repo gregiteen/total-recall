@@ -28,8 +28,8 @@
 - Bundles Metaharness 0.3.12: a question to the operator ends the agent's turn and costs nothing
   while it waits, jobs get the commands that match their task instead of whole inventories, and a
   launch refused for quota records the wall so routing picks another included harness. Also bundles
-  Auth 1.2.9 (`auth secret scan --stdin`), SSSS 0.1.3, Mesh 0.2.9, OpenWiki 0.1.10, Composable
-  CLI 0.2.5, Code Quality 0.2.6, Security 0.3.6 and Embeddings 0.1.3.
+  Auth 1.2.10 (`auth secret scan --stdin`), SSSS 0.1.3, Mesh 0.2.10, OpenWiki 0.1.11, Composable
+  CLI 0.2.6, Code Quality 0.2.7, Security 0.3.7 and Embeddings 0.1.4.
 
 ## 3.44.0 — 2026-11-07
 
