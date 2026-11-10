@@ -2,7 +2,7 @@
   "$schema": "https://github.com/gregiteen/total-recall/blob/main/metadata.plugin.schema.json",
   "id": "git",
   "name": "Git",
-  "version": "2.0.0",
+  "version": "2.0.1",
   "description": "The whole git CLI through Total Recall: sign-in from the auth store, guarded commits and pushes, undo, fleet state, and the intent behind every change.",
   "author": "Total Recall",
   "license": "MIT",

@@ -1,7 +1,7 @@
 {
   "id": "meta-harness",
   "name": "Metaharness",
-  "version": "0.3.12",
+  "version": "0.3.13",
   "description": "Discover, configure, document, track, and run coding agent harnesses through Total Recall across mesh nodes.",
   "gate": {
     "tasks": ["Run work in another agent harness", "Choose which harness takes a task", "Check harness versions, sign-in and quota", "Read a harness's official documentation"],

@@ -92,3 +92,21 @@ total-recall git diff --json [--patch] [--cached] [--base <ref>]
 ```
 
 An unknown upstream is never reported as zero unpushed commits.
+
+## Using this from an agent
+
+Send every git command here: `total-recall git <git command and arguments>` runs git itself, with
+the same output and exit status, plus sign-in from the auth store and the guards above. Push your
+finished, tested work yourself; never push unfinished work.
+
+```bash
+total-recall git status --short
+total-recall git add -A
+total-recall git commit -m "<message>"
+total-recall git push
+total-recall git fleet --json
+total-recall git undo --list
+```
+
+A refused commit or push names the rule or the auth key that matched; fix the cause, never bypass
+the guard. Raw commands this plugin owns: `git <command>`.

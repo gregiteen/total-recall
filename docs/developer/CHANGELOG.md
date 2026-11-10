@@ -24,10 +24,11 @@
   ships to every install. The walk now skips `<package>/scaffold` in a checkout or `node_modules`.
 - The collab server refuses to start without a `JWT_SECRET` of at least 32 characters.
 - Bundled plugins renamed: `user-automations` is `automations` (1.1.0) and `git-sentinel` is `git`
-  (2.0.0), which now runs the whole git CLI with guarded commits and pushes.
-- Bundles Metaharness 0.3.12: a question to the operator ends the agent's turn and costs nothing
+  (2.0.1), which now runs the whole git CLI with guarded commits and pushes.
+- Bundles Metaharness 0.3.13: a question to the operator ends the agent's turn and costs nothing
   while it waits, jobs get the commands that match their task instead of whole inventories, and a
-  launch refused for quota records the wall so routing picks another included harness. Also bundles
+  launch refused for quota records the wall so routing picks another included harness, and uninstall
+  removes the Hermes gate even after another tool rewrote its config. Also bundles
   Auth 1.2.10 (`auth secret scan --stdin`), SSSS 0.1.3, Mesh 0.2.10, OpenWiki 0.1.11, Composable
   CLI 0.2.6, Code Quality 0.2.7, Security 0.3.7 and Embeddings 0.1.4.
 

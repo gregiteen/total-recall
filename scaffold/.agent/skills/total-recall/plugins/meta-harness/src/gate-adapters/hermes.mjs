@@ -27,6 +27,32 @@ function withGate(text) {
   return `${text.replace(/\n*$/, text ? '\n' : '')}\nhooks:\n  pre_tool_call:\n${entry}`;
 }
 
+/**
+ * Remove every hook list item whose command runs the gate. Other tools rewrite config.yaml (the
+ * lesson hooks re-serialize it), so the item is found by indentation, not by its exact text: the
+ * item runs from its `- ` line to the next line indented no deeper than that dash.
+ */
+export function withoutGate(text) {
+  if (!text.includes(GATE)) return text;
+  const exact = text.replace(ENTRY_LINES, '');
+  if (!exact.includes(GATE)) return exact;
+  let lines = text.split('\n');
+  const indent = (line) => line.match(/^ */)[0].length;
+  for (let guard = 0; guard < 50; guard++) {
+    const hit = lines.findIndex((line) => line.includes(GATE));
+    if (hit < 0) break;
+    let start = hit;
+    while (start >= 0 && !/^ *- /.test(lines[start])) start--;
+    if (start < 0 || indent(lines[start]) > indent(lines[hit])) break;
+    const dash = indent(lines[start]);
+    let end = start + 1;
+    while (end < lines.length && (lines[end].trim() === '' || indent(lines[end]) > dash)) end++;
+    while (end > start + 1 && lines[end - 1].trim() === '') end--;
+    lines = [...lines.slice(0, start), ...lines.slice(end)];
+  }
+  return lines.join('\n');
+}
+
 export const hermesAdapter = {
   id: 'hermes',
   level: 'enforced',
@@ -118,7 +144,9 @@ export const hermesAdapter = {
     const present = text.includes(GATE);
     if (remove || off) {
       if (present) {
-        if (!dryRun) fs.writeFileSync(configPath, text.replace(ENTRY_LINES, ''));
+        const next = withoutGate(text);
+        if (next.includes(GATE)) throw new Error(`could not remove the gate from ${configPath}; remove the pre_tool_call entry that runs "${GATE}" by hand`);
+        if (!dryRun) fs.writeFileSync(configPath, next);
         removed.push('managed pre_tool_call gate');
       }
       return { settings: configPath, added, removed };
