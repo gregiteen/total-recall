@@ -37,6 +37,8 @@
  * What repairs the gate stays open (see whenGateFails), so a bad edit to this code can never deny
  * the edit that fixes it.
  */
+import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { DEFAULT_GATE_MODE } from './gate-mode.mjs';
@@ -247,6 +249,25 @@ function steer(deps, { kind, plugin, name, reason, note, use }) {
  * to this code would deny the edit that fixes it: displaying, reading and searching, any plain
  * Total Recall command, and changes inside this gate's own package.
  */
+/** A command that starts by changing into the gate's package: `cd <package> && ...`. */
+function cdIntoPackage(command, inPackage) {
+  const match = typeof command === 'string' && command.match(/^\s*cd\s+("([^"]+)"|'([^']+)'|(\S+))\s*(&&|;|$)/);
+  if (!match) return false;
+  const target = (match[2] || match[3] || match[4]).replace(/^~(?=$|\/)/, os.homedir());
+  return inPackage(target);
+}
+
+/**
+ * The gate's own package with its dependency tree deleted (what `npm ci` leaves while it runs, or a
+ * failed install). Every total-recall command fails then, so a stale receipt cannot be renewed;
+ * this is a gate failure, and the repair must stay open. Cheap: one stat per call.
+ */
+export function gatePackageBroken(root = GATE_PACKAGE) {
+  if (!fs.existsSync(path.join(root, 'package-lock.json'))) return null;
+  if (fs.existsSync(path.join(root, 'node_modules', '.package-lock.json'))) return null;
+  return `the Total Recall package at ${root} has no installed dependencies; run 'npm install' there`;
+}
+
 export function whenGateFails(call, err) {
   const from = typeof call?.cwd === 'string' ? call.cwd : process.cwd();
   const inPackage = (target) => {
@@ -255,7 +276,7 @@ export function whenGateFails(call, err) {
   };
   const open = ['meta', 'ui', 'read', 'search'].includes(call?.tool)
     || (call?.tool === 'write' && typeof call.path === 'string' && inPackage(call.path))
-    || (call?.tool === 'shell' && (isPlainTotalRecall(call.command) || inPackage(from)));
+    || (call?.tool === 'shell' && (isPlainTotalRecall(call.command) || inPackage(from) || cdIntoPackage(call.command, inPackage)));
   if (open) {
     return { decision: 'allow', rule: 'gate-error:repair', warned: ['gate-error'],
       warning: `Total Recall note: the preflight gate failed (${err.message}), so it made no decision. This call is open because it can repair the gate, which lives in ${GATE_PACKAGE}. Other work stays denied until that is fixed.` };

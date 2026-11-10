@@ -209,7 +209,29 @@ lock_hash() {
   if command -v shasum >/dev/null 2>&1; then shasum -a 256 "$REPO_DIR/package-lock.json"; else sha256sum "$REPO_DIR/package-lock.json"; fi | cut -d' ' -f1
 }
 deps_current() {
-  [ -d "$REPO_DIR/node_modules" ] && [ -f "$LOCK_STAMP" ] && [ "$(cat "$LOCK_STAMP")" = "$(lock_hash)" ]
+  [ -d "$REPO_DIR/node_modules" ] || return 1
+  if [ -f "$LOCK_STAMP" ]; then
+    [ "$(cat "$LOCK_STAMP")" = "$(lock_hash)" ]
+    return
+  fi
+  # No stamp: the tree was installed by something other than this script (npm install,
+  # the brain updater), which never writes it. Wiping a complete tree for that reason
+  # cost a full npm ci on every version mismatch, broke every total-recall command for
+  # its duration, and during a Time Machine snapshot every rewrite stays on the disk
+  # (2026-11-10, ~20 GB pinned). The tree is current when npm's own record of what it
+  # installed (node_modules/.package-lock.json) has every locked package at its locked
+  # version; optional packages for other platforms are never installed and do not count.
+  # (`npm ls --all` cannot decide this: it fails on those unmet optional dependencies.)
+  if "$NODE_BIN" -e '
+    const [lock, hidden] = process.argv.slice(1).map(f => require(f).packages || {});
+    for (const [key, entry] of Object.entries(lock)) {
+      if (!key || (entry.optional && !hidden[key])) continue;
+      if (hidden[key]?.version !== entry.version) process.exit(1);
+    }' "$REPO_DIR/package-lock.json" "$REPO_DIR/node_modules/.package-lock.json" >/dev/null 2>&1; then
+    lock_hash > "$LOCK_STAMP" 2>/dev/null || true
+    return 0
+  fi
+  return 1
 }
 
 log "Checking $REPO_DIR (node: $NODE_BIN)"

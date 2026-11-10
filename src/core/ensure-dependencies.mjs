@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { spawn } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
 
 export const DEFAULT_INSTALL_TIMEOUT_MS = 300_000;
 const MARKER = '.total-recall-install.json';
@@ -12,6 +13,38 @@ const LOCKFILES = [
   ['bun', 'bun.lock'], ['bun', 'bun.lockb'],
 ];
 const pending = new Map();
+// The package this module runs from. `npm ci` deletes node_modules before installing, so running
+// it here breaks every total-recall command, the preflight gate included, for the whole install
+// (2026-11-10: the release's checks and every agent tool call failed until a manual install).
+const RUNNING_PACKAGE_ROOT = (() => {
+  try { return fs.realpathSync(path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..')); }
+  catch { return null; }
+})();
+
+/**
+ * npm records the tree it installed in node_modules/.package-lock.json. The tree matches the
+ * lockfile when every installed package has the locked version and every required locked package
+ * is installed (optional packages may be absent on this platform; workspace links are not copies).
+ */
+export function npmTreeMatchesLock(root) {
+  let lock, installed;
+  try {
+    lock = JSON.parse(fs.readFileSync(path.join(root, 'package-lock.json'), 'utf8')).packages;
+    installed = JSON.parse(fs.readFileSync(path.join(root, 'node_modules', '.package-lock.json'), 'utf8')).packages;
+  } catch { return false; }
+  if (!lock || !installed) return false;
+  for (const [key, entry] of Object.entries(installed)) {
+    if (!key || entry.link) continue;
+    if (!lock[key] || lock[key].version !== entry.version) return false;
+  }
+  for (const [key, entry] of Object.entries(lock)) {
+    if (!key.startsWith('node_modules/') && !key.includes('/node_modules/')) continue;
+    if (entry.optional || entry.link || entry.peer) continue;
+    if (!installed[key]) return false;
+  }
+  return true;
+}
+
 const hash = file => crypto.createHash('sha256').update(fs.readFileSync(file)).digest('hex');
 
 /** No shell, bounded output, and a deadline that also stops lifecycle-script children. */
@@ -40,7 +73,7 @@ function runInstall(command, args, { cwd, timeoutMs }) {
   });
 }
 
-async function ensure(root, { reason = 'work', timeoutMs = DEFAULT_INSTALL_TIMEOUT_MS, run = runInstall } = {}) {
+async function ensure(root, { reason = 'work', timeoutMs = DEFAULT_INSTALL_TIMEOUT_MS, run = runInstall, packageRoot = RUNNING_PACKAGE_ROOT } = {}) {
   const started = Date.now();
   const base = { root, reason, manager: null, lockfile: null, command: null };
   const result = (status, fields = {}) => ({ ...base, ok: status !== 'failed', status, durationMs: Date.now() - started, ...fields });
@@ -67,6 +100,20 @@ async function ensure(root, { reason = 'work', timeoutMs = DEFAULT_INSTALL_TIMEO
     const current = marker?.version === 1 && marker.manager === manager && marker.lockfile === lockfile
       && marker.lockHash === lockHash && marker.lockMtimeMs === lockMtimeMs;
     if (current) return result('current');
+    const writeMarker = () => {
+      fs.mkdirSync(installDir(), { recursive: true });
+      fs.writeFileSync(markerPath(), `${JSON.stringify({ version: 1, manager, lockfile, lockHash, lockMtimeMs, installedAt: new Date().toISOString() })}\n`);
+    };
+    // Installed by hand or by an earlier npm run: npm's own record says the tree is current.
+    if (manager === 'npm' && lockfile === 'package-lock.json' && npmTreeMatchesLock(root)) {
+      writeMarker();
+      return result('current', { trigger: 'npm-tree-record' });
+    }
+    // Never reinstall the package this process runs from: the install would delete the code
+    // that is running, and every other total-recall process with it.
+    if (packageRoot && root === packageRoot) {
+      return result('failed', { trigger: 'running-package', error: `${root} is the Total Recall package this command runs from and its dependencies do not match ${lockfile}. Run '${manager} install' there yourself; it is never reinstalled automatically.` });
+    }
     const trigger = fs.existsSync(installDir()) ? 'stale' : 'missing';
     // A failed reinstall must not leave an old marker that can certify a partial install.
     fs.rmSync(markerPath(), { force: true });

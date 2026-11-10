@@ -6,7 +6,7 @@ import { detectProjectBrain } from '../core/brain-locate.mjs';
 import { globalBrainDirFor, isBrainEnabled } from '../core/brain-registry.mjs';
 import { GATE_MODES, gateConfigPath, projectBrainDir, readGateLayers, resolveGateMode, writeGateMode } from '../core/gate-mode.mjs';
 import { installHarnessHooks, loadGateAdapters } from '../core/harness-hooks.mjs';
-import { ackDirectory, capsuleVerb, decide, isAckCommand, isCheckCommand, isRouteCommand, isSubagentPayload, nativeToolOf, sessionOf, SWEEP_CONSULT_MS, whenGateFails } from '../core/preflight-gate.mjs';
+import { ackDirectory, capsuleVerb, decide, gatePackageBroken, isAckCommand, isCheckCommand, isRouteCommand, isSubagentPayload, nativeToolOf, sessionOf, SWEEP_CONSULT_MS, whenGateFails } from '../core/preflight-gate.mjs';
 import { ACK_COMMAND, acknowledge, checkAgentReceipt, checkAnyReceipt, findRoot, forgetCapsuleDeliveries, lastArrivalMs, lastCapsuleDelivery, lastConsultMs, lastRoutedMs, lastRouteWarnedMs, lastSessionAck, markArrival, markDelegated, markRouted, markRouteWarned, markSessionAck, noteCaller, recordDecision, sessionHasStanding, sessionKey, readDecisions, takeCaller } from '../core/preflight-receipt.mjs';
 
 const USAGE = `Usage: total-recall preflight <command>
@@ -411,6 +411,8 @@ function evaluate(call, options = {}) {
 }
 
 function judge(call, { harness, readablePaths, session = null, subagent = false, nativeTool = null } = {}) {
+  const broken = gatePackageBroken();
+  if (broken) return whenGateFails(call, new Error(broken));
   const root = findRoot(call.cwd || process.cwd());
   const limit = envMaxAgeMs();
   const declared = readGateDeclarations();

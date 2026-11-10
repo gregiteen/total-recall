@@ -185,3 +185,45 @@ describe('ensureDependencies', () => {
     expect(result.output.length).toBe(65536);
   });
 });
+
+describe('ensureDependencies never wipes a working tree it can trust', () => {
+  let root;
+  const lockPackages = {
+    '': { name: 'fixture', version: '1.0.0' },
+    'node_modules/zod': { version: '4.4.3' },
+    'node_modules/fsevents': { version: '2.3.3', optional: true },
+    'node_modules/frontend': { resolved: 'frontend', link: true },
+  };
+  beforeEach(() => {
+    root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'tr-npm-tree-')));
+    fs.writeFileSync(path.join(root, 'package.json'), JSON.stringify({ name: 'fixture', version: '1.0.0' }));
+    fs.writeFileSync(path.join(root, 'package-lock.json'), JSON.stringify({ lockfileVersion: 3, packages: lockPackages }));
+    fs.mkdirSync(path.join(root, 'node_modules'));
+  });
+  afterEach(() => fs.rmSync(root, { recursive: true, force: true }));
+  const hidden = (packages) => fs.writeFileSync(path.join(root, 'node_modules', '.package-lock.json'), JSON.stringify({ lockfileVersion: 3, packages }));
+
+  it('accepts a tree npm installed by hand and writes the marker, without reinstalling', async () => {
+    hidden({ 'node_modules/zod': { version: '4.4.3' }, 'node_modules/frontend': { resolved: 'frontend', link: true } });
+    const run = vi.fn();
+    expect(await ensureDependencies(root, { run })).toMatchObject({ ok: true, status: 'current', trigger: 'npm-tree-record' });
+    expect(run).not.toHaveBeenCalled();
+    expect(fs.existsSync(path.join(root, 'node_modules', '.total-recall-install.json'))).toBe(true);
+  });
+
+  it('reinstalls a tree whose versions differ from the lockfile', async () => {
+    hidden({ 'node_modules/zod': { version: '3.0.0' } });
+    const run = vi.fn(async () => ({ exitCode: 0 }));
+    expect(await ensureDependencies(root, { run })).toMatchObject({ ok: true, status: 'installed' });
+    expect(run).toHaveBeenCalledWith('npm', ['ci'], expect.anything());
+  });
+
+  it('never reinstalls the package it runs from, and says how to repair it', async () => {
+    hidden({});
+    const run = vi.fn();
+    const result = await ensureDependencies(root, { run, packageRoot: root });
+    expect(result).toMatchObject({ ok: false, status: 'failed', trigger: 'running-package' });
+    expect(result.error).toContain("Run 'npm install' there yourself");
+    expect(run).not.toHaveBeenCalled();
+  });
+});

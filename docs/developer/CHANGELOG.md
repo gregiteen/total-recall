@@ -9,6 +9,13 @@
   runs had restored about 10 GB of reclaimed trees and filled the disk twice.
 - Dependencies are installed when work starts in a repository (preflight), not kept in every
   checkout.
+- Preflight never reinstalls the Total Recall package it runs from. `npm ci` deletes `node_modules`
+  first, so a lockfile change (a version bump) broke every command, the gate included, until a
+  manual install. A tree npm already installed (`node_modules/.package-lock.json` matching the
+  lockfile) counts as current, so an install by hand is not repeated.
+- The preflight gate treats its own package with no installed dependencies as a gate failure, so
+  repairs stay open instead of a stale receipt that cannot be renewed; `cd <package> && …` counts as
+  a repair inside the package.
 - `fleet status` reports `not_installed` and installs it; `dream --all-brains` takes strict options;
   `server ensure` repoints the server service to the current install.
 - Idle tasks run again: skill gaps route to the skill manager, and a lesson review reads recent
