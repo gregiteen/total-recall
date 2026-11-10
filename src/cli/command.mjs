@@ -247,19 +247,57 @@ function existingTag(file, key) {
   try { return fs.readFileSync(file, 'utf8').match(new RegExp(`^// @${key} (.+)$`, 'm'))?.[1] || undefined; } catch { return undefined; }
 }
 
+/** Where the background recompile records its outcome: <agentDir>/state and <agentDir>/logs. */
+export function compileRecordPaths(isGlobal) {
+  const agentDir = path.dirname(resolveTargetDir(isGlobal));
+  return {
+    status: path.join(agentDir, 'state', 'command-compile.json'),
+    log: path.join(agentDir, 'logs', 'command-compile.log'),
+  };
+}
+
+// Runs in the detached child: compile, then record the exit code and output.
+const COMPILE_RECORDER = `
+const { spawnSync } = require('node:child_process');
+const fs = require('node:fs');
+const [cli, layer, statusFile, logFile] = process.argv.slice(1);
+const startedAt = new Date().toISOString();
+const r = spawnSync(process.execPath, [cli, 'compile', layer], { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 });
+const code = r.status === null ? 1 : r.status;
+fs.writeFileSync(logFile, (r.stdout || '') + (r.stderr || '') + (r.error ? String(r.error) + '\\n' : ''));
+const record = { ok: code === 0, code, signal: r.signal || null, layer, startedAt, finishedAt: new Date().toISOString(), log: logFile };
+fs.writeFileSync(statusFile + '.tmp', JSON.stringify(record, null, 2));
+fs.renameSync(statusFile + '.tmp', statusFile);
+`;
+
 /**
  * Composable instructions: the surfaces list every command, so any change to
  * the command set recompiles them (project layer, or every project for global).
+ * A global compile takes minutes, so it runs in the background; its exit code and
+ * output are recorded, and the next `command` call reports a failure.
  */
 export function recompileSurfaces(isGlobal) {
   if (process.env.TR_COMMAND_NO_COMPILE === '1' || !process.argv[1]) return;
   try {
-    const child = spawn(process.execPath, [process.argv[1], 'compile', isGlobal ? '--global' : '--project'], { detached: true, stdio: 'ignore' });
+    const { status, log } = compileRecordPaths(isGlobal);
+    fs.mkdirSync(path.dirname(status), { recursive: true });
+    fs.mkdirSync(path.dirname(log), { recursive: true });
+    const child = spawn(process.execPath, ['-e', COMPILE_RECORDER, process.argv[1], isGlobal ? '--global' : '--project', status, log], { detached: true, stdio: 'ignore' });
     child.unref();
-    console.log('  ⏳ Instruction surfaces recompiling in the background (command list updated).');
+    console.log(`  ⏳ Instruction surfaces recompiling in the background (command list updated). Outcome: ${status}`);
   } catch (error) {
     console.warn(`  ⚠️  Command saved, but surface recompile failed to start: ${error.message}`);
+    process.exitCode = 1;
   }
+}
+
+/** Report a failed background recompile; returns the record when it failed. */
+export function reportFailedCompile(isGlobal, out = console.warn) {
+  let record;
+  try { record = JSON.parse(fs.readFileSync(compileRecordPaths(isGlobal).status, 'utf8')); } catch { return null; }
+  if (record.ok) return null;
+  out(`  ❌ The last instruction-surface recompile (${record.layer}, ${record.finishedAt}) failed with exit ${record.code}. Surfaces may not list current commands. Log: ${record.log}. Run 'total-recall compile ${record.layer}' to retry.`);
+  return record;
 }
 
 /**
@@ -319,6 +357,7 @@ export default async function commandCmd(rawArgs = []) {
 
   const action = cleanArgs[0];
   const name = cleanArgs[1];
+  if (process.env.TR_COMMAND_NO_COMPILE !== '1') reportFailedCompile(isGlobal);
 
   if (!action || action === '--help' || action === '-h') {
     printHelp();

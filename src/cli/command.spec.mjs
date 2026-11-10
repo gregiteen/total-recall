@@ -128,3 +128,30 @@ describe('plugin command generation', () => {
     }
   });
 });
+
+describe('background surface recompile', () => {
+  it('records a failed compile and reports it on the next command call', async () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'tr-compile-record-'));
+    const fakeCli = path.join(root, 'fake-cli.mjs');
+    fs.writeFileSync(fakeCli, "console.error('compile broke: ' + process.argv.slice(2).join(' ')); process.exit(3);\n");
+    const script = `
+      import { recompileSurfaces, compileRecordPaths, reportFailedCompile } from ${JSON.stringify(path.resolve('src/cli/command.mjs'))};
+      import fs from 'node:fs';
+      process.argv[1] = ${JSON.stringify(fakeCli)};
+      recompileSurfaces(true);
+      const { status } = compileRecordPaths(true);
+      for (let i = 0; i < 100 && !fs.existsSync(status); i++) await new Promise(r => setTimeout(r, 50));
+      const lines = [];
+      const record = reportFailedCompile(true, line => lines.push(line));
+      console.log(JSON.stringify({ record, lines, log: fs.readFileSync(record.log, 'utf8') }));
+    `;
+    const env = { ...process.env, HOME: root, AGENT_DIR: path.join(root, '.agent') };
+    const result = spawnSync(process.execPath, ['--input-type=module', '-e', script], { cwd: root, encoding: 'utf8', env });
+    expect(result.status, result.stderr).toBe(0);
+    const out = JSON.parse(result.stdout.trim().split('\n').pop());
+    expect(out.record).toMatchObject({ ok: false, code: 3, layer: '--global' });
+    expect(out.log).toContain('compile broke: compile --global');
+    expect(out.lines[0]).toContain('failed with exit 3');
+    fs.rmSync(root, { recursive: true, force: true });
+  });
+});

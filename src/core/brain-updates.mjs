@@ -192,6 +192,19 @@ function targetSpec(key, version) {
 }
 
 /**
+ * Automatic maintenance keeps each checkout's tree as found. A dependency with no installed
+ * copy, in a checkout (and owner) with no node_modules at all, gets its pin updated and nothing
+ * more: the tree was reclaimed for disk space or never installed, and restoring it is the
+ * owner's call. A dev dependency absent from a shared install is the same case. Without this,
+ * every hourly run reinstalled full trees into idle checkouts (~10 GB on 2026-11-07, again on
+ * 2026-11-09 until the disk filled). `installMissing: true` (CLI --install-missing) opts in.
+ */
+const absentDevDep = (dep) => dep.section === 'devDependencies' && !dep.file;
+const noInstallTree = (...roots) => roots.every(root => !fs.existsSync(path.join(root, 'node_modules')));
+const keepAsFound = (dep, installMissing, ...roots) =>
+  !installMissing && !dep.file && (absentDevDep(dep) || noInstallTree(...roots));
+
+/**
  * The daemon runs with NODE_ENV=production, and under that npm and pnpm remove dev dependencies
  * from whatever they install in. An install that wants a runtime tree says so with a flag.
  */
@@ -202,6 +215,7 @@ export function installEnv(env = process.env) {
 
 export async function updateAllBrains(opts = {}) {
   const dryRun = opts.dryRun !== false;
+  const installMissing = opts.installMissing === true;
   const exec = opts.exec || spawnSync;
   const roots = listUpdateRoots(opts).map(row => row.root);
   const errors = [];
@@ -262,10 +276,15 @@ export async function updateAllBrains(opts = {}) {
     const shared = isLink(path.join(owner.owner, 'node_modules')) || isLink(path.join(consumer.root, 'node_modules'));
     const needsChange = shared || (!consumer.runtimeOnly && overridesLag(consumer.pkg, versions)) || consumer.deps.some(dep => {
       const pinLags = !consumer.runtimeOnly && dep.declared !== targetSpec(dep.key, versions[dep.package]);
+      if (keepAsFound(dep, installMissing, consumer.root, owner.owner)) return pinLags;
       return pinLags || dep.version !== versions[dep.package]
         || !dep.file?.startsWith(path.join(owner.owner, 'node_modules') + path.sep);
     });
-    if (!needsChange) continue;
+    if (!needsChange) {
+      // Kept as found: report the missing tree, install nothing.
+      if (consumer.deps.some(dep => !dep.version)) row.status = 'not_installed';
+      continue;
+    }
     row.status = dryRun ? (consumer.deps.some(dep => !dep.version) ? 'not_installed' : 'would_update') : 'pending';
     if (!groups.has(owner.owner)) groups.set(owner.owner, { ...owner, consumers: [] });
     groups.get(owner.owner).consumers.push({ consumer, row });
@@ -282,7 +301,8 @@ export async function updateAllBrains(opts = {}) {
     const unpinned = runtimeOnly && group.manager === 'npm';
     const needsInstall = group.consumers.some(({ consumer }) =>
       isLink(path.join(consumer.root, 'node_modules')) || consumer.deps.some(dep =>
-        dep.version !== versions[dep.package] || !dep.file?.startsWith(path.join(group.owner, 'node_modules') + path.sep)));
+        !keepAsFound(dep, installMissing, consumer.root, group.owner)
+        && (dep.version !== versions[dep.package] || !dep.file?.startsWith(path.join(group.owner, 'node_modules') + path.sep))));
     try {
       lockFd = acquireBrainUpdateLock(lock, opts.lockWaitMs === undefined ? {} : { waitMs: opts.lockWaitMs });
       for (const name of ['package-lock.json', 'npm-shrinkwrap.json', 'pnpm-lock.yaml']) {
@@ -332,6 +352,7 @@ export async function updateAllBrains(opts = {}) {
         const placed = (file) => Boolean(file) && allowedRoots.some((root) => file.startsWith(root));
         const bad = consumer.deps.find(dep => {
           const actual = installedBrainPackage(consumer.root, dep.key);
+          if (keepAsFound(dep, installMissing, consumer.root, group.owner) && !actual.file) return false;
           return actual.version !== versions[dep.package] || !placed(actual.file);
         });
         // A link is only a fault when it escapes every legitimate root; a self-contained one is fine.

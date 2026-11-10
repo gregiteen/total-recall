@@ -122,7 +122,7 @@ describe('uniform brain updates', () => {
       } finally { vi.unstubAllEnvs(); }
     });
 
-    it.each(['dependencies', 'devDependencies'])('reports pinned missing %s and installs it on apply', async section => {
+    it.each(['dependencies', 'devDependencies'])('reports pinned missing %s and installs it only with installMissing', async section => {
       const root = manifest(path.join(tmp, 'app'), { [section]: { '@gregiteen/ssss-cli': '0.11.0' } });
       const exec = execWithInstall(() => { installed(root, '@gregiteen/ssss-cli', '0.11.0'); return { status: 0 }; });
       const before = fs.readFileSync(path.join(root, 'package.json'), 'utf8');
@@ -133,12 +133,40 @@ describe('uniform brain updates', () => {
       expect(preview.results[0].status).toBe('not_installed');
       expect(installArgs(exec)).toEqual([]);
       expect(fs.readFileSync(path.join(root, 'package.json'), 'utf8')).toBe(before);
-      const applied = await run([root], exec, { dryRun: false });
+      // Automatic maintenance keeps the checkout as found: nothing installed, still reported.
+      const kept = await run([root], exec, { dryRun: false });
+      expect(kept.failed).toBe(0);
+      expect(kept.results[0].status).toBe('not_installed');
+      expect(installArgs(exec)).toEqual([]);
+      expect(fs.existsSync(path.join(root, 'node_modules'))).toBe(false);
+      const applied = await run([root], exec, { dryRun: false, installMissing: true });
       expect(applied.failed).toBe(0);
       expect(applied.updated).toBe(1);
       expect(applied.results[0].packages[0].installed).toBe('0.11.0');
       expect(installArgs(exec)[0][1]).not.toContain('--package-lock-only');
       expect((await run([root], exec)).results[0].status).toBe('up_to_date');
+    });
+
+    it('never reinstalls a tree into a checkout that has none, and keeps its lagging pin current', async () => {
+      // A checkout whose node_modules were reclaimed for disk space stays without them.
+      const root = manifest(path.join(tmp, 'app'), { dependencies: { 'total-recall-brain': '3.39.0' } });
+      const exec = execWithInstall();
+      const result = await run([root], exec, { dryRun: false });
+      expect(result.failed).toBe(0);
+      expect(result.updated).toBe(1);
+      const [[, args]] = installArgs(exec);
+      expect(args).toContain('--package-lock-only');
+      expect(fs.existsSync(path.join(root, 'node_modules'))).toBe(false);
+      expect(JSON.parse(fs.readFileSync(path.join(root, 'package.json'))).dependencies['total-recall-brain']).toBe('3.39.1');
+    });
+
+    it('still installs a package missing from an existing tree', async () => {
+      const root = manifest(path.join(tmp, 'app'), { dependencies: { 'total-recall-brain': '3.39.1' } });
+      installed(root, 'left-pad', '1.3.0');
+      const exec = execWithInstall(() => { installed(root, 'total-recall-brain', '3.39.1'); return { status: 0 }; });
+      const result = await run([root], exec, { dryRun: false });
+      expect(installArgs(exec)[0][1]).not.toContain('--package-lock-only');
+      expect(result.updated).toBe(1);
     });
 
     it('reports a current installed package as up_to_date without installing', async () => {
@@ -155,7 +183,7 @@ describe('uniform brain updates', () => {
     it('fails verification when a missing package does not arrive', async () => {
       const root = manifest(path.join(tmp, 'app'), { dependencies: { 'total-recall-brain': '3.39.1' } });
       const exec = execWithInstall();
-      const result = await run([root], exec, { dryRun: false });
+      const result = await run([root], exec, { dryRun: false, installMissing: true });
       expect(installArgs(exec)[0][1]).not.toContain('--package-lock-only');
       expect(result.failed).toBe(1);
     });
