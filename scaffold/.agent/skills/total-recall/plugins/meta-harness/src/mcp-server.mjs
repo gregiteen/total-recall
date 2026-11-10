@@ -61,7 +61,8 @@ async function decideApproval(request, { signal } = {}) {
 
 /** Resolve all pending calls on close; no poll timer or child command outlives the server. */
 export function createMcpTools({ job = process.env.TR_METAHARNESS_JOB, approvalPolicy = 'auto',
-  questionTimeoutMs = QUESTION_TIMEOUT_MS, timeoutMs, decisionFn = decideApproval, alertFn } = {}) {
+  questionTimeoutMs = QUESTION_TIMEOUT_MS, timeoutMs, decisionFn = decideApproval, alertFn,
+  deferQuestions = process.env.TR_METAHARNESS_DEFER_QUESTIONS !== '0' } = {}) {
   jobPaths(job);
   if (!['auto', 'operator', 'rules'].includes(approvalPolicy)) throw new Error('Approval policy must be auto, operator, or rules.');
   questionTimeoutMs = timeoutMs ?? questionTimeoutMs;
@@ -98,7 +99,7 @@ export function createMcpTools({ job = process.env.TR_METAHARNESS_JOB, approvalP
   });
 
   return {
-    async call(name, args, { signal } = {}) {
+    async call(name, args, { signal, defer = deferQuestions } = {}) {
       if (lifetime.signal.aborted) throw new Error('The MCP server has closed.');
       if (name === 'ask') {
         if (!object(args) || !Array.isArray(args.questions) || !args.questions.length ||
@@ -108,6 +109,15 @@ export function createMcpTools({ job = process.env.TR_METAHARNESS_JOB, approvalP
             (args.tool_use_id !== undefined && typeof args.tool_use_id !== 'string')) throw fault(-32602, 'approve requires tool_name and input.');
       } else throw fault(-32602, `Unknown tool: ${name}`);
       const requestId = randomUUID();
+      if (name === 'ask' && defer) {
+        // A question costs nothing while it waits (A-125): record it, tell the agent to end its turn,
+        // and let the session runner start the next turn with the operator's answer. Holding the tool
+        // call open made Codex call the model every few seconds while it waited.
+        const event = { kind: 'question', source: 'deferred', requestId, text: JSON.stringify(args.questions), questions: args.questions };
+        appendEvent(job, event);
+        notify(event);
+        return textResult(`Your question went to the operator (request ${requestId}). End your turn now and do no other work. The operator's answer arrives as the next message in this session.`);
+      }
       const event = { kind: name === 'ask' ? 'question' : 'approval', source: 'mcp', requestId,
         text: name === 'ask' ? JSON.stringify(args.questions) : `${args.tool_name}: ${JSON.stringify(args.input)}`,
         ...(name === 'ask' ? { questions: args.questions } : { request: args, policy: approvalPolicy }) };

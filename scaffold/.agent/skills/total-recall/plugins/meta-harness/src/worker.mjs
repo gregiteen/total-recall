@@ -529,19 +529,18 @@ export async function totalRecallBootstrap(request, { probe = runProcess, env = 
   await acknowledge(cwd);
   // A receipt is per checkout, and the agent's own gate reads the one where it works.
   if (request.cwd !== cwd) await acknowledge(request.cwd);
-  const help = await invoke(['--help']);
-  const plugins = JSON.parse(await invoke(['plugin', 'library', '--json']));
-  const commands = JSON.parse(await invoke(['composable-cli', 'library', '--json']));
+  // A-121: give the agent the commands that match its task from the semantic CLI index, not whole
+  // inventories (the plugin and composed libraries were about 550 KB together). It looks up anything else.
   const docs = JSON.parse(await invoke(['meta-harness', 'docs-ensure', '--agent', request.agent, '--json']));
   if (docs.ok !== true) throw notReady('Official agent documentation is unavailable or stale');
-  let references;
-  if (request.bootstrapDirectory) {
-    const file = path.join(request.bootstrapDirectory, 'cli-reference.json');
-    fs.writeFileSync(file, JSON.stringify({ help, plugins, commands }), { mode: 0o600 });
-    references = `Complete CLI, installed-plugin and composed-command inventories: ${file}. Retrieve only the applicable operations; use total-recall <namespace> --help for current arguments.`;
-  } else references = `Complete CLI help:\n${help}\nInstalled plugin command library:\n${JSON.stringify(plugins)}\nComposed command library:\n${JSON.stringify(commands)}`;
+  // Node built-ins only here (this file ships to remote nodes): the result is the pretty-printed JSON after any log lines.
+  let found = null;
+  try { const out = await invoke(['help', task, '--json']); const at = out.indexOf('{\n'); found = JSON.parse(at >= 0 ? out.slice(at) : out); }
+  catch (error) { if (error.code === 'NOT_READY') throw error; found = null; }
+  const matches = Array.isArray(found?.matches) ? found.matches.slice(0, 12) : [];
+  const references = `${matches.length ? `Commands that match this task (Total Recall semantic command search):\n${matches.map(m => `- ${m.verb} — ${m.description}`).join('\n')}\n` : ''}For anything else, run total-recall help "<what you need>" to find the command, then total-recall <namespace> --help for its arguments. Do not load whole command inventories.`;
   const operatingContext = hasEvidence ? capsule.context.slice(0, evidenceStart).trimEnd() : capsule.context;
-  const prompt = `Requester: the operator of this Total Recall workspace.\nThe Total Recall preflight is already acknowledged for this checkout, so do not run it again; a sandboxed session cannot write its receipt.\nUse Total Recall and its owning plugin CLI for this task. Context was assembled automatically for this task on this node. Official documentation is cached at ${docs.directory}; read applicable references before changing an integration.\n\nTask context:\n${operatingContext}\n\nCLI reference:\n${references}`;
+  const prompt = `Requester: the operator of this Total Recall workspace.\nThe Total Recall preflight is already acknowledged for this checkout, so do not run it again; a sandboxed session cannot write its receipt.\nUse Total Recall and its owning plugin CLI for this task. Context was assembled automatically for this task on this node. Official documentation is cached at ${docs.directory}; read applicable references before changing an integration.\n\nTask context:\n${operatingContext}\n\nCommands:\n${references}`;
   const requestedTask = `\n\nRequested task:\n${request.prompt}`;
   if (!hasEvidence) return prompt + requestedTask;
 

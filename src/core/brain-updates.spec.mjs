@@ -47,6 +47,14 @@ describe('uniform brain updates', () => {
     expect(fs.existsSync(path.join(root, '.total-recall-update.lock'))).toBe(false);
   });
 
+  it('never treats a brain package source checkout as a consumer, but still finds consumers inside it', () => {
+    // The cloud server runs from a Total Recall checkout; rewriting its SSSS pin left it
+    // dirty and the release runner refused to move it.
+    const source = manifest(path.join(tmp, 'total-recall'), { name: 'total-recall-brain', dependencies: { '@ssss/cli': 'npm:@gregiteen/ssss-cli@0.10.0' } });
+    const nested = manifest(path.join(source, 'examples/app'), { dependencies: { 'total-recall-brain': '3.39.0' } });
+    expect(discoverBrainConsumers([source]).map(({ root }) => fs.realpathSync(root))).toEqual([fs.realpathSync(nested)]);
+  });
+
   it('excludes managed scaffold assets without hiding real nested consumers', () => {
     const root = manifest(path.join(tmp, 'app'), {});
     const dependency = { dependencies: { '@gregiteen/ssss-cli': '0.11.0' } };

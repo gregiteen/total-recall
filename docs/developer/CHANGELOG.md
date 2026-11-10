@@ -1,3 +1,36 @@
+## 3.45.0 — 2026-11-09
+
+- Instruction surfaces compile on demand (ODC): a task capsule is compiled when an agent asks for
+  it, not for every repository on every change.
+- Memory decay with an active-day ledger: nodes nobody reads lose weight only on days the brain is
+  in use, and reading a node refreshes it.
+- `update --all-brains` keeps each checkout's install tree as found. A checkout with no
+  `node_modules` gets only its pin updated; `--install-missing` installs those trees. Automatic
+  runs had restored about 10 GB of reclaimed trees and filled the disk twice.
+- Dependencies are installed when work starts in a repository (preflight), not kept in every
+  checkout.
+- `fleet status` reports `not_installed` and installs it; `dream --all-brains` takes strict options;
+  `server ensure` repoints the server service to the current install.
+- Idle tasks run again: skill gaps route to the skill manager, and a lesson review reads recent
+  agent sessions for lessons and rules to save.
+- The vector field is wired into recall behind a flag, so its effect can be measured first.
+- One remote surface: remote agents use `/v1/invoke` and SSSS. Unused features removed (UNUSED-01).
+- The semantic CLI index writes declared plugin arguments as usage text (`<arg>`,
+  `[--flag <value>]`) instead of `[object Object]`.
+- The recompile after `command create|update|remove` records its exit code and log in
+  `<agentDir>/state/command-compile.json`; the next `command` call reports a failure.
+- Fix brain detection taking the package's own `scaffold/` template for a project. A context call
+  or `project-id` from inside it wrote `brain.json` and derived ledgers into the template, which
+  ships to every install. The walk now skips `<package>/scaffold` in a checkout or `node_modules`.
+- The collab server refuses to start without a `JWT_SECRET` of at least 32 characters.
+- Bundled plugins renamed: `user-automations` is `automations` (1.1.0) and `git-sentinel` is `git`
+  (2.0.0), which now runs the whole git CLI with guarded commits and pushes.
+- Bundles Metaharness 0.3.12: a question to the operator ends the agent's turn and costs nothing
+  while it waits, jobs get the commands that match their task instead of whole inventories, and a
+  launch refused for quota records the wall so routing picks another included harness. Also bundles
+  Auth 1.2.9 (`auth secret scan --stdin`), SSSS 0.1.3, Mesh 0.2.9, OpenWiki 0.1.10, Composable
+  CLI 0.2.5, Code Quality 0.2.6, Security 0.3.6 and Embeddings 0.1.3.
+
 ## 3.44.0 — 2026-11-07
 
 - `connect openclaw` no longer writes the workspace's `MEMORY.md`, which is OpenClaw's own memory.

@@ -116,7 +116,11 @@ export function discoverBrainConsumers(roots, { onError, installedPlugins = new 
         .filter(([key]) => BRAIN_PACKAGES.includes(canonical(key)) && canonical(key) !== pkg.name)
         .map(([key, declared]) => ({ section, key, package: canonical(key), declared,
           ...installedBrainPackage(real, key) })));
-      if (deps.length) consumers.push({ root: real, file, pkg, deps, runtimeOnly });
+      // A source checkout of a brain package is not a consumer: its pins move only
+      // with its own releases (updateSourceBrainPackage). Rewriting them left the
+      // cloud server's checkout dirty, and the release runner refuses a dirty one.
+      const brainSource = BRAIN_PACKAGES.includes(pkg.name);
+      if (deps.length && !brainSource) consumers.push({ root: real, file, pkg, deps, runtimeOnly });
     }
     for (const entry of fs.readdirSync(real, { withFileTypes: true })) {
       if (!entry.isDirectory() || ignored.has(entry.name)) continue;

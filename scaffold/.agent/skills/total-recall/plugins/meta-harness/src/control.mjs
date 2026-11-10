@@ -90,6 +90,8 @@ export async function appendCommand(target, command, { local = false, execFileFn
     if (reserved.has(request.requestId)) throw new Error('The request already has an answer in the inbox.');
     entry.requestId = request.requestId;
     if (request.source === 'mcp') entry.recipient = 'mcp';
+    // A deferred question is answered by the session runner, which starts the next turn with it.
+    else if (request.source === 'deferred') entry.recipient = 'deferred';
   }
   const { inbox } = jobPaths(job.id);
   fs.mkdirSync(path.dirname(inbox), { recursive: true, mode: 0o700 });

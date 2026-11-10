@@ -11,6 +11,8 @@ export const machineEmail = address => {
 };
 
 async function visibility(ctx) {
+  // No remote: nothing can be published, so the repository is local, not public.
+  if (!String(ctx.git(['remote']).stdout || '').trim()) return 'LOCAL';
   const repository = repoId(ctx);
   // Remote URLs can contain credentials. Cache only the URL fingerprint.
   const remote = createHash('sha256').update(ctx.git(['config', '--get', 'remote.origin.url']).stdout?.trim() || '').digest('hex');

@@ -6,8 +6,8 @@ import { createClaudeDriver } from './claude.mjs';
 import { createCodexDriver } from './codex.mjs';
 import { createResumeDriver } from './resume.mjs';
 import { GOAL_SCHEMA, readResult } from './result.mjs';
-import { tailInbox, appendEvent } from '../control.mjs';
-import { mcpConfigFor, createMcpTools } from '../mcp-server.mjs';
+import { tailInbox, appendEvent, waitingRequests } from '../control.mjs';
+import { mcpConfigFor, createMcpTools, NO_ANSWER, QUESTION_TIMEOUT_MS } from '../mcp-server.mjs';
 
 // A routed attempt or coordination stage shares its CLI job's limits. Each
 // driver reports its own usage; the job sums those reports without double count.
@@ -48,7 +48,8 @@ export async function runSession({ request, adapter, binary, args, env, prompt, 
     const model = args.lastIndexOf('--model');
     args = [...prefix, ...(model >= 0 ? ['-c', `model=${JSON.stringify(args[model + 1])}`] : []), ...config.codex];
   }
-  let driver, tools, watcher, timer, stopResult, stopTask, turns = 0;
+  let driver, tools, watcher, deferredWatcher, replyWaiter = null, timer, stopResult, stopTask, turns = 0;
+  const deferredReplies = new Map();
   let resolveStop;
   const stopped = new Promise(resolve => { resolveStop = resolve; });
   const usage = { inputTokens: null, outputTokens: null, costUsd: null };
@@ -94,7 +95,9 @@ export async function runSession({ request, adapter, binary, args, env, prompt, 
         if (!tools) return;
         const answer = await tools.call(event.kind === 'question' ? 'ask' : 'approve', event.kind === 'question'
           ? { questions: event.questions || event.request?.questions || [event.text || 'Reply to the agent.'] }
-          : { tool_name: event.request?.tool_name || event.request?.command || event.method || 'tool', input: event.request || {} });
+          : { tool_name: event.request?.tool_name || event.request?.command || event.method || 'tool', input: event.request || {} },
+          // A native request pauses the harness itself with no model call, so it waits for the answer here.
+          { defer: false });
         let value = answer.content[0].text;
         if (event.kind === 'approval') {
           const approval = JSON.parse(value);
@@ -135,6 +138,12 @@ export async function runSession({ request, adapter, binary, args, env, prompt, 
     await wait(driver.start(`${prompt}\n\nJob goal: ${goal}`));
     if (stopResult) return stopResult;
     emit({ kind: 'capabilities', text: 'Session controls reported.', capabilities: capabilities() });
+    deferredWatcher = tailInbox(job, command => {
+      if (command.type !== 'reply' || !command.requestId) return false;
+      deferredReplies.set(command.requestId, command.text);
+      replyWaiter?.();
+      return { via: 'metaharness' };
+    }, { recipient: 'deferred' });
     watcher = tailInbox(job, async command => {
       if (command.type === 'reply') return driver.send(command.text);
       if (command.type === 'approve') return driver.answer(command.requestId, command.value);
@@ -152,6 +161,21 @@ export async function runSession({ request, adapter, binary, args, env, prompt, 
       return false;
     });
     let result = await wait(driver.done);
+    // Deferred questions (A-125): the agent ended its turn after asking. Hold the session with no
+    // model calls until the operator replies, then start the next turn with the answer.
+    while (result.ok && !stopResult) {
+      const open = waitingRequests(job).filter(r => r.kind === 'question' && r.source === 'deferred');
+      if (!open.length) break;
+      emit({ kind: 'waiting', text: `Waiting for the operator on ${open.length} question(s); no model calls until a reply.` });
+      const answer = await wait(new Promise(resolve => {
+        const check = () => { const hit = open.find(r => deferredReplies.has(r.requestId)); if (hit) { replyWaiter = null; clearTimeout(limit); resolve({ request: hit, text: deferredReplies.get(hit.requestId) }); } };
+        const limit = setTimeout(() => { replyWaiter = null; resolve({ request: open[0], text: NO_ANSWER, timeout: true }); }, options.questionTimeoutMs ?? QUESTION_TIMEOUT_MS);
+        replyWaiter = check; check();
+      }));
+      if (!answer || stopResult) break;
+      appendEvent(job, { kind: 'ack', command: 'ask', requestId: answer.request.requestId, ok: true, value: answer.text, text: answer.text, ...(answer.timeout ? { timeout: true } : {}) });
+      result = await next(`The operator answered your question ${answer.request.text}: ${answer.text}\nContinue the task.`);
+    }
     if (result.ok && options.maxTokens !== undefined && usage.inputTokens === null && usage.outputTokens === null) {
       result = { ...result, ok: false, failureKind: 'limit', error: 'The harness did not report token usage, so the token cap cannot be enforced.' };
     }
@@ -194,5 +218,6 @@ export async function runSession({ request, adapter, binary, args, env, prompt, 
     }
     await driver.close();
     await watcher?.close();
+    await deferredWatcher?.close();
   }
 }

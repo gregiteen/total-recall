@@ -68,7 +68,15 @@ export async function dispatchWithReceipt(request, { dispatchFn, node = request.
       }
     }
   }
-  if (launchPrevented) return { ...result, launchPrevented, durationMs };
+  if (launchPrevented) {
+    // A launch refused for quota is a quota wall too (A-124): record it, so routing sees the harness as
+    // exhausted until its reset and picks another included harness instead of choosing it again.
+    if (result.failureKind === 'quota') {
+      try { await record({ harness: request.agent, role, task: String(request.contextTask || request.prompt || '').slice(0, 200), success: false,
+        failureKind: 'quota', error: result.error, resetsAt: result.resetsAt || null }); } catch { /* bookkeeping must not hide the refusal */ }
+    }
+    return { ...result, launchPrevented, durationMs };
+  }
   // A finished run keeps its result: the worktree and any cost are real even when bookkeeping fails.
   let receipt, receiptError;
   try {
