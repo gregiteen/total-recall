@@ -23,6 +23,19 @@
   or `project-id` from inside it wrote `brain.json` and derived ledgers into the template, which
   ships to every install. The walk now skips `<package>/scaffold` in a checkout or `node_modules`.
 - The collab server refuses to start without a `JWT_SECRET` of at least 32 characters.
+- Nothing is installed per repository. `plugin install` and `plugin create` always use the shared
+  plugin folder (`--project` is refused, `--global` changes nothing), discovery reads only the
+  shared folder and the bundled plugins, and a shared install also recompiles the repository it ran
+  in. A repository switches a plugin with `plugin on|off`.
+- `plugin copies` reports repository-only installs, deletes them with `--apply --drop-repo-only`,
+  and with `--apply` removes install records of plugins installed nowhere. On/off records and
+  records of shared plugins are kept.
+- The plugin-task scheduler moved out of core into the bundled user-automations plugin (1.1.0).
+  Core keeps only generic `runtime.daemon` services, which the daemon starts from the shared folder.
+- `update --all-brains`: a lockfile-only update passes `--ignore-scripts` (a never-installed
+  checkout's own `postinstall` failed the run), and a brain package's own source checkout is no
+  longer treated as a consumer, so its pins move only with its releases. The rewritten pin had left
+  the server's checkout dirty, which `deploy release` refuses.
 - Bundled plugins renamed: `user-automations` is `automations` (1.1.0) and `git-sentinel` is `git`
   (2.0.1), which now runs the whole git CLI with guarded commits and pushes.
 - Bundles Metaharness 0.3.13: a question to the operator ends the agent's turn and costs nothing
