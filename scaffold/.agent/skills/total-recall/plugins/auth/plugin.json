@@ -16,41 +16,6 @@
     "badge": "FIDO2 Vault",
     "font": "chivo-mono"
   },
-  "card_face": {
-    "theme": "vibrant",
-    "headline": "Passkey & Google OAuth2 Authentication Engine",
-    "primary_color": "#6366f1",
-    "secondary_color": "#312e81",
-    "accent_color": "#818cf8",
-    "touch_layout": "comfortable",
-    "interactive": true,
-    "quick_actions": [
-      {
-        "subcommand": "status",
-        "label": "STATUS"
-      },
-      {
-        "subcommand": "audit",
-        "label": "AUDIT"
-      },
-      {
-        "subcommand": "passkey",
-        "label": "PASSKEY"
-      },
-      {
-        "subcommand": "google",
-        "label": "GOOGLE"
-      },
-      {
-        "subcommand": "rotate",
-        "label": "ROTATE"
-      },
-      {
-        "subcommand": "probe",
-        "label": "CHECK ENDPOINT"
-      }
-    ]
-  },
   "secrets": [
     {
       "key": "GOOGLE_CLIENT_ID",
@@ -132,12 +97,14 @@
       {
         "name": "agent",
         "description": "Sign in an agent CLI that authenticates on its own terminal",
-        "effect": "destructive"
+        "effect": "destructive",
+        "sensitive_output": true
       },
       {
         "name": "secret",
         "description": "Manage and inspect auth secrets in the Total Recall store",
-        "effect": "write"
+        "effect": "write",
+        "sensitive_output": true
       },
       {
         "name": "password",
@@ -153,14 +120,15 @@
     ]
   },
   "ui": {
-    "design_tokens": "ui/DESIGN.md",
+    "home": "home",
+    "design_tokens": "DESIGN.md",
     "elements": [
       {
-        "id": "card",
-        "kind": "card",
-        "tag": "tr-auth-card",
-        "module": "ui/card.js",
-        "description": "Gatepass Card Face"
+        "id": "home",
+        "kind": "panel",
+        "tag": "tr-auth-home",
+        "module": "ui/home.js",
+        "description": "Dashboard access and security baseline"
       },
       {
         "id": "panel",

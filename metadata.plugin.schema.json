@@ -11,6 +11,13 @@
     "description"
   ],
   "additionalProperties": true,
+  "not": {
+    "anyOf": [
+      { "required": ["card"] },
+      { "required": ["card_face"] },
+      { "required": ["card_layout"] }
+    ]
+  },
   "properties": {
     "configuration": {
       "type": "object",
@@ -125,6 +132,20 @@
                   "text"
                 ]
               },
+              "sensitive_output": {
+                "type": "boolean",
+                "description": "The operation can return private credential material. The generic browser runner and UI data bindings must not expose it."
+              },
+              "terminal_only_args": {
+                "type": "array",
+                "uniqueItems": true,
+                "items": { "type": "string", "pattern": "^--[a-z][a-z0-9-]{0,63}$" },
+                "description": "Long flags reserved for the owning terminal CLI. Browser dispatch rejects separate and equals-form values."
+              },
+              "terminal_only": {
+                "type": "boolean",
+                "description": "The owning terminal CLI is required. Safe output pointers may still be documented."
+              },
               "timeout_ms": {
                 "type": "integer",
                 "minimum": 1,
@@ -133,7 +154,7 @@
               "args": {
                 "type": "array",
                 "items": {
-                  "$ref": "#/definitions/cardArgument"
+                  "$ref": "#/definitions/pluginArgument"
                 }
               }
             }
@@ -519,7 +540,7 @@
         },
         "home": {
           "type": "string",
-          "description": "ID of the plugin's declared non-card Home element."
+          "description": "ID of the plugin's declared native Home element."
         },
         "elements": {
           "type": "array",
@@ -544,9 +565,7 @@
                   "list",
                   "detail",
                   "settings",
-                  "widget",
-                  "card",
-                  "card-face"
+                  "widget"
                 ]
               },
               "tag": {
@@ -681,110 +700,6 @@
         "badge": {
           "type": "string",
           "description": "Custom status or badge text"
-        }
-      }
-    },
-    "card_face": {
-      "type": "object",
-      "description": "Branded creative UI card face configuration: mobile-first, touch-friendly, agent-customizable layout, metrics, and actions",
-      "properties": {
-        "skin": {
-          "type": "string",
-          "enum": [
-            "winamp-classic",
-            "analog-hifi",
-            "synth-deck",
-            "translucent-acrylic",
-            "pocket-arcade",
-            "studio-rack",
-            "vibrant-modern"
-          ],
-          "description": "Creative visual skin inspired by classic audio players, hardware decks, and retro UI"
-        },
-        "theme": {
-          "type": "string",
-          "enum": [
-            "vibrant",
-            "neon",
-            "gradient",
-            "minimal",
-            "glass",
-            "compact"
-          ],
-          "description": "Visual theme preset for the card face"
-        },
-        "headline": {
-          "type": "string",
-          "description": "Custom headline or tag line for the plugin card face"
-        },
-        "primary_color": {
-          "type": "string",
-          "description": "Primary brand color hex (e.g. #10b981)"
-        },
-        "secondary_color": {
-          "type": "string",
-          "description": "Secondary accent or background tint hex"
-        },
-        "accent_color": {
-          "type": "string",
-          "description": "Highlight or glowing accent hex"
-        },
-        "quick_actions": {
-          "type": "array",
-          "description": "Touch-friendly direct CLI execution actions rendered on the card face",
-          "items": {
-            "type": "object",
-            "required": [
-              "subcommand",
-              "label"
-            ],
-            "properties": {
-              "subcommand": {
-                "type": "string"
-              },
-              "label": {
-                "type": "string"
-              },
-              "icon": {
-                "type": "string"
-              },
-              "color": {
-                "type": "string"
-              }
-            }
-          }
-        },
-        "metrics": {
-          "type": "array",
-          "description": "DEPRECATED: fixed text cannot reflect real state. Declare a 'status' command (top-level 'status' field) so the card reads the plugin's real state instead.",
-          "items": {
-            "type": "object",
-            "required": [
-              "label",
-              "value"
-            ],
-            "properties": {
-              "label": {
-                "type": "string"
-              },
-              "value": {
-                "type": "string"
-              }
-            }
-          }
-        },
-        "touch_layout": {
-          "type": "string",
-          "enum": [
-            "compact",
-            "comfortable",
-            "dense"
-          ],
-          "description": "Touch target and padding layout mode"
-        },
-        "interactive": {
-          "type": "boolean",
-          "description": "Whether interactive JavaScript controls are active on the card face"
         }
       }
     },
@@ -925,124 +840,6 @@
         }
       }
     },
-    "card_layout": {
-      "type": "object",
-      "required": [
-        "template",
-        "regions"
-      ],
-      "properties": {
-        "template": {
-          "enum": [
-            "console",
-            "ledger",
-            "monitor",
-            "inbox",
-            "dashboard",
-            "workbench",
-            "vault"
-          ]
-        },
-        "regions": {
-          "type": "array",
-          "minItems": 1,
-          "maxItems": 12,
-          "items": {
-            "type": "object",
-            "required": [
-              "widget"
-            ],
-            "properties": {
-              "widget": {
-                "enum": [
-                  "status",
-                  "actions",
-                  "table",
-                  "detail",
-                  "log",
-                  "form",
-                  "keypad",
-                  "gauge",
-                  "list",
-                  "settings",
-                  "credentials",
-                  "activity",
-                  "live"
-                ]
-              },
-              "title": {
-                "type": "string"
-              },
-              "command": {
-                "type": "string"
-              },
-              "commands": {
-                "type": "array",
-                "items": {
-                  "type": "string"
-                }
-              },
-              "span": {
-                "type": "integer",
-                "minimum": 1,
-                "maximum": 12
-              },
-              "source": {
-                "type": "object",
-                "required": [
-                  "command"
-                ],
-                "properties": {
-                  "command": {
-                    "type": "string"
-                  },
-                  "args": {
-                    "type": "array",
-                    "items": {
-                      "type": "string"
-                    }
-                  },
-                  "path": {
-                    "type": "string"
-                  }
-                }
-              },
-              "columns": {
-                "type": "array",
-                "minItems": 1,
-                "items": {
-                  "type": "object",
-                  "required": [
-                    "key",
-                    "label"
-                  ],
-                  "properties": {
-                    "key": {
-                      "type": "string"
-                    },
-                    "label": {
-                      "type": "string"
-                    },
-                    "format": {
-                      "enum": [
-                        "text",
-                        "number",
-                        "money",
-                        "date",
-                        "datetime",
-                        "bytes",
-                        "percent",
-                        "status"
-                      ]
-                    }
-                  }
-                }
-              }
-            }
-          }
-        }
-      }
-    },
     "workspace": {
       "type": "object",
       "description": "Live-use surface hosted in the slide-out drawer",
@@ -1126,7 +923,7 @@
     }
   },
   "definitions": {
-    "cardArgument": {
+    "pluginArgument": {
       "type": "object",
       "required": [
         "name",

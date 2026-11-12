@@ -339,6 +339,20 @@ describe('plugins router', () => {
     expect(runner.runPluginCommand).not.toHaveBeenCalled();
   });
 
+  it('blocks private output before dispatch, including when the command is supplied as an argument', async () => {
+    const secretPlugin = { ...plugin, manifest: { ...plugin.manifest, cli: { ...plugin.manifest.cli,
+      subcommands: [{ name: 'token', effect: 'read', sensitive_output: true }],
+    } } };
+    runner.runPluginCommand.mockClear();
+    for (const payload of [{ subcommand: 'token' }, { args: ['token'] }]) {
+      getPluginByIdMock.mockReturnValueOnce(secretPlugin);
+      const response = await request(app).post('/api/plugins/git-sentinel/run')
+        .set('x-test-scopes', 'config:read,config:write').send(payload);
+      expect(response.status).toBe(403);
+    }
+    expect(runner.runPluginCommand).not.toHaveBeenCalled();
+  });
+
   it('accepts stdin only for a declared secret operation and passes it separately from argv', async () => {
     const secretPlugin = { ...plugin, manifest: { ...plugin.manifest, cli: { ...plugin.manifest.cli,
       subcommands: [{ name: 'save-key', args: [{ name: 'key', type: 'string', secret: true }] }] } } };
@@ -351,6 +365,36 @@ describe('plugins router', () => {
     expect(denied.status).toBe(400);
     expect(runner.runPluginCommand).not.toHaveBeenCalled();
     expect(JSON.stringify(denied.body)).not.toContain('private-fixture');
+  });
+
+  it('rejects terminal-only flags before local and alternate browser dispatch', async () => {
+    const terminalPlugin = { ...plugin, manifest: { ...plugin.manifest, cli: { ...plugin.manifest.cli,
+      subcommands: [{ name: 'publish', effect: 'write', terminal_only_args: ['--body-file'] },
+        { name: 'configure', effect: 'write', terminal_only: true }],
+    } } };
+    runner.runPluginCommand.mockClear();
+    for (const body of [
+      { subcommand: 'publish', args: ['--body-file', '/private/fixture'] },
+      { subcommand: 'publish', args: ['--body-file=/private/fixture'], execution: { node: 'peer' } },
+      { args: ['publish', '--body-file=/private/fixture'] },
+    ]) {
+      getPluginByIdMock.mockReturnValueOnce(terminalPlugin);
+      const response = await request(app).post('/api/plugins/git-sentinel/run').send(body);
+      expect(response.status).toBe(403);
+      expect(response.body.error).toMatch(body.subcommand ? /terminal-only/ : /owning CLI/);
+      expect(JSON.stringify(response.body)).not.toContain('/private/fixture');
+    }
+    expect(runner.runPluginCommand).not.toHaveBeenCalled();
+
+    getPluginByIdMock.mockReturnValueOnce(terminalPlugin);
+    const terminalOnly = await request(app).post('/api/plugins/git-sentinel/run').send({ subcommand: 'configure', args: ['/private/fixture'] });
+    expect(terminalOnly.status).toBe(403);
+    expect(runner.runPluginCommand).not.toHaveBeenCalled();
+
+    getPluginByIdMock.mockReturnValueOnce(terminalPlugin);
+    const allowed = await request(app).post('/api/plugins/git-sentinel/run').send({ subcommand: 'publish', args: ['--json'] });
+    expect(allowed.status).toBe(200);
+    expect(runner.runPluginCommand).toHaveBeenCalledWith(terminalPlugin, expect.objectContaining({ args: ['--json'] }));
   });
 
   // ── Review Endpoints ──────────────────────────────────────────────────────

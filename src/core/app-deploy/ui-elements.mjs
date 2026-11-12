@@ -251,7 +251,7 @@ export function generateUiElements(manifest, { pluginDir, target, tokens, typesc
   };
   add(UI_MANIFEST_FILE, `${JSON.stringify(uiManifest, null, 2)}\n`);
 
-  const first = elements[0];
+  const first = elements.find(element => element.id === spec.home) ?? elements[0];
   const hasTokens = Boolean(tokenInfo.source);
   const usage = (target === 'react'
     ? [

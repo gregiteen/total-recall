@@ -69,9 +69,9 @@ describe('--help through the real command never runs plugin code', () => {
     fs.writeFileSync(path.join(pluginDir(), 'plugin.json'), JSON.stringify({
       id: 'fx', name: 'Fixture', version: '1.0.0', description: 'Sends real messages.',
       cli: { command: 'fx', handler: './cli.mjs', subcommands: [{ name: 'send', description: 'Send a real message.', effect: 'write' }], ...cli },
-      ui: { elements: [{ id: 'card', kind: 'card', tag: 'fx-card', module: 'ui/card.js' }] },
+      ui: { home: 'home', design_tokens: 'DESIGN.md', elements: [{ id: 'home', kind: 'panel', tag: 'fx-home', module: 'ui/home.js' }] },
     }));
-    fs.writeFileSync(path.join(pluginDir(), 'ui', 'card.js'), '');
+    fs.writeFileSync(path.join(pluginDir(), 'ui', 'home.js'), '');
     // A plugin that ignores --help and does its real work, like most of the 166 the audit found.
     fs.writeFileSync(path.join(pluginDir(), 'cli.mjs'), `import fs from 'node:fs'; fs.writeFileSync(${JSON.stringify(marker)}, process.argv.slice(2).join(' ')); console.log('SENT');`);
   };

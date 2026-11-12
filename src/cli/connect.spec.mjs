@@ -87,6 +87,20 @@ describe('connect — Cursor projection', () => {
     expect(registry.clients.cursor.projectionPath).toContain('.cursor');
   });
 
+  it('preserves the registered identity when changing the brain connection', async () => {
+    const config = path.join(tmpAgentDir, 'skills', 'total-recall', 'config', 'brain.json');
+    const project_id = 'd7c8e744-9454-4cb3-8b07-d646f0421a7d';
+    fs.mkdirSync(path.dirname(config), { recursive: true });
+    fs.writeFileSync(config, JSON.stringify({ url: 'http://127.0.0.1:3000', project_id, tags: ['personal-brain'] }));
+
+    await runConnect(['cursor', '--brain', 'http://127.0.0.1:5175']);
+
+    expect(JSON.parse(fs.readFileSync(config, 'utf8'))).toMatchObject({
+      url: 'http://127.0.0.1:5175', project_id, tags: ['personal-brain'],
+    });
+    expect(fs.statSync(config).mode & 0o777).toBe(0o600);
+  });
+
   it('skips overwrite without --force when file already exists', async () => {
     await runConnect(['cursor']);
     const targetPath = path.join(tmpProject, '.cursor', 'rules', 'total-recall.mdc');

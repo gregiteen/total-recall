@@ -117,42 +117,59 @@
       "description": "Total Recall composable CLI plugin: create, compose, register, test and safely run custom verbs; every command listed in the instruction surfaces."
     }
   ],
-  "card_face": {
-    "skin": "cyber-forge",
-    "theme": "vibrant",
-    "headline": "Dynamic Agent Command Composition",
-    "primary_color": "#0891b2",
-    "secondary_color": "#083344",
-    "accent_color": "#06b6d4",
-    "touch_layout": "comfortable",
-    "interactive": true,
-    "quick_actions": [
-      {
-        "subcommand": "library",
-        "label": "LIBRARY"
-      },
-      {
-        "subcommand": "list",
-        "label": "LIST"
-      },
-      {
-        "subcommand": "show",
-        "label": "SHOW"
-      },
-      {
-        "subcommand": "history",
-        "label": "HISTORY"
-      }
-    ]
-  },
   "ui": {
+    "home": "home",
+    "design_tokens": "DESIGN.md",
     "elements": [
       {
-        "id": "card",
-        "kind": "card",
-        "tag": "tr-composable-cli-card",
-        "module": "ui/card.js",
-        "description": "Pipeline Card Face"
+        "id": "home",
+        "kind": "panel",
+        "tag": "tr-composable-cli-home",
+        "module": "ui/home.js",
+        "description": "CmdSmith Home: composed commands, their records and history, with on-demand test, rollback and remove",
+        "tokens": [
+          "color-background",
+          "color-secondary",
+          "color-surface",
+          "color-surface-raised",
+          "color-line",
+          "color-text",
+          "color-muted",
+          "color-primary",
+          "color-primary-strong",
+          "color-primary-soft",
+          "color-on-primary",
+          "color-ok",
+          "color-ok-soft",
+          "color-warn",
+          "color-warn-soft",
+          "color-danger",
+          "color-danger-soft",
+          "color-info",
+          "color-info-soft",
+          "spacing-xs",
+          "spacing-sm",
+          "spacing-md",
+          "spacing-lg",
+          "spacing-touch",
+          "radius-sm",
+          "radius-md",
+          "radius-lg",
+          "typography-title-font-family",
+          "typography-title-font-size",
+          "typography-title-font-weight",
+          "typography-title-line-height",
+          "typography-body-font-family",
+          "typography-body-font-size",
+          "typography-body-line-height",
+          "typography-label-font-family",
+          "typography-label-font-size",
+          "typography-label-font-weight",
+          "typography-label-letter-spacing",
+          "typography-code-font-family",
+          "typography-code-font-size",
+          "typography-code-line-height"
+        ]
       }
     ]
   },

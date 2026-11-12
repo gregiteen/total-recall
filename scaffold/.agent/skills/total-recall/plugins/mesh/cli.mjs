@@ -46,15 +46,21 @@ export async function run(argv = []) {
     if (!result.success) process.exitCode = 1;
     return;
   }
+  if (sub === 'token-status' || (sub === 'token' && (!args[1] || args[1] === 'status'))) {
+    if (sub === 'token-status' && args.slice(1).some(arg => arg !== '--json')) {
+      throw new Error('token-status accepts only --json');
+    }
+    const meta = await findHeadscaleKeyMeta(brainDir);
+    const present = Boolean(meta?.set);
+    console.log(JSON.stringify(sub === 'token-status' ? { present } : { present, secretKey: 'HEADSCALE_API_KEY' }));
+    return;
+  }
   if (sub === 'token') {
     if (args[1] === 'set' && args.includes('--stdin')) {
       const chunks = []; for await (const chunk of process.stdin) chunks.push(chunk);
       const config = JSON.parse(process.env.TR_PLUGIN_CONFIG || '{}');
       const at = args.indexOf('--url'); if (at >= 0) config.controlUrl = args[at + 1];
       console.log(JSON.stringify(await saveCredential({ key: 'HEADSCALE_API_KEY', value: Buffer.concat(chunks).toString('utf8').trim(), configuration: config, brainDir: process.env.TR_SECRETS_BRAIN || brainDir })));
-    } else if (!args[1] || args[1] === 'status') {
-      const meta = await findHeadscaleKeyMeta(brainDir);
-      console.log(JSON.stringify({ present: !!meta?.set, secretKey: 'HEADSCALE_API_KEY' }));
     } else throw new Error('token <status|set --stdin [--url URL]>');
     return;
   }

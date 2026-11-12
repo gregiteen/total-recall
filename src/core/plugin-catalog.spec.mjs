@@ -29,7 +29,7 @@ describe('plugin inventory and CLI library lifecycle', () => {
     const dir = path.join(root, 'source'); fs.mkdirSync(dir);
     const manifest = { id: 'catalog-example', name: 'Example', version: '1.0.0', description: 'Inspect example records',
       cli: { command: 'example', handler: 'cli.mjs', subcommands: [{ name: 'list', effect: 'read', output: 'json', args: [] }] },
-      ui: { elements: [{ id: 'card', kind: 'card', tag: 'tr-fixture-card', module: 'ui/card.js' }] } };
+      ui: { home: 'home', design_tokens: 'DESIGN.md', elements: [{ id: 'home', kind: 'panel', tag: 'tr-fixture-home', module: 'ui/home.js' }] } };
     fs.writeFileSync(path.join(dir, 'plugin.json'), JSON.stringify(manifest));
     fs.writeFileSync(path.join(dir, 'cli.mjs'), "throw new Error('Catalog must never execute this handler');");
     return dir;

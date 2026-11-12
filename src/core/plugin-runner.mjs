@@ -9,10 +9,10 @@ import { manifestHelp } from './plugin-help.mjs';
 import { spawn } from 'node:child_process';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { PACKAGE_ROOT, resolvePluginFile } from './plugin-loader.mjs';
-import { readPluginRecord } from './plugin-store.mjs';
+import { PACKAGE_ROOT, projectPluginsDir, resolvePluginFile } from './plugin-loader.mjs';
+import { readPluginRecord, recordPluginsDir } from './plugin-store.mjs';
 import { pluginExecutionEnabled } from './plugin-state.mjs';
-import { setPluginActive } from './plugin-activation.mjs';
+import { activatePluginOnUse, setPluginActive } from './plugin-activation.mjs';
 
 const CHILD = path.join(path.dirname(fileURLToPath(import.meta.url)), 'plugin-runner-child.mjs');
 export const DEFAULT_TIMEOUT_MS = 30_000;
@@ -39,11 +39,12 @@ export function validatePluginSecretInput(plugin, subcommand, input) {
 
 /**
  * @param {object} plugin  A discovered plugin ({ id, dir, manifest }).
- * @param {{ subcommand?: string, args?: string[], cwd?: string, timeoutMs?: number }} [options]
+ * @param {{ subcommand?: string, args?: string[], cwd?: string, projectRoot?: string|null, timeoutMs?: number }} [options]
  * @returns {Promise<{ ok: boolean, exitCode: number|null, signal: string|null, timedOut: boolean, truncated: boolean, output: string, durationMs: number }>}
  */
 export function runPluginCommand(plugin, options = {}) {
   const { subcommand = '', args = [], cwd = process.cwd(), timeoutMs: requestedTimeoutMs, stdin = 'ignore', stdinText, stdinRequest, composable = false, secretsBrainDir } = options;
+  const { projectRoot = cwd } = options;
   const help = manifestHelp(plugin, { subcommand, args });
   if (help !== null) return Promise.resolve({ ok: true, exitCode: 0, stdout: help, stderr: '', output: help, durationMs: 0, timedOut: false });
   const maxOutputBytes = options.maxOutputBytes ?? (stdin === 'inherit' ? CLI_MAX_OUTPUT_BYTES : MAX_OUTPUT_BYTES);
@@ -58,19 +59,26 @@ export function runPluginCommand(plugin, options = {}) {
   const stdinPayload = stdinText ?? stdinRequest;
   const operation = subcommand || args[0];
   if (operation === 'on' || operation === 'off') {
-    return setPluginActive(plugin.id, operation === 'on', { projectRoot: cwd }).then(result => ({
-      ok: result.compilation.ok, exitCode: result.compilation.ok ? 0 : 1,
+    return setPluginActive(plugin.id, operation === 'on', { projectRoot: projectRoot ?? cwd }).then(result => ({
+      ok: result.compilation.ok && result.cleanup?.ok !== false, exitCode: result.compilation.ok && result.cleanup?.ok !== false ? 0 : 1,
       output: JSON.stringify(result), durationMs: 0, timedOut: false,
     }));
   }
-  if (!pluginExecutionEnabled(plugin, { projectRoot: cwd }) && !['status', 'health', 'jobs', '--help', '-h', 'help'].includes(operation)) {
-    return Promise.reject(new Error(`Plugin ${plugin.id} is inactive; run total-recall plugin on ${plugin.id}`));
-  }
+  const passive = ['status', 'health', 'jobs', '--help', '-h', 'help'].includes(operation);
   // Manifests declare this as `timeoutMs`; the runner only read `timeout_ms`, so every declared
   // timeout was ignored and each command fell back to DEFAULT_TIMEOUT_MS (30s). That killed work
   // that legitimately takes longer — `mesh nodes` and `tr-transcribe transcribe` (model load) both
   // died at 30s while their manifests asked for far more. Accept both spellings.
   const declaration = plugin?.manifest?.cli?.subcommands?.find(item => item.name === operation);
+  if (!pluginExecutionEnabled(plugin, { projectRoot }) && !passive) {
+    if (options.activateOnUse && declaration && !args.includes('--help') && !args.includes('-h')) {
+      return activatePluginOnUse(plugin.id, { projectRoot }).then(result => {
+        if (result && !result.compilation.ok) throw new Error('Plugin was activated, but the repository instructions could not be refreshed.');
+        return runPluginCommand(plugin, { ...options, activateOnUse: false });
+      });
+    }
+    return Promise.reject(new Error(`Plugin ${plugin.id} is inactive; run total-recall plugin on ${plugin.id}`));
+  }
   const declaredTimeout = declaration?.timeout_ms ?? declaration?.timeoutMs;
   const timeoutMs = requestedTimeoutMs ?? declaredTimeout ?? DEFAULT_TIMEOUT_MS;
   if (!Number.isInteger(timeoutMs) || timeoutMs < 1 || timeoutMs > 600000) return Promise.reject(new Error('Plugin timeout must be 1..600000 ms'));
@@ -85,6 +93,8 @@ export function runPluginCommand(plugin, options = {}) {
   const safeArgs = (Array.isArray(args) ? args : []).map(String);
   if (stdinPayload !== undefined && !safeArgs.includes('--stdin')) safeArgs.push('--stdin');
   const childArgv = [CHILD, handler, command, ...(subcommand ? [String(subcommand)] : []), ...safeArgs];
+  // Only an explicitly selected project owns repository state. The cwd fallback above preserves legacy activation.
+  const statePluginsDir = options.projectRoot ? projectPluginsDir(projectRoot) : recordPluginsDir(plugin);
 
   return new Promise((resolve) => {
     const started = Date.now();
@@ -101,10 +111,11 @@ export function runPluginCommand(plugin, options = {}) {
       env: {
         ...process.env,
         TR_PACKAGE_ROOT: PACKAGE_ROOT,
+        TOTAL_RECALL_BIN: path.join(PACKAGE_ROOT, 'bin', 'total-recall.mjs'),
         TR_PLUGIN_ID: plugin.id,
         TR_PLUGIN_DIR: plugin.dir,
         TR_PLUGIN_CONFIG: JSON.stringify(readPluginRecord(plugin)?.configuration || {}),
-        ...(plugin.pluginsDir ? { TR_PLUGIN_STATE_DIR: path.join(path.dirname(plugin.pluginsDir), 'plugin-state', plugin.id) } : {}),
+        ...(statePluginsDir ? { TR_PLUGIN_STATE_DIR: path.join(path.dirname(statePluginsDir), 'plugin-state', plugin.id) } : {}),
         ...(secretsBrainDir ? { TR_SECRETS_BRAIN: secretsBrainDir } : {}),
         TR_PLUGIN_COMMAND_MODE: composable ? 'composable' : 'cli',
         FORCE_COLOR: '0',

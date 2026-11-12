@@ -15,10 +15,10 @@ import { runInSandbox } from '../core/sandbox.mjs';
 import { resolveAgentDir } from '../cli/agent-dir.mjs';
 import { removeSessionEmbeddingFromIndex } from '../core/embeddings.mjs';
 import path from 'path';
-import os from 'os';
 import fs from 'fs';
 import matter from '../core/frontmatter.mjs';
 import { agentDir, brainDir, surfaceDir, instructionsFilePath } from '../core/config.mjs';
+import { resolveVaultFromQuery } from './routes/_shared.mjs';
 
 const AGENT_DIR = process.env.AGENT_DIR || agentDir;
 const BRAIN_DIR = process.env.TR_BRAIN || path.join(AGENT_DIR, 'skills', 'total-recall');
@@ -43,32 +43,9 @@ const MODEL_CATALOG_DIR = path.join(ROOT, 'models', 'catalog', 'total-recall');
  * @returns {string} Absolute path to the memory-vault directory
  */
 function resolveVaultDir(brainId) {
-  if (!brainId || brainId === 'global') {
-    return VAULT_DIR;
-  }
-
-  if (brainId.startsWith('project:')) {
-    const projectName = brainId.slice('project:'.length);
-    const globalBrainDir = path.join(os.homedir(), '.agent', 'skills', 'total-recall');
-    const registryPath = path.join(globalBrainDir, 'config', 'project-registry.json');
-
-    if (fs.existsSync(registryPath)) {
-      try {
-        const registry = JSON.parse(fs.readFileSync(registryPath, 'utf8'));
-        const project = registry.find(p => p.name === projectName);
-        if (project) {
-          const projectVaultDir = path.join(project.brainDir, 'memory-vault');
-          if (fs.existsSync(projectVaultDir)) {
-            return projectVaultDir;
-          }
-        }
-      } catch {
-        // Registry parse error — fall through to default
-      }
-    }
-  }
-
-  return VAULT_DIR;
+  return typeof brainId === 'string' && (brainId === 'global' || brainId.startsWith('project:'))
+    ? resolveVaultFromQuery({ query: { brain: brainId } })
+    : VAULT_DIR;
 }
 
 function sha256(content) {

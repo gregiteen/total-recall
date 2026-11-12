@@ -109,6 +109,14 @@
   },
   {
     "method": "GET",
+    "path": "/api/dashboard/drawers/:edge"
+  },
+  {
+    "method": "PUT",
+    "path": "/api/dashboard/drawers/:edge"
+  },
+  {
+    "method": "GET",
     "path": "/api/dashboard/instructions"
   },
   {
@@ -482,10 +490,6 @@
   {
     "method": "POST",
     "path": "/api/plugins/:id/branding"
-  },
-  {
-    "method": "PATCH",
-    "path": "/api/plugins/:id/card-face"
   },
   {
     "method": "GET",
@@ -893,6 +897,34 @@
   },
   {
     "method": "GET",
+    "path": "/api/ui-chunks"
+  },
+  {
+    "method": "GET",
+    "path": "/api/ui-chunks/:plugin/:id"
+  },
+  {
+    "method": "GET",
+    "path": "/api/ui-chunks/:plugin/composition/current"
+  },
+  {
+    "method": "GET",
+    "path": "/api/ui-chunks/:plugin/design/revision"
+  },
+  {
+    "method": "POST",
+    "path": "/api/ui-chunks/compose"
+  },
+  {
+    "method": "POST",
+    "path": "/api/ui-chunks/pool"
+  },
+  {
+    "method": "POST",
+    "path": "/api/ui-chunks/suggest"
+  },
+  {
+    "method": "GET",
     "path": "/api/update/check"
   },
   {
@@ -994,6 +1026,22 @@
   {
     "method": "POST",
     "path": "/api/webhooks/test/:provider"
+  },
+  {
+    "method": "GET",
+    "path": "/api/workspace/pages"
+  },
+  {
+    "method": "POST",
+    "path": "/api/workspace/pages"
+  },
+  {
+    "method": "GET",
+    "path": "/api/workspace/pages/:id"
+  },
+  {
+    "method": "PUT",
+    "path": "/api/workspace/pages/:id"
   },
   {
     "method": "POST",

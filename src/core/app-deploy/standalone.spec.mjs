@@ -4,7 +4,7 @@ import path from 'node:path';
 import os from 'node:os';
 import { execSync } from 'node:child_process';
 import { createStandaloneApp, AppCreateError } from './standalone.mjs';
-import { withFixtureFace } from '../testing/plugin-fixture.mjs';
+import { withFixtureHome } from '../testing/plugin-fixture.mjs';
 
 describe('Standalone App Creator (app-deploy/standalone.mjs)', () => {
   let tmpParent;
@@ -19,7 +19,7 @@ describe('Standalone App Creator (app-deploy/standalone.mjs)', () => {
     // Create a minimal capability plugin
     fs.writeFileSync(
       path.join(tmpPluginDir, 'plugin.json'),
-      JSON.stringify(withFixtureFace({
+      JSON.stringify(withFixtureHome({
         id: 'chat-feature',
         name: 'Chat Feature',
         version: '1.0.0',

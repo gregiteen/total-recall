@@ -84,7 +84,7 @@ export default function MemoryPage({ activeBrainId }: { activeBrainId?: string }
     setError("")
     try {
       if (query.trim()) {
-        const results = await searchMemory(query, category === "all" ? undefined : category)
+        const results = await searchMemory(query, category === "all" ? undefined : category, activeBrainId)
         setNodes(results)
       } else {
         const results = await listMemory(activeBrainId, category === "all" ? undefined : category)

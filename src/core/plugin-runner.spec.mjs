@@ -1,8 +1,10 @@
-import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { globalPluginsDir, projectPluginsDir } from './plugin-loader.mjs';
 import { runPluginCommand } from './plugin-runner.mjs';
+import { writeFixturePlugin } from './testing/plugin-fixture.mjs';
 
 function makePlugin(root, id, source) {
   const pluginsDir = path.join(root, 'plugins');
@@ -12,14 +14,24 @@ function makePlugin(root, id, source) {
   return { id, dir, pluginsDir, manifest: { id, cli: { command: id, handler: './cli.mjs' } } };
 }
 
+const writeState = `import fs from 'node:fs';
+  import path from 'node:path';
+  export function run(argv) {
+    const stateDir = process.env.TR_PLUGIN_STATE_DIR;
+    fs.mkdirSync(stateDir, { recursive: true });
+    fs.writeFileSync(path.join(stateDir, 'state.txt'), argv.at(-1));
+  }`;
+
 describe('plugin-runner', () => {
   let root;
 
   beforeAll(() => {
     root = fs.mkdtempSync(path.join(os.tmpdir(), 'tr-runner-'));
+    vi.stubEnv('AGENT_DIR', path.join(root, 'agent'));
   });
 
   afterAll(() => {
+    vi.unstubAllEnvs();
     fs.rmSync(root, { recursive: true, force: true });
   });
 
@@ -39,6 +51,45 @@ describe('plugin-runner', () => {
     const res = await runPluginCommand(p, { subcommand: 'status', args: ['--json'], cwd: root });
     expect(res.ok).toBe(true);
     expect(JSON.parse(res.output.trim())).toEqual(['echo', 'status', '--json']);
+  });
+
+  it('writes and archives repository state independently of a shared install', async () => {
+    const fixture = makePlugin(path.dirname(globalPluginsDir()), 'scoped-state', writeState);
+    const manifest = writeFixturePlugin(fixture.dir, {
+      ...fixture.manifest,
+      name: 'Scoped State',
+      description: 'Writes a fixture state file.',
+      version: '1.0.0',
+    });
+    const plugin = { ...fixture, manifest, scope: 'global' };
+    const projectRoot = path.join(root, 'repo');
+    const cwd = path.join(projectRoot, 'nested');
+    fs.mkdirSync(cwd, { recursive: true });
+    const brainDir = path.dirname(projectPluginsDir(projectRoot));
+    const sharedState = path.join(path.dirname(globalPluginsDir()), 'plugin-state', plugin.id, 'state.txt');
+    const projectState = path.join(brainDir, 'plugin-state', plugin.id, 'state.txt');
+
+    await expect(runPluginCommand(plugin, { cwd, projectRoot: null, args: ['shared'] })).resolves.toMatchObject({ ok: true });
+    await expect(runPluginCommand(plugin, { cwd, projectRoot, args: ['project'] })).resolves.toMatchObject({ ok: true });
+    expect(fs.readFileSync(projectState, 'utf8')).toBe('project');
+    expect(fs.readFileSync(sharedState, 'utf8')).toBe('shared');
+
+    const off = await runPluginCommand(plugin, { cwd: projectRoot, projectRoot: null, subcommand: 'off' });
+    expect(off.ok).toBe(true);
+    expect(JSON.parse(off.output).cleanup).toEqual({ ok: true, state: 'archived' });
+    expect(fs.existsSync(projectState)).toBe(false);
+    expect(fs.readFileSync(path.join(brainDir, 'config', 'plugin-state-archive', plugin.id, 'state.txt'), 'utf8')).toBe('project');
+    expect(fs.readFileSync(sharedState, 'utf8')).toBe('shared');
+  });
+
+  it('writes scaffold fallback state to the global brain when no project is selected', async () => {
+    const shipped = path.join(root, 'shipped');
+    const plugin = { ...makePlugin(shipped, 'scaffold-state', writeState), scope: 'scaffold' };
+    const globalState = path.join(path.dirname(globalPluginsDir()), 'plugin-state', plugin.id, 'state.txt');
+
+    await expect(runPluginCommand(plugin, { cwd: root, args: ['fallback'] })).resolves.toMatchObject({ ok: true });
+    expect(fs.readFileSync(globalState, 'utf8')).toBe('fallback');
+    expect(fs.existsSync(path.join(shipped, 'plugin-state'))).toBe(false);
   });
 
   it('bounds server output at 256 KiB but gives a terminal call the full output', async () => {

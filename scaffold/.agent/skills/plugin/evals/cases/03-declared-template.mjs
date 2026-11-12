@@ -1,33 +1,25 @@
 /**
- * A manifest that declares a shared layout template.
+ * A valid native Home package that still ships legacy presentation artifacts.
  *
  * Observed: core enforced a closed allowlist of seven layouts, and 24 of 34
  * plugins shared a byte-identical card signature.
  */
-const CARD = `
-export class TemplatedCard extends HTMLElement {
-  connectedCallback() { this.attachShadow({ mode: 'open' }) }
-}
-customElements.define('tr-templated-card', TemplatedCard)
-`;
+import correct from './06-correct-plugin.mjs';
+
+const manifest = JSON.parse(correct.files['plugin.json']);
+manifest.card_layout = { template: 'ledger', regions: [{ widget: 'status' }] };
 
 export default {
+  ...correct,
   name: 'declared-template',
-  why: 'a shared layout vocabulary is the mechanism that made unrelated plugins look alike',
+  why: 'Keeping the legacy template or asset ships an unsupported presentation alongside native Home.',
+  flags: ['--manifest'],
   files: {
-    'plugin.json': JSON.stringify({
-      id: 'templated', name: 'Templated', version: '1.0.0', description: 'A plugin that declares a layout template.',
-      reuse: { commands: [], owned: 'Displays the plugin-specific view.' },
-      cli: { command: 'templated', handler: './cli.mjs', subcommands: [{ name: 'status', effect: 'read' }] },
-      status: { command: 'status', refresh_seconds: 30 },
-      branding: { color: '#475569' },
-      card_layout: { template: 'ledger', regions: [{ widget: 'status' }, { widget: 'table', source: { command: 'status' } }] },
-      ui: { elements: [{ id: 'card', kind: 'card', tag: 'tr-templated-card', module: 'ui/card.js' }] },
-    }, null, 2),
-    'cli.mjs': 'export default async function run() {}\n',
-    'ui/card.js': CARD,
+    ...correct.files,
+    'plugin.json': JSON.stringify(manifest),
+    'ui/card.js': "customElements.define('tr-example-card', class extends HTMLElement {})\n",
   },
   expect: {
-    fail: ['no template', 'card_layout'],
+    fail: ['contract', 'native presentation only'],
   },
 };

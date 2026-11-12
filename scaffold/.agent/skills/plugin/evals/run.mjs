@@ -9,8 +9,7 @@
  *
  *   node evals/run.mjs [--case <name>] [--json] [--keep]
  *
- * A case passes when record.mjs reports exactly the failures the case expects:
- * an eval that passes because the checker looks at nothing is not evidence.
+ * A case requires the exact set of failure check names and any declared passes.
  */
 import fs from 'node:fs'
 import os from 'node:os'
@@ -49,9 +48,9 @@ function materialise(spec, dir) {
   }
 }
 
-function runRecord(dir) {
+function runRecord(dir, flags) {
   try {
-    const out = execFileSync(process.execPath, [RECORD, dir, '--json'], { encoding: 'utf8', timeout: 60000 })
+    const out = execFileSync(process.execPath, [RECORD, dir, '--json', ...flags], { encoding: 'utf8', timeout: 60000 })
     return { code: 0, report: JSON.parse(out) }
   } catch (err) {
     // record.mjs exits non-zero when it finds failures; the JSON is still valid.
@@ -67,7 +66,7 @@ for (const spec of cases) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), `plugin-eval-${spec.name}-`))
   try {
     materialise(spec, dir)
-    const { report } = runRecord(dir)
+    const { report } = runRecord(dir, spec.flags ?? [])
 
     if (!report) {
       results.push({ name: spec.name, ok: false, reason: 'record.mjs produced no JSON' })
@@ -75,24 +74,24 @@ for (const spec of cases) {
     }
 
     const failures = report.results.filter((r) => r.level === 'FAIL')
-    const failureText = failures.map((f) => `${f.check}: ${f.detail}`).join(' | ')
-    const expected = spec.expect.fail || []
-
-    const missing = expected.filter((want) => !failureText.includes(want.split(':')[0].trim()))
-    const unexpected = expected.length === 0
-      ? failures.map((f) => `${f.check}: ${f.detail}`)
-      : []
-
-    const ok = missing.length === 0 && unexpected.length === 0
+    const failedChecks = new Set(failures.map((f) => f.check))
+    const passedChecks = new Set(report.results.filter((r) => r.level === 'PASS').map((r) => r.check))
+    const expected = spec.expect.fail ?? []
+    const missing = expected.filter((check) => !failedChecks.has(check))
+    const unexpected = failures.filter((f) => !expected.includes(f.check))
+    const missingPasses = (spec.expect.pass ?? []).filter((check) => !passedChecks.has(check))
+    const reasons = [
+      missing.length ? `checker missed: ${missing.join(', ')}` : null,
+      unexpected.length ? `unexpected failures: ${unexpected.map((f) => f.check).join(', ')}` : null,
+      missingPasses.length ? `missing passes: ${missingPasses.join(', ')}` : null,
+    ].filter(Boolean)
     results.push({
       name: spec.name,
-      ok,
+      ok: reasons.length === 0,
       why: spec.why,
       expected,
       found: failures.map((f) => `${f.check} — ${f.detail}`),
-      reason: ok ? null
-        : missing.length ? `checker missed: ${missing.join(', ')}`
-          : `unexpected failures: ${unexpected.join(' | ')}`,
+      reason: reasons.join(' | ') || null,
     })
   } finally {
     if (!keep) fs.rmSync(dir, { recursive: true, force: true })

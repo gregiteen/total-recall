@@ -21,8 +21,9 @@ import { decomposeTask } from './capability/index.mjs';
 import { listThreads, getThread, createThread, updateThread, closeThread, deleteThread } from './src/threads.mjs';
 import { executeCodeReview } from './src/review.mjs';
 import { stopOnTermination } from './src/termination.mjs';
+import { chatTarget, setChatDefault } from './src/chat.mjs';
 
-const VALUE_FLAGS = ['--node', '--mode', '--orchestrator', '--branch', '--reviewer', '--thread', '--status', '--platform', '--agent', '--url', '--query', '--tier', '--threshold', '--author', '--explorer', '--architect', '--implementer', '--verifier', '--title', '--summary', '--cwd', '--tools', '--setting-sources', '--model', '--name', '--tail', '--timeout-ms', '--void', '--reason'];
+const VALUE_FLAGS = ['--node', '--mode', '--orchestrator', '--branch', '--reviewer', '--thread', '--status', '--platform', '--agent', '--url', '--brains', '--query', '--tier', '--threshold', '--author', '--explorer', '--architect', '--implementer', '--verifier', '--title', '--summary', '--cwd', '--tools', '--setting-sources', '--model', '--name', '--tail', '--timeout-ms', '--void', '--reason'];
 export function parseArguments(args) {
   const positional = [];
   for (let index = 1; index < args.length; index += 1) {
@@ -85,6 +86,8 @@ async function runOperation(argv) {
   let result;
   if (operation === 'status') result = {...await inspectNode(value('--node') || 'local'),documentation:documentationStatus()};
   else if (operation === 'catalog') result = { adapters: getActiveAdapters(), permissions: ['read', 'write', 'send', 'destructive'] };
+  else if (operation === 'chat-target') result = chatTarget(value('--brains'));
+  else if (operation === 'chat-default') result = setChatDefault(positional[0], value('--url'));
   else if (operation === 'nodes') result = await listTargets();
   else if (operation === 'adoption') {
     const node = value('--node');

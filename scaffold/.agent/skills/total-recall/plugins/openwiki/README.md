@@ -30,6 +30,8 @@ total-recall openwiki bootstrap --brain /absolute/path/to/brain \
 - **CLI Command**: `npx total-recall openwiki`
 - **UI**: `ui/panel.js` custom element with DESIGN.md tokens
 
+Open **OpenWiki** from the dashboard's Plugins folder to search workspace passages, browse indexed Markdown pages, and inspect the links between them. The atlas reads local wiki files and recorded upstream status. Customize its theme in the root `DESIGN.md`. The 16 owner blocks in `ui/chunks/` can be composed into pages or drawers. Use Settings for write-only credential entry or run `total-recall openwiki token set <provider> --stdin` in the terminal.
+
 ## Use it two ways
 
 This plugin is a reusable brick, so a new project does not start from zero.

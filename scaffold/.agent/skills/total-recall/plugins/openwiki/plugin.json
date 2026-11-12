@@ -41,29 +41,6 @@
       "required": false
     }
   ],
-  "card_face": {
-    "headline": "OpenWiki Control Deck",
-    "quick_actions": [
-      {
-        "subcommand": "status",
-        "label": "STATUS"
-      },
-      {
-        "subcommand": "hubs",
-        "label": "HUBS"
-      },
-      {
-        "subcommand": "ingest",
-        "label": "INGEST"
-      },
-      {
-        "subcommand": "probe",
-        "label": "200 PROBE"
-      }
-    ],
-    "touch_layout": "comfortable",
-    "interactive": true
-  },
   "ssss_schemas": {
     "categories": [
       {
@@ -232,6 +209,12 @@
             "name": "project",
             "flag": "--project",
             "label": "Target project brain",
+            "type": "boolean"
+          },
+          {
+            "name": "json",
+            "flag": "--json",
+            "label": "JSON output",
             "type": "boolean"
           }
         ]
@@ -443,32 +426,15 @@
     ]
   },
   "ui": {
-    "design_tokens": "ui/DESIGN.md",
+    "home": "panel",
+    "design_tokens": "DESIGN.md",
     "elements": [
       {
         "id": "panel",
         "kind": "panel",
         "tag": "openwiki-panel",
         "module": "ui/panel.js",
-        "description": "OpenWiki panel",
-        "events": [
-          "save-token"
-        ],
-        "tokens": [
-          "color-text",
-          "color-surface",
-          "color-border",
-          "spacing-md",
-          "radius-md"
-        ],
-        "optional_tokens": []
-      },
-      {
-        "id": "card",
-        "kind": "card",
-        "tag": "tr-openwiki-card",
-        "module": "ui/card.js",
-        "description": "Knowledge Graph Card Face"
+        "description": "Workspace wiki atlas"
       }
     ]
   },

@@ -4,6 +4,8 @@ import path from 'node:path';
 import { createValidator } from '@ssss/cli/validator';
 import { discoverPlugins, resolvePluginFile, validatePluginManifest } from './plugin-loader.mjs';
 import { pluginActivation } from './plugin-state.mjs';
+import { executePluginState, listPluginStates, PluginStateStore } from './plugin-state-store.mjs';
+import { collectCssVariables, extractFrontmatter, resolveTokenReferences } from './app-deploy/design-tokens.mjs';
 
 const type = 'ui-chunk:chunk';
 const idPattern = /^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/;
@@ -11,6 +13,7 @@ const timestampPattern = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-
 const surfaces = new Set(['page', 'left', 'right', 'bottom']);
 const maxFileBytes = 64 * 1024;
 const maxQueryLength = 1024;
+const POOL = 'workspace-chunk-pool';
 export const uiChunkRegistryPath = path.join(import.meta.dirname, 'ui-chunk.registry.json');
 const registry = JSON.parse(fs.readFileSync(uiChunkRegistryPath, 'utf8'));
 const validator = createValidator({ extensions: [registry] });
@@ -40,7 +43,7 @@ function validList(list, max, test) {
 // inside its resolved root must be regular, and never traverse another link.
 function ownerFile(root, relative) {
   const filename = path.join(root, relative);
-  if (fs.realpathSync(filename) !== filename || !fs.lstatSync(filename).isFile()) {
+  if (!filename.startsWith(root + path.sep) || fs.realpathSync(filename) !== filename || !fs.lstatSync(filename).isFile()) {
     throw new UiChunkFileError('Chunk files and DESIGN.md must be regular files inside the plugin.');
   }
   return filename;
@@ -69,6 +72,79 @@ function readOwnerFile(root, relative) {
   }
 }
 
+const componentProperties = {
+  backgroundColor: 'background-color', textColor: 'color', color: 'color',
+  borderColor: 'border-color', borderWidth: 'border-width', borderStyle: 'border-style',
+  rounded: 'border-radius', padding: 'padding', gap: 'gap', size: 'inline-size',
+  width: 'width', height: 'height', fontFamily: 'font-family', fontSize: 'font-size',
+  fontWeight: 'font-weight', lineHeight: 'line-height', letterSpacing: 'letter-spacing',
+  fontFeature: 'font-feature-settings', fontVariation: 'font-variation-settings',
+};
+
+function designValue(value) {
+  const css = String(value);
+  if (/[;{}<>\\\r\n]|\/\*|\burl\s*\(/i.test(css)) {
+    throw new UiChunkFileError('Unsafe design token value.');
+  }
+  return css;
+}
+
+export function compilePluginDesign(markdown) {
+  // Older owners published the token map in a fenced YAML section.
+  const legacy = !/^\uFEFF?---(?:\r?\n|$)/.test(markdown) &&
+    markdown.match(/^```yaml\r?\n(tokens:\r?\n[\s\S]*?)^```[ \t]*$/m);
+  if (/^\uFEFF?---(?:\r?\n|$)/.test(markdown) && !/^\uFEFF?---\r?\n[\s\S]*?\r?\n---[ \t]*(?:\r?\n|$)/.test(markdown)) {
+    throw new UiChunkFileError('Incomplete design frontmatter.');
+  }
+  const tokens = extractFrontmatter(legacy ? '---\n' + legacy[1] + '---\n' : markdown);
+  const flat = Object.entries(tokens.tokens || {}).filter(([name, value]) =>
+    /^(?:color|font|spacing|radius|border-radius)(?:-[a-z0-9-]+)?$/.test(name) &&
+    (typeof value === 'string' || typeof value === 'number'));
+  const entries = new Map([...flat, ...collectCssVariables(tokens)]);
+  const properties = Object.fromEntries([...entries].map(([name, value]) => ['--' + name, designValue(value)]));
+  const resolved = resolveTokenReferences(tokens);
+  const components = [];
+  const rules = Object.entries(resolved.components || {}).map(([component, values]) => {
+    if (!/^[A-Za-z0-9_-]{1,80}$/.test(component) || !values || typeof values !== 'object') return '';
+    const definitions = { ...values.typography, ...values };
+    const declarations = Object.entries(componentProperties).flatMap(([key, property]) => {
+      const value = definitions[key];
+      return typeof value === 'string' || typeof value === 'number' ? [property + ':' + designValue(value) + ';'] : [];
+    });
+    if (!declarations.length) return '';
+    components.push(component);
+    return '[data-design-component="' + component + '"]{' + declarations.join('') + '}';
+  });
+  const css = ':root{' + Object.entries(properties).map(([name, value]) => name + ':' + value + ';').join('') + '}\n' +
+    rules.join('\n');
+  return { css, components };
+}
+
+export function readPluginDesign(plugin, { projectRoot = process.cwd(), revision } = {}) {
+  if (!isId(plugin)) throw new UiChunkInputError('Invalid plugin ID.');
+  const owner = discoverPlugins(projectRoot).find(entry => entry.id === plugin && entry.valid);
+  if (!owner || !pluginActivation(owner, { projectRoot }).enabled) return null;
+  const root = fs.realpathSync(owner.dir);
+  const declared = owner.manifest.ui?.design_tokens;
+  for (const file of declared ? [declared] : ['DESIGN.md', 'ui/DESIGN.md']) {
+    let content;
+    try {
+      content = readOwnerFile(root, file);
+    } catch (error) {
+      if (!declared && error.code === 'ENOENT') continue;
+      throw new UiChunkInputError('The plugin design file could not be read.');
+    }
+    const version = createHash('sha256').update(content).digest('hex');
+    if (version === revision) return { unchanged: true };
+    try {
+      return { revision: version, ...compilePluginDesign(new TextDecoder('utf-8', { fatal: true }).decode(content)) };
+    } catch {
+      throw new UiChunkInputError('The plugin design contains invalid tokens. Showing the last valid design.');
+    }
+  }
+  return { revision: null, css: '', components: [] };
+}
+
 function chunkDirectory(root) {
   for (const relative of ['ui', 'ui/chunks']) {
     const directory = path.join(root, relative);
@@ -89,7 +165,7 @@ function chunkDirectory(root) {
 function nativePanel(manifest, id, root) {
   const element = manifest.ui?.elements?.find(entry => entry.id === id);
   if (!element || !['panel', 'form', 'list', 'detail', 'widget'].includes(element.kind)) {
-    throw new UiChunkFileError('panel must identify a declared non-card content element.');
+    throw new UiChunkFileError('panel must identify a declared native content element.');
   }
   try {
     resolvePluginFile(root, element.module);
@@ -100,6 +176,10 @@ function nativePanel(manifest, id, root) {
 
 function readChunk(root, manifest, id) {
   const contents = readOwnerFile(root, 'ui/chunks/' + id + '.md');
+  return parseChunk(contents, root, manifest, id);
+}
+
+function parseChunk(contents, root, manifest, id) {
   let source;
   try {
     source = new TextDecoder('utf-8', { fatal: true }).decode(contents);
@@ -125,17 +205,18 @@ function readChunk(root, manifest, id) {
     if (!isId(data.panel)) throw new UiChunkFileError('Invalid panel ID.');
     nativePanel(manifest, data.panel, root);
   }
-  const operations = new Set(manifest.cli?.subcommands?.map(command => command.name));
+  const operations = new Map(manifest.cli?.subcommands?.map(command => [command.name, command]));
   if (data.operations !== undefined && !validList(data.operations, 24, operation => operations.has(operation))) {
     throw new UiChunkFileError('operations must name distinct CLI operations declared by this plugin.');
   }
   if (data.data !== undefined && !validList(data.data, 24, ref => {
     if (!isText(ref, 200)) return false;
     const separator = ref.indexOf(':');
-    return separator > 0 && operations.has(ref.slice(0, separator)) &&
+    const operation = separator > 0 && operations.get(ref.slice(0, separator));
+    return operation && operation.sensitive_output !== true &&
       /^(?:\/(?:[^~/]|~[01])*)+$/u.test(ref.slice(separator + 1));
   })) {
-    throw new UiChunkFileError('data must name declared operations and JSON pointers in the form operation:/path.');
+    throw new UiChunkFileError('data must name non-sensitive declared operations and JSON pointers in the form operation:/path.');
   }
   const html = result.body.trim();
   if (!html.startsWith('<') || html.includes('\0')) {
@@ -159,6 +240,43 @@ function readChunk(root, manifest, id) {
 
 function metadata({ html: _html, ...chunk }) {
   return chunk;
+}
+
+function poolDirectory(brainDir) {
+  return path.join(brainDir, 'config', POOL);
+}
+
+function poolFile(brainDir, plugin, id) {
+  return path.join(poolDirectory(brainDir), plugin + ':' + id + '.json');
+}
+
+function poolChunk(value, root, manifest, id) {
+  if (!value || value.plugin !== manifest.id || value.id !== id ||
+      typeof value.markdown !== 'string' || Buffer.byteLength(value.markdown) > maxFileBytes) {
+    throw new UiChunkFileError('Invalid workspace block record.');
+  }
+  return { ...parseChunk(Buffer.from(value.markdown), root, manifest, id), origin: 'workspace' };
+}
+
+export async function addWorkspaceUiChunk(brainDir, { plugin, id, markdown }, projectRoot = process.cwd()) {
+  if (!isId(plugin) || !isId(id)) throw new UiChunkInputError('Invalid block identity.');
+  const owner = discoverPlugins(projectRoot).find(entry => entry.id === plugin && entry.valid);
+  if (!owner || !pluginActivation(owner, { projectRoot }).enabled) throw new UiChunkInputError('The block owner must be installed and enabled.');
+  const root = fs.realpathSync(owner.dir);
+  const directory = chunkDirectory(root);
+  if (directory && fs.lstatSync(path.join(directory, id + '.md'), { throwIfNoEntry: false })) {
+    throw new UiChunkInputError('That block ID belongs to the installed plugin.');
+  }
+  const value = { plugin, id, markdown };
+  let chunk;
+  try { chunk = poolChunk(value, root, owner.manifest, id); }
+  catch (error) {
+    if (error instanceof UiChunkFileError) throw new UiChunkInputError(error.message);
+    throw error;
+  }
+  const file = poolFile(brainDir, plugin, id);
+  const result = await executePluginState({ file, plugin: POOL, action: 'write', value, expectedVersion: null });
+  return { chunk: metadata(chunk), version: result.version };
 }
 
 function diagnostic(error, plugin, id) {
@@ -200,22 +318,33 @@ function scoreChunk(chunk, query, terms) {
   return score;
 }
 
-export function searchUiChunks({ projectRoot = process.cwd(), plugin, surface, query = '', limit = 40 } = {}) {
+export function searchUiChunks({ projectRoot = process.cwd(), brainDir, plugin, surface, query = '', limit = 40, offset = 0 } = {}) {
   if (plugin !== undefined && !isId(plugin)) throw new UiChunkInputError('Invalid plugin ID.');
   if (surface !== undefined && !surfaces.has(surface)) throw new UiChunkInputError('Invalid UI surface.');
   if (typeof query !== 'string' || query.length > maxQueryLength) throw new UiChunkInputError('Chunk query exceeds 1024 characters or is invalid.');
   if (!Number.isInteger(limit) || limit < 1 || limit > 200) throw new UiChunkInputError('Limit must be between 1 and 200.');
+  if (!Number.isSafeInteger(offset) || offset < 0) throw new UiChunkInputError('Offset must be a nonnegative integer.');
   const chunks = [];
   const diagnostics = [];
   const normalized = query.trim().toLowerCase();
   const terms = tokens(normalized);
+  const installed = discoverPlugins(projectRoot).filter(owner => owner.valid && (!plugin || owner.id === plugin));
+  const visible = new Map();
+  const keys = new Set();
+  const add = (record) => {
+    if (keys.has(record.key)) return;
+    keys.add(record.key);
+    if (surface && !record.surfaces.includes(surface)) return;
+    const score = scoreChunk(record, normalized, terms);
+    if (!normalized || score > 0) chunks.push({ chunk: metadata(record), score });
+  };
 
-  for (const owner of discoverPlugins(projectRoot)) {
-    if (!owner.valid || (plugin && owner.id !== plugin)) continue;
+  for (const owner of installed) {
     try {
       if (!pluginActivation(owner, { projectRoot }).enabled) continue;
       const root = fs.realpathSync(owner.dir);
       const directory = chunkDirectory(root);
+      visible.set(owner.id, { root, manifest: owner.manifest, directory });
       if (!directory) continue;
       const files = fs.readdirSync(directory).filter(name => name.endsWith('.md')).sort();
       if (!files.length) continue;
@@ -227,10 +356,7 @@ export function searchUiChunks({ projectRoot = process.cwd(), plugin, surface, q
           continue;
         }
         try {
-          const chunk = metadata(readChunk(root, owner.manifest, id));
-          if (surface && !chunk.surfaces.includes(surface)) continue;
-          const score = scoreChunk(chunk, normalized, terms);
-          if (!normalized || score > 0) chunks.push({ chunk, score });
+          add(readChunk(root, owner.manifest, id));
         } catch (error) {
           diagnostics.push(diagnostic(error, owner.id, id));
         }
@@ -239,11 +365,21 @@ export function searchUiChunks({ projectRoot = process.cwd(), plugin, surface, q
       diagnostics.push(diagnostic(error, owner.id));
     }
   }
+  if (brainDir) {
+    for (const { value } of listPluginStates(poolDirectory(brainDir), POOL)) {
+      const owner = visible.get(value?.plugin);
+      if (!owner || !isId(value.id)) continue;
+      try {
+        if (owner.directory && fs.lstatSync(path.join(owner.directory, value.id + '.md'), { throwIfNoEntry: false })) continue;
+        add(poolChunk(value, owner.root, owner.manifest, value.id));
+      } catch (error) { diagnostics.push(diagnostic(error, value.plugin, value.id)); }
+    }
+  }
   chunks.sort((a, b) => b.score - a.score || a.chunk.key.localeCompare(b.chunk.key, 'en'));
-  return { chunks: chunks.slice(0, limit).map(entry => entry.chunk), total: chunks.length, diagnostics, retrieval: 'lexical' };
+  return { chunks: chunks.slice(offset, offset + limit).map(entry => entry.chunk), total: chunks.length, diagnostics, retrieval: 'lexical' };
 }
 
-export function getUiChunk(plugin, id, { projectRoot = process.cwd(), surface } = {}) {
+export function getUiChunk(plugin, id, { projectRoot = process.cwd(), surface, brainDir } = {}) {
   if (!isId(plugin) || !isId(id)) throw new UiChunkInputError('Invalid chunk identity.');
   if (surface !== undefined && !surfaces.has(surface)) throw new UiChunkInputError('Invalid UI surface.');
   const owner = discoverPlugins(projectRoot).find(entry => entry.id === plugin && entry.valid);
@@ -251,9 +387,16 @@ export function getUiChunk(plugin, id, { projectRoot = process.cwd(), surface } 
   try {
     if (!pluginActivation(owner, { projectRoot }).enabled) return null;
     const root = fs.realpathSync(owner.dir);
-    if (!chunkDirectory(root)) return null;
-    ownerFile(root, 'DESIGN.md');
-    const chunk = readChunk(root, owner.manifest, id);
+    const directory = chunkDirectory(root);
+    let chunk;
+    if (directory && fs.lstatSync(path.join(directory, id + '.md'), { throwIfNoEntry: false })) {
+      ownerFile(root, 'DESIGN.md');
+      chunk = readChunk(root, owner.manifest, id);
+    } else if (brainDir) {
+      const record = new PluginStateStore(poolFile(brainDir, plugin, id), POOL).read(null);
+      if (record) chunk = poolChunk(record, root, owner.manifest, id);
+    }
+    if (!chunk) return null;
     return !surface || chunk.surfaces.includes(surface) ? chunk : null;
   } catch {
     return null;

@@ -29,6 +29,7 @@
     "cli.mjs",
     "plugin.json",
     "README.md",
+    "DESIGN.md",
     "src/",
     "scripts/",
     "!src/**/*.spec.mjs",

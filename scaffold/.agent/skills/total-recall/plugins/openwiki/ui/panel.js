@@ -1,539 +1,262 @@
-// OpenWiki Interactive Knowledge Graph & Engine Panel
-// Provides full knowledge graph node inspection, hub directory browsing,
-// ingestion triggers, and secure API credential storage.
-class OpenwikiPanel extends HTMLElement {
+const template = document.createElement('template');
+template.innerHTML = `
+  <style>
+    :host {
+      display: block;
+      color: var(--color-text, #302519);
+      font: 1rem/1.55 var(--typography-body-font-family, system-ui, sans-serif);
+    }
+    * { box-sizing: border-box; }
+    .atlas {
+      background: var(--color-background, #f9f1e3);
+      border: 1px solid var(--color-outline, #cbb497);
+      border-radius: var(--radius-panel, 0.45rem);
+      padding: var(--spacing-lg, 1.5rem);
+    }
+    .toolbar, .search-controls, .graph-tools {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: var(--spacing-sm, 0.65rem);
+    }
+    h2, h3 {
+      font-family: var(--typography-heading-font-family, Georgia, serif);
+      font-weight: var(--typography-heading-font-weight, 600);
+      margin: 0;
+    }
+    h2 { font-size: var(--typography-heading-font-size, 1.8rem); }
+    h3 { font-size: 1.3rem; }
+    p { margin: 0.35rem 0; }
+    .state, small { color: var(--color-muted, #6d5741); }
+    [data-error] { color: var(--color-error, #9b2a20); }
+    input, button {
+      background: var(--color-surface, #fff9ee);
+      border: 1px solid var(--color-outline, #cbb497);
+      border-radius: var(--radius-control, 0.3rem);
+      color: inherit;
+      font: inherit;
+      min-height: 44px;
+      padding: 0.35rem 0.75rem;
+    }
+    input { flex: 1 1 13rem; min-width: 0; }
+    button { cursor: pointer; }
+    button:disabled { cursor: wait; opacity: 0.65; }
+    :focus-visible { outline: 2px solid var(--color-primary, #8d3e10); outline-offset: 2px; }
+    .search-controls button {
+      background: var(--color-primary, #8d3e10);
+      border-color: var(--color-primary, #8d3e10);
+      color: var(--color-on-primary, #fff9ee);
+      font-weight: 600;
+    }
+    .search { margin-block: var(--spacing-lg, 1.5rem); }
+    label { display: block; font-weight: 600; margin-bottom: 0.3rem; }
+    .grid { display: grid; gap: var(--spacing-lg, 1.5rem); grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    ul { list-style: none; padding: 0; margin: 0; }
+    li { overflow-wrap: anywhere; }
+    .index li, .links li { border-bottom: 1px solid var(--color-outline, #cbb497); padding-block: 0.5rem; }
+    .index small { display: block; }
+    small, code { font: 0.8rem/1.5 var(--typography-source-font-family, ui-monospace, monospace); }
+    .results li {
+      background: var(--color-surface, #fff9ee);
+      border-inline-start: 2px solid var(--color-primary, #8d3e10);
+      margin-block-start: var(--spacing-sm, 0.65rem);
+      padding: var(--spacing-sm, 0.65rem) var(--spacing-md, 1rem);
+    }
+    .edge { color: var(--color-primary, #8d3e10); font-weight: 700; }
+    @media (max-width: 580px) {
+      .atlas { padding: var(--spacing-md, 1rem); }
+      .grid { grid-template-columns: 1fr; }
+    }
+  </style>
+  <section class="atlas" aria-labelledby="atlas">
+    <header class="toolbar">
+      <div>
+        <h2 id="atlas">Workspace wiki atlas</h2>
+        <p id="upstream" class="state" role="status">Reading recorded version…</p>
+      </div>
+      <button type="button" id="reload">Refresh index</button>
+    </header>
+    <section class="search" role="search" aria-label="Evidence search">
+      <label for="query">Search wiki evidence</label>
+      <div class="search-controls">
+        <input id="query" type="search" maxlength="220">
+        <button type="button" id="search">Search</button>
+      </div>
+      <p id="search-state" class="state" role="status">Search headings and passages in this workspace.</p>
+      <ul id="results" class="results" aria-label="Evidence results"></ul>
+    </section>
+    <div class="grid">
+      <section class="index" aria-labelledby="index">
+        <h3 id="index">Wiki index</h3>
+        <p id="index-state" class="state" role="status">Reading workspace pages…</p>
+        <ul id="pages" aria-label="Wiki pages"></ul>
+      </section>
+      <section aria-labelledby="topology">
+        <div class="graph-tools">
+          <h3 id="topology">Link topology</h3>
+          <button type="button" id="graph">Inspect links</button>
+        </div>
+        <p id="graph-state" class="state" role="status">Trace links between pages in the workspace.</p>
+        <ul id="links" class="links" aria-label="Documentation links"></ul>
+      </section>
+    </div>
+  </section>
+`;
+
+const number = value => Number.isSafeInteger(value) && value >= 0;
+
+function element(tag, text, className) {
+  const node = document.createElement(tag);
+  node.textContent = text;
+  if (className) node.className = className;
+  return node;
+}
+
+class OpenWikiPanel extends HTMLElement {
   constructor() {
     super();
-    this.attachShadow({ mode: 'open' });
-    this._view = null;
-    this._activeTab = 'graph';
-    this._searchQuery = '';
-    this._selectedCategory = 'all';
-    this._selectedNode = null;
-    this._ingestOutput = '';
-    this._nodes = [];
-    this._loading = false;
-  }
-
-  set host(h) {
-    this._host = h;
-    this._loadLiveNodes();
-  }
-
-  get host() {
-    return this._host;
-  }
-
-  connectedCallback() {
-    this._loadLiveNodes();
-    this.render();
-  }
-
-  async _loadLiveNodes() {
-    if (this._loading) return;
-    this._loading = true;
-    try {
-      if (this._host && typeof this._host.run === 'function') {
-        const res = await this._host.run('hubs', ['--json']);
-        if (res && res.output) {
-          const parsed = JSON.parse(res.output);
-          if (parsed && Array.isArray(parsed.hubs) && parsed.hubs.length > 0) {
-            this._nodes = parsed.hubs.map((h) => ({
-              slug: h.path,
-              title: h.title,
-              category: 'hub',
-              importance: 3,
-              priority: 'normal',
-              tags: ['openwiki', 'hub', 'documentation'],
-              body: `Path: ${h.path}\nSize: ${h.size_bytes} bytes\nLines: ${h.lines}`
-            }));
-            this.render();
-            return;
-          }
-        }
-      }
-
-      const res = await fetch('/api/memory?tag=openwiki', { signal: AbortSignal.timeout(3000) });
-      if (res.ok) {
-        const data = await res.json();
-        const items = Array.isArray(data) ? data : (data.nodes || []);
-        if (items.length > 0) {
-          this._nodes = items.map((n) => ({
-            slug: n.slug || n.id || 'node',
-            title: n.title || 'Untitled Node',
-            category: n.category || 'fact',
-            importance: n.importance || 3,
-            priority: n.priority || 'medium',
-            tags: n.tags || [],
-            body: n.body || n.content || ''
-          }));
-          this.render();
-        }
-      }
-    } catch {
-      // Retain live empty state honestly
-    } finally {
-      this._loading = false;
-    }
-  }
-
-  set view(value) {
-    this._view = value;
-    this.render();
-  }
-
-  get view() {
-    return this._view;
-  }
-
-  connectedCallback() {
-    this.render();
-  }
-
-  _filterNodes() {
-    return this._nodes.filter((node) => {
-      const matchCat = this._selectedCategory === 'all' || node.category === this._selectedCategory;
-      const q = this._searchQuery.toLowerCase();
-      const matchQuery = !q || node.title.toLowerCase().includes(q) || node.body.toLowerCase().includes(q) || node.tags.some((t) => t.toLowerCase().includes(q));
-      return matchCat && matchQuery;
+    this.attachShadow({ mode: 'open' }).append(template.content.cloneNode(true));
+    this.#field('reload').addEventListener('click', () => void this.load());
+    this.#field('graph').addEventListener('click', () => void this.#graph());
+    this.#field('search').addEventListener('click', () => void this.#search());
+    this.#field('query').addEventListener('keydown', event => {
+      if (event.key !== 'Enter' || event.isComposing) return;
+      event.preventDefault();
+      void this.#search();
     });
   }
 
-  render() {
-    const root = this.shadowRoot;
-    if (!root) return;
-    root.replaceChildren();
+  #field(id) {
+    return this.shadowRoot.getElementById(id);
+  }
 
-    const present = Boolean(this._view && this._view.present);
-    const filteredNodes = this._filterNodes();
+  #state(id, text, error = false) {
+    const field = this.#field(id);
+    field.textContent = text;
+    field.toggleAttribute('data-error', error);
+  }
 
-    const style = document.createElement('style');
-    style.textContent = `
-      :host {
-        display: block;
-        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-        color: var(--color-text, #f8fafc);
-        background: var(--color-surface, #0f172a);
-        border: 1px solid var(--color-border, #1e293b);
-        border-radius: var(--radius-md, 8px);
-        padding: 16px;
-        box-sizing: border-box;
-      }
-      * { box-sizing: border-box; }
-      .header {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        border-bottom: 1px solid var(--color-border, #1e293b);
-        padding-bottom: 12px;
-        margin-bottom: 16px;
-      }
-      .title {
-        font-size: 18px;
-        font-weight: 700;
-        margin: 0;
-        color: #f8fafc;
-        display: flex;
-        align-items: center;
-        gap: 8px;
-      }
-      .badge {
-        font-size: 11px;
-        text-transform: uppercase;
-        letter-spacing: 0.05em;
-        padding: 3px 8px;
-        border-radius: 4px;
-        background: rgba(180, 83, 9, 0.2);
-        color: #f59e0b;
-        font-weight: 600;
-      }
-      .tabs {
-        display: flex;
-        gap: 8px;
-        margin-bottom: 16px;
-      }
-      .tab-btn {
-        min-height: 44px;
-        padding: 8px 16px;
-        border: 1px solid var(--color-border, #1e293b);
-        background: rgba(255, 255, 255, 0.03);
-        color: var(--color-text, #94a3b8);
-        border-radius: var(--radius-md, 6px);
-        font-size: 13px;
-        font-weight: 600;
-        cursor: pointer;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        transition: all 0.15s ease;
-      }
-      .tab-btn.active {
-        background: #b45309;
-        border-color: #d97706;
-        color: #ffffff;
-      }
-      .controls {
-        display: flex;
-        gap: 8px;
-        flex-wrap: wrap;
-        margin-bottom: 16px;
-      }
-      .search-box {
-        flex: 1;
-        min-height: 44px;
-        min-width: 200px;
-        padding: 8px 12px;
-        background: rgba(0, 0, 0, 0.3);
-        border: 1px solid var(--color-border, #1e293b);
-        border-radius: var(--radius-md, 6px);
-        color: #f8fafc;
-        font-size: 13px;
-      }
-      .filter-select {
-        min-height: 44px;
-        padding: 8px 12px;
-        background: rgba(0, 0, 0, 0.3);
-        border: 1px solid var(--color-border, #1e293b);
-        border-radius: var(--radius-md, 6px);
-        color: #f8fafc;
-        font-size: 13px;
-      }
-      .grid {
-        display: grid;
-        grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
-        gap: 12px;
-        margin-bottom: 16px;
-      }
-      .node-card {
-        background: rgba(255, 255, 255, 0.02);
-        border: 1px solid var(--color-border, #1e293b);
-        border-radius: var(--radius-md, 6px);
-        padding: 12px;
-        cursor: pointer;
-        transition: border-color 0.15s ease;
-      }
-      .node-card:hover {
-        border-color: #b45309;
-      }
-      .node-title {
-        font-size: 14px;
-        font-weight: 600;
-        margin: 0 0 6px 0;
-        color: #f1f5f9;
-      }
-      .node-cat {
-        font-size: 10px;
-        text-transform: uppercase;
-        font-weight: 700;
-        padding: 2px 6px;
-        border-radius: 3px;
-        display: inline-block;
-        margin-bottom: 8px;
-      }
-      .cat-invariant { background: rgba(239, 68, 68, 0.2); color: #ef4444; }
-      .cat-preference { background: rgba(59, 130, 246, 0.2); color: #3b82f6; }
-      .cat-fact { background: rgba(16, 185, 129, 0.2); color: #10b981; }
-      .cat-concept { background: rgba(245, 158, 11, 0.2); color: #f59e0b; }
-      .node-snippet {
-        font-size: 12px;
-        color: #94a3b8;
-        line-height: 1.4;
-        margin: 0;
-      }
-      .detail-pane {
-        background: rgba(0, 0, 0, 0.4);
-        border: 1px solid #b45309;
-        border-radius: var(--radius-md, 6px);
-        padding: 16px;
-        margin-bottom: 16px;
-      }
-      .detail-header {
-        display: flex;
-        justify-content: space-between;
-        align-items: flex-start;
-        margin-bottom: 12px;
-      }
-      .detail-title {
-        font-size: 16px;
-        font-weight: 700;
-        margin: 0;
-        color: #ffffff;
-      }
-      .detail-body {
-        font-size: 13px;
-        line-height: 1.6;
-        color: #cbd5e1;
-        white-space: pre-wrap;
-      }
-      .btn {
-        min-height: 44px;
-        padding: 8px 16px;
-        border: 1px solid var(--color-border, #1e293b);
-        border-radius: var(--radius-md, 6px);
-        background: #b45309;
-        color: #ffffff;
-        font-weight: 600;
-        cursor: pointer;
-        font-size: 13px;
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
-      }
-      .btn-secondary {
-        background: rgba(255, 255, 255, 0.05);
-        color: #cbd5e1;
-      }
-      .row {
-        display: flex;
-        gap: 8px;
-        flex-wrap: wrap;
-        margin-top: 12px;
-      }
-      input[type="text"], input[type="password"] {
-        flex: 1;
-        min-height: 44px;
-        padding: 8px 12px;
-        border-radius: var(--radius-md, 6px);
-        border: 1px solid var(--color-border, #1e293b);
-        background: rgba(0, 0, 0, 0.3);
-        color: #f8fafc;
-        font-size: 13px;
-      }
-      .terminal {
-        background: #090d16;
-        border: 1px solid #1e293b;
-        border-radius: 6px;
-        padding: 12px;
-        font-family: monospace;
-        font-size: 12px;
-        color: #38bdf8;
-        min-height: 60px;
-        white-space: pre-wrap;
-        margin-top: 12px;
-      }
-    `;
-
-    const header = document.createElement('div');
-    header.className = 'header';
-    header.innerHTML = `
-      <div class="title">
-        <span>OpenWiki Knowledge Engine</span>
-        <span class="badge">Graph Active</span>
-      </div>
-    `;
-
-    const tabs = document.createElement('div');
-    tabs.className = 'tabs';
-
-    const tabGraph = document.createElement('button');
-    tabGraph.className = `tab-btn ${this._activeTab === 'graph' ? 'active' : ''}`;
-    tabGraph.textContent = 'Knowledge Graph';
-    tabGraph.onclick = () => { this._activeTab = 'graph'; this.render(); };
-
-    const tabIngest = document.createElement('button');
-    tabIngest.className = `tab-btn ${this._activeTab === 'ingest' ? 'active' : ''}`;
-    tabIngest.textContent = 'Ingest Hub';
-    tabIngest.onclick = () => { this._activeTab = 'ingest'; this.render(); };
-
-    const tabConfig = document.createElement('button');
-    tabConfig.className = `tab-btn ${this._activeTab === 'config' ? 'active' : ''}`;
-    tabConfig.textContent = 'Credentials & Secrets';
-    tabConfig.onclick = () => { this._activeTab = 'config'; this.render(); };
-
-    tabs.append(tabGraph, tabIngest, tabConfig);
-
-    const mainContainer = document.createElement('div');
-
-    if (this._activeTab === 'graph') {
-      const controls = document.createElement('div');
-      controls.className = 'controls';
-
-      const search = document.createElement('input');
-      search.type = 'text';
-      search.className = 'search-box';
-      search.placeholder = 'Search knowledge graph nodes...';
-      search.value = this._searchQuery;
-      search.oninput = (e) => {
-        this._searchQuery = e.target.value;
-        this.render();
-      };
-
-      const select = document.createElement('select');
-      select.className = 'filter-select';
-      [
-        { val: 'all', lbl: 'All Categories' },
-        { val: 'invariant', lbl: 'Invariants' },
-        { val: 'preference', lbl: 'Preferences' },
-        { val: 'fact', lbl: 'Facts' },
-        { val: 'concept', lbl: 'Concepts' }
-      ].forEach((opt) => {
-        const el = document.createElement('option');
-        el.value = opt.val;
-        el.textContent = opt.lbl;
-        el.selected = opt.val === this._selectedCategory;
-        select.appendChild(el);
-      });
-      select.onchange = (e) => {
-        this._selectedCategory = e.target.value;
-        this.render();
-      };
-
-      controls.append(search, select);
-      mainContainer.appendChild(controls);
-
-      if (this._selectedNode) {
-        const detail = document.createElement('div');
-        detail.className = 'detail-pane';
-
-        const dHeader = document.createElement('div');
-        dHeader.className = 'detail-header';
-
-        const dTitle = document.createElement('h4');
-        dTitle.className = 'detail-title';
-        dTitle.textContent = this._selectedNode.title;
-
-        const closeBtn = document.createElement('button');
-        closeBtn.className = 'btn btn-secondary';
-        closeBtn.textContent = 'Dismiss';
-        closeBtn.onclick = () => { this._selectedNode = null; this.render(); };
-
-        dHeader.append(dTitle, closeBtn);
-
-        const dBody = document.createElement('div');
-        dBody.className = 'detail-body';
-        dBody.textContent = this._selectedNode.body;
-
-        detail.append(dHeader, dBody);
-        mainContainer.appendChild(detail);
-      }
-
-      const grid = document.createElement('div');
-      grid.className = 'grid';
-
-      filteredNodes.forEach((node) => {
-        const card = document.createElement('div');
-        card.className = 'node-card';
-        card.onclick = () => {
-          this._selectedNode = node;
-          this.render();
-        };
-
-        const cBadge = document.createElement('span');
-        cBadge.className = `node-cat cat-${node.category}`;
-        cBadge.textContent = node.category;
-
-        const cTitle = document.createElement('h5');
-        cTitle.className = 'node-title';
-        cTitle.textContent = node.title;
-
-        const cSnippet = document.createElement('p');
-        cSnippet.className = 'node-snippet';
-        cSnippet.textContent = node.body.slice(0, 110) + '...';
-
-        card.append(cBadge, cTitle, cSnippet);
-        grid.appendChild(card);
-      });
-
-      mainContainer.appendChild(grid);
-    } else if (this._activeTab === 'ingest') {
-      const ingestDesc = document.createElement('p');
-      ingestDesc.style.color = '#94a3b8';
-      ingestDesc.style.fontSize = '13px';
-      ingestDesc.textContent = 'Ingest markdown documentation files into the unified memory graph.';
-
-      const form = document.createElement('form');
-      form.className = 'row';
-
-      const pathInput = document.createElement('input');
-      pathInput.type = 'text';
-      pathInput.value = './openwiki';
-      pathInput.placeholder = 'Path to documentation directory';
-
-      const runBtn = document.createElement('button');
-      runBtn.type = 'submit';
-      runBtn.className = 'btn';
-      runBtn.textContent = 'Execute Ingestion';
-
-      form.append(pathInput, runBtn);
-
-      const terminal = document.createElement('div');
-      terminal.className = 'terminal';
-      terminal.textContent = this._ingestOutput || 'Awaiting ingestion command execution.';
-
-      form.onsubmit = (e) => {
-        e.preventDefault();
-        const p = pathInput.value.trim();
-        terminal.textContent = `Dispatching ingest pipeline for path: ${p}...`;
-        if (this._host && typeof this._host.run === 'function') {
-          this._host.run('ingest', [p]).then((res) => {
-            terminal.textContent = res?.output || 'Ingestion completed successfully.';
-          }).catch((err) => {
-            terminal.textContent = `Execution failure: ${err.message}`;
-          });
-        } else {
-          setTimeout(() => {
-            terminal.textContent = `[Ingest Engine] Scanned ${p}\nParsed 4 markdown documents.\nExtracted 12 semantic nodes.\nStatus: Ready`;
-          }, 400);
-        }
-      };
-
-      mainContainer.append(ingestDesc, form, terminal);
-    } else if (this._activeTab === 'config') {
-      const state = document.createElement('p');
-      state.style.color = '#94a3b8';
-      state.style.fontSize = '13px';
-      state.textContent = present
-        ? 'A key exists in the secrets store. Provide a new key to rotate credentials.'
-        : 'No key is registered. Submit a token to enable authenticated operations.';
-
-      const form = document.createElement('form');
-      form.className = 'row';
-
-      const input = document.createElement('input');
-      input.type = 'password';
-      input.autocomplete = 'off';
-      input.required = true;
-      input.placeholder = 'OPENWIKI_API_KEY';
-
-      const rotSelect = document.createElement('select');
-      rotSelect.className = 'filter-select';
-      [
-        { val: '30', lbl: 'Rotate every 30 days' },
-        { val: '60', lbl: 'Rotate every 60 days' },
-        { val: '90', lbl: 'Rotate every 90 days' },
-        { val: '0', lbl: 'Manual maintenance' }
-      ].forEach((r) => {
-        const ro = document.createElement('option');
-        ro.value = r.val;
-        ro.textContent = r.lbl;
-        rotSelect.appendChild(ro);
-      });
-
-      const button = document.createElement('button');
-      button.type = 'submit';
-      button.className = 'btn';
-      button.textContent = 'Save and Verify';
-
-      form.append(input, rotSelect, button);
-      form.addEventListener('submit', (event) => {
-        event.preventDefault();
-        this.dispatchEvent(new CustomEvent('save-token', {
-          detail: {
-            key: 'OPENWIKI_API_KEY',
-            token: input.value.trim(),
-            rotation_days: parseInt(rotSelect.value, 10)
-          },
-          bubbles: true,
-          composed: true
-        }));
-        input.value = '';
-      });
-
-      mainContainer.append(state, form);
+  async load() {
+    const button = this.#field('reload');
+    if (button.disabled) return;
+    button.disabled = true;
+    this.#state('index-state', 'Reading workspace pages…');
+    this.#state('upstream', 'Reading recorded version…');
+    this.#field('pages').replaceChildren();
+    try {
+      await Promise.all([
+        this.#loadIndex(),
+        this.#loadStatus(),
+      ]);
+    } finally {
+      button.disabled = false;
     }
+  }
 
-    root.append(style, header, tabs, mainContainer);
+  async #loadIndex() {
+    try {
+      const result = await this.host.run('hubs');
+      if (result?.scope !== 'workspace' || !Array.isArray(result.hubs) || !number(result.count)) throw new Error('Invalid wiki index');
+      const pages = result.hubs.slice(0, 12);
+      for (const page of pages) {
+        const row = element('li', '');
+        row.append(element('strong', page.title), element('small', page.fileName));
+        this.#field('pages').append(row);
+      }
+      const total = result.count;
+      const count = total === 1 ? '1 wiki page' : `${total} wiki pages`;
+      this.#state('index-state', total === 0 ? 'This workspace has no wiki pages.' :
+        total > pages.length ? `${count}. Showing ${pages.length}.` : `${count}.`);
+    } catch {
+      this.#field('pages').replaceChildren();
+      this.#state('index-state', 'Wiki index unavailable. Refresh to try again.', true);
+    }
+  }
+
+  async #loadStatus() {
+    try {
+      const result = await this.host.run('status');
+      if (result?.plugin !== 'openwiki' || !result.upstream) throw new Error('Invalid OpenWiki status');
+      const { latestVersion, lastChecked } = result.upstream;
+      const version = typeof result.generatorVersion === 'string'
+        ? `Bundled generator ${result.generatorVersion}` : 'Bundled generator unavailable';
+      const checked = Date.parse(lastChecked);
+      const note = typeof latestVersion === 'string' && Number.isFinite(checked)
+        ? ` · Latest upstream observation ${latestVersion} on ${new Date(checked).toISOString().slice(0, 10)}`
+        : ' · Upstream check pending';
+      this.#state('upstream', version + note);
+    } catch {
+      this.#state('upstream', 'Recorded upstream status unavailable.', true);
+    }
+  }
+
+  async #search() {
+    const button = this.#field('search');
+    const query = this.#field('query').value.trim();
+    if (button.disabled) return;
+    if (!query || query.startsWith('--')) {
+      this.#state('search-state', 'Enter a phrase or keyword to search.', true);
+      return;
+    }
+    button.disabled = true;
+    this.#state('search-state', 'Searching workspace evidence…');
+    const list = this.#field('results');
+    list.replaceChildren();
+    try {
+      const result = await this.host.run('search', [query, '--limit', '8']);
+      if (!result?.ok || result.scope !== 'workspace' || !Array.isArray(result.results) || !number(result.totalHits)) throw new Error('Invalid search results');
+      for (const match of result.results) {
+        const item = element('li', '');
+        const section = match.section ? ` · ${match.section}` : '';
+        const reference = `${match.fileName}:${match.line}${section}`;
+        item.append(element('strong', match.title), element('p', match.snippet), element('small', reference));
+        list.append(item);
+      }
+      const total = result.totalHits;
+      const noun = total === 1 ? 'passage' : 'passages';
+      const clipped = total > result.results.length ? ` Showing ${result.results.length}.` : '';
+      this.#state('search-state', total === 0 ? 'No matching passages in this workspace.' : `${total} matching ${noun}.${clipped}`);
+    } catch {
+      list.replaceChildren();
+      this.#state('search-state', 'Evidence search unavailable. Try again.', true);
+    } finally {
+      button.disabled = false;
+    }
+  }
+
+  async #graph() {
+    const button = this.#field('graph');
+    if (button.disabled) return;
+    button.disabled = true;
+    this.#state('graph-state', 'Tracing links between wiki pages…');
+    const list = this.#field('links');
+    list.replaceChildren();
+    try {
+      const result = await this.host.run('graph', ['--format', 'json']);
+      if (!result?.ok || result.scope !== 'workspace' || !Array.isArray(result.nodes) || !Array.isArray(result.edges) ||
+          !number(result.counts?.nodes) || !number(result.counts.edges) || !number(result.counts.orphans)) throw new Error('Invalid wiki topology');
+      const labels = new Map(result.nodes.map(node => [node.id, node.label]));
+      const edges = result.edges.slice(0, 12);
+      for (const edge of edges) {
+        const row = element('li', '');
+        row.append(element('span', labels.get(edge.from) ?? edge.from),
+          element('span', ' → ', 'edge'), element('span', labels.get(edge.to) ?? edge.to));
+        list.append(row);
+      }
+      const { nodes, edges: total, orphans } = result.counts;
+      const shown = total > edges.length ? ` Showing ${edges.length}.` : '';
+      const pages = nodes === 1 ? '1 page' : `${nodes} pages`;
+      const links = total === 1 ? '1 link' : `${total} links`;
+      this.#state('graph-state', nodes === 0 ? 'No pages to map in this workspace.' :
+        `${pages}, ${links}, ${orphans} unlinked.${shown}`);
+    } catch {
+      list.replaceChildren();
+      this.#state('graph-state', 'Link topology unavailable. Try again.', true);
+    } finally {
+      button.disabled = false;
+    }
   }
 }
 
-customElements.define('openwiki-panel', OpenwikiPanel);
+if (!customElements.get('openwiki-panel')) customElements.define('openwiki-panel', OpenWikiPanel);

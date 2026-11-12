@@ -7,7 +7,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { runBootstrapCommand } from './src/bootstrap.mjs';
 import { describeRetention, hasWiki, isDue, readProjects, refreshProject, refreshProjectAsync, resolveKey, staleness } from './src/refresh.mjs';
-import { watchUpstream, propagateUpdates, readUpstreamState } from './src/upstream-watcher.mjs';
+import { watchUpstream, propagateUpdates, readUpstreamState, bundledGeneratorVersion } from './src/upstream-watcher.mjs';
 import { loadOpenWikiConfig, setOpenWikiConfigValue, resetOpenWikiConfig, resolveConfigPath, ALLOWED_CONFIG_KEYS, ALLOWED_PROVIDERS } from './src/config.mjs';
 import { discoverAllHubs } from './src/mesh-vaults.mjs';
 import { searchWikiHubs } from './src/search.mjs';
@@ -316,22 +316,17 @@ async function tokenCommand(args) {
           const icon = t.configured ? '✔' : '✖';
           console.log(`  ${icon} ${provider.padEnd(12)} : ${t.key} (${t.status})`);
         }
-        console.log('\nTo set a token: total-recall openwiki token set <openrouter|google> <key>');
-        console.log('Or via stdin:  echo "$KEY" | total-recall openwiki token set <provider> --stdin\n');
+        console.log('\nTo set a token: total-recall openwiki token set <openrouter|google> --stdin\n');
       }
       return;
     }
 
     if (verb === 'set') {
-      const clean = args.filter((a) => !a.startsWith('--'));
-      const provider = clean[1];
-      let value = clean[2];
-      if (args.includes('--stdin')) {
-        value = fs.readFileSync(0, 'utf8').trim();
+      const [, provider, ...extra] = args.filter(arg => arg !== '--json' && arg !== '--stdin');
+      if (!args.includes('--stdin') || !provider || extra.length) {
+        throw new Error('Use openwiki token set <provider> --stdin with the credential on standard input');
       }
-      if (!provider || !value) {
-        throw new Error('Provider and secret value required: openwiki token set <provider> <value> (or --stdin)');
-      }
+      const value = fs.readFileSync(0, 'utf8');
       const res = setTokenValue(provider, value);
       if (json) console.log(JSON.stringify(res, null, 2));
       else console.log(`✔ ${res.message}`);
@@ -428,8 +423,14 @@ async function generateCommand(args) {
 import { runOpenWikiIngest } from "./src/ingest.mjs";
 
 async function ingestCommand(args) {
-  const result = await runOpenWikiIngest(args);
-  if (!result.ok) {
+  const json = args.includes('--json');
+  try {
+    const result = await runOpenWikiIngest(args);
+    if (json && !args.some(arg => arg === '--help' || arg === '-h')) console.log(JSON.stringify(result));
+    if (!result.ok) process.exitCode = 1;
+  } catch (error) {
+    if (json) console.log(JSON.stringify({ ok: false, error: error.message }));
+    else console.error(`OpenWiki ingest error: ${error.message}`);
     process.exitCode = 1;
   }
 }
@@ -646,6 +647,7 @@ export async function run(argv = process.argv) {
     const status = {
       plugin: "openwiki",
       implemented: Object.keys(IMPLEMENTED),
+      generatorVersion: bundledGeneratorVersion(),
       upstream: {
         recordedVersion: upstream.currentRecordedVersion,
         latestVersion: upstream.latestKnownVersion,
@@ -656,6 +658,7 @@ export async function run(argv = process.argv) {
     if (json) console.log(JSON.stringify(status, null, 2));
     else {
       console.log(`OpenWiki: implemented subcommands: ${status.implemented.join(", ")}`);
+      console.log(`Bundled generator: ${status.generatorVersion || 'unavailable'}`);
       console.log(`Upstream Status: recorded v${status.upstream.recordedVersion}, latest v${status.upstream.latestVersion}`);
     }
     return;
@@ -680,7 +683,7 @@ export async function run(argv = process.argv) {
                               Extract knowledge graph topology, nodes, and inter-hub links
     generate [--repo <name>] [--force] [--dry-run] [--node <node>] [--json]
                               Targeted on-demand documentation generation
-    token [status|set <provider> <value>] [--stdin] [--json]
+    token [status|set <provider> --stdin] [--json]
                               Check or securely configure Total Recall secrets store keys
     lint [--all-vaults] [--node <node>] [--json]
                               Validate link integrity, dead targets, and orphaned hubs

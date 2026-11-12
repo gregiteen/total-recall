@@ -49,30 +49,33 @@ function EdgeDrawer({ side, title, open, onChange, children }: {
   </>
 }
 
-function HelpDrawer({ plugins }: { plugins: PluginInfo[] | null }) {
+function HelpDrawer({ plugins, brainId }: { plugins: PluginInfo[] | null; brainId?: string }) {
   const [custom, setCustom] = useState(false)
   return <>
     <div className="drawer-section-tabs" role="group" aria-label="Help sections">
       <button type="button" className="btn btn-ghost btn-sm" aria-pressed={!custom} onClick={() => setCustom(false)}>Reference</button>
       <button type="button" className="btn btn-ghost btn-sm" aria-pressed={custom} onClick={() => setCustom(true)}>Custom</button>
     </div>
-    {custom ? <DrawerLayout side="right" view="custom" plugins={plugins} /> : <HelpPage embedded />}
+    {custom ? (brainId ? <DrawerLayout key={brainId} side="right" view="custom" plugins={plugins} brainId={brainId} />
+      : <p className="drawer-note">Select one local brain to open custom help.</p>) : <HelpPage embedded />}
   </>
 }
 
-function ToolsDrawer({ plugins, activeBrainId }: { plugins: PluginInfo[] | null; activeBrainId: string }) {
+function ToolsDrawer({ plugins, activeBrainId, brainId }: { plugins: PluginInfo[] | null; activeBrainId: string; brainId?: string }) {
   const [section, setSection] = useState<Tool>('Shortcuts')
   return <>
     <div className="drawer-section-tabs" role="group" aria-label="Bottom drawer tools">
       {tools.map(tool => <button key={tool} type="button" className="btn btn-ghost btn-sm"
         aria-pressed={tool === section} onClick={() => setSection(tool)}>{tool}</button>)}
     </div>
-    {section === 'Phone' && <DrawerPanel plugins={plugins} reference={{ plugin: 'phone', element: 'phone' }} />}
-    {section === 'Text' && <DrawerPanel plugins={plugins} reference={{ plugin: 'text', element: 'text' }} />}
+    {(section === 'Phone' || section === 'Text') && (brainId
+      ? <DrawerPanel plugins={plugins} reference={{ plugin: section.toLowerCase(), element: section.toLowerCase() }} brainId={brainId} />
+      : <p className="drawer-note">Select one local brain to open {section}.</p>)}
     {section === 'Chat' && (plugins ? <DrawerChat plugin={plugins.find(plugin => plugin.id === 'meta-harness')}
       activeBrainId={activeBrainId} /> : <p role="status">Loading Metaharness…</p>)}
-    {(section === 'Shortcuts' || section === 'Custom') &&
-      <DrawerLayout side="bottom" view={section === 'Shortcuts' ? 'shortcuts' : 'custom'} plugins={plugins} />}
+    {section === 'Shortcuts' && <DrawerLayout side="bottom" view="shortcuts" plugins={plugins} brainId={brainId} />}
+    {section === 'Custom' && (brainId ? <DrawerLayout key={brainId} side="bottom" view="custom" plugins={plugins} brainId={brainId} />
+      : <p className="drawer-note">Select one local brain to open custom tools.</p>)}
   </>
 }
 
@@ -82,10 +85,12 @@ export function WorkspaceDrawers({ edge, onChange, plugins, activeBrainId }: {
   plugins: PluginInfo[] | null
   activeBrainId: string
 }) {
+  const brainId = !activeBrainId.includes(',') && (activeBrainId === 'global' || activeBrainId.startsWith('project:'))
+    ? activeBrainId : undefined
   return <>
-    <EdgeDrawer side="right" title="Help" open={edge === 'right'} onChange={onChange}><HelpDrawer plugins={plugins} /></EdgeDrawer>
+    <EdgeDrawer side="right" title="Help" open={edge === 'right'} onChange={onChange}><HelpDrawer plugins={plugins} brainId={brainId} /></EdgeDrawer>
     <EdgeDrawer side="bottom" title="Tools" open={edge === 'bottom'} onChange={onChange}>
-      <ToolsDrawer plugins={plugins} activeBrainId={activeBrainId} />
+      <ToolsDrawer plugins={plugins} activeBrainId={activeBrainId} brainId={brainId} />
     </EdgeDrawer>
   </>
 }

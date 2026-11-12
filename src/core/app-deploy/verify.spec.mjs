@@ -5,7 +5,7 @@ import os from 'node:os';
 import { applyDeploymentPlan, resolveAppVaultDir } from './apply.mjs';
 import { createDeploymentPlan } from './plan.mjs';
 import { verifyApplication } from './verify.mjs';
-import { withFixtureFace } from '../testing/plugin-fixture.mjs';
+import { withFixtureHome } from '../testing/plugin-fixture.mjs';
 
 describe('Capability Deployment Verifier (app-deploy/verify.mjs)', () => {
   let tmpTarget;
@@ -17,7 +17,7 @@ describe('Capability Deployment Verifier (app-deploy/verify.mjs)', () => {
 
     fs.writeFileSync(
       path.join(tmpPluginDir, 'plugin.json'),
-      JSON.stringify(withFixtureFace({
+      JSON.stringify(withFixtureHome({
         id: 'audited-tool',
         name: 'Audited Tool',
         version: '1.0.0',

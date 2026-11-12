@@ -3,7 +3,11 @@ import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 import crypto from 'node:crypto';
-import { loadCustomAdapters } from './worker.mjs';
+import { execFile } from 'node:child_process';
+import { promisify } from 'node:util';
+import { agentEnvironment, loadCustomAdapters } from './worker.mjs';
+
+const exec = promisify(execFile);
 
 export const DOC_SOURCES = [
   { id: 'claude', index: 'https://code.claude.com/docs/llms.txt', prefix: 'https://code.claude.com/docs/', catalog:true },
@@ -91,7 +95,27 @@ function links(text,base,prefix) {
   return [...new Set(values.map(value=>{try{const url=new URL(value);url.hash='';url.search='';url.pathname=url.pathname.replace(/\/{2,}/g,'/').replace(/\/$/,'') || '/';return url.href;}catch{return '';}}))]
     .filter(url=>url.startsWith(prefix) && !/%3[CE]|[<>"'`\s]/i.test(url) && !/\.(png|jpg|jpeg|svg|gif|css|js|woff2?|ico|pdf|json|ya?ml|xml|zip|gz|tgz|lock)$/i.test(url));
 }
-export async function refreshDocumentation({ directory = documentationDirectory(), agent, fetchImpl = fetch, now = () => new Date(), maxPages = 1500 } = {}) {
+async function gitDocumentationPaths(source) {
+  const checkout = fs.mkdtempSync(path.join(os.tmpdir(), 'meta-harness-doc-tree-'));
+  const options = {
+    cwd: checkout, timeout: 30000, maxBuffer: 4 * 1024 * 1024,
+    env: { ...agentEnvironment(), GIT_TERMINAL_PROMPT: '0', GIT_CONFIG_NOSYSTEM: '1', GIT_CONFIG_GLOBAL: os.devNull },
+  };
+  try {
+    await exec('git', ['-c', 'http.followRedirects=false', 'clone', '--quiet', '--filter=blob:none',
+      '--depth=1', '--single-branch', '--branch', source.branch, '--no-checkout',
+      '--', `https://github.com/${source.repo}.git`, checkout], options);
+    const { stdout } = await exec('git', ['ls-tree', '-r', '-z', 'HEAD', '--', ...source.directories], options);
+    return stdout.split('\0').flatMap(entry => {
+      const match = /^100(?:644|755) blob [a-f0-9]+\t([\s\S]+)$/.exec(entry);
+      return match ? [match[1]] : [];
+    });
+  } catch {
+    throw new Error(`Could not read the official documentation tree through Git for ${source.repo}`);
+  } finally { fs.rmSync(checkout, { recursive: true, force: true }); }
+}
+
+export async function refreshDocumentation({ directory = documentationDirectory(), agent, fetchImpl = fetch, now = () => new Date(), maxPages = 1500, readGitPaths = gitDocumentationPaths } = {}) {
   const sources=sourcesFor(agent);
   if(!sources.length)throw new Error('Unknown documentation adapter');
   const reports=[];
@@ -99,11 +123,27 @@ export async function refreshDocumentation({ directory = documentationDirectory(
     const previous=metadata(directory,source.id), pages=[], queue=[source.index], seen=new Set(), queued=new Set(queue), errors=[], discovered=new Set(), skipped=[];
     // `found` marks a link taken from HTML navigation. The vendor's catalog, the index and the repository tree are authoritative; a link found by scraping is not.
     const enqueue=(url,found=false)=>{if(!queued.has(url)){queued.add(url);queue.push(url);if(found)discovered.add(url);}};
+    let treeSource;
     try {
       if(source.repo) {
-        const tree=JSON.parse(await download(`https://api.github.com/repos/${source.repo}/git/trees/${source.branch}?recursive=1`,fetchImpl));
-        if(tree.truncated)throw new Error('Official repository documentation tree is truncated');
-        for(const entry of tree.tree || [])if(entry.type==='blob' && /\.(md|mdx)$/i.test(entry.path) && source.directories.some(dir=>entry.path.startsWith(dir)))enqueue(`https://raw.githubusercontent.com/${source.repo}/${source.branch}/${entry.path}`);
+        let paths;
+        try {
+          const tree = JSON.parse(await download(`https://api.github.com/repos/${source.repo}/git/trees/${source.branch}?recursive=1`, fetchImpl));
+          if (tree.truncated) throw new Error('Official repository documentation tree is truncated');
+          if (!Array.isArray(tree.tree)) throw new Error('Invalid official repository documentation tree');
+          paths = tree.tree.filter(entry => entry.type === 'blob').map(entry => entry.path);
+          treeSource = 'github-rest';
+        } catch (error) {
+          if (!/^Documentation HTTP (403|429):|^Official repository documentation tree is truncated$/.test(error.message)) throw error;
+          paths = await readGitPaths(source);
+          treeSource = 'github-git';
+        }
+        for (const file of paths) {
+          if (!/\.(md|mdx)$/i.test(file) || !source.directories.some(dir => file.startsWith(dir))) continue;
+          const encoded = file.split('/').map(encodeURIComponent).join('/');
+          enqueue(`https://raw.githubusercontent.com/${source.repo}/${source.branch}/${encoded}`);
+        }
+        if (queue.length === 1) throw new Error('Official repository documentation tree contains no additional pages');
       }
       // Bounded batches; follow the official index/navigation to cover agent features.
       while(queue.length) {
@@ -138,7 +178,7 @@ export async function refreshDocumentation({ directory = documentationDirectory(
         reports.push({id:source.id,ok:false,error,pages:preserved.pages?.length || 0,downloadedPages:pages.length,failedCount:errors.length,failures:errors,...(skipped.length?{skippedCount:skipped.length,skipped}:{})});continue;
       }
       atomic(path.join(directory,source.id,'index.json'),JSON.stringify({id:source.id,complete:true,checkedAt,lastAttempt:checkedAt,pages,...(skipped.length?{skipped}:{})},null,2));
-      reports.push({id:source.id,ok:true,pages:pages.length,...(skipped.length?{skippedCount:skipped.length,skipped}:{})});
+      reports.push({id:source.id,ok:true,pages:pages.length,...(treeSource?{treeSource}:{}),...(skipped.length?{skippedCount:skipped.length,skipped}:{})});
     } catch(error) {
       atomic(path.join(directory,source.id,'index.json'),JSON.stringify({...previous,id:source.id,lastAttempt:now().toISOString(),error:error.message},null,2));
       reports.push({id:source.id,ok:false,error:error.message,pages:previous?.pages?.length || 0});

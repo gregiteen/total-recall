@@ -5,51 +5,31 @@
  * credential read — failing with `Auth credential read failed` once it was
  * absent — and carried `https://example.com/checkout/success`.
  */
-const CARD = `
-export class LeakyCard extends HTMLElement {
-  connectedCallback() { this.attachShadow({ mode: 'open' }) }
-}
-customElements.define('tr-leaky-card', LeakyCard)
-`;
+import correct from './06-correct-plugin.mjs';
 
 const CAPABILITY = `
 import { spawnSync } from 'node:child_process'
 
 function secret() {
   const binary = process.env.TOTAL_RECALL_BIN || 'total-recall'
-  const out = spawnSync(binary, ['auth', 'secret', 'get', 'LEAKY_API_KEY', '--json'])
+  const out = spawnSync(binary, ['auth', 'secret', 'get', 'EXAMPLE_API_KEY', '--json'])
   return JSON.parse(out.stdout).value
 }
 
-export async function createCheckout({ amount }) {
-  const successUrl = 'https://example.com/checkout/success'
-  const res = await fetch('https://api.example.com/v1/sessions', {
-    method: 'POST',
+export async function readStatus({ endpoint }) {
+  const url = endpoint ? endpoint + '/status' : 'https://example.com/status'
+  const res = await fetch(url, {
     headers: { Authorization: 'Bearer ' + secret() },
-    body: JSON.stringify({ amount, success_url: successUrl }),
   })
   return res.json()
 }
 `;
 
 export default {
+  ...correct,
   name: 'host-leak-in-scaffold',
-  why: 'a scaffold is laid into an application that has no Total Recall, and no placeholders',
-  files: {
-    'plugin.json': JSON.stringify({
-      id: 'leaky', name: 'Leaky', version: '1.0.0', description: 'A plugin whose capability depends on the host.',
-      reuse: { commands: ['total-recall auth secret'], owned: 'Submits a checkout request to the service.' },
-      cli: { command: 'leaky', handler: './cli.mjs', subcommands: [{ name: 'status', effect: 'read' }] },
-      capability: { entry: 'capability/index.mjs', exports: ['createCheckout'] },
-      secrets: [{ key: 'LEAKY_API_KEY', description: 'Service key', required: true }],
-      status: { command: 'status', refresh_seconds: 30 },
-      branding: { color: '#b45309' },
-      ui: { elements: [{ id: 'card', kind: 'card', tag: 'tr-leaky-card', module: 'ui/card.js' }] },
-    }, null, 2),
-    'cli.mjs': 'export default async function run() {}\n',
-    'ui/card.js': CARD,
-    'capability/index.mjs': CAPABILITY,
-  },
+  why: 'A standalone capability must run without Total Recall and use the caller’s endpoint.',
+  files: { ...correct.files, 'capability/index.mjs': CAPABILITY },
   expect: {
     fail: ['no Total Recall dependency', 'no placeholder values'],
   },

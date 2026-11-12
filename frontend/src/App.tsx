@@ -17,6 +17,7 @@ import { NotificationsPage } from './pages/NotificationsPage'
 import { isOnboardingComplete } from './utils/onboarding'
 import BrandMark from './components/brand/BrandMark'
 import { WorkspaceDrawers, type WorkspaceEdge } from './components/workspace/WorkspaceDrawers'
+import { SavedPages, WorkspacePage } from './components/workspace/WorkspacePage'
 
 // ─── Auth state type ──────────────────────────────────────────────────────────
 type AuthState = 'loading' | 'authed' | 'unauthed'
@@ -70,34 +71,31 @@ function networkGateTone(gate: HealthData['fetch_gate'] | undefined): {
 }
 
 interface SidebarProps {
-  health: HealthData | null
   activeBrainId: string
   onBrainChange: (id: string) => void
   open: boolean
   onClose: () => void
   onActivity: () => void
   pluginFolder: ReactNode
+  savedPagesFolder: ReactNode
 }
 
 const getNavLinkClass = ({ isActive }: { isActive: boolean }) => `nav-link ${isActive ? 'active' : ''}`
 
-function Sidebar({ health, activeBrainId, onBrainChange, open, onClose, onActivity, pluginFolder }: SidebarProps) {
+function Sidebar({ activeBrainId, onBrainChange, open, onClose, onActivity, pluginFolder, savedPagesFolder }: SidebarProps) {
   return (
     <aside className={`sidebar ${open ? 'open' : ''}`} id="workspace-sidebar" inert={!open}
       onPointerMove={onActivity} onPointerDown={onActivity} onFocus={onActivity} onKeyDown={event => {
         if (event.key === 'Escape') onClose()
         else onActivity()
       }}>
-      <div className="sidebar-brand">
-        <BrandMark height={28} alt="" />
-        <div><strong>Total Recall</strong>{health?.version && <span>v{health.version}</span>}</div>
-      </div>
       <div className="sidebar-brains">
         <div className="nav-section-label">Brains</div>
         <BrainSelector activeBrainId={activeBrainId} onBrainChange={onBrainChange} onSelectionComplete={onClose} />
       </div>
       <nav className="sidebar-nav" aria-label="Workspace">
         {pluginFolder}
+        {savedPagesFolder}
         <details className="sidebar-memory">
           <summary className="nav-link">Memory</summary>
           {!isOnboardingComplete() && <NavLink to="/onboarding" className={getNavLinkClass} id="nav-onboarding" onClick={onClose}>Setup</NavLink>}
@@ -148,6 +146,7 @@ function AccountMenu({ health, onLogout }: { health: HealthData | null; onLogout
       </label>
       <div className="account-menu-health">
         {health ? <>
+          {health.version && <span>v{health.version}</span>}
           <StatusDot ok={serverOk} label={serverOk ? 'Server online' : 'Server offline'} />
           <StatusDot ok={daemonOk} label={daemonOk ? 'Daemon running' : `Daemon ${health.daemon ?? 'unknown'}`} />
           <NavLink to="/network" title={gate.title} data-testid="network-gate-indicator" onClick={close}>
@@ -201,7 +200,7 @@ function MainContent({ activeBrainId }: { activeBrainId: string }) {
           <Route path="/network" element={<NetworkPage />} />
           <Route path="/mesh" element={<Navigate to="/plugins?id=mesh" replace />} />
           <Route path="/webhooks" element={<WebhooksPage />} />
-          <Route path="/secrets" element={<Navigate to="/plugins?id=auth" replace />} />
+          <Route path="/secrets" element={<Navigate to="/memory?brain=global&plugin=auth" replace />} />
           <Route path="/notifications" element={<NotificationsPage />} />
           <Route path="/help" element={<Navigate to={isOnboardingComplete() ? '/memory?drawer=help' : '/onboarding?drawer=help'} replace />} />
           {/* Legacy OS-control-plane routes → core product */}
@@ -232,6 +231,7 @@ const SIDEBAR_IDLE_MS = 5000
 
 function Dashboard() {
   const location = useLocation()
+  const [params, setParams] = useSearchParams()
   const requestedEdge = new URLSearchParams(location.search).get('drawer') === 'help' ? 'right' : null
   const [drawerEntry, setDrawerEntry] = useState<{ key: string; edge: WorkspaceEdge | null }>(
     () => ({ key: location.key, edge: requestedEdge })
@@ -246,14 +246,32 @@ function Dashboard() {
   const sidebarOpen = edge === 'left'
   const sidebarToggle = useRef<HTMLButtonElement>(null)
   const sidebarTimer = useRef<number | undefined>(undefined)
-  const [activeBrainId, setActiveBrainId] = useState(
+  const [storedBrainId, setStoredBrainId] = useState(
     () => localStorage.getItem(BRAIN_STORAGE_KEY) || 'global'
   )
+  const pageId = location.pathname === '/memory' ? params.get('page') : null
+  const linkedBrainId = (pageId || params.has('plugin')) ? params.get('brain') : null
+  const activeBrainId = linkedBrainId || storedBrainId
+  const pageBrainId = activeBrainId.includes(',') ? undefined : activeBrainId
+  function setActiveBrainId(id: string) {
+    setStoredBrainId(id)
+    if (pageId && id !== activeBrainId) {
+      const next = new URLSearchParams(params)
+      next.delete('page')
+      next.delete('brain')
+      next.delete('plugin')
+      setParams(next, { replace: true })
+    } else if (!pageId && linkedBrainId) {
+      const next = new URLSearchParams(params)
+      next.delete('brain')
+      setParams(next, { replace: true })
+    }
+  }
 
   // Persist activeBrainId to localStorage on change
   useEffect(() => {
-    localStorage.setItem(BRAIN_STORAGE_KEY, activeBrainId)
-  }, [activeBrainId])
+    localStorage.setItem(BRAIN_STORAGE_KEY, storedBrainId)
+  }, [storedBrainId])
 
   // Register 401 interceptor so any API call that gets a 401 flips us to unauthed
   useEffect(() => {
@@ -339,30 +357,34 @@ function Dashboard() {
   // Authed — render full dashboard
   return (
       <PluginWorkspace activeBrainId={activeBrainId} onOpenPlugin={closeSidebar}
-        renderShell={(pluginFolder, pluginPage, plugins) => (
-          <div className="app-layout">
-            <Sidebar health={health} activeBrainId={activeBrainId} onBrainChange={setActiveBrainId}
-              open={sidebarOpen} onClose={closeSidebar} onActivity={queueSidebarClose} pluginFolder={pluginFolder} />
-            {edge && <div className="sidebar-scrim" aria-hidden="true" onClick={closeDrawer} />}
-            <button type="button" className="sidebar-handle" ref={sidebarToggle} aria-label="Workspace navigation"
-              aria-controls="workspace-sidebar" aria-expanded={sidebarOpen} onClick={() => setEdge(sidebarOpen ? null : 'left')}
-              onKeyDown={event => { if (event.key === 'Escape' && sidebarOpen) closeSidebar() }}>
-              <svg width="14" height="18" viewBox="0 0 14 18" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true">
-                <path d={sidebarOpen ? 'M9 4 4 9l5 5' : 'm5 4 5 5-5 5'} />
-              </svg>
-            </button>
-            <div className="workspace-main" inert={edge !== null}>
-              <div className="workspace-toolbar">
-                <AccountMenu health={health} onLogout={handleLogout} />
+        renderShell={(pluginFolder, pluginPage, plugins) => {
+          const page = pageId ? <WorkspacePage id={pageId} brainId={pageBrainId} plugins={plugins} /> : pluginPage
+          return <div className="app-layout">
+              <Sidebar activeBrainId={activeBrainId} onBrainChange={setActiveBrainId}
+                open={sidebarOpen} onClose={closeSidebar} onActivity={queueSidebarClose} pluginFolder={pluginFolder}
+                savedPagesFolder={<SavedPages brainId={pageBrainId} drawerOpen={sidebarOpen}
+                  activePageId={pageId} onOpenPage={closeSidebar} />} />
+              {edge && <div className="sidebar-scrim" aria-hidden="true" onClick={closeDrawer} />}
+              <button type="button" className="sidebar-handle" ref={sidebarToggle} aria-label="Workspace navigation"
+                aria-controls="workspace-sidebar" aria-expanded={sidebarOpen} onClick={() => setEdge(sidebarOpen ? null : 'left')}
+                onKeyDown={event => { if (event.key === 'Escape' && sidebarOpen) closeSidebar() }}>
+                <svg width="14" height="18" viewBox="0 0 14 18" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true">
+                  <path d={sidebarOpen ? 'M9 4 4 9l5 5' : 'm5 4 5 5-5 5'} />
+                </svg>
+              </button>
+              <div className="workspace-main" inert={edge !== null}>
+                <header className="workspace-toolbar" aria-label="Dashboard">
+                  <BrandMark height={64} className="workspace-logo" />
+                  <AccountMenu health={health} onLogout={handleLogout} />
+                </header>
+                <div className="workspace-body" hidden={!!page}>
+                  <MainContent activeBrainId={activeBrainId} />
+                </div>
+                {page}
               </div>
-              <div className="workspace-body" hidden={!!pluginPage}>
-                <MainContent activeBrainId={activeBrainId} />
-              </div>
-              {pluginPage}
+              <WorkspaceDrawers edge={edge} onChange={setEdge} plugins={plugins} activeBrainId={activeBrainId} />
             </div>
-            <WorkspaceDrawers edge={edge} onChange={setEdge} plugins={plugins} activeBrainId={activeBrainId} />
-          </div>
-        )}
+        }}
       />
   )
 }

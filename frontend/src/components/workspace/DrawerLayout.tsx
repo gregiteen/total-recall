@@ -3,16 +3,20 @@ import { Link } from 'react-router-dom'
 import type { PluginInfo } from '../../api/plugins'
 import {
   findWorkspaceChunks, readDrawer, readWorkspaceChunk, saveDrawer,
-  type DrawerConfig, type DrawerRevision, type DrawerSide, type PanelRef, type WorkspaceChunk,
+  type DrawerConfig, type DrawerRevision, type DrawerSide, type PanelRef, type PluginDesign, type WorkspaceChunk,
 } from '../../api/workspace-drawers'
 import { PluginPanel, pluginElements } from '../plugins/PluginPanel'
+import { ScopedPluginCommands } from '../plugins/ScopedPluginCommands'
 import { DrawerMarkup } from './DrawerMarkup'
+import { usePluginDesign } from './usePluginDesign'
 
 export function drawerPanels(plugin: PluginInfo) {
-  return pluginElements(plugin).filter(item => !['card', 'card-face', 'settings'].includes(item.kind))
+  return pluginElements(plugin).filter(item => item.kind !== 'settings')
 }
 
-export function DrawerPanel({ plugins, reference }: { plugins: PluginInfo[] | null; reference: PanelRef }) {
+export function DrawerPanel({ plugins, reference, designCss, brainId }: {
+  plugins: PluginInfo[] | null; reference: PanelRef; designCss?: string; brainId?: string
+}) {
   if (!plugins) return <p role="status">Loading installed interfaces…</p>
   const plugin = plugins.find(plugin => plugin.id === reference.plugin)
   const panel = plugin && drawerPanels(plugin).find(item => item.id === reference.element)
@@ -23,27 +27,35 @@ export function DrawerPanel({ plugins, reference }: { plugins: PluginInfo[] | nu
   if (plugin.activation?.enabled !== true) return <p className="drawer-note">
     {plugin.name} is off. <Link to={{ search: `?plugin=${encodeURIComponent(plugin.id)}` }}>Open plugin settings</Link>
   </p>
-  return <PluginPanel key={`${plugin.id}:${panel.id}`} plugin={plugin} elementId={panel.id} />
+  return <PluginPanel key={`${plugin.id}:${panel.id}`} plugin={plugin} elementId={panel.id} designCss={designCss} brainId={brainId} />
 }
 
-export function PublishedChunk({ name, side, plugins }: {
-  name: string; side: DrawerSide | 'page'; plugins: PluginInfo[] | null
+export function PublishedChunk({ name, side, plugins, design, designOwner, brainId }: {
+  name: string; side: DrawerSide | 'page'; plugins: PluginInfo[] | null; design?: PluginDesign; designOwner?: string; brainId?: string
 }) {
-  const [chunk, setChunk] = useState<(WorkspaceChunk & { html: string }) | null>(null)
-  const [error, setError] = useState(false)
+  const ownerDesign = usePluginDesign(designOwner, brainId)
+  const theme = ownerDesign?.design || design
+  const requestKey = JSON.stringify([name, side, brainId])
+  const [result, setResult] = useState<{ key: string; chunk: (WorkspaceChunk & { html: string }) | null }>()
+  const current = result?.key === requestKey ? result : undefined
+  const chunk = current?.chunk
   useEffect(() => {
     const controller = new AbortController()
-    void readWorkspaceChunk(name, side, controller.signal).then(
-      data => { if (!controller.signal.aborted) setChunk(data) },
-      () => { if (!controller.signal.aborted) setError(true) },
+    void readWorkspaceChunk(name, side, controller.signal, brainId).then(
+      data => { if (!controller.signal.aborted) setResult({ key: requestKey, chunk: data }) },
+      () => { if (!controller.signal.aborted) setResult({ key: requestKey, chunk: null }) },
     )
     return () => controller.abort()
-  }, [name, side])
-  if (error || (chunk && !chunk.surfaces.includes(side))) return <p className="drawer-note">{name} is unavailable here.</p>
+  }, [name, side, brainId, requestKey])
+  if (current && (!chunk || !chunk.surfaces.includes(side))) return <p className="drawer-note">{name} is unavailable here.</p>
   if (!chunk) return <p role="status">Loading {name}…</p>
+  const owner = plugins?.find(plugin => plugin.id === chunk.plugin)
   return <section className="drawer-stack" aria-label={chunk.title}>
-    {chunk.html && <DrawerMarkup title={chunk.title} html={chunk.html} />}
-    {chunk.panel && <DrawerPanel plugins={plugins} reference={{ plugin: chunk.plugin, element: chunk.panel }} />}
+    {chunk.html && <DrawerMarkup title={chunk.title} html={chunk.html} design={theme} />}
+    {chunk.panel && <DrawerPanel plugins={plugins} reference={{ plugin: chunk.plugin, element: chunk.panel }} designCss={theme?.css ?? ''} brainId={brainId} />}
+    {brainId && owner?.valid && owner.activation?.enabled === true && owner.activation.state !== 'error' &&
+      !!chunk.operations?.length && <ScopedPluginCommands key={`${requestKey}:${owner.sha256}:${chunk.sha256}`} plugin={owner} brainId={brainId}
+        operationIds={chunk.operations} label={`${chunk.title} operations`} />}
   </section>
 }
 
@@ -56,8 +68,8 @@ function ShortcutList({ shortcuts }: { shortcuts: DrawerConfig['shortcuts'] }) {
   </nav>
 }
 
-function LayoutEditor({ side, draft, onChange, plugins }: {
-  side: DrawerSide; draft: DrawerConfig; onChange: (next: DrawerConfig) => void; plugins: PluginInfo[] | null
+function LayoutEditor({ side, draft, onChange, plugins, brainId }: {
+  side: DrawerSide; draft: DrawerConfig; onChange: (next: DrawerConfig) => void; plugins: PluginInfo[] | null; brainId?: string
 }) {
   const [query, setQuery] = useState('')
   const [chunks, setChunks] = useState<WorkspaceChunk[]>([])
@@ -66,13 +78,13 @@ function LayoutEditor({ side, draft, onChange, plugins }: {
   useEffect(() => {
     const controller = new AbortController()
     const timer = window.setTimeout(() => {
-      void findWorkspaceChunks(side, query, controller.signal).then(
+      void findWorkspaceChunks(side, query, controller.signal, undefined, brainId).then(
         data => { if (!controller.signal.aborted) { setChunks(data.chunks); setCatalogError(false) } },
         () => { if (!controller.signal.aborted) { setChunks([]); setCatalogError(true) } },
       )
     }, 180)
     return () => { controller.abort(); window.clearTimeout(timer) }
-  }, [side, query])
+  }, [side, query, brainId])
   const panels = (plugins || []).filter(plugin => plugin.valid && plugin.activation?.enabled === true)
     .flatMap(plugin => drawerPanels(plugin).map(element => ({ plugin, element })))
   const choices = panels.filter(({ plugin, element }) => !draft.panels.some(ref => ref.plugin === plugin.id && ref.element === element.id))
@@ -134,8 +146,8 @@ function LayoutEditor({ side, draft, onChange, plugins }: {
   </div>
 }
 
-export function DrawerLayout({ side, view, plugins }: {
-  side: DrawerSide; view: 'custom' | 'shortcuts'; plugins: PluginInfo[] | null
+export function DrawerLayout({ side, view, plugins, brainId }: {
+  side: DrawerSide; view: 'custom' | 'shortcuts'; plugins: PluginInfo[] | null; brainId?: string
 }) {
   const [revision, setRevision] = useState<DrawerRevision | null>(null)
   const [draft, setDraft] = useState<DrawerConfig | null>(null)
@@ -167,7 +179,7 @@ export function DrawerLayout({ side, view, plugins }: {
       } catch (error) { setError(error instanceof Error ? error.message : 'Could not save the drawer.') }
       finally { setBusy(false) }
     }}>
-      <LayoutEditor side={side} draft={draft} onChange={setDraft} plugins={plugins} />
+      <LayoutEditor side={side} draft={draft} onChange={setDraft} plugins={plugins} brainId={brainId} />
       <div className="drawer-actions">
         <button className="btn btn-primary" disabled={busy}>{busy ? 'Saving…' : 'Save drawer'}</button>
         <button type="button" className="btn btn-ghost" disabled={busy} onClick={() => { setDraft(null); setError('') }}>Cancel</button>
@@ -175,8 +187,8 @@ export function DrawerLayout({ side, view, plugins }: {
     </form>}
     {!draft && revision && (view === 'shortcuts' ? <ShortcutList shortcuts={revision.config.shortcuts} /> : <>
       {revision.config.html && <DrawerMarkup title={`${side} drawer custom HTML`} html={revision.config.html} />}
-      {revision.config.chunks.map(key => <PublishedChunk key={`${key}:${refresh}`} name={key} side={side} plugins={plugins} />)}
-      {revision.config.panels.map(ref => <DrawerPanel key={`${ref.plugin}:${ref.element}:${refresh}`} plugins={plugins} reference={ref} />)}
+      {revision.config.chunks.map(key => <PublishedChunk key={`${brainId}:${key}:${refresh}`} name={key} side={side} plugins={plugins} brainId={brainId} designOwner={key.split(':')[0]} />)}
+      {revision.config.panels.map(ref => <DrawerPanel key={`${brainId}:${ref.plugin}:${ref.element}:${refresh}`} plugins={plugins} reference={ref} brainId={brainId} />)}
       {!revision.config.html && !revision.config.chunks.length && !revision.config.panels.length &&
         <p className="drawer-note">Add HTML or an installed plugin interface to make this drawer yours.</p>}
     </>)}

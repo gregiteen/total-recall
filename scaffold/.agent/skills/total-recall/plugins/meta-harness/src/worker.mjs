@@ -263,7 +263,7 @@ function toolEvidence(toolResults) {
   };
 }
 
-export function runProcess(binary, args, { cwd, input = '', timeoutMs = 300000, env = agentEnvironment(), maxBytes = 2 * 1024 * 1024, codexJsonl = false, claudeJsonl = false } = {}) {
+export function runProcess(binary, args, { cwd, input = '', timeoutMs = 300000, env = agentEnvironment(), maxBytes = 2 * 1024 * 1024, codexJsonl = false, claudeJsonl = false, piJsonl = false } = {}) {
   return new Promise(resolve => {
     let stdout = '', stderr = '', bytes = 0, reason = null, child, timer, escalation, settled = false;
     const kill = signal => { try { if (process.platform !== 'win32') process.kill(-child.pid, signal); else child.kill(signal); } catch {} };
@@ -290,7 +290,7 @@ export function runProcess(binary, args, { cwd, input = '', timeoutMs = 300000, 
       if (output) stdout += part; else stderr += part;
       if (bytes > maxBytes) stop('output-limit');
     };
-    if (codexJsonl || claudeJsonl) {
+    if (codexJsonl || claudeJsonl || piJsonl) {
       let transportBytes = 0, toolFrames = 0;
       const lines = createInterface({ input: child.stdout, crlfDelay: Infinity });
       child.stdout.prependListener('data', chunk => {
@@ -315,6 +315,25 @@ export function runProcess(binary, args, { cwd, input = '', timeoutMs = 300000, 
           if (content.length) collect(Buffer.from(JSON.stringify({ type: frame.type, message: { content } }) + '\n'), true);
           return;
         }
+        if (piJsonl && frame?.type === 'tool_execution_end') {
+          if (typeof frame.toolName === 'string' && typeof frame.isError === 'boolean' && toolFrames++ < TOOL_RESULT_LIMIT) {
+            const result = { content: toolOutput(frame.result?.content) };
+            collect(Buffer.from(JSON.stringify({ type: frame.type, toolName: frame.toolName, isError: frame.isError, result }) + '\n'), true);
+          }
+          return;
+        }
+        if (piJsonl && frame?.type === 'agent_end' && Array.isArray(frame.messages)) {
+          const messages = frame.messages.filter(message => message?.role === 'assistant').map(message => ({
+            role: message.role,
+            stopReason: message.stopReason,
+            content: Array.isArray(message.content) ? message.content.filter(part => part?.type === 'text') : [],
+          }));
+          const model = frame.messages.findLast(message => message?.role === 'assistant' && typeof message.model === 'string')?.model;
+          collect(Buffer.from(JSON.stringify({ type: frame.type, model, messages }) + '\n'), true);
+          return;
+        }
+        // Pi's progress events can repeat the full partial assistant message on each delta.
+        if (piJsonl && frame && frame.type !== 'agent_end' && frame.type !== 'error' && !frameError(frame)) return;
         collect(Buffer.from(line + '\n'), true);
       });
     } else child.stdout.on('data', chunk => collect(chunk, true));
@@ -670,7 +689,8 @@ export async function dispatchAgent(request, { probe = runProcess, env = process
     else args.push(`Read ${file} completely before taking action. It contains the required Total Recall task context, CLI reference location, official documentation location and the requested task. Carry out that task using the supplied context.`);
   }
   const execution = await probe(binary, args, { cwd: request.cwd, input, timeoutMs: request.timeoutMs || 900000,
-    codexJsonl: adapter.id === 'codex', claudeJsonl: adapter.id === 'claude', env: { ...agentEnvironment(env), ...credentials, TR_META_HARNESS_RUN: '1' } });
+    codexJsonl: adapter.id === 'codex', claudeJsonl: adapter.id === 'claude', piJsonl: adapter.id === 'pi',
+    env: { ...agentEnvironment(env), ...credentials, TR_META_HARNESS_RUN: '1' } });
   const parsed = openClawSession ? await readOpenClawResult(execution, {
     binary, cwd: request.cwd, env: agentEnvironment(env), probe, sessionId: openClawSession,
   }) : parseAgentResult(adapter.id, execution);

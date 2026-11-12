@@ -1,7 +1,7 @@
 {
   "id": "meta-harness",
-  "name": "Meta Harness",
-  "version": "0.3.9",
+  "name": "Metaharness",
+  "version": "0.3.11",
   "description": "Discover, configure, document, track, and run coding agent harnesses through Total Recall across mesh nodes.",
   "gate": {
     "tasks": ["Run work in another agent harness", "Choose which harness takes a task", "Check harness versions, sign-in and quota", "Read a harness's official documentation"],
@@ -44,6 +44,41 @@
         "effect": "read",
         "output": "json",
         "args": []
+      },
+      {
+        "name": "chat-target",
+        "description": "Resolve the default Chat harness and prepare a draft for the selected brains",
+        "effect": "read",
+        "output": "json",
+        "args": [
+          {
+            "name": "brains",
+            "flag": "--brains",
+            "type": "string",
+            "label": "Selected brain IDs, comma separated"
+          }
+        ]
+      },
+      {
+        "name": "chat-default",
+        "description": "Save the default Chat harness for every brain selection",
+        "effect": "write",
+        "output": "json",
+        "args": [
+          {
+            "name": "adapter",
+            "type": "string",
+            "label": "Metaharness adapter ID",
+            "required": true,
+            "positional": true
+          },
+          {
+            "name": "url",
+            "flag": "--url",
+            "type": "string",
+            "label": "Optional Chat launch URL"
+          }
+        ]
       },
       {
         "name": "nodes",
@@ -682,36 +717,22 @@
     "setup_command": "setup"
   },
   "branding": {
-    "name": "Meta Harness",
+    "name": "Metaharness",
     "color": "#3b82f6",
     "accent": "#38bdf8",
     "background": "#0c1427",
     "font": "system"
   },
   "ui": {
+    "home": "home",
+    "design_tokens": "DESIGN.md",
     "elements": [
       {
-        "id": "meta-harness-card",
-        "kind": "card",
-        "tag": "meta-harness-card",
-        "module": "ui/card.js",
-        "description": "Meta Harness multi-agent coordination matrix"
-      }
-    ]
-  },
-  "card_face": {
-    "quick_actions": [
-      {
-        "subcommand": "status",
-        "label": "Local agents"
-      },
-      {
-        "subcommand": "nodes",
-        "label": "Mesh nodes"
-      },
-      {
-        "subcommand": "catalog",
-        "label": "Adapters"
+        "id": "home",
+        "kind": "panel",
+        "tag": "tr-metaharness-home",
+        "module": "ui/home.js",
+        "description": "Default Chat harness and launch destination"
       }
     ]
   },

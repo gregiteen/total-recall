@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import App from './App';
 import * as api from './api';
 import * as onboarding from './utils/onboarding';
@@ -61,6 +61,9 @@ describe('App', () => {
     render(<App />);
 
     const handle = await screen.findByRole('button', { name: 'Workspace navigation' });
+    expect(handle).toHaveAttribute('aria-expanded', 'false');
+    const header = screen.getByRole('banner', { name: 'Dashboard' });
+    expect(within(header).getByRole('img', { name: 'Total Recall' })).toBeVisible();
     fireEvent.click(handle);
     expect(screen.getByRole('button', { name: 'Plugins' })).toBeInTheDocument();
     fireEvent.click(screen.getByText('Memory', { selector: 'summary' }));

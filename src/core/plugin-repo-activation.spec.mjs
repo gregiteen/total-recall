@@ -7,6 +7,7 @@ import { describePlugin, listInstalledPlugins, patchPluginRecord } from './plugi
 import { patchProjectActivationRecord } from './plugin-store.mjs';
 import { pluginActivation } from './plugin-state.mjs';
 import { setPluginActive } from './plugin-activation.mjs';
+import { runPluginCommand } from './plugin-runner.mjs';
 import { ensureRequiredPlugins, inspectRequiredPlugins, auditProjectPluginCopies } from './required-plugins.mjs';
 import { writeFixturePlugin } from './testing/plugin-fixture.mjs';
 
@@ -150,6 +151,79 @@ describe('per-repository activation of a shared plugin', () => {
     expect(fs.readFileSync(record, 'utf8')).toMatch(/runtime_enabled:\s*false/);
     // No plugin directory was created in the repository.
     expect(fs.existsSync(path.join(repoA, '.agent', 'skills', 'total-recall', 'plugins', 'shared-demo'))).toBe(false);
+  });
+
+  it('activates a dormant shared plugin only on deliberate use in the armed repository', async () => {
+    await setPluginActive('shared-demo', false, { projectRoot: repoA, scope: 'shared' });
+    await setPluginActive('shared-demo', 'on-use', { projectRoot: repoA });
+    const plugin = discoverPlugins(repoA).find(p => p.id === 'shared-demo');
+    expect(activationFor(repoA)).toMatchObject({ enabled: false, mode: 'on-use' });
+    await expect(runPluginCommand(plugin, { cwd: repoA, args: ['tick'] })).rejects.toThrow(/inactive/);
+    await expect(runPluginCommand(plugin, { cwd: repoA, args: ['status'], activateOnUse: true })).resolves.toMatchObject({ ok: true });
+    expect(activationFor(repoA)).toMatchObject({ enabled: false, mode: 'on-use' });
+    await expect(runPluginCommand(plugin, { cwd: repoA, args: ['tick'], activateOnUse: true })).resolves.toMatchObject({ ok: true });
+    expect(activationFor(repoA).enabled).toBe(true);
+    expect(activationFor(repoA).mode).toBeUndefined();
+    expect(activationFor(repoB).enabled).toBe(false);
+    await setPluginActive('shared-demo', 'on-use', { projectRoot: repoA });
+    await setPluginActive('shared-demo', false, { projectRoot: repoA });
+    await expect(runPluginCommand(plugin, { cwd: repoA, args: ['tick'], activateOnUse: true })).rejects.toThrow(/inactive/);
+    expect(activationFor(repoA)).toMatchObject({ enabled: false });
+    expect(activationFor(repoA).mode).toBeUndefined();
+  });
+
+  it('archives and restores only the runtime directory owned by the selected repository', async () => {
+    const brain = path.join(repoA, '.agent', 'skills', 'total-recall');
+    const local = path.join(brain, 'plugin-state', 'shared-demo');
+    const shared = path.join(path.dirname(globalPluginsDir()), 'plugin-state', 'shared-demo');
+    const archived = path.join(brain, 'config', 'plugin-state-archive', 'shared-demo');
+    fs.mkdirSync(local, { recursive: true });
+    fs.mkdirSync(shared, { recursive: true });
+    fs.writeFileSync(path.join(local, 'state.txt'), 'local');
+    fs.writeFileSync(path.join(shared, 'state.txt'), 'shared');
+    const off = await setPluginActive('shared-demo', false, { projectRoot: repoA });
+    expect(off.cleanup).toEqual({ ok: true, state: 'archived' });
+    expect(off.activation.enabled).toBe(false);
+    expect(fs.existsSync(local)).toBe(false);
+    expect(fs.readFileSync(path.join(archived, 'state.txt'), 'utf8')).toBe('local');
+    expect(fs.readFileSync(path.join(shared, 'state.txt'), 'utf8')).toBe('shared');
+    expect(activationFor(repoB).enabled).toBe(true);
+    expect((await setPluginActive('shared-demo', false, { projectRoot: repoA })).cleanup.state).toBe('already-archived');
+    const on = await setPluginActive('shared-demo', true, { projectRoot: repoA });
+    expect(on.cleanup.state).toBe('restored');
+    expect(on.activation.enabled).toBe(true);
+    expect(fs.existsSync(archived)).toBe(false);
+    expect(fs.readFileSync(path.join(local, 'state.txt'), 'utf8')).toBe('local');
+  });
+
+  it('keeps Off and both copies when an archive conflict needs attention', async () => {
+    const brain = path.join(repoA, '.agent', 'skills', 'total-recall');
+    const live = path.join(brain, 'plugin-state', 'shared-demo');
+    const archive = path.join(brain, 'config', 'plugin-state-archive', 'shared-demo');
+    fs.mkdirSync(live, { recursive: true });
+    fs.mkdirSync(archive, { recursive: true });
+    fs.writeFileSync(path.join(live, 'state.txt'), 'current');
+    fs.writeFileSync(path.join(archive, 'state.txt'), 'previous');
+    const result = await setPluginActive('shared-demo', false, { projectRoot: repoA });
+    expect(result.cleanup).toMatchObject({ ok: false, state: 'pending' });
+    expect(activationFor(repoA).enabled).toBe(false);
+    expect(fs.readFileSync(path.join(live, 'state.txt'), 'utf8')).toBe('current');
+    expect(fs.readFileSync(path.join(archive, 'state.txt'), 'utf8')).toBe('previous');
+    await expect(setPluginActive('shared-demo', true, { projectRoot: repoA })).rejects.toThrow(/Both copies/);
+    expect(activationFor(repoA).enabled).toBe(false);
+  });
+
+  it('does not follow a link from the runtime directory to shared state', async () => {
+    const live = path.join(repoA, '.agent', 'skills', 'total-recall', 'plugin-state', 'shared-demo');
+    const shared = path.join(path.dirname(globalPluginsDir()), 'plugin-state', 'shared-demo');
+    fs.mkdirSync(path.dirname(live), { recursive: true });
+    fs.mkdirSync(shared, { recursive: true });
+    fs.writeFileSync(path.join(shared, 'state.txt'), 'shared');
+    fs.symlinkSync(shared, live, 'dir');
+    const result = await setPluginActive('shared-demo', false, { projectRoot: repoA });
+    expect(result.cleanup).toMatchObject({ ok: false, state: 'pending' });
+    expect(fs.lstatSync(live).isSymbolicLink()).toBe(true);
+    expect(fs.readFileSync(path.join(shared, 'state.txt'), 'utf8')).toBe('shared');
   });
 
   it('switches through the CLI-facing command, refusing a shared switch on a repository copy', async () => {

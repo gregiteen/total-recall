@@ -135,31 +135,38 @@ export async function loadFirewallPolicy(brainDir) {
 
     applyPolicy();
 
-    // Watch the file directly if it exists.
-    if (!policyWatcher && fs.existsSync(policyPath)) {
-      policyWatcher = fs.watch(policyPath, (eventType) => {
-        if (eventType === 'change') applyPolicy();
-      });
-      // Unref so this watcher does not prevent one-shot CLI commands (e.g.
-      // `recall`) from exiting cleanly once their work is done.
-      policyWatcher.unref();
-    }
+    const watch = (target, onChange, clear) => {
+      try {
+        const watcher = fs.watch(target, onChange);
+        watcher.on('error', error => {
+          watcher.close();
+          clear(watcher);
+          logger.warn('throttled-fetch', `Network policy watcher unavailable: ${error.message}`);
+        });
+        watcher.unref();
+        return watcher;
+      } catch (error) {
+        logger.warn('throttled-fetch', `Network policy watcher unavailable: ${error.message}`);
+        return null;
+      }
+    };
+    const watchPolicy = () => {
+      if (policyWatcher || !fs.existsSync(policyPath)) return;
+      policyWatcher = watch(policyPath, event => {
+        if (event === 'change') applyPolicy();
+      }, watcher => { if (policyWatcher === watcher) policyWatcher = null; });
+    };
+    watchPolicy();
 
     // Also watch the parent directory so we pick up the policy file being
     // created after boot (e.g. first-run setups where the doc doesn't exist
     // yet). Attach the direct file watcher once it appears.
     if (!parentWatcher && fs.existsSync(systemDir)) {
-      parentWatcher = fs.watch(systemDir, (eventType, filename) => {
+      parentWatcher = watch(systemDir, (_event, filename) => {
         if (filename !== 'network-policy.md') return;
         applyPolicy();
-        if (!policyWatcher && fs.existsSync(policyPath)) {
-          policyWatcher = fs.watch(policyPath, (evt) => {
-            if (evt === 'change') applyPolicy();
-          });
-          policyWatcher.unref();
-        }
-      });
-      parentWatcher.unref();
+        watchPolicy();
+      }, watcher => { if (parentWatcher === watcher) parentWatcher = null; });
     }
   } catch (err) {
     logger.error('throttled-fetch', `Failed to load network policy: ${err.message}`);

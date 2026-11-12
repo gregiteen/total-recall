@@ -24,25 +24,24 @@ Peers install it with `npx total-recall plugin install peer:<this-node>/mesh`.
 ## Features
 
 - **Identifier**: `mesh`
-- **Version**: 0.1.0
 - **SSSS Category**: `mesh-nodes`
 - **CLI Command**: `npx total-recall mesh`
-- **UI**: `ui/card.js` is the declared card component and uses `ui/DESIGN.md` tokens.
+- **UI**: native Mesh Home, [owner design](DESIGN.md), and SSSS blocks under `ui/chunks/`.
 - **API key**: paste it in the plugin UI (`save-token` event) or pipe it to `npx total-recall mesh token set --stdin`; stored as `HEADSCALE_API_KEY` in the secrets store
 
 ## Install and vendor
 
-Install the full integration with `total-recall plugin install <git URL of this repository>`. The declared standalone artifact is the control and SSH helper capability under `capability/`. The manifest lists its exports and [the capability entry](capability/index.mjs) exposes them. A consumer integration guide and independent proof remain open. The Total Recall card, host routes and auth/grant integration belong to the installed plugin.
+Install the full integration with `total-recall plugin install <git URL of this repository>`. The declared standalone artifact is the control and SSH helper capability under `capability/`. The manifest lists its exports and [the capability entry](capability/index.mjs) exposes them. A consumer integration guide and independent proof remain open. Mesh Home, host routes, and Auth and grant integration belong to the installed plugin.
 
 The [Mesh project tracker](docs/projects/in-progress/MESH_CARD/MESH_CARD_PROJECT_TRACKER.md) separates runtime transport and authorization work from card checks.
 
 ## Mesh screens and integration declarations
 
-The card defines Machines, Flows, Placement, Boundary and Join. Machines separates control membership, path checks, recorded login and actual execution. Hardware cells retain their measurement dates; failed or untested runtime probes remain unknown. Placement filters confirmed capabilities and includes the integration matrix declared in `plugin.json.mesh`.
+Mesh Home defines Machines, Flows, Placement, Boundary, and Join. Machines separates control membership, path checks, recorded login, and actual execution. Hardware cells retain their measurement dates. Failed or untested runtime probes remain unknown. Select **Verify fleet execution** to run `doctor`. Placement filters confirmed capabilities and includes the integration matrix declared in `plugin.json.mesh`.
 
 `total-recall mesh view <machines|flows|placement|boundary|join> --json` reads fixed owner commands. Each source carries its command, attempt time and either data or an explicit error. `mesh.provides` references declared operations/runtime modules; `mesh.integrations` identifies each owner and the meaning of its evidence; `mesh.endpoints` identifies served peer routes. These are declarations, not primitive grants or proof every provider action works. Read-only views never perform enrollment, policy changes, grant edits, deployments or secret transfers.
 
-The dashboard supplies frozen `host.operations`. Read-only cards show CLI handoffs for login administration and re-enrollment. A writable host may expose those declared actions; re-enrollment then requires target-specific confirmation. Enrollment keys never enter the card.
+The dashboard supplies frozen `host.operations`. A read-only Home shows CLI handoffs for login administration and re-enrollment. A writable host can expose those declared actions with target-specific confirmation for re-enrollment. Enrollment key issuance stays in the interactive terminal. `mesh token-status --json` reports credential presence from Auth.
 
 Auth's `host-secrets-store` runtime supplies the single host-store selector for control credentials and mesh-sync authentication. Project `AGENT_DIR`/`TR_BRAIN` cannot divert these reads. Native SSSS audit contention is serialized by the generic host; errors still fail closed. The corresponding source runtime must be installed; missing modules never select a fallback implementation.
 

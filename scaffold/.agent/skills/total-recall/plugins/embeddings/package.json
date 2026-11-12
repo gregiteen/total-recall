@@ -13,6 +13,7 @@
     "plugin.json",
     "README.md",
     "LICENSE",
+    "DESIGN.md",
     "ui/"
   ],
   "dependencies": {

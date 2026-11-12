@@ -13,6 +13,7 @@ import { fileURLToPath } from 'node:url';
 import { agentDir, brainDir, globalBrainDir } from '../../core/config.mjs';
 import { resolveSurfaceDir } from '../../cli/agent-dir.mjs';
 import { logger } from '../../core/logger.mjs';
+import { dashboardBrainDir, readRegisteredProjects } from '../../core/brain-registry.mjs';
 
 export { globalBrainDir };
 export const AGENT_DIR    = process.env.AGENT_DIR || agentDir;
@@ -33,7 +34,7 @@ export const MODEL_CATALOG_DIR = path.join(ROOT, 'models', 'catalog', 'total-rec
  * Resolve a brain-specific vault directory from the request.
  *
  * Reads `req.query.brain` (query param) or `req.body?.brainId` (body field).
- * - If the value is `'global'` or missing, returns the default VAULT_DIR.
+ * - Missing selection uses the default server vault. Explicit global selection follows the dashboard.
  * - If it starts with `'project:'`, looks up the project brain in the
  *   project-registry.json (same resolution logic as GET /api/brains/:id/nodes).
  * - Falls back to VAULT_DIR if the resolved path doesn't exist.
@@ -52,23 +53,15 @@ export function resolveVaultFromQuery(req, { strict = false } = {}) {
     }
   }
 
-  // No brain specified or explicitly global → default vault
-  if (!brainId || brainId === 'global') {
-    return VAULT_DIR;
-  }
+  if (!brainId) return VAULT_DIR;
+  if (brainId === 'global') return path.join(dashboardBrainDir(process.env, BRAIN_DIR), 'memory-vault');
 
   if (brainId.startsWith('project:')) {
     const projectName = brainId.slice('project:'.length);
-    const registryPath = path.join(globalBrainDir, 'config', 'project-registry.json');
-
-    if (!fs.existsSync(registryPath)) {
-      if (strict) throw Object.assign(new Error('Selected brain is unavailable'), { status: 404 });
-      return VAULT_DIR;
-    }
-
     try {
-      const registry = JSON.parse(fs.readFileSync(registryPath, 'utf8'));
-      const project = registry.find(p => p.name === projectName);
+      const registry = readRegisteredProjects(dashboardBrainDir(process.env, globalBrainDir));
+      const matching = registry.filter(p => p.name === projectName || p.project_id === projectName);
+      const project = matching.length === 1 ? matching[0] : null;
       if (project) {
         const projectVaultDir = path.join(project.brainDir, 'memory-vault');
         if (fs.existsSync(projectVaultDir)) {

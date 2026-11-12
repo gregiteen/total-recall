@@ -3,17 +3,19 @@ import { pluginActivation } from './plugin-state.mjs';
 
 const decisionLimit = 20;
 
-async function requestChoice(state, questions) {
-  const plugin = getPluginById('decision');
-  if (!plugin?.valid || !pluginActivation(plugin, { projectRoot: process.cwd() }).enabled ||
+async function requestChoice(state, questions, { projectRoot = process.cwd(), brainDir } = {}) {
+  const plugin = getPluginById('decision', projectRoot);
+  if (!plugin?.valid || !pluginActivation(plugin, { projectRoot }).enabled ||
       !plugin.manifest.cli?.subcommands?.some(command => command.name === 'run')) return null;
   const { runPluginCommand } = await import('./plugin-runner.mjs');
   const run = await runPluginCommand(plugin, {
     subcommand: 'run',
     args: ['--state', JSON.stringify(state), '--questions', JSON.stringify(questions), '--json'],
     timeoutMs: 15_000,
+    cwd: projectRoot ?? brainDir ?? process.cwd(),
+    projectRoot,
   });
-  if (!run.ok || run.truncated) return null;
+  if ((!run.ok && run.exitCode !== 4) || run.truncated) return null;
   return JSON.parse(run.stdout);
 }
 
@@ -23,8 +25,9 @@ export async function chooseUiChunk(chunks, query, surface, decide = requestChoi
   return { ...selection, key: keys[0] ?? null };
 }
 
-export async function chooseUiComposition(chunks, query, decide = requestChoice) {
-  return chooseBlocks(chunks, query, 'page', ['selected_chunk', 'supporting_chunk', 'reference_chunk'], decide);
+export async function chooseUiComposition(chunks, query, decide, target) {
+  const choose = decide ?? ((state, questions) => requestChoice(state, questions, target));
+  return chooseBlocks(chunks, query, 'page', ['selected_chunk', 'supporting_chunk', 'reference_chunk'], choose, false);
 }
 
 const instructions = {
@@ -33,11 +36,11 @@ const instructions = {
   reference_chunk: 'Choose an optional readout or reference block that gives useful context for the task.',
 };
 
-async function chooseBlocks(chunks, query, surface, slots, decide) {
+async function chooseBlocks(chunks, query, surface, slots, decide, skipSingle = true) {
   const shortlist = chunks.slice(0, decisionLimit);
   if (!shortlist.length) return { source: 'lexical', keys: [], reason: 'no-matches' };
   const fallback = { source: 'lexical', keys: shortlist.slice(0, slots.length).map(chunk => chunk.key) };
-  if (shortlist.length === 1) return { ...fallback, reason: 'single-match' };
+  if (skipSingle && shortlist.length === 1) return { ...fallback, reason: 'single-match' };
 
   const criteria = Object.fromEntries(shortlist.map(chunk => {
     const description = [chunk.title, chunk.description, ...chunk.intents, ...(chunk.operations || []), ...(chunk.data || [])].join(' ').slice(0, 600);
@@ -58,7 +61,7 @@ async function chooseBlocks(chunks, query, surface, slots, decide) {
   if (result?.ok !== true) return { ...fallback, reason: 'decision-unavailable' };
   const eligible = new Set(shortlist.map(chunk => chunk.key));
   const primary = result.answers?.selected_chunk;
-  if (!confident(primary)) return { source: 'decision', keys: [], reason: 'insufficient-confidence' };
+  if (!confident(primary)) return { ...fallback, reason: 'decision-abstained' };
   if (primary.choice === 'none') return { source: 'decision', keys: [], reason: 'no-fit', confidence: primary.confidence };
   if (!eligible.has(primary.choice)) return { source: 'decision', keys: [], reason: 'invalid-choice' };
   const keys = new Set([primary.choice]);

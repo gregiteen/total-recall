@@ -9,6 +9,7 @@ export interface DrawerConfig {
   shortcuts: { label: string; href: string }[]
 }
 export interface DrawerRevision { config: DrawerConfig; version: string | null }
+export interface PluginDesign { revision: string | null; css: string; components: string[] }
 export interface WorkspaceChunk {
   key: string
   plugin: string
@@ -22,16 +23,30 @@ export interface WorkspaceChunk {
   sha256: string
 }
 
-export function suggestWorkspaceChunks(plugin: string, query: string, signal?: AbortSignal) {
-  return request<{ chunks: WorkspaceChunk[]; selection: { source: 'lexical' | 'decision'; keys: string[]; reason?: string } }>(
-    '/api/ui-chunks/suggest', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ plugin, query }), signal,
-    },
+export interface SavedPageSummary { id: string; title: string; version: string }
+export interface SavedPage extends SavedPageSummary { chunks: WorkspaceChunk[] }
+
+export function listSavedPages(brainId: string, signal: AbortSignal) {
+  return request<{ pages: SavedPageSummary[] }>(
+    `/api/workspace/pages?brain=${encodeURIComponent(brainId)}`, { signal },
+  )
+}
+
+export function readSavedPage(id: string, brainId: string, signal: AbortSignal) {
+  return request<SavedPage>(
+    `/api/workspace/pages/${encodeURIComponent(id)}?brain=${encodeURIComponent(brainId)}`, { signal },
+  )
+}
+
+export function readWorkspaceComposition(plugin: string, signal: AbortSignal, brainId?: string) {
+  const scope = brainId ? `?brain=${encodeURIComponent(brainId)}` : ''
+  return request<{ chunks: WorkspaceChunk[]; version: string | null }>(
+    `/api/ui-chunks/${encodeURIComponent(plugin)}/composition/current${scope}`, { signal },
   )
 }
 
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
-  const response = await apiFetch(getApiBase() + path, options)
+  const response = await apiFetch(getApiBase() + path, { cache: 'no-store', ...options })
   if (!response.headers.get('content-type')?.includes('application/json')) {
     throw new Error('This server does not support saved drawer layouts yet.')
   }
@@ -50,16 +65,33 @@ export function saveDrawer(side: DrawerSide, revision: DrawerRevision) {
   })
 }
 
-export function findWorkspaceChunks(surface: DrawerSide | 'page', query: string, signal?: AbortSignal, plugin?: string) {
-  const params = new URLSearchParams({ surface, q: query, limit: '24' })
+export function findWorkspaceChunks(
+  surface: DrawerSide | 'page', query: string, signal?: AbortSignal, plugin?: string,
+  brainId?: string, page?: { limit: number; offset: number },
+) {
+  const params = new URLSearchParams({ surface, q: query, limit: String(page?.limit ?? 24) })
+  if (page) params.set('offset', String(page.offset))
   if (plugin) params.set('plugin', plugin)
-  return request<{ chunks: WorkspaceChunk[] }>(`/api/ui-chunks?${params}`, { signal })
+  if (brainId) params.set('brain', brainId)
+  return request<{ chunks: WorkspaceChunk[]; total: number }>(`/api/ui-chunks?${params}`, { signal })
 }
 
-export async function readWorkspaceChunk(key: string, surface: DrawerSide | 'page', signal?: AbortSignal) {
+export function readPluginDesign(plugin: string, revision: string | null, signal: AbortSignal, brainId?: string) {
+  const params = new URLSearchParams()
+  if (revision) params.set('revision', revision)
+  if (brainId) params.set('brain', brainId)
+  const query = params.size ? `?${params}` : ''
+  return request<PluginDesign | { unchanged: true }>(
+    `/api/ui-chunks/${encodeURIComponent(plugin)}/design/revision${query}`, { signal },
+  )
+}
+
+export async function readWorkspaceChunk(key: string, surface: DrawerSide | 'page', signal?: AbortSignal, brainId?: string) {
   const [plugin, id] = key.split(':')
+  const params = new URLSearchParams({ surface })
+  if (brainId) params.set('brain', brainId)
   const data = await request<{ chunk: WorkspaceChunk & { html: string } }>(
-    `/api/ui-chunks/${encodeURIComponent(plugin)}/${encodeURIComponent(id)}?surface=${surface}`, { signal },
+    `/api/ui-chunks/${encodeURIComponent(plugin)}/${encodeURIComponent(id)}?${params}`, { signal },
   )
   return data.chunk
 }

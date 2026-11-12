@@ -3,7 +3,7 @@
  *
  * Caching strategies:
  *   • App shell:      Pre-cached on install
- *   • /api/* GETs:    Stale-While-Revalidate
+ *   • /api/* GETs:    Stale-While-Revalidate except live brain, plugin and chunk reads
  *   • /api/memory writes (POST/PUT/PATCH/DELETE): Network-first + offline queue with Background Sync
  *   • Static assets:  Cache-first
  *   • Everything else: Network-first
@@ -15,7 +15,7 @@
  */
 
 const CACHE_NAME = 'total-recall-v1';
-const API_CACHE = 'total-recall-api-v1';
+const API_CACHE = 'total-recall-api-v3';
 
 // Pre-cache app shell
 const PRECACHE_URLS = [
@@ -59,8 +59,9 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // Live streaming / LLM / v1 endpoints should bypass the cache completely
-  if (url.pathname.startsWith('/v1/')) {
+  // Registry, owner modules and composed views use the current authenticated state.
+  if (event.request.cache === 'no-store' || url.pathname.startsWith('/v1/') ||
+      /^\/api\/(?:brains|plugins|ui-chunks)(?:\/|$)/.test(url.pathname)) {
     return;
   }
 

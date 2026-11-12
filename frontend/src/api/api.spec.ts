@@ -164,6 +164,24 @@ beforeEach(() => {
   mockFetch.mockImplementation(() => makeOkResponse())
 })
 
+describe('brain-scoped memory', () => {
+  it('queries the global and named project vault separately in a mixed selection', async () => {
+    await listMemory('global,project:Personal settings', 'facts')
+    expect(mockFetch).toHaveBeenNthCalledWith(1, '/api/memory?category=facts&brain=global', expect.objectContaining({ cache: 'no-store' }))
+    expect(mockFetch).toHaveBeenNthCalledWith(2, '/api/brains/project%3APersonal%20settings/nodes?category=facts', expect.objectContaining({ cache: 'no-store' }))
+  })
+
+  it('searches the explicit selection even when the saved header is for another brain', async () => {
+    localStorageMock.setItem('total-recall-active-brain', 'global')
+    try {
+      await searchMemory('career', undefined, 'project:Career')
+      expect(mockFetch).toHaveBeenCalledWith('/api/memory?q=career&brain=project%3ACareer', expect.objectContaining({ cache: 'no-store' }))
+    } finally {
+      localStorageMock.removeItem('total-recall-active-brain')
+    }
+  })
+})
+
 describe('API barrel exports — all functions exist', () => {
   const fns = [
     // _base

@@ -9,6 +9,8 @@ Reports the state of the git repository you run it in: current branch, staged / 
 
 **Use cases:** software-development
 
+The native Home opens with an audit and registered worktrees. It reads diff statistics on request and confirms the exact destination or target before a worktree change. Its [design](DESIGN.md) and SSSS blocks under `ui/chunks/` ship with the plugin.
+
 ## Install
 
 ```bash

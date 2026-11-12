@@ -15,6 +15,7 @@
   "files": [
     "cli.mjs",
     "plugin.json",
+    "DESIGN.md",
     "README.md",
     "LICENSE",
     "ui/",

@@ -294,24 +294,29 @@ async function handleAudit(subArgs, json) {
     return;
   }
   const brain = resolveBrainDir();
-  const webauthnPath = path.join(brain, 'config', 'webauthn.json');
   const findings = [];
 
-  // Check 1: WebAuthn file permissions
-  if (fs.existsSync(webauthnPath)) {
-    try {
-      const stats = fs.statSync(webauthnPath);
-      const mode = (stats.mode & 0o777).toString(8);
-      if (mode !== '600' && mode !== '400') {
-        findings.push({
-          target: 'webauthn.json',
-          severity: 'HIGH',
-          message: `Permissions mode is ${mode}, expected 0600 (owner read/write only)`,
-        });
-      }
-    } catch {
-      // stat check fallback
+  // Check 1: The same canonical passkey state the owner reads and writes.
+  try {
+    const { resolveWebAuthnPath } = await import('./src/webauthn-store.mjs');
+    const { authState } = await import('./src/metadata-state.mjs');
+    await listStoredPasskeys();
+    const { documentPath } = authState(resolveWebAuthnPath(brain));
+    const stats = fs.lstatSync(documentPath, { throwIfNoEntry: false });
+    const mode = stats && (stats.mode & 0o777);
+    if (stats && mode !== 0o600 && mode !== 0o400) {
+      findings.push({
+        target: 'webauthn.json',
+        severity: 'HIGH',
+        message: `Passkey state permissions are ${mode.toString(8)}, expected 0600 or 0400`,
+      });
     }
+  } catch {
+    findings.push({
+      target: 'webauthn.json',
+      severity: 'HIGH',
+      message: 'Could not read or validate the Auth passkey state',
+    });
   }
 
   // Check 2: Session secret entropy

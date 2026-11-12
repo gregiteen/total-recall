@@ -16,12 +16,14 @@ export async function listMemory(brainId?: string, category?: string, status?: s
   }
   
   const ids = brainId.split(',')
+  const globalParams = new URLSearchParams(params)
+  globalParams.set('brain', 'global')
   const fetchPromises = ids.map(async (id) => {
     const url = id === 'global'
-      ? `${API_BASE}/api/memory?${params}`
-      : `${API_BASE}/api/brains/${id}/nodes?${params}`
+      ? `${API_BASE}/api/memory?${globalParams}`
+      : `${API_BASE}/api/brains/${encodeURIComponent(id)}/nodes?${params}`
     try {
-      const res = await apiFetch(url)
+      const res = await apiFetch(url, { cache: 'no-store' })
       if (!res.ok) return []
       const data = await res.json()
       return Array.isArray(data) ? data : (data.nodes || [])
@@ -54,10 +56,11 @@ export async function listMemory(brainId?: string, category?: string, status?: s
   return merged
 }
 
-export async function searchMemory(query: string, category?: string): Promise<MemoryNode[]> {
+export async function searchMemory(query: string, category?: string, brainId?: string): Promise<MemoryNode[]> {
   const params = new URLSearchParams({ q: query })
   if (category) params.set('category', category)
-  const res = await apiFetch(`${API_BASE}/api/memory?${params}`)
+  if (brainId) params.set('brain', brainId)
+  const res = await apiFetch(`${API_BASE}/api/memory?${params}`, { cache: 'no-store' })
   if (!res.ok) throw new Error(`Memory API error: ${res.status}`)
   const data = await res.json()
   return Array.isArray(data) ? data : (data.nodes || [])
@@ -167,10 +170,12 @@ export async function fetchOpenWikiNodes(
   // Reuse listMemory brain routing (global vs project:name), then keep openwiki-tagged only.
   // Server also filters tag=openwiki when we hit /api/memory?tag=openwiki.
   const params = new URLSearchParams({ tag: 'openwiki', limit: '500' })
+  const globalParams = new URLSearchParams(params)
+  globalParams.set('brain', 'global')
   const ids = active.split(',').map((s) => s.trim()).filter(Boolean)
 
   if (ids.length === 0 || (ids.length === 1 && ids[0] === 'global')) {
-    const res = await apiFetch(`${API_BASE}/api/memory?${params}`)
+    const res = await apiFetch(`${API_BASE}/api/memory?${globalParams}`, { cache: 'no-store' })
     if (!res.ok) throw new Error(`OpenWiki nodes error: ${res.status}`)
     const data = await res.json()
     const nodes = Array.isArray(data) ? data : (data.nodes ?? [])
@@ -181,7 +186,7 @@ export async function fetchOpenWikiNodes(
   const fetchPromises = ids.map(async (id) => {
     try {
       if (id === 'global') {
-        const res = await apiFetch(`${API_BASE}/api/memory?${params}`)
+        const res = await apiFetch(`${API_BASE}/api/memory?${globalParams}`, { cache: 'no-store' })
         if (!res.ok) return []
         const data = await res.json()
         return Array.isArray(data) ? data : (data.nodes ?? [])
@@ -190,7 +195,7 @@ export async function fetchOpenWikiNodes(
       const res = await apiFetch(`${API_BASE}/api/brains/${encodeURIComponent(id)}/nodes`)
       if (!res.ok) {
         // Fallback: memory list with brain header already set by apiFetch
-        const res2 = await apiFetch(`${API_BASE}/api/memory?${params}&brain=${encodeURIComponent(id)}`)
+        const res2 = await apiFetch(`${API_BASE}/api/memory?${params}&brain=${encodeURIComponent(id)}`, { cache: 'no-store' })
         if (!res2.ok) return []
         const data2 = await res2.json()
         return Array.isArray(data2) ? data2 : (data2.nodes ?? [])

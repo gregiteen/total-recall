@@ -18,7 +18,9 @@ Dashboard/step-up/collaboration tokens use HS256 with issuer, purpose-specific a
 
 Before uninstall, auth verifies and preserves encrypted ciphertext outside the brain. Locked, corrupt, plaintext, conflicting or unmigrated legacy credentials abort teardown. No live credential migration is performed by source changes.
 
-The card displays requested results only. The panel performs browser credential creation plus server verification before reporting registration success. Hardware attestation, provider availability and rotation schedules are never fabricated.
+## Auth Home
+
+Open **Auth & Secrets** from the dashboard's Plugins folder to check sign-in setup and run the host baseline. Customize its colors, typography and layout in `DESIGN.md`. The independent SSSS blocks in `ui/chunks/` bind to the owner CLI and can be composed into pages and drawers. Credential entry and one-time outputs stay in the native Auth flows. The account panel uses browser credential creation and server verification to enroll a passkey.
 
 Integration and whole-ecosystem migration remain in progress. Fixture tests do not prove a physical passkey, OAuth provider login or fleet deployment.
 

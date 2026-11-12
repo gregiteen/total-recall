@@ -10,7 +10,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { createRequire } from 'node:module';
-import { readPluginsDir, globalPluginsDir, PACKAGE_ROOT, resolvePluginFile } from './plugin-loader.mjs';
+import { readPluginsDir, globalPluginsDir, PACKAGE_ROOT, resolvePluginFile, validatePluginManifest } from './plugin-loader.mjs';
 import { DEFAULT_PLUGIN_IDS, REQUIRED_INSTALLATION_PLUGIN_IDS } from './default-plugins.mjs';
 import { comparePackageVersions } from './package-version.mjs';
 import { preparePluginDependencies } from './plugin-dependencies.mjs';
@@ -113,14 +113,39 @@ export function inspectRequiredPlugins(brainDir, { pluginsDir, sharedBrainDir = 
   return { status: errors.length ? 'failed' : 'ready', errors, source, installations };
 }
 
-/** Only a copy that declares an older release than the bundled one is refreshed; damaged same-release copies still fail. */
+const LEGACY_PRESENTATION_FIELDS = ['card', 'card_face', 'card_layout'];
+
+function hasLegacyPresentation(manifest) {
+  return LEGACY_PRESENTATION_FIELDS.some(field => Object.hasOwn(manifest, field))
+    || (Array.isArray(manifest.ui?.elements) && manifest.ui.elements.some(element => ['card', 'card-face'].includes(element?.kind)));
+}
+
+function hasPluginFiles(directory, files) {
+  return files.every(file => fs.statSync(resolvePluginFile(directory, file)).isFile());
+}
+
+function runtimeFiles(manifest) {
+  return ['package.json', ...(manifest.cli ? [manifest.cli.handler] : []), ...Object.values(manifest.runtime?.modules || {})];
+}
+
+/** Refresh older copies and migrate the retired presentation of an otherwise intact same-release copy. */
 function isStaleInstall(target, source) {
   try {
     // A link is its owner's checkout. Replacing it would delete that repository's files, .git included.
     if (fs.lstatSync(target).isSymbolicLink()) return false;
-    const installed = JSON.parse(fs.readFileSync(path.join(target, 'plugin.json'), 'utf8')).version;
-    const bundled = JSON.parse(fs.readFileSync(path.join(source, 'plugin.json'), 'utf8')).version;
-    return comparePackageVersions(installed, bundled) === -1;
+    const installed = JSON.parse(fs.readFileSync(path.join(target, 'plugin.json'), 'utf8'));
+    const bundled = JSON.parse(fs.readFileSync(path.join(source, 'plugin.json'), 'utf8'));
+    if (comparePackageVersions(installed.version, bundled.version) === -1) return true;
+    if (installed.version !== bundled.version || installed.id !== bundled.id || bundled.id !== path.basename(source)
+      || installed.cli?.command !== bundled.cli?.command || !hasLegacyPresentation(installed)
+      || hasLegacyPresentation(bundled) || !bundled.ui?.home || !validatePluginManifest(bundled).valid) return false;
+
+    const migrated = { ...installed, ui: bundled.ui };
+    for (const field of LEGACY_PRESENTATION_FIELDS) delete migrated[field];
+    if (!validatePluginManifest(migrated).valid || !hasPluginFiles(target, runtimeFiles(installed))) return false;
+    return hasPluginFiles(source, [
+      ...runtimeFiles(bundled), bundled.ui.design_tokens, ...bundled.ui.elements.map(element => element.module),
+    ]);
   } catch { return false; }
 }
 
@@ -165,7 +190,7 @@ function installDefaultsInto(brainDir, sourceDir) {
       fs.mkdirSync(path.dirname(target), { recursive: true });
       fs.cpSync(source, target, { recursive: true, force: false, errorOnExist: true });
     } else if (isStaleInstall(target, source)) {
-      // A vendored copy that no longer validates (or predates the bundled release) is replaced; node_modules stays.
+      // Keep installed dependencies when refreshing the bundled plugin files.
       for (const entry of fs.readdirSync(target)) if (entry !== 'node_modules') fs.rmSync(path.join(target, entry), { recursive: true, force: true });
       for (const entry of fs.readdirSync(source)) if (entry !== 'node_modules') fs.cpSync(path.join(source, entry), path.join(target, entry), { recursive: true });
     }

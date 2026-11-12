@@ -1,6 +1,6 @@
 /** Pure plugin UI manifest validation; rendering belongs to capability owners. */
 import path from 'node:path';
-export const UI_ELEMENT_KINDS = ['panel', 'form', 'list', 'detail', 'settings', 'widget', 'card', 'card-face'];
+export const UI_ELEMENT_KINDS = ['panel', 'form', 'list', 'detail', 'settings', 'widget'];
 const PROP_TYPES = ['string', 'number', 'boolean', 'object', 'array'];
 const ELEMENT_ID = /^[a-z][a-z0-9-]{0,63}$/;
 // Custom element names: lowercase, start with a letter, contain a hyphen.
@@ -144,7 +144,7 @@ export function normalizeUiSpec(ui) {
   });
   if (ui.home !== undefined) {
     if (!spec.elements.some(el => el.id === ui.home && ['panel', 'form', 'list', 'detail', 'widget'].includes(el.kind))) {
-      errors.push("'ui.home' must name a declared non-card content element");
+      errors.push("'ui.home' must name a declared content element");
     } else spec.home = ui.home;
     if (!spec.design_tokens) errors.push("'ui.home' requires 'ui.design_tokens'");
   }

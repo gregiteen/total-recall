@@ -169,9 +169,18 @@ export async function executeProcessTask(job, dependencies = {}) {
     if (worktree) { (dependencies.removeWorktree || removeWorktree)(job.cwd, worktree); worktree = null; }
     if (branch && !commit) { (dependencies.deleteBranch || deleteBranch)(job.cwd, branch); branch = null; }
   } catch (error) { result = { ...result, ok: false, error: `${result.error ? result.error + '; ' : ''}Isolation cleanup failed: ${error.message}` }; }
-  return updateAgentRecord(job.id, { status: result.ok ? 'completed' : 'failed', exitCode: result.exitCode ?? (result.ok ? 0 : 1), error: result.ok ? null : result.error,
+  const record = updateAgentRecord(job.id, { status: result.ok ? 'completed' : 'failed', exitCode: result.exitCode ?? (result.ok ? 0 : 1), error: result.ok ? null : result.error,
     ...(result.queueId ? { queueId: result.queueId } : {}),
     result: result.response || null, branch, commit, worktreePath: worktree, endedAt: new Date().toISOString() });
+  return {
+    ...record,
+    ...(Array.isArray(result.toolResults) ? {
+      toolResults: result.toolResults,
+      toolExecutionVerified: result.toolExecutionVerified,
+      commandExecutionVerified: result.commandExecutionVerified,
+    } : {}),
+    ...(result.toolEvidenceError ? { toolEvidenceError: result.toolEvidenceError } : {}),
+  };
 }
 
 export async function killAgent(idOrPid, dependencies = {}) {
@@ -211,6 +220,20 @@ export async function getAgentLogs(idOrPid, tailLines = 50, dependencies = {}) {
   if (record.remote) {
     const result = await remoteCall(record.node, record.cwd, ['logs', record.id, '--tail', String(tailLines)], dependencies);
     if (typeof result.logs !== 'string') throw new Error('Remote owner returned no logs');
+    if (['starting', 'running'].includes(record.status)) {
+      for (const line of result.logs.trimEnd().split('\n').reverse()) {
+        let terminal;
+        try { terminal = JSON.parse(line); } catch { continue; }
+        if (terminal?.id !== record.id || !['completed', 'failed', 'killed'].includes(terminal.status) ||
+            typeof terminal.endedAt !== 'string' || !Number.isFinite(Date.parse(terminal.endedAt))) continue;
+        updateAgentRecord(record.id, {
+          status: terminal.status,
+          exitCode: Number.isInteger(terminal.exitCode) ? terminal.exitCode : null,
+          endedAt: terminal.endedAt,
+        });
+        break;
+      }
+    }
     return result.logs;
   }
   if (path.dirname(record.logFile || '') !== logDirectory()) throw new Error('Invalid managed log path');

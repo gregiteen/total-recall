@@ -43,7 +43,7 @@ export default function BrainSelector({ activeBrainId, onBrainChange, onSelectio
     setLoading(true)
     setError(null)
     try {
-      const res = await apiFetch(`${getApiBase()}/api/brains`)
+      const res = await apiFetch(`${getApiBase()}/api/brains`, { cache: 'no-store' })
       if (!res.ok) {
         const body = await res.json().catch(() => ({}))
         throw new Error(body.error || `Brains API ${res.status}`)

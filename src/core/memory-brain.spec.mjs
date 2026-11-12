@@ -33,6 +33,12 @@ it('registers a stable project UUID without a separate repair command', () => {
     expect(row.project_id).toMatch(/^[0-9a-f-]{36}$/);
     expect(JSON.parse(fs.readFileSync(path.join(brainDir, 'config/brain.json'), 'utf8')).project_id).toBe(row.project_id);
     expect(registerProjectBrain(global, entry).project_id).toBe(row.project_id);
+    const identity = path.join(brainDir, 'config/brain.json');
+    fs.writeFileSync(identity, JSON.stringify({ url: 'http://127.0.0.1:3000' }));
+    expect(registerProjectBrain(global, entry).project_id).toBe(row.project_id);
+    expect(JSON.parse(fs.readFileSync(identity, 'utf8'))).toEqual({
+      url: 'http://127.0.0.1:3000', project_id: row.project_id,
+    });
     const file = path.join(global, 'config/project-registry.json');
     expect(JSON.parse(fs.readFileSync(file, 'utf8'))).toHaveLength(1);
     const before = fs.readFileSync(file, 'utf8');

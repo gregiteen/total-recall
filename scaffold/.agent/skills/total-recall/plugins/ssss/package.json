@@ -11,6 +11,7 @@
     "ui/",
     "scripts/",
     "cli.mjs",
+    "DESIGN.md",
     "plugin.json"
   ],
   "scripts": {

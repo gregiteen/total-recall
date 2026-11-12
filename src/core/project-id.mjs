@@ -7,6 +7,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+
 function brainJsonPath(brainDir) {
   return path.join(brainDir, 'config', 'brain.json');
 }
@@ -35,21 +37,21 @@ export function readProjectId(brainDir) {
  * Return the project's id, creating a random UUID on first use.
  * @returns {{ project_id: string, created: boolean }}
  */
-export function ensureProjectId(brainDir) {
+export function ensureProjectId(brainDir, { fallbackId } = {}) {
   const file = brainJsonPath(brainDir);
   let cfg;
   try { cfg = JSON.parse(fs.readFileSync(file, 'utf8')); }
   catch (err) { if (err.code === 'ENOENT') cfg = {}; else throw new Error('Existing project identity is unreadable or malformed'); }
   if (!cfg || typeof cfg !== 'object' || Array.isArray(cfg)) throw new Error('Existing project identity must be an object');
   if (cfg.project_id) return { project_id: cfg.project_id, created: false };
-  cfg.project_id = randomUUID();
+  cfg.project_id = fallbackId || randomUUID();
   writeJsonAtomic(file, cfg);
   return { project_id: cfg.project_id, created: true };
 }
 
 /**
- * Give every registered project an id and make the registry agree with each
- * project's brain.json (the brain.json id wins).
+ * Make the registry agree with each project's brain.json. If the disk identity
+ * is missing, preserve a unique valid UUID already published in the registry.
  * @returns {{ total: number, created: number, synced: number, missing_brain: number }}
  */
 export function repairProjectIds(globalBrainDir) {
@@ -57,13 +59,21 @@ export function repairProjectIds(globalBrainDir) {
   const list = readJson(registryPath, []);
   const out = { total: 0, created: 0, synced: 0, missing_brain: 0 };
   if (!Array.isArray(list)) return out;
+  const owners = new Map();
+  for (const row of list) {
+    const onDisk = typeof row?.brainDir === 'string' ? readProjectId(row.brainDir) : null;
+    for (const id of new Set([row?.project_id, onDisk])) {
+      if (typeof id === 'string' && UUID.test(id)) owners.set(id, (owners.get(id) || 0) + 1);
+    }
+  }
   for (const row of list) {
     out.total++;
     if (!row?.brainDir || !fs.existsSync(row.brainDir)) {
       out.missing_brain++;
       continue;
     }
-    const { project_id, created } = ensureProjectId(row.brainDir);
+    const fallbackId = owners.get(row.project_id) === 1 ? row.project_id : undefined;
+    const { project_id, created } = ensureProjectId(row.brainDir, { fallbackId });
     if (created) out.created++;
     if (row.project_id !== project_id) {
       row.project_id = project_id;

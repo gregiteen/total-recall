@@ -81,8 +81,8 @@ export function processIdentity(pidFile, hint, { alive = pid => { try { process.
 }
 
 /** The single installation-aware daemon observation for status and lifecycle. */
-export function observeDaemon(brainDir, { identity = processIdentity } = {}) {
-  const expected_entry = path.join(packageRoot, 'src', 'core', 'daemon-loop.mjs');
+export function observeDaemon(brainDir, { identity = processIdentity, expectedEntry = path.join(packageRoot, 'src', 'core', 'daemon-loop.mjs') } = {}) {
+  const expected_entry = expectedEntry;
   return { ...identity(path.join(brainDir, 'daemon.pid'), expected_entry), expected_entry, source: 'local-pid' };
 }
 

@@ -183,7 +183,7 @@ export async function patchPluginRecord(plugin, patches) {
  * setting so it follows the shared one again. The overlay never installs the
  * plugin: a repository without it uses the shared folder's copy.
  */
-export async function patchProjectActivationRecord(id, projectRoot, runtimeEnabled, { manifest = null } = {}) {
+export async function patchProjectActivationRecord(id, projectRoot, runtimeEnabled, { manifest = null, onUse = false } = {}) {
   if (!ID_PATTERN.test(id)) throw new Error('Invalid plugin identity');
   const pluginsDir = projectPluginsDir(projectRoot);
   const vaultRoot = vaultForPluginsDir(pluginsDir);
@@ -194,7 +194,7 @@ export async function patchProjectActivationRecord(id, projectRoot, runtimeEnabl
   if (runtimeEnabled === null) {
     const existing = readProjectActivationRecord(id, projectRoot);
     if (!existing) return null;
-    const { runtime_enabled: _dropped, ...frontmatter } = { ...(existing.frontmatter || {}) };
+    const { runtime_enabled: _dropped, runtime_on_use: _onUse, ...frontmatter } = { ...(existing.frontmatter || {}) };
     await writeVfsDocument(recordPath(id), {
       ...frontmatter,
       type: 'plugin_record',
@@ -210,7 +210,7 @@ export async function patchProjectActivationRecord(id, projectRoot, runtimeEnabl
   if (typeof runtimeEnabled !== 'boolean') throw new Error('Plugin activation requires a boolean or null');
   const previous = readProjectActivationRecord(id, projectRoot);
   if (previous) {
-    return patchVfsDocument(recordPath(id), { runtime_enabled: runtimeEnabled, timestamp: now }, {
+    return patchVfsDocument(recordPath(id), { runtime_enabled: runtimeEnabled, runtime_on_use: onUse, timestamp: now }, {
       actorRole: 'system',
       intent: `Set repository activation for plugin ${id}`,
       vaultRoot
@@ -226,6 +226,7 @@ export async function patchProjectActivationRecord(id, projectRoot, runtimeEnabl
     category: 'plugins',
     tags: ['plugin', 'activation-override'],
     runtime_enabled: runtimeEnabled,
+    runtime_on_use: onUse,
     source: { kind: 'shared', ref: globalPluginsDir() }
   };
   await writeVfsDocument(recordPath(id), frontmatter, buildPluginDocumentBody(m, id), {
@@ -236,19 +237,21 @@ export async function patchProjectActivationRecord(id, projectRoot, runtimeEnabl
   return frontmatter;
 }
 
+function describeActivation(plugin, projectRoot) {
+  const required = REQUIRED_INSTALLATION_PLUGIN_IDS.includes(plugin.id);
+  try {
+    const { state, enabled, mode } = pluginActivation(plugin, { projectRoot });
+    return { state, enabled, required, ...(mode ? { mode } : {}) };
+  } catch {
+    // An unreadable repository policy is an error, never shared enablement.
+    return { state: 'error', enabled: false, required };
+  }
+}
+
 /** Facts about one installed plugin, merged with its record. */
 export function describePlugin(plugin, projectRoot = process.cwd()) {
   const record = readPluginRecord(plugin);
   const m = plugin.manifest || {};
-  const required = REQUIRED_INSTALLATION_PLUGIN_IDS.includes(plugin.id);
-  let activation;
-  try {
-    const { state, enabled } = pluginActivation(plugin, { projectRoot });
-    activation = { state, enabled, required };
-  } catch {
-    // An unreadable repository policy is an error, never shared enablement.
-    activation = { state: 'error', enabled: false, required };
-  }
   let current = null;
   try {
     current = hashPluginDir(plugin.dir);
@@ -294,13 +297,18 @@ export function describePlugin(plugin, projectRoot = process.cwd()) {
     ui: m.ui || null,
     configuration: m.configuration || null,
     manifest: m,
-    card_face: record?.card_face || m.card_face || null,
-    activation
+    activation: describeActivation(plugin, projectRoot)
   };
 }
 
-export function listInstalledPlugins(projectRoot = process.cwd()) {
-  return discoverPlugins(projectRoot).map(plugin => describePlugin(plugin, projectRoot));
+export function listInstalledPlugins(projectRoot = process.cwd(), { descriptions } = {}) {
+  return discoverPlugins(projectRoot).map(plugin => {
+    const description = descriptions?.get(plugin.dir);
+    if (description) return { ...description, activation: describeActivation(plugin, projectRoot) };
+    const result = describePlugin(plugin, projectRoot);
+    descriptions?.set(plugin.dir, result);
+    return result;
+  });
 }
 
 /** Bundled plugins shipped in the package, flagged with whether they are installed here. */

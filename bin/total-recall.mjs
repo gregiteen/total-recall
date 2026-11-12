@@ -154,14 +154,16 @@ async function main() {
   if (!CORE_BUILTINS.has(command)) {
     try {
       const { discoverPlugins } = await import('../src/core/plugin-loader.mjs');
-      const plugins = discoverPlugins(process.cwd());
+      const { detectProjectBrain } = await import('../src/core/brain-locate.mjs');
+      const projectRoot = detectProjectBrain(process.cwd())?.projectRoot ?? null;
+      const plugins = discoverPlugins(projectRoot ?? process.cwd());
       for (const p of plugins) {
         if (p.valid && (p.manifest.cli?.command === command || p.manifest.cli?.alias === command)) {
           const handlerRel = p.manifest.cli.handler;
           if (handlerRel) {
             const { runPluginCommand } = await import('../src/core/plugin-runner.mjs');
             const pluginArgs = args.slice(1);
-            const result = await runPluginCommand(p, { args: pluginArgs, stdin: 'inherit' });
+            const result = await runPluginCommand(p, { args: pluginArgs, stdin: 'inherit', projectRoot, activateOnUse: true });
             if (result.stdout !== undefined) {
               if(result.stdout)process.stdout.write(result.stdout);
               if(result.stderr)process.stderr.write(result.stderr);

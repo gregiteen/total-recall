@@ -13,7 +13,7 @@ tr-plugin-<id>/
   capability/     ← the scaffold payload: exported functions, no host
     index.mjs
   cli.mjs         ← the Total Recall entry: parse argv, resolve credentials, call capability/
-  ui/             ← the face; Total Recall only
+  ui/             ← the Home; Total Recall only
   test/
 ```
 
@@ -33,7 +33,7 @@ The capability must be:
 - **returning data**, not printing text
 - **throwing errors**, not setting `process.exitCode`
 - **free of Total Recall** — no `total-recall`, no `TOTAL_RECALL_BIN`, no auth store
-- **free of UI** — no card, no `DESIGN.md`, no logo
+- **free of UI** — keep the Home, `DESIGN.md` and logo in the plugin
 
 Write `BRICK.md`: what to import, what to pass, where credentials come from, what comes back.
 

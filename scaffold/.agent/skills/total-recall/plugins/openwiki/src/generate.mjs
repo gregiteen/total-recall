@@ -28,14 +28,15 @@ export async function generateWiki({
     const isSelf = selfNode && (selfNode.ip === node || selfNode.hostname.toLowerCase() === node.toLowerCase());
 
     if (!isSelf) {
-      const escapedRepo = repo ? `--repo="${repo}"` : '';
-      const cmd = `total-recall openwiki generate ${escapedRepo} ${force ? '--force' : ''} --json`;
-      const meshRes = execOnMeshNode(node, cmd);
+      const meshRes = execOnMeshNode(node, [
+        'generate', ...(repo ? [`--repo=${repo}`] : []), ...(force ? ['--force'] : []),
+        ...(dryRun ? ['--dry-run'] : []), '--json',
+      ]);
       if (meshRes.ok) {
         try {
           return JSON.parse(meshRes.stdout);
         } catch {
-          return { ok: true, node, output: meshRes.stdout };
+          throw new Error('Mesh generation returned invalid JSON');
         }
       } else {
         throw new Error(`Mesh generation failed on node ${node}: ${meshRes.stderr || meshRes.error}`);
