@@ -202,9 +202,14 @@ describe('ensureDependencies never wipes a working tree it can trust', () => {
   });
   afterEach(() => fs.rmSync(root, { recursive: true, force: true }));
   const hidden = (packages) => fs.writeFileSync(path.join(root, 'node_modules', '.package-lock.json'), JSON.stringify({ lockfileVersion: 3, packages }));
+  const onDisk = (name, version) => {
+    fs.mkdirSync(path.join(root, 'node_modules', name), { recursive: true });
+    fs.writeFileSync(path.join(root, 'node_modules', name, 'package.json'), JSON.stringify({ name, version }));
+  };
 
   it('accepts a tree npm installed by hand and writes the marker, without reinstalling', async () => {
     hidden({ 'node_modules/zod': { version: '4.4.3' }, 'node_modules/frontend': { resolved: 'frontend', link: true } });
+    onDisk('zod', '4.4.3');
     const run = vi.fn();
     expect(await ensureDependencies(root, { run })).toMatchObject({ ok: true, status: 'current', trigger: 'npm-tree-record' });
     expect(run).not.toHaveBeenCalled();
@@ -213,9 +218,25 @@ describe('ensureDependencies never wipes a working tree it can trust', () => {
 
   it('reinstalls a tree whose versions differ from the lockfile', async () => {
     hidden({ 'node_modules/zod': { version: '3.0.0' } });
+    onDisk('zod', '3.0.0');
     const run = vi.fn(async () => ({ exitCode: 0 }));
     expect(await ensureDependencies(root, { run })).toMatchObject({ ok: true, status: 'installed' });
     expect(run).toHaveBeenCalledWith('npm', ['ci'], expect.anything());
+  });
+
+  it('never trusts npm\'s tree record over the packages on disk (2026-11-12)', async () => {
+    // `npm install --package-lock-only` rewrote the record to the locked version; disk kept the old one.
+    hidden({ 'node_modules/zod': { version: '4.4.3' } });
+    onDisk('zod', '3.0.0');
+    const run = vi.fn(async () => ({ exitCode: 0 }));
+    expect(await ensureDependencies(root, { run })).toMatchObject({ ok: true, status: 'installed' });
+    expect(run).toHaveBeenCalledWith('npm', ['ci'], expect.anything());
+  });
+
+  it('treats a required package missing from disk as stale even when the record lists it', async () => {
+    hidden({ 'node_modules/zod': { version: '4.4.3' } });
+    const run = vi.fn(async () => ({ exitCode: 0 }));
+    expect(await ensureDependencies(root, { run })).toMatchObject({ ok: true, status: 'installed' });
   });
 
   it('never reinstalls the package it runs from, and says how to repair it', async () => {
