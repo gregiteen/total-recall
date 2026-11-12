@@ -168,6 +168,20 @@ describe('uniform brain updates', () => {
       expect(JSON.parse(fs.readFileSync(path.join(root, 'package.json'))).dependencies['total-recall-brain']).toBe('3.39.1');
     });
 
+    it('never runs a lockfile-only update over an existing tree (2026-11-12)', async () => {
+      // npm's lockfile-only mode rewrites node_modules/.package-lock.json without installing,
+      // so a lagging pin over a current tree left 21 plugins reporting versions they never had.
+      const root = manifest(path.join(tmp, 'app'), { dependencies: { 'total-recall-brain': '^3.39.0' } });
+      installed(root, 'total-recall-brain', '3.39.1');
+      const exec = execWithInstall();
+      const result = await run([root], exec, { dryRun: false });
+      expect(result.failed).toBe(0);
+      expect(result.updated).toBe(1);
+      const [[, args]] = installArgs(exec);
+      expect(args).not.toContain('--package-lock-only');
+      expect(JSON.parse(fs.readFileSync(path.join(root, 'package.json'))).dependencies['total-recall-brain']).toBe('3.39.1');
+    });
+
     it('still installs a package missing from an existing tree', async () => {
       const root = manifest(path.join(tmp, 'app'), { dependencies: { 'total-recall-brain': '3.39.1' } });
       installed(root, 'left-pad', '1.3.0');

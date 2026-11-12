@@ -106,24 +106,38 @@ describe('auto-pull.sh deps_current', () => {
   });
   afterEach(() => fs.rmSync(repo, { recursive: true, force: true }));
 
+  // What is on disk decides, read from each package's own package.json (TREE-RECORD-01).
+  const installed = (name, version) => {
+    fs.mkdirSync(path.join(repo, 'node_modules', name), { recursive: true });
+    write(`node_modules/${name}/package.json`, { name, version });
+  };
+
   it('trusts a complete tree another installer left without a stamp, and stamps it', () => {
-    write('node_modules/.package-lock.json', { packages: { 'node_modules/a': { version: '1.0.0' } } });
+    installed('a', '1.0.0');
     expect(current()).toBe('current');
     expect(fs.existsSync(path.join(repo, 'node_modules', '.stamp'))).toBe(true);
     expect(current()).toBe('current');
   });
 
   it('reinstalls when an installed version differs from the lockfile', () => {
-    write('node_modules/.package-lock.json', { packages: { 'node_modules/a': { version: '0.9.0' } } });
+    installed('a', '0.9.0');
     expect(current()).toBe('stale');
   });
 
-  it('reinstalls when there is no record of the installed tree', () => {
+  it('never trusts npm\'s tree record over the packages on disk (2026-11-12)', () => {
+    // `npm install --package-lock-only` rewrote the record to the locked version; disk kept the old one.
+    write('node_modules/.package-lock.json', { packages: { 'node_modules/a': { version: '1.0.0' } } });
+    installed('a', '0.9.0');
+    expect(current()).toBe('stale');
+  });
+
+  it('reinstalls when a locked package is missing from disk', () => {
+    write('node_modules/.package-lock.json', { packages: { 'node_modules/a': { version: '1.0.0' } } });
     expect(current()).toBe('stale');
   });
 
   it('reinstalls when the stamp names another lockfile', () => {
-    write('node_modules/.package-lock.json', { packages: { 'node_modules/a': { version: '1.0.0' } } });
+    installed('a', '1.0.0');
     write('node_modules/.stamp', 'other');
     expect(current()).toBe('stale');
   });

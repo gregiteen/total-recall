@@ -38,6 +38,23 @@ function untrackedSnapshot(ctx, includeIgnored) {
   } finally { rmSync(dir, { recursive: true, force: true }); }
 }
 
+/**
+ * Tracked working-tree content as a commit on HEAD, through a private index. `git stash create`
+ * refuses while the index has unmerged paths, which blocked every conflict resolution
+ * (`checkout --theirs -- <file>`) with "Cannot save an undo snapshot". This keeps the content;
+ * an undo restores the files, not the merge state itself.
+ */
+function trackedSnapshot(ctx) {
+  const dir = mkdtempSync(path.join(os.tmpdir(), 'git-undo-tracked-'));
+  const env = { ...objectEnv(ctx), GIT_INDEX_FILE: path.join(dir, 'index') };
+  try {
+    gitText(ctx, ['read-tree', 'HEAD'], { env });
+    gitText(ctx, ['add', '--update', '--', '.'], { env });
+    const tree = gitText(ctx, ['write-tree'], { env }).trim();
+    return gitText(ctx, ['commit-tree', tree, '-p', 'HEAD', '-m', 'Git undo working tree'], { env }).trim();
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+}
+
 export async function snapshot(ctx, command, { includeIgnored = false } = {}) {
   const store = await stateStore(ctx);
   const repository = repoId(ctx);
@@ -52,17 +69,24 @@ export async function snapshot(ctx, command, { includeIgnored = false } = {}) {
   const head = gitText(ctx, ['rev-parse', '--verify', 'HEAD']).trim();
   const sym = ctx.git(['symbolic-ref', '-q', 'HEAD']);
   const status = gitText(ctx, ['status', '--porcelain=v1', '-z']);
-  const stash = status ? gitText(ctx, ['stash', 'create'], { env: objectEnv(ctx) }).trim() || null : null;
+  let stash = null, tracked = null;
+  if (status) {
+    const created = ctx.git(['stash', 'create'], { env: objectEnv(ctx) });
+    if (!created.error && created.status === 0) stash = String(created.stdout).trim() || null;
+    // Only a conflicted index makes stash create refuse for a reason a content snapshot answers.
+    else if (gitText(ctx, ['ls-files', '--unmerged']).trim()) tracked = trackedSnapshot(ctx);
+    else throw new Error('git stash create failed');
+  }
   const untracked = untrackedSnapshot(ctx, includeIgnored);
   const stashes = gitText(ctx, ['stash', 'list', '--format=%H%x00%gs']).trim().split('\n').filter(Boolean).map(row => {
     const [oid, message] = row.split('\0'); return { oid, message };
   });
-  const objects = [...new Set([head, stash, untracked, ...refs.map(r => r.oid), ...stashes.map(r => r.oid)].filter(Boolean))];
+  const objects = [...new Set([head, stash, tracked, untracked, ...refs.map(r => r.oid), ...stashes.map(r => r.oid)].filter(Boolean))];
   // Pin objects before the event is durable. Git GC must not remove a snapshot.
   for (let i = 0; i < objects.length; i += 1) gitText(ctx, ['update-ref', `${backupPrefix}${id}/${i}`, objects[i]]);
   const event = { id, type: 'git.snapshot', timestamp: new Date().toISOString(), repository, worktree,
     command: [command[0]], refs, head, symbolicHead: sym.status === 0 ? sym.stdout.trim() : null,
-    stash, untracked, stashes, includeIgnored };
+    stash, tracked, untracked, stashes, includeIgnored };
   store.append(event);
   return event;
 }
@@ -92,11 +116,11 @@ async function restore(ctx, event) {
   else gitText(ctx, ['update-ref', '--no-deref', 'HEAD', event.head]);
   gitText(ctx, ['reset', '--hard', event.head]);
   if (event.stash) gitText(ctx, ['stash', 'apply', '--index', event.stash]);
-  if (event.untracked) {
+  for (const commit of [event.tracked, event.untracked].filter(Boolean)) {
     const dir = mkdtempSync(path.join(os.tmpdir(), 'git-undo-restore-'));
     const env = { ...ctx.env, GIT_INDEX_FILE: path.join(dir, 'index') };
     try {
-      gitText(ctx, ['read-tree', event.untracked], { env });
+      gitText(ctx, ['read-tree', commit], { env });
       gitText(ctx, ['checkout-index', '--all', '--force'], { env });
     } finally { rmSync(dir, { recursive: true, force: true }); }
   }

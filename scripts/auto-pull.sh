@@ -218,16 +218,25 @@ deps_current() {
   # the brain updater), which never writes it. Wiping a complete tree for that reason
   # cost a full npm ci on every version mismatch, broke every total-recall command for
   # its duration, and during a Time Machine snapshot every rewrite stays on the disk
-  # (2026-11-10, ~20 GB pinned). The tree is current when npm's own record of what it
-  # installed (node_modules/.package-lock.json) has every locked package at its locked
-  # version; optional packages for other platforms are never installed and do not count.
+  # (2026-11-10, ~20 GB pinned). The tree is current when every locked package is on disk
+  # at its locked version, read from each package's own package.json; optional packages for
+  # other platforms are never installed and do not count, nor do workspace links.
   # (`npm ls --all` cannot decide this: it fails on those unmet optional dependencies.)
+  # npm's record of the tree (node_modules/.package-lock.json) is not read: a lockfile-only
+  # install rewrites it without installing, so it reported stale trees current (2026-11-12).
   if "$NODE_BIN" -e '
-    const [lock, hidden] = process.argv.slice(1).map(f => require(f).packages || {});
+    const fs = require("fs"), path = require("path");
+    const [lockFile, root] = process.argv.slice(1);
+    const lock = require(lockFile).packages || {};
+    if (!fs.existsSync(path.join(root, "node_modules"))) process.exit(1);
     for (const [key, entry] of Object.entries(lock)) {
-      if (!key || (entry.optional && !hidden[key])) continue;
-      if (hidden[key]?.version !== entry.version) process.exit(1);
-    }' "$REPO_DIR/package-lock.json" "$REPO_DIR/node_modules/.package-lock.json" >/dev/null 2>&1; then
+      if (!key.startsWith("node_modules/") && !key.includes("/node_modules/")) continue;
+      if (entry.optional || entry.link) continue;
+      let version;
+      try { version = JSON.parse(fs.readFileSync(path.join(root, key, "package.json"), "utf8")).version; }
+      catch { if (entry.peer) continue; process.exit(1); }
+      if (entry.version && version !== entry.version) process.exit(1);
+    }' "$REPO_DIR/package-lock.json" "$REPO_DIR" >/dev/null 2>&1; then
     lock_hash > "$LOCK_STAMP" 2>/dev/null || true
     return 0
   fi

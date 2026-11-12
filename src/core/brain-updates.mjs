@@ -340,7 +340,11 @@ export async function updateAllBrains(opts = {}) {
       // A lockfile-only update builds no tree, so it runs no lifecycle scripts: npm still
       // ran a checkout's own postinstall here, which fails in a repository that was never
       // installed (a postinstall calling a tool that is not yet installed, 2026-11-09).
-      else if (!needsInstall) args.push(group.manager === 'pnpm' ? '--lockfile-only' : '--package-lock-only', '--ignore-scripts');
+      // Only where no tree exists: npm's lockfile-only mode also rewrites the tree record
+      // (node_modules/.package-lock.json) to versions it never installs, and npm then reports the
+      // stale tree "up to date" forever (21 plugins on @ssss/cli 0.14.4 under 0.14.5, 2026-11-12).
+      // A tree that exists gets a real install, so the tree and its record agree.
+      else if (!needsInstall && noInstallTree(group.owner)) args.push(group.manager === 'pnpm' ? '--lockfile-only' : '--package-lock-only', '--ignore-scripts');
       const install = exec(group.manager, args, { cwd: group.owner, env: installEnv(), encoding: 'utf8',
         timeout: 600000, maxBuffer: 8 * 1024 * 1024 });
       if (install.status !== 0) throw new Error(install.error?.message || install.stderr?.trim().slice(-1500) || `Install exited ${install.status}`);

@@ -33,7 +33,7 @@ function scanFailure(result) {
 /**
  * The publishable part of a patch: everything except removed lines. A removed line is content the
  * commit takes out; scanning it blocked the very commit that redacts a secret already in history
- * (portfolio-site tracker, 2026-11-12). Added lines, headers, binary patches and the commit message
+ * (a project tracker, 2026-11-12). Added lines, headers, binary patches and the commit message
  * are still scanned, and every staged or outgoing blob is scanned whole.
  */
 export function publishedPatchText(patch) {

@@ -22,25 +22,29 @@ const RUNNING_PACKAGE_ROOT = (() => {
 })();
 
 /**
- * npm records the tree it installed in node_modules/.package-lock.json. The tree matches the
- * lockfile when every installed package has the locked version and every required locked package
- * is installed (optional packages may be absent on this platform; workspace links are not copies).
+ * The tree matches the lockfile when every locked package is on disk at its locked version
+ * (optional packages may be absent on this platform; workspace links are not copies; an absent
+ * peer is npm's call). It reads each package's own package.json, never npm's record of the tree
+ * (node_modules/.package-lock.json): `npm install --package-lock-only`, which the brain updater
+ * runs, rewrites that record to the new versions without installing them. On 2026-11-12 21 linked
+ * plugins held @ssss/cli 0.14.4 under a record and lock that both said 0.14.5, so every check that
+ * trusted the record, and npm itself, reported the stale tree as current.
  */
 export function npmTreeMatchesLock(root) {
-  let lock, installed;
-  try {
-    lock = JSON.parse(fs.readFileSync(path.join(root, 'package-lock.json'), 'utf8')).packages;
-    installed = JSON.parse(fs.readFileSync(path.join(root, 'node_modules', '.package-lock.json'), 'utf8')).packages;
-  } catch { return false; }
-  if (!lock || !installed) return false;
-  for (const [key, entry] of Object.entries(installed)) {
-    if (!key || entry.link) continue;
-    if (!lock[key] || lock[key].version !== entry.version) return false;
-  }
+  let lock;
+  try { lock = JSON.parse(fs.readFileSync(path.join(root, 'package-lock.json'), 'utf8')).packages; }
+  catch { return false; }
+  if (!lock || !fs.existsSync(path.join(root, 'node_modules'))) return false;
   for (const [key, entry] of Object.entries(lock)) {
     if (!key.startsWith('node_modules/') && !key.includes('/node_modules/')) continue;
-    if (entry.optional || entry.link || entry.peer) continue;
-    if (!installed[key]) return false;
+    if (entry.optional || entry.link) continue;
+    let version;
+    try { version = JSON.parse(fs.readFileSync(path.join(root, key, 'package.json'), 'utf8')).version; }
+    catch {
+      if (entry.peer) continue;
+      return false;
+    }
+    if (entry.version && version !== entry.version) return false;
   }
   return true;
 }
