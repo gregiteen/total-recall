@@ -299,9 +299,10 @@ export default function MemoryPage({ activeBrainId }: { activeBrainId?: string }
 
   // Wire SSE Live Agent Monitor Streaming
   useEffect(() => {
+    // The dashboard's authenticated memory event stream; /stream is the local monitor port only.
     const base = getApiBase() || window.location.origin
-    const sseUrl = `${base.replace(/\/+$/, '')}/stream`
-    const eventSource = new EventSource(sseUrl)
+    const sseUrl = `${base.replace(/\/+$/, '')}/api/memory-events`
+    const eventSource = new EventSource(sseUrl, { withCredentials: new URL(base).origin !== window.location.origin })
 
     eventSource.onmessage = (event) => {
       try {

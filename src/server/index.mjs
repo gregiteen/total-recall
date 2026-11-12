@@ -446,6 +446,10 @@ try {
 
 const frontendDist = path.join(ROOT, 'frontend', 'dist');
 
+// Live refresh for the memory page on this port (the /stream monitor listens on 127.0.0.1 only).
+const { memoryEventsHandler } = await import('./memory-events.mjs');
+app.get('/api/memory-events', requireAuth, memoryEventsHandler(logEvents));
+
 // Keep the served dashboard as new as its sources. A missing or stale bundle is
 // rebuilt in the background while the current one keeps serving; express.static
 // resolves files per request, so the swapped-in build serves without a restart.
