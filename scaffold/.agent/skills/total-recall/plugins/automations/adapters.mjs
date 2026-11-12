@@ -13,6 +13,18 @@ export const coreModule = (root, name) => import(pathToFileURL(path.join(root, '
 const digest = text => crypto.createHash('sha256').update(text).digest('hex').slice(0, 20);
 export const recordId = (node, source, key) => `${source}:${digest(`${node}\0${key}`)}`;
 const text = (value, max = 240) => typeof value === 'string' ? value.slice(0, max) : '';
+const credentialLine = /\b(?:authorization|bearer|password|token|credential|secret|api[-_ ]?key)\b|(?:_KEY|_TOKEN|_SECRET|_PASSWORD)\b|\b(?:sk[-_]|gh[pousr]_|github_pat_|eyJ)[a-z0-9_-]{12,}/i;
+
+function failureReceipt(event) {
+  const output = text(event.output_tail, 2000).split('\n')
+    .map(line => credentialLine.test(line) ? '[credential diagnostic omitted]' : line)
+    .join('\n');
+  return {
+    timed_out: Boolean(event.timed_out),
+    duration_ms: Number.isFinite(event.duration_ms) ? event.duration_ms : null,
+    output_tail: output || null,
+  };
+}
 const canCancelPending = async (tasks, queueDir) =>
   tasks.TASK_CANCELLATION_SUPPORTS_EXPECTED_STATUS === true
   && typeof tasks.supportsPendingTaskCancellation === 'function'
@@ -143,7 +155,11 @@ export async function sourceAdapters(ctx) {
         const matching = payloads.filter(event => event.plugin_id === record.plugin_id && event.command === record.command)
           .sort((a, b) => eventTime(a) - eventTime(b));
         const last = matching.at(-1);
-        if (last) record.last_run = outcome(last);
+        if (last) {
+          record.last_run = outcome(last);
+          // The failure receipt is shown only for the record the operator asked about.
+          if (last.ok === false && ctx.receiptId === record.id) record.last_run.receipt = failureReceipt(last);
+        }
         const handled = record.last_handled_slot && matching.filter(event => event.slot === record.last_handled_slot).at(-1);
         if (handled) record.last_handled_outcome = outcome(handled);
       }

@@ -46,6 +46,7 @@ export function patchVfsDocument(vfsPath, patches, options = {}) {
     type: 'patch',
     ...envelopeBase(vfsPath, options),
     patches,
+    ...(options.expectedBeforeHash === undefined ? {} : { expected_before_hash: options.expectedBeforeHash }),
   }, options);
 }
 

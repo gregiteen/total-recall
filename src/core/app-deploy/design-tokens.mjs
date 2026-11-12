@@ -62,38 +62,43 @@ export function extractFrontmatter(content) {
  * @returns {object}
  */
 export function resolveTokenReferences(tokens) {
+  let visits = 0;
+  function checkBudget(depth) {
+    if (++visits > 20_000 || depth > 64) throw new DesignTokenError(['token references exceed the expansion limit']);
+  }
+
   function getNested(obj, pathParts) {
     let curr = obj;
     for (const p of pathParts) {
-      if (curr === undefined || curr === null) return undefined;
+      if (!isPlainObject(curr) || !Object.hasOwn(curr, p)) return undefined;
       curr = curr[p];
     }
     return curr;
   }
 
-  function resolveVal(val, seen) {
+  function resolveVal(val, seen, depth) {
+    checkBudget(depth);
     if (typeof val !== 'string') return val;
     const whole = val.match(/^\{([a-zA-Z0-9_.-]+)\}$/);
     if (whole && !seen.has(whole[1])) {
       const target = getNested(tokens, whole[1].split('.'));
       // A whole-value reference may point at a composite (e.g. a typography style).
-      if (isPlainObject(target)) return walk(target, new Set([...seen, whole[1]]));
+      if (isPlainObject(target)) return walk(target, new Set([...seen, whole[1]]), depth + 1);
     }
     return val.replace(/\{([a-zA-Z0-9_.-]+)\}/g, (match, tokenPath) => {
       if (seen.has(tokenPath)) return match;
       const resolved = getNested(tokens, tokenPath.split('.'));
       if (typeof resolved === 'string' || typeof resolved === 'number') {
-        return String(resolveVal(resolved, new Set([...seen, tokenPath])));
+        return String(resolveVal(resolved, new Set([...seen, tokenPath]), depth + 1));
       }
       return match;
     });
   }
 
-  function walk(node, seen = new Set()) {
-    if (!isPlainObject(node)) return resolveVal(node, seen);
-    const out = {};
-    for (const [k, v] of Object.entries(node)) out[k] = walk(v, seen);
-    return out;
+  function walk(node, seen = new Set(), depth = 0) {
+    checkBudget(depth);
+    if (!isPlainObject(node)) return resolveVal(node, seen, depth);
+    return Object.fromEntries(Object.entries(node).map(([k, v]) => [k, walk(v, seen, depth + 1)]));
   }
 
   return walk(tokens);

@@ -19,7 +19,7 @@ describe('plugin command generation', () => {
       id: 'sample-plugin', name: 'Sample Plugin', version: '1.0.0',
       description: 'A sample plugin command.',
       commands: [{ name: 'sample-run', handler: './handler.mjs', description: 'Run the sample.', background: true }],
-      ui: { elements: [{ id: 'card', kind: 'card', tag: 'tr-fixture-card', module: 'ui/card.js' }] },
+      ui: { home: 'home', design_tokens: 'DESIGN.md', elements: [{ id: 'home', kind: 'panel', tag: 'tr-fixture-home', module: 'ui/home.js' }] },
     }));
     fs.writeFileSync(path.join(plugin, 'handler.mjs'),
       'export function run(argv) { return { data: { args: argv.slice(3) } }; }\n');

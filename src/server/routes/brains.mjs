@@ -12,14 +12,10 @@ import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 import { requireAuth, requireScope } from '../auth.mjs';
+import { dashboardBrainDir, readRegisteredProjects } from '../../core/brain-registry.mjs';
 import { getNodes } from '../../core/vault-cache.mjs';
 import { logger } from '../../core/logger.mjs';
-import {
-  BRAIN_DIR,
-  VAULT_DIR,
-  DERIVED_DIR,
-  serverError,
-} from './_shared.mjs';
+import { serverError } from './_shared.mjs';
 
 const router = Router();
 
@@ -49,8 +45,9 @@ function countMd(dir) {
  * List all known brains (global + registered projects + optional tenant) with state metadata.
  */
 router.get('/api/brains', requireAuth, requireScope('ssss:read'), async (req, res) => {
+  res.set('Cache-Control', 'private, no-store');
   try {
-    const globalBrainDir = path.join(os.homedir(), '.agent', 'skills', 'total-recall');
+    const globalBrainDir = dashboardBrainDir();
     const brains = [];
 
     // Global brain
@@ -75,35 +72,27 @@ router.get('/api/brains', requireAuth, requireScope('ssss:read'), async (req, re
     });
 
     // Project brains from registry
-    const registryPath = path.join(globalBrainDir, 'config', 'project-registry.json');
-    if (fs.existsSync(registryPath)) {
-      try {
-        const registry = JSON.parse(fs.readFileSync(registryPath, 'utf8'));
-        for (const project of registry) {
-          const projectVaultDir = path.join(project.brainDir, 'memory-vault');
-          let nodeCount = 0;
-          const exists = fs.existsSync(project.path);
-          if (!exists) continue; // Hide non-existent projects automatically
-
-          if (fs.existsSync(projectVaultDir)) {
-            nodeCount = countMd(projectVaultDir);
-          }
-
-          brains.push({
-            id: `project:${project.name}`,
-            name: project.name,
-            layer: 'project',
-            path: project.brainDir,
-            project_root: project.path,
-            exists: true,
-            node_count: nodeCount,
-            registered_at: project.registered_at,
-            last_compiled: project.last_compiled || getLastModified(path.join(project.brainDir, 'memory-derived', 'graph-index.jsonl')),
-          });
-        }
-      } catch (err) {
-        logger.error('server', 'Failed to read project registry', { error: err.message });
+    try {
+      const registry = readRegisteredProjects(globalBrainDir);
+      for (const project of registry) {
+        if (!project.name || !project.path || !project.brainDir || !fs.existsSync(project.path)) continue;
+        const duplicateName = registry.some(other => other !== project && other.name === project.name);
+        if (duplicateName && !project.project_id) continue;
+        brains.push({
+          id: `project:${duplicateName ? project.project_id : project.name}`,
+          name: project.name,
+          layer: 'project',
+          path: project.brainDir,
+          project_root: project.path,
+          exists: true,
+          node_count: countMd(path.join(project.brainDir, 'memory-vault')),
+          registered_at: project.registered_at,
+          last_compiled: project.last_compiled || getLastModified(path.join(project.brainDir, 'memory-derived', 'graph-index.jsonl')),
+        });
       }
+    } catch (err) {
+      logger.error('server', 'Failed to read project registry', { error: err.message });
+      return res.status(503).json({ error: 'Brain registry metadata is unavailable' });
     }
 
     // Optional remote/tenant vault from config
@@ -145,22 +134,18 @@ router.get('/api/brains', requireAuth, requireScope('ssss:read'), async (req, re
  * List all memory nodes for a specific brain.
  */
 router.get('/api/brains/:id/nodes', requireAuth, requireScope('ssss:read', 'memory:read'), async (req, res) => {
+  res.set('Cache-Control', 'private, no-store');
   try {
     const brainId = req.params.id;
     let vaultDir;
 
     if (brainId === 'global') {
-      const brainDir = path.join(os.homedir(), '.agent', 'skills', 'total-recall');
-      vaultDir = path.join(brainDir, 'memory-vault');
+      vaultDir = path.join(dashboardBrainDir(), 'memory-vault');
     } else if (brainId.startsWith('project:')) {
       const projectName = brainId.slice('project:'.length);
-      const globalBrainDir = path.join(os.homedir(), '.agent', 'skills', 'total-recall');
-      const registryPath = path.join(globalBrainDir, 'config', 'project-registry.json');
-      if (!fs.existsSync(registryPath)) {
-        return res.status(404).json({ error: 'Project registry not found' });
-      }
-      const registry = JSON.parse(fs.readFileSync(registryPath, 'utf8'));
-      const project = registry.find(p => p.name === projectName);
+      const registry = readRegisteredProjects(dashboardBrainDir());
+      const matching = registry.filter(p => p.name === projectName || p.project_id === projectName);
+      const project = matching.length === 1 ? matching[0] : null;
       if (!project) {
         return res.status(404).json({ error: `Project "${projectName}" not found in registry` });
       }

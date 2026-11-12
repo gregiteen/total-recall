@@ -709,6 +709,10 @@ async function machineCommand(args) {
   console.log(JSON.stringify(result, null, 2));
   if (result.status !== 'passed' || remediation?.status === 'failed') process.exitCode = 1;
 }
+async function networkCommand(args) {
+  if (args.includes('--apply-permissions')) throw new Error('Network is read-only. Use machine --apply-permissions for an explicit repair');
+  return machineCommand([]);
+}
 function option(args, name) {
   const at = args.indexOf(name);
   if (at < 0) return undefined;
@@ -861,24 +865,8 @@ const IMPLEMENTED = {
     const json = args.includes("--json");
     const status = {
       plugin: "security",
-      active_suite: [
-        "platforms", "device", "android",
-        "machine",
-        "fleet",
-        "audit",
-        "scan",
-        "harden",
-        "plugins",
-        "secure-all",
-        "challenge",
-        "bot-mitigate",
-        "site-audit",
-        "site-shield",
-        "encrypt",
-        "decrypt",
-        "probe",
-        "token"
-      ],
+      host_platform: process.platform,
+      active_suite: Object.keys(IMPLEMENTED).filter(name => name !== 'status'),
       encryption_cipher: "AES-256-GCM (scrypt KDF)",
       proof_of_work: "SHA-256 PoW challenge engine",
       bot_mitigation: "Honeypot + velocity + token risk analyzer",
@@ -901,7 +889,7 @@ const IMPLEMENTED = {
   platforms: async () => console.log(JSON.stringify(platformInventory(), null, 2)),
   device: deviceCommand,
   android: androidCommand,
-  network: machineCommand,
+  network: networkCommand,
   fleet: fleetCommand,
   audit: auditCommand,
   scan: scanCommand,

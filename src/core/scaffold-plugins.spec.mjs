@@ -27,7 +27,7 @@ afterEach(() => { fs.rmSync(root, { recursive: true, force: true }); fs.rmSync(s
 describe('scaffold plugin release set', () => {
   it('excludes tests, node_modules and .gitignore (npm never ships it)', () => {
     for (const p of ['test/a.mjs', 'src/x.spec.mjs', 'src/y.test.js', 'vitest.config.mjs', '.gitignore', 'ui/.gitignore', 'node_modules/a/i.js']) expect(isReleaseFile(p)).toBe(false);
-    for (const p of ['cli.mjs', 'src/routes/secrets.mjs', 'ui/card.js', 'README.md']) expect(isReleaseFile(p)).toBe(true);
+    for (const p of ['cli.mjs', 'src/routes/secrets.mjs', 'ui/home.js', 'README.md']) expect(isReleaseFile(p)).toBe(true);
   });
   it('uses the plugin package contents and adds the lockfile', () => {
     const files = releaseFiles(source, packed(['cli.mjs', 'src/new.mjs', 'package.json', 'test/a.spec.mjs']));

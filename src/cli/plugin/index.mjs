@@ -10,6 +10,7 @@ import { getPlugin, getPluginMonetization, globalPluginsDir, projectPluginsDir }
 import { describePlugin, pruneReplacementArchives, replacementArchiveDir } from '../../core/plugin-store.mjs';
 import { buildPluginCatalog } from '../../core/plugin-catalog.mjs';
 import { setPluginActive } from '../../core/plugin-activation.mjs';
+import { detectProjectBrain } from '../../core/brain-locate.mjs';
 
 function printHelp() {
   console.log(`
@@ -26,6 +27,7 @@ Usage:
 Commands:
   list                      Installed plugins (project & global) with source and sharing
   library [--plugin ID]      Installed CLI operation library (--json for agents)
+  chunks [query]            Search installed SSSS UI chunks and validate owner files
   refresh                   Rebuild installed command inventories and instruction surfaces
   copies [dir] [--apply]    Audit repository copies of shared defaults and shadow links. --apply
                             deletes bundled matches, unlinks shadows (on/off records are kept)
@@ -39,6 +41,7 @@ Commands:
   on <id> / off <id>         Enable/disable host execution for this repository alone
                               --all-repos   Change the shared setting for every repository
                               --clear       Drop this repository's override; follow the shared setting
+  on-use <id>                Activate when deliberately opened or used in this repository
   available [query]         Plugins bundled with this Total Recall package
   peers [query]             Plugins your mesh peers share (queried live)
   search <query>            Search bundled plugins and mesh peers
@@ -75,7 +78,7 @@ Commands:
                               --category <cat>      Declare an SSSS memory category
                               --with-cli            Generate CLI command handler
                               --with-generator      Generate context generator
-                              --with-ui             Generate token-driven panel element
+                              --with-ui             Include owner UI authoring instructions
                               --with-task           Declare a selected-node scheduled task
                               --task-command <cmd>  Task CLI subcommand (requires --with-task)
                               --task-schedule <cron> Five-field local-time schedule
@@ -116,33 +119,41 @@ export async function run(argv = []) {
     if (!result.ok || !setup.ok) process.exitCode = 1;
     return;
   }
-  if (command === 'on' || command === 'off') {
+  if (['on', 'off', 'on-use'].includes(command)) {
+    const projectRoot = detectProjectBrain(process.cwd())?.projectRoot ?? process.cwd();
     const id = rest.find(argument => !argument.startsWith('-'));
     if (!id) throw new Error(`Usage: total-recall plugin ${command} <id> [--all-repos|--clear]`);
     const flags = rest.filter(argument => argument.startsWith('-'));
+    if (command === 'on-use' && flags.some(flag => flag !== '--json')) throw new Error('Use on-use for one repository without --all-repos or --clear.');
     const unknown = flags.find(flag => !['--all-repos', '--clear', '--json'].includes(flag));
     if (unknown) throw new Error(`Unsupported plugin ${command} option: ${unknown}`);
     if (flags.includes('--all-repos') && flags.includes('--clear')) throw new Error('Choose --all-repos or --clear, not both');
     if (flags.includes('--clear')) {
       if (command === 'off') throw new Error('--clear removes a repository override; use it with on, not off');
-      const cleared = await setPluginActive(id, true, { clear: true });
+      const cleared = await setPluginActive(id, true, { clear: true, projectRoot });
       const activation = cleared.activation || {};
       console.log(flags.includes('--json') ? JSON.stringify(cleared)
         : `♻️  ${id} follows the shared setting again in this repository (${activation.state || 'unknown'})`);
       if (!cleared.compilation.ok) process.exitCode = 1;
       return;
     }
-    const result = await setPluginActive(id, command === 'on', { scope: flags.includes('--all-repos') ? 'shared' : 'project' });
+    const result = await setPluginActive(id, command === 'on-use' ? command : command === 'on', { projectRoot, scope: flags.includes('--all-repos') ? 'shared' : 'project' });
     const activation = result.activation || {};
     if (flags.includes('--json')) console.log(JSON.stringify(result));
-    else console.log(`${command === 'on' ? '✅' : '⛔'} ${id} ${command === 'on' ? 'enabled' : 'disabled'} for ${result.scope === 'shared' ? 'every repository' : 'this repository'} (${activation.state || 'unknown'})`);
-    if (!result.compilation.ok) process.exitCode = 1;
+    else if (command === 'on-use') console.log(`${id} will activate on use in this repository.`);
+    else {
+      console.log(`${command === 'on' ? '✅' : '⛔'} ${id} ${command === 'on' ? 'enabled' : 'disabled'} for ${result.scope === 'shared' ? 'every repository' : 'this repository'} (${activation.state || 'unknown'})`);
+      if (result.cleanup?.state === 'archived') console.log('Repository plugin state archived.');
+      if (result.cleanup?.state === 'restored') console.log('Repository plugin state restored.');
+      if (result.cleanup?.ok === false) console.error(`Cleanup pending. ${result.cleanup.error}`);
+    }
+    if (!result.compilation.ok || result.cleanup?.ok === false) process.exitCode = 1;
     return;
   }
 
-  if (command === 'card' || command === 'card-face' || command === 'skin') {
-    await managePluginCard(rest);
-    return;
+  if (command === 'chunks') {
+    const { runPluginChunks } = await import('./chunks.mjs');
+    return runPluginChunks(rest);
   }
 
   if (rest.includes('--help') || rest.includes('-h')) {

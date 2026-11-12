@@ -102,7 +102,7 @@ export function getMeshNodes() {
  * Execute a command on a remote mesh node via Total Recall mesh plugin.
  * Guarded against self-execution (never ssh a machine into itself).
  */
-export function execOnMeshNode(nodeTarget, commandStr, { timeoutMs = 25000 } = {}) {
+export function execOnMeshNode(nodeTarget, args, { timeoutMs = 25000 } = {}) {
   if (!nodeTarget || typeof nodeTarget !== 'string') {
     throw new Error('A valid mesh node identifier or IP is required');
   }
@@ -117,7 +117,12 @@ export function execOnMeshNode(nodeTarget, commandStr, { timeoutMs = 25000 } = {
     throw new Error(`Target node '${nodeTarget}' is the local host. Do not mesh exec into self.`);
   }
 
-  const result = spawnSync('total-recall', ['mesh', 'exec', nodeTarget, commandStr], {
+  if (!Array.isArray(args) || args.some(arg => typeof arg !== 'string')) {
+    throw new Error('Mesh operation requires OpenWiki CLI arguments');
+  }
+  const quote = arg => "'" + arg.replaceAll("'", "'\\''") + "'";
+  const command = ['total-recall', 'openwiki', ...args].map(quote).join(' ');
+  const result = spawnSync('total-recall', ['mesh', 'exec', nodeTarget, command], {
     encoding: 'utf8',
     timeout: timeoutMs,
   });
@@ -203,7 +208,7 @@ export async function discoverAllHubs({
     const isSelf = selfNode && (selfNode.ip === node || selfNode.hostname.toLowerCase() === node.toLowerCase());
 
     if (!isSelf) {
-      const meshRes = execOnMeshNode(node, `total-recall openwiki hubs ${allVaults ? '--all-vaults' : ''} --json`);
+      const meshRes = execOnMeshNode(node, ['hubs', ...(allVaults ? ['--all-vaults'] : []), '--json']);
       if (meshRes.ok) {
         try {
           const parsed = JSON.parse(meshRes.stdout);

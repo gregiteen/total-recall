@@ -244,7 +244,7 @@ describe('gate modes through the real command', () => {
     fs.writeFileSync(path.join(pluginDir(), 'plugin.json'), JSON.stringify({
       id: 'fx', name: 'Fixture', version: '1.0.0', description: 'A plugin that owns one raw command.',
       cli: { command: 'fx', handler: './cli.mjs', answers_help: true, subcommands: [{ name: 'go', description: 'Run it.' }] },
-      ui: { elements: [{ id: 'card', kind: 'card', tag: 'fx-card', module: 'ui/card.js' }] },
+      ui: { home: 'home', design_tokens: 'DESIGN.md', elements: [{ id: 'home', kind: 'panel', tag: 'fx-home', module: 'ui/home.js' }] },
       gate: { owned_commands: [{ pattern: 'rawthing\\b', use: 'total-recall fx go' }] },
     }));
     owner('process.exit(0);');
@@ -331,11 +331,11 @@ describe('bookkeeping never decides anything (a sandbox may refuse every write t
     fs.writeFileSync(path.join(pluginDir(), 'plugin.json'), JSON.stringify({
       id: 'fx', name: 'Fixture', version: '1.0.0', description: 'A plugin that owns one raw command and routes.',
       cli: { command: 'fx', handler: './cli.mjs', subcommands: [{ name: 'route', description: 'Route.' }] },
-      ui: { elements: [{ id: 'card', kind: 'card', tag: 'fx-card', module: 'ui/card.js' }] },
+      ui: { home: 'home', design_tokens: 'DESIGN.md', elements: [{ id: 'home', kind: 'panel', tag: 'fx-home', module: 'ui/home.js' }] },
       gate: { owned_commands: [{ pattern: 'rawthing\\b', use: 'total-recall fx route' }], router: { pattern: 'fx\\s+route', use: 'total-recall fx route "<task>"' } },
     }));
     fs.writeFileSync(path.join(pluginDir(), 'cli.mjs'), 'process.exit(0);');
-    fs.writeFileSync(path.join(pluginDir(), 'ui', 'card.js'), '');
+    fs.writeFileSync(path.join(pluginDir(), 'ui', 'home.js'), '');
   });
   afterAll(() => {
     for (const d of [state(), tmp]) { try { allowWrites(d); } catch { /* already gone */ } }
@@ -399,11 +399,11 @@ describe('receipts count per session', () => {
     fs.writeFileSync(path.join(pluginDir(), 'plugin.json'), JSON.stringify({
       id: 'fx', name: 'Fixture', version: '1.0.0', description: 'A plugin that routes.',
       cli: { command: 'fx', handler: './cli.mjs', answers_help: true, subcommands: [{ name: 'route', description: 'Route.' }] },
-      ui: { elements: [{ id: 'card', kind: 'card', tag: 'fx-card', module: 'ui/card.js' }] },
+      ui: { home: 'home', design_tokens: 'DESIGN.md', elements: [{ id: 'home', kind: 'panel', tag: 'fx-home', module: 'ui/home.js' }] },
       gate: { router: { pattern: 'fx\\s+route', use: 'total-recall fx route "<task>"' } },
     }));
     fs.writeFileSync(path.join(pluginDir(), 'cli.mjs'), 'process.exit(0);');
-    fs.writeFileSync(path.join(pluginDir(), 'ui', 'card.js'), '');
+    fs.writeFileSync(path.join(pluginDir(), 'ui', 'home.js'), '');
   });
   afterAll(() => {
     for (const d of [state(), tmp]) { try { fs.chmodSync(d, 0o700); } catch { /* gone */ } }

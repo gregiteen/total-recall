@@ -33,7 +33,11 @@ export function getDaemonObservation() { return observeDaemon(brainDir); }
  * @returns {'running'|'dead'|'not_started'|'conflict'|'unknown'}
  */
 export function getDaemonStatus() {
-  const { status } = getDaemonObservation();
+  // A supervised daemon can run from a different verified installation than the server.
+  const entry = process.env.TR_SUPERVISED_DAEMON_ENTRY;
+  const { status } = process.env.DISABLE_DAEMON === 'true' && entry && path.isAbsolute(entry)
+    ? observeDaemon(brainDir, { expectedEntry: entry })
+    : getDaemonObservation();
   return status === 'not-started' ? 'not_started' : status === 'stopped' ? 'dead' : status;
 }
 

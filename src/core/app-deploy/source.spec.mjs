@@ -11,7 +11,7 @@ import {
 } from './source.mjs';
 import { packPlugin } from '../plugin-bundle.mjs';
 import { listBundledPlugins } from '../plugin-loader.mjs';
-import { withFixtureFace } from '../testing/plugin-fixture.mjs';
+import { withFixtureHome } from '../testing/plugin-fixture.mjs';
 
 describe('Capability Source Resolver (app-deploy/source.mjs)', () => {
   let tmpRoot;
@@ -41,7 +41,7 @@ describe('Capability Source Resolver (app-deploy/source.mjs)', () => {
       },
       skills: [{ id: 'test-cap', path: './skills/test/SKILL.md' }],
       cli: { command: 'test-cap', handler: './cli.mjs' },
-      ui: { elements: [{ id: 'card', kind: 'card', tag: 'tr-fixture-card', module: 'ui/card.js' }] },
+      ui: { home: 'home', design_tokens: 'DESIGN.md', elements: [{ id: 'home', kind: 'panel', tag: 'tr-fixture-home', module: 'ui/home.js' }] },
       ...overrides
     };
     fs.writeFileSync(path.join(dir, 'plugin.json'), JSON.stringify(manifest, null, 2), 'utf8');

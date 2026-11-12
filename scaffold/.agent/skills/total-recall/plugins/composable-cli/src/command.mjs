@@ -295,7 +295,7 @@ export function commandList(targets = []) {
   const results = [];
   for (const t of targets) {
     if (fs.existsSync(t.dir)) {
-      const files = fs.readdirSync(t.dir).filter((f) => f.endsWith('.mjs'));
+      const files = fs.readdirSync(t.dir).filter((f) => f.endsWith('.mjs') && !f.endsWith('.test.mjs'));
       for (const f of files) {
         const fullPath = path.join(t.dir, f);
         const name = f.replace(/\.mjs$/, '');

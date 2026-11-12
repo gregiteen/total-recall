@@ -85,6 +85,48 @@ describe('required native auth installation', () => {
     expect(ensureRequiredPlugins(brain).status).toBe('ready');
     expect(JSON.parse(fs.readFileSync(path.join(dir, 'plugin.json'), 'utf8')).version).toBe(manifest.version);
   });
+  it('refreshes a copied same-release legacy Auth and retains installed dependencies', () => {
+    const root = fixture();
+    const brain = sharedBrain(root);
+    ensureRequiredPlugins(brain);
+    const dir = path.join(brain, 'plugins/auth');
+    const manifestFile = path.join(dir, 'plugin.json');
+    const original = fs.readFileSync(manifestFile, 'utf8');
+    const manifest = JSON.parse(original);
+    const card = path.join(dir, 'ui/card.js');
+    fs.writeFileSync(card, '/* obsolete presentation */');
+    fs.writeFileSync(manifestFile, JSON.stringify({
+      ...manifest,
+      card: { handler: './ui/card.js', element: 'auth-card' },
+      ui: { elements: [{ id: 'card', kind: 'card', tag: 'auth-card', module: 'ui/card.js' }] },
+    }));
+    const dependencies = path.join(dir, 'node_modules');
+    fs.mkdirSync(dependencies, { recursive: true });
+    const marker = path.join(dependencies, 'retained');
+    fs.writeFileSync(marker, 'installed');
+
+    expect(inspectRequiredPlugins(brain).status).toBe('failed');
+    expect(ensureRequiredPlugins(brain).status).toBe('ready');
+    expect(fs.readFileSync(manifestFile, 'utf8')).toBe(original);
+    expect(fs.existsSync(card)).toBe(false);
+    expect(fs.readFileSync(marker, 'utf8')).toBe('installed');
+    expect(ensureRequiredPlugins(brain).status).toBe('ready');
+  });
+  it.each(['newer', 'damaged'])('preserves a %s legacy copy and reports its validation failure', reason => {
+    const root = fixture();
+    const brain = sharedBrain(root);
+    ensureRequiredPlugins(brain);
+    const dir = path.join(brain, 'plugins/auth');
+    const file = path.join(dir, 'plugin.json');
+    const legacy = { ...JSON.parse(fs.readFileSync(file, 'utf8')), card_layout: 'legacy' };
+    if (reason === 'newer') legacy.version = '9999.0.0';
+    else fs.unlinkSync(path.join(dir, 'src/secrets-store.mjs'));
+    const original = JSON.stringify(legacy);
+    fs.writeFileSync(file, original);
+
+    expect(() => ensureRequiredPlugins(brain)).toThrow(/auth plugin/);
+    expect(fs.readFileSync(file, 'utf8')).toBe(original);
+  });
   it('never deletes through a link into the checkout that owns the plugin', () => {
     const root = fixture();
     const brain = sharedBrain(root);

@@ -1,6 +1,6 @@
 /** Pure plugin UI manifest validation; rendering belongs to capability owners. */
 import path from 'node:path';
-export const UI_ELEMENT_KINDS = ['panel', 'form', 'list', 'detail', 'settings', 'widget', 'card', 'card-face'];
+export const UI_ELEMENT_KINDS = ['panel', 'form', 'list', 'detail', 'settings', 'widget'];
 const PROP_TYPES = ['string', 'number', 'boolean', 'object', 'array'];
 const ELEMENT_ID = /^[a-z][a-z0-9-]{0,63}$/;
 // Custom element names: lowercase, start with a letter, contain a hyphen.
@@ -117,13 +117,13 @@ function normalizeElement(raw, index, errors) {
 /**
  * Validates and normalizes a manifest `ui` block.
  * @param {object} ui
- * @returns {{ design_tokens?: string, elements: object[] }}
+ * @returns {{ design_tokens?: string, home?: string, elements: object[] }}
  * @throws {UiSpecError}
  */
 export function normalizeUiSpec(ui) {
   const errors = [];
   if (!isPlainObject(ui)) throw new UiSpecError(["'ui' must be an object"]);
-  unknownKeys(ui, ['design_tokens', 'elements'], 'ui', errors);
+  unknownKeys(ui, ['design_tokens', 'elements', 'home'], 'ui', errors);
   const spec = { elements: [] };
   if (ui.design_tokens !== undefined) {
     if (!isSafePluginPath(ui.design_tokens, /\.md$/)) {
@@ -142,6 +142,12 @@ export function normalizeUiSpec(ui) {
     tags.add(el.tag);
     spec.elements.push(el);
   });
+  if (ui.home !== undefined) {
+    if (!spec.elements.some(el => el.id === ui.home && ['panel', 'form', 'list', 'detail', 'widget'].includes(el.kind))) {
+      errors.push("'ui.home' must name a declared content element");
+    } else spec.home = ui.home;
+    if (!spec.design_tokens) errors.push("'ui.home' requires 'ui.design_tokens'");
+  }
   if (errors.length) throw new UiSpecError(errors);
   return spec;
 }

@@ -1,2 +1,2 @@
-/** External bundlers may use this entrypoint; the sandbox loads card.js directly. */
-export { AutomationsElement } from './card.js';
+/** External bundlers may use this entrypoint; the sandbox loads the Home directly. */
+export { AutomationsElement } from './home.js';

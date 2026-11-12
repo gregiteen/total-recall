@@ -17,6 +17,7 @@ Options:
   --source <source>    Filter records by source
   --trigger <kind>     Filter records by trigger kind
   --state <state>      Filter records by observed state
+  --receipt            Include a failed plugin task receipt (show --local, terminal only)
   --json               Machine-readable output (also the default)
   --help, -h           Show this help
 
@@ -43,6 +44,7 @@ export function parseArgs(argv) {
     const flag = args.shift();
     if (flag === '--json') continue;
     if (flag === '--local') { result.localOnly = true; continue; }
+    if (flag === '--receipt') { result.receipt = true; continue; }
     const name = { '--node': 'node', '--source': 'source', '--trigger': 'trigger', '--state': 'state' }[flag];
     if (!name) throw new Error(`Unknown option: ${flag}`);
     const value = args.shift(); if (!value || value.startsWith('-')) throw new Error(`Missing value for ${flag}`);
@@ -50,6 +52,9 @@ export function parseArgs(argv) {
     result.filters[name] = value;
   }
   if (result.filters.source && !SOURCES.includes(result.filters.source)) throw new Error('Unknown source');
+  if (result.receipt && (command !== 'show' || !result.localOnly || !result.id.startsWith('plugin-tasks:'))) {
+    throw new Error('--receipt requires show <plugin-task-id> --local');
+  }
   if (command === 'cancel' && (Object.keys(result.filters).length || result.localOnly)) throw new Error('cancel accepts only a local automation id and --json');
   return result;
 }
@@ -101,13 +106,17 @@ export async function run(argv = [], dependencies = {}) {
     if (!result.ok) (dependencies.setExitCode || (code => { process.exitCode = code; }))(result.exit_code);
     return result;
   }
+  if (parsed.receipt && !process.stdin.isTTY) throw new Error('--receipt requires a local terminal');
   const root = dependencies.packageRoot || process.env.TR_PACKAGE_ROOT;
   if (!root) throw new Error('TR_PACKAGE_ROOT is required');
   if (parsed.command === 'cancel') {
     const result = await (dependencies.cancel || cancelAutomation)(root, parsed.id);
     write(`${JSON.stringify(result)}\n`); return result;
   }
-  let inventory = await (dependencies.inventory || meshAutomationInventory)(root, { localOnly: parsed.localOnly });
+  let inventory = await (dependencies.inventory || meshAutomationInventory)(root, {
+    localOnly: parsed.localOnly,
+    ...(parsed.receipt ? { receiptId: parsed.id } : {}),
+  });
   inventory = filterInventory(inventory, parsed.filters);
   let result = inventory;
   if (parsed.command === 'show') {

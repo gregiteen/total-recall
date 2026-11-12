@@ -15,6 +15,7 @@ import { brainDir } from './config.mjs';
 
 let watchCallback = null;
 let parentWatchCallback = null;
+let watchErrorCallback = null;
 
 // Prevent fire-and-forget audit events from hitting the real global brain vault
 // (processViaPackageKernel) — that path is slow and causes suite-wide hangs.
@@ -44,11 +45,11 @@ vi.mock('node:fs', async (importOriginal) => {
     watch: (p, options, callback) => {
       if (typeof p === 'string' && p.endsWith('network-policy.md')) {
         watchCallback = typeof options === 'function' ? options : callback;
-        return { close: () => {} };
+        return { close: () => {}, unref: () => {}, on: (_event, listener) => { watchErrorCallback = listener; } };
       }
       if (typeof p === 'string' && p.endsWith('/system')) {
         parentWatchCallback = typeof options === 'function' ? options : callback;
-        return { close: () => {} };
+        return { close: () => {}, unref: () => {}, on: () => {} };
       }
       return actual.watch(p, options, callback);
     },
@@ -123,6 +124,13 @@ describe('throttledFetch', () => {
 
     const res = await throttledFetch('https://blocked.com');
     expect(res.status).toBe(200);
+  });
+
+  it('keeps the loaded network policy when the filesystem watcher emits an async error', async () => {
+    globalThis.__mockNetworkPolicy = `---\ntype: network_policy\nstatus: active\nblocked_domains: [watch-error.example]\n---`;
+    await loadFirewallPolicy(brainDir);
+    watchErrorCallback(Object.assign(new Error('watch limit'), { code: 'EMFILE' }));
+    await expect(throttledFetch('https://watch-error.example')).rejects.toThrow(/Fetch blocked/);
   });
 
   it('records audit logs', async () => {

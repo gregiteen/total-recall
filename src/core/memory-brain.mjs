@@ -5,6 +5,7 @@ import { writeFileSecure } from './secure-file.mjs';
 import { ensureProjectId } from './project-id.mjs';
 
 function ensureDir(dir) { fs.mkdirSync(dir, { recursive: true }); }
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 
 export const VAULT_CATEGORIES = Object.freeze([
   'invariants',
@@ -18,17 +19,33 @@ export const VAULT_CATEGORIES = Object.freeze([
   'lore',
 ]);
 
+function readBrainConfig(file) {
+  let current;
+  try { current = JSON.parse(fs.readFileSync(file, 'utf8')); }
+  catch (error) {
+    if (error.code === 'ENOENT') return {};
+    throw error;
+  }
+  if (!current || typeof current !== 'object' || Array.isArray(current)) {
+    throw new Error('Existing brain identity must be an object');
+  }
+  return current;
+}
+
+/** Update connection settings without replacing the existing brain identity. */
+export function writeBrainConnection(brainDir, fields) {
+  const file = path.join(brainDir, 'config', 'brain.json');
+  const current = readBrainConfig(file);
+  ensureDir(path.dirname(file));
+  writeFileSecure(file, JSON.stringify({ ...current, ...fields }, null, 2), { encoding: 'utf8', mode: 0o600 });
+  return file;
+}
+
 export function writeBrainIdentity(brainDir, { name, role = 'project', tags = [] } = {}) {
   const configDir = path.join(brainDir, 'config');
   ensureDir(configDir);
   const brainJsonPath = path.join(configDir, 'brain.json');
-  let current = {};
-  if (fs.existsSync(brainJsonPath)) {
-    current = JSON.parse(fs.readFileSync(brainJsonPath, 'utf8'));
-    if (!current || typeof current !== 'object' || Array.isArray(current)) {
-      throw new Error('Existing brain identity must be an object');
-    }
-  }
+  const current = readBrainConfig(brainJsonPath);
   const next = {
     ...current,
     name: name || current.name || path.basename(path.resolve(brainDir, '../../..')),
@@ -54,12 +71,17 @@ export function registerProjectBrain(globalBrainDir, entry) {
 
   const abs = path.resolve(entry.path);
   const idx = list.findIndex((p) => path.resolve(p.path || '') === abs);
+  const existing = list[idx];
+  const candidateId = existing?.project_id;
+  const fallbackId = typeof candidateId === 'string' && UUID.test(candidateId) &&
+    existing.brainDir === entry.brainDir && list.filter(record => record.project_id === candidateId).length === 1
+    ? candidateId : undefined;
   const now = new Date().toISOString();
   const row = {
     name: entry.name,
     path: abs,
     brainDir: entry.brainDir,
-    project_id: ensureProjectId(entry.brainDir).project_id,
+    project_id: ensureProjectId(entry.brainDir, { fallbackId }).project_id,
     full_brain: true,
     layer: 'project',
     tags: entry.tags || ['project-brain'],

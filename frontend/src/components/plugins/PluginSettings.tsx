@@ -1,12 +1,13 @@
 import { useEffect, useState } from 'react'
 import type { PluginInfo } from '../../api/plugins'
 import { apiFetch, API_BASE } from '../../api/_base'
+import { readSavedPluginCredentials, savePluginCredential } from '../../api/plugin-credentials'
 
 interface Setting { name: string; label: string; type: 'string' | 'number' | 'boolean'; options?: Array<string | number>; required?: boolean; default?: string | number | boolean }
 
 /** Credential values are write-only. Existing values never enter browser state. */
 export function PluginSettings({ plugin }: { plugin: PluginInfo }) {
-  const [stored, setStored] = useState<Set<string>>(new Set())
+  const [stored, setStored] = useState<Set<string> | null>(null)
   const [values, setValues] = useState<Record<string, string>>({})
   const [saving, setSaving] = useState('')
   const [notice, setNotice] = useState('')
@@ -16,13 +17,10 @@ export function PluginSettings({ plugin }: { plugin: PluginInfo }) {
   useEffect(() => {
     let disposed = false
     setValues({}); setNotice(''); setError('')
-    apiFetch(`${API_BASE}/api/plugins/auth/secrets`).then(async res => {
-      if (!res.ok) return []
-      const entries = await res.json()
-      if (!disposed && Array.isArray(entries)) {
-        setStored(new Set(entries.map((entry: any) => entry.key)))
-      }
-    }).catch((err: any) => { if (!disposed) setError(err.message) })
+    setStored(null)
+    readSavedPluginCredentials().then(keys => {
+      if (!disposed) setStored(keys)
+    }).catch((err: Error) => { if (!disposed) setError(err.message) })
     apiFetch(`${API_BASE}/api/plugins/${encodeURIComponent(plugin.id)}/configuration`).then(async response => {
       if (!response.ok) throw new Error('Could not load plugin settings')
       const data = await response.json()
@@ -36,17 +34,9 @@ export function PluginSettings({ plugin }: { plugin: PluginInfo }) {
   async function save(key: string) {
     setSaving(key); setError(''); setNotice('')
     try {
-      const res = await apiFetch(plugin.manifest?.runtime && (plugin.manifest.runtime as any).modules?.credentials ? `${API_BASE}/api/plugins/${encodeURIComponent(plugin.id)}/credentials` : `${API_BASE}/api/plugins/auth/secrets`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ key, value: values[key], tags: [`plugin:${plugin.id}`] })
-      })
-      if (!res.ok) {
-        const errData = await res.json().catch(() => ({}))
-        throw new Error(errData.error || 'Failed to save secret')
-      }
+      await savePluginCredential(plugin, key, values[key])
       setValues(previous => ({ ...previous, [key]: '' }))
-      setStored(previous => new Set([...previous, key]))
+      setStored(await readSavedPluginCredentials().catch(() => null))
       setNotice('Credential saved. Open the plugin to verify the connection.')
     } catch (err: any) { setError(err.message) }
     finally { setSaving('') }
@@ -83,9 +73,9 @@ export function PluginSettings({ plugin }: { plugin: PluginInfo }) {
     {(plugin.secrets || []).map((secret, index) => {
       const label = `Credential ${index + 1}${secret.required ? ' (required)' : ' (optional)'}`
       return <form key={secret.key} onSubmit={event => { event.preventDefault(); void save(secret.key) }} style={{ marginBottom: 16 }}>
-        <label style={{ display: 'block', marginBottom: 6 }}>{label} · {stored.has(secret.key) ? 'Saved' : 'Not saved'}
+        <label style={{ display: 'block', marginBottom: 6 }}>{label} · {stored?.has(secret.key) ? 'Saved' : stored ? 'Not saved' : 'Status unavailable'}
           <input className="input" type="password" autoComplete="new-password" value={values[secret.key] || ''}
-            placeholder={stored.has(secret.key) ? 'Paste a replacement' : 'Paste credential'}
+            placeholder={stored?.has(secret.key) ? 'Paste a replacement' : 'Paste credential'}
             onChange={event => setValues(previous => ({ ...previous, [secret.key]: event.target.value }))} />
         </label>
         <button className="btn btn-sm btn-primary" disabled={!values[secret.key]?.trim() || !!saving}>{saving === secret.key ? 'Saving…' : 'Save credential'}</button>

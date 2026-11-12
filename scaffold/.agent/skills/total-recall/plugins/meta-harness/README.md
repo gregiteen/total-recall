@@ -173,6 +173,25 @@ follows this foundation and requires its own current audit and plan.
 
 Use the installed plugin for CLI execution and maintenance. The repository has a pure planning capability under `capability/`. The current manifest does not declare it for vendoring. See the [Metaharness tracker](docs/projects/in-progress/META_HARNESS_UNIFICATION/META_HARNESS_UNIFICATION_PROJECT_TRACKER.md) for current package, execution and hook acceptance.
 
+## Default Chat
+
+Open **Metaharness** from the dashboard's Plugins folder to select and save a
+default harness. The Chat drawer uses that default with the selected brains.
+Customize the native Home in `DESIGN.md`. The owner blocks in `ui/chunks/`
+cover execution, routing, usage, documentation, maintenance and run evidence.
+
+`total-recall meta-harness chat-default codex --json` sets the host's default
+Chat harness. Choose an adapter from the catalog or from the choices returned
+by `total-recall meta-harness chat-target --json`. The default applies to every
+brain selection.
+
+For example, `total-recall meta-harness chat-target --brains global,project:docs --json`
+returns the chosen harness and draft context for those two brain IDs. A Codex
+target opens a native draft that the operator can review before sending. Other
+harnesses can use an explicit HTTPS launch URL configured with `--url` and
+copyable context. Use a launch URL without embedded credentials, a query, or a
+fragment. Omitting `--url` selects the adapter's built-in handoff, if available.
+
 ## Using this from an agent
 
 Send work here to run it in another agent harness, or to find out which harness should take it. Native subagents are separate and never need this.

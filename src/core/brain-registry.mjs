@@ -24,6 +24,11 @@ export function globalBrainDirFor(env = process.env) {
   return path.join(agentDir, 'skills', 'total-recall');
 }
 
+/** The dashboard can read a host brain while preview plugin state stays isolated. */
+export function dashboardBrainDir(env = process.env, fallback = globalBrainDirFor(env)) {
+  return env.TR_DASHBOARD_BRAIN_DIR ? path.resolve(env.TR_DASHBOARD_BRAIN_DIR) : fallback;
+}
+
 function togglesPath(globalBrainDir) {
   return path.join(globalBrainDir, 'config', 'brain-toggles.json');
 }

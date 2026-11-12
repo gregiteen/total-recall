@@ -5,7 +5,7 @@ import os from 'node:os';
 import { applyDeploymentPlan, resolveAppVaultDir } from './apply.mjs';
 import { createDeploymentPlan } from './plan.mjs';
 import { upgradeCapability, AppUpgradeError, getInstalledCapabilityRecord } from './upgrade.mjs';
-import { withFixtureFace } from '../testing/plugin-fixture.mjs';
+import { withFixtureHome } from '../testing/plugin-fixture.mjs';
 
 describe('Capability Deployment Upgrader (app-deploy/upgrade.mjs)', () => {
   let tmpTarget;
@@ -20,7 +20,7 @@ describe('Capability Deployment Upgrader (app-deploy/upgrade.mjs)', () => {
     // Version 1 of capability
     fs.writeFileSync(
       path.join(v1Dir, 'plugin.json'),
-      JSON.stringify(withFixtureFace({
+      JSON.stringify(withFixtureHome({
         id: 'crm-bridge',
         name: 'CRM Bridge',
         version: '1.0.0',
@@ -36,7 +36,7 @@ describe('Capability Deployment Upgrader (app-deploy/upgrade.mjs)', () => {
     // Version 2 of capability (updates bridge.mjs, removes legacy-helper.mjs, adds new-feature.mjs)
     fs.writeFileSync(
       path.join(v2Dir, 'plugin.json'),
-      JSON.stringify(withFixtureFace({
+      JSON.stringify(withFixtureHome({
         id: 'crm-bridge',
         name: 'CRM Bridge',
         version: '2.0.0',

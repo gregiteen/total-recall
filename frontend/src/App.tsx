@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react'
-import { BrowserRouter, Routes, Route, NavLink, Navigate, useLocation } from 'react-router-dom'
+import { useState, useEffect, useRef, useCallback, type ReactNode } from 'react'
+import { BrowserRouter, Routes, Route, NavLink, Navigate, useLocation, useSearchParams } from 'react-router-dom'
 import './App.css'
 import { getApiBase, setApiBase, checkSession, logout, registerUnauthedCallback, fetchHealth } from './api'
 import type { HealthData } from './types'
@@ -10,14 +10,14 @@ import NetworkPage from './pages/NetworkPage'
 import { WebhooksPage } from './pages/WebhooksPage'
 import BrainSelector from './components/BrainSelector'
 import RulesPage from './pages/RulesPage'
-import HelpPage from './pages/HelpPage'
 import GraphPage from './pages/GraphPage'
-import PluginsPage from './pages/PluginsPage'
+import PluginWorkspace from './components/plugins/PluginWorkspace'
 import OnboardingPage from './pages/OnboardingPage'
 import { NotificationsPage } from './pages/NotificationsPage'
 import { isOnboardingComplete } from './utils/onboarding'
 import BrandMark from './components/brand/BrandMark'
-import ContextualHelp from './components/ContextualHelp'
+import { WorkspaceDrawers, type WorkspaceEdge } from './components/workspace/WorkspaceDrawers'
+import { SavedPages, WorkspacePage } from './components/workspace/WorkspacePage'
 
 // ─── Auth state type ──────────────────────────────────────────────────────────
 type AuthState = 'loading' | 'authed' | 'unauthed'
@@ -71,232 +71,92 @@ function networkGateTone(gate: HealthData['fetch_gate'] | undefined): {
 }
 
 interface SidebarProps {
-  onLogout: () => void
-  health: HealthData | null
   activeBrainId: string
   onBrainChange: (id: string) => void
+  open: boolean
+  onClose: () => void
+  onActivity: () => void
+  pluginFolder: ReactNode
+  savedPagesFolder: ReactNode
 }
 
-const getNavLinkClass = ({ isActive }: { isActive: boolean }) => `nav-link ${isActive ? 'active' : ''}`;
+const getNavLinkClass = ({ isActive }: { isActive: boolean }) => `nav-link ${isActive ? 'active' : ''}`
 
-function Sidebar({ onLogout, health, activeBrainId, onBrainChange }: SidebarProps) {
+function Sidebar({ activeBrainId, onBrainChange, open, onClose, onActivity, pluginFolder, savedPagesFolder }: SidebarProps) {
   return (
-    <aside className="sidebar">
-      <div className="sidebar-brand" style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '16px 14px' }}>
-        <BrandMark animated height={44} alt="Total Recall" />
-        <div style={{ display: 'flex', flexDirection: 'column' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-            <span style={{ fontSize: 15, fontWeight: 700, letterSpacing: '-0.02em', color: '#f8fafc' }}>Total Recall</span>
-            <span style={{ fontSize: 10, fontWeight: 600, padding: '2px 5px', borderRadius: 4, background: 'rgba(59,130,246,0.15)', color: '#60a5fa', border: '1px solid rgba(59,130,246,0.3)' }}>{health?.version ? `v${health.version}` : 'Version unknown'}</span>
-          </div>
-          <span style={{ fontSize: 11, color: 'var(--text-tertiary)', letterSpacing: '0.01em' }}>Portable memory · any IDE</span>
-        </div>
+    <aside className={`sidebar ${open ? 'open' : ''}`} id="workspace-sidebar" inert={!open}
+      onPointerMove={onActivity} onPointerDown={onActivity} onFocus={onActivity} onKeyDown={event => {
+        if (event.key === 'Escape') onClose()
+        else onActivity()
+      }}>
+      <div className="sidebar-brains">
+        <div className="nav-section-label">Brains</div>
+        <BrainSelector activeBrainId={activeBrainId} onBrainChange={onBrainChange} onSelectionComplete={onClose} />
       </div>
-      <nav className="sidebar-nav">
-        <div className="nav-section-label">Memory</div>
-        {!isOnboardingComplete() && (
-          <NavLink to="/onboarding" className={getNavLinkClass} id="nav-onboarding">
-            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M12 2L2 7l10 5 10-5-10-5z" /><path d="M2 17l10 5 10-5" /><path d="M2 12l10 5 10-5" />
-            </svg>
-            Setup
-          </NavLink>
-        )}
-        <NavLink to="/memory" className={getNavLinkClass} id="nav-memory">
-          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-            <circle cx="12" cy="12" r="10" /><path d="M12 16v-4M12 8h.01" />
-          </svg>
-          Vault
-        </NavLink>
-        <NavLink to="/rules" className={getNavLinkClass} id="nav-rules">
-          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M14 2H6a2 2 0 0 0-2 2v16c0 1.1.9 2 2 2h12a2 2 0 0 0 2-2V8l-6-6z" />
-            <path d="M14 3v5h5M16 13H8M16 17H8M10 9H8" />
-          </svg>
-          Rules
-        </NavLink>
-        <NavLink to="/graph" className={getNavLinkClass} id="nav-graph">
-          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-            <circle cx="5" cy="6" r="2" /><circle cx="19" cy="6" r="2" /><circle cx="12" cy="18" r="2" />
-            <path d="M7 7l4 9M17 7l-4 9" />
-          </svg>
-          Graph
-        </NavLink>
-
-        <div className="nav-section-label">Capabilities</div>
-        <NavLink to="/plugins" className={getNavLinkClass} id="nav-plugins">
-          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" />
-            <polyline points="3.27 6.96 12 12.01 20.73 6.96" />
-            <line x1="12" y1="22.08" x2="12" y2="12" />
-          </svg>
-          Plugins
-        </NavLink>
-
-        <div className="nav-section-label">Account</div>
-        <NavLink to="/network" className={getNavLinkClass} id="nav-network">
-          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-            <rect x="2" y="2" width="20" height="8" rx="2" ry="2" />
-            <rect x="2" y="14" width="20" height="8" rx="2" ry="2" />
-            <line x1="6" y1="6" x2="6.01" y2="6" />
-            <line x1="6" y1="18" x2="6.01" y2="18" />
-          </svg>
-          Network
-        </NavLink>
-        <NavLink to="/mesh" className={getNavLinkClass} id="nav-mesh">
-          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M12 2L2 7l10 5 10-5-10-5z" /><path d="M2 17l10 5 10-5" /><path d="M2 12l10 5 10-5" />
-          </svg>
-          Mesh
-        </NavLink>
-        <NavLink to="/webhooks" className={getNavLinkClass} id="nav-webhooks">
-          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M22 12h-4l-3 9L9 3l-3 9H2" />
-          </svg>
-          Webhooks
-        </NavLink>
-        <NavLink to="/secrets" className={getNavLinkClass} id="nav-secrets">
-          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-            <rect x="3" y="11" width="18" height="11" rx="2" ry="2" /><path d="M7 11V7a5 5 0 0110 0v4" />
-          </svg>
-          Secrets & Keys
-        </NavLink>
-        <NavLink to="/notifications" className={getNavLinkClass} id="nav-notifications">
-          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9" /><path d="M13.73 21a2 2 0 01-3.46 0" />
-          </svg>
-          Notifications
-        </NavLink>
-        <NavLink to="/settings" className={getNavLinkClass} id="nav-settings">
-          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-            <circle cx="12" cy="12" r="3" /><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z" />
-          </svg>
-          Settings
-        </NavLink>
-        <NavLink to="/help" className={getNavLinkClass} id="nav-help">
-          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-            <circle cx="12" cy="12" r="10" />
-            <path d="M9.09 9a3 3 0 015.83 1c0 2-3 3-3 3" />
-            <line x1="12" y1="17" x2="12.01" y2="17" />
-          </svg>
-          Help
-        </NavLink>
-        {isOnboardingComplete() && (
-          <NavLink to="/onboarding" className={getNavLinkClass} id="nav-onboarding-replay" style={{ opacity: 0.75 }}>
-            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M12 2L2 7l10 5 10-5-10-5z" /><path d="M2 17l10 5 10-5" /><path d="M2 12l10 5 10-5" />
-            </svg>
-            Setup guide
-          </NavLink>
-        )}
+      <nav className="sidebar-nav" aria-label="Workspace">
+        {pluginFolder}
+        {savedPagesFolder}
+        <details className="sidebar-memory">
+          <summary className="nav-link">Memory</summary>
+          {!isOnboardingComplete() && <NavLink to="/onboarding" className={getNavLinkClass} id="nav-onboarding" onClick={onClose}>Setup</NavLink>}
+          <NavLink to="/memory" className={getNavLinkClass} id="nav-memory" onClick={onClose}>Vault</NavLink>
+          <NavLink to="/rules" className={getNavLinkClass} id="nav-rules" onClick={onClose}>Rules</NavLink>
+          <NavLink to="/graph" className={getNavLinkClass} id="nav-graph" onClick={onClose}>Graph</NavLink>
+        </details>
       </nav>
-      <div className="sidebar-footer" style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-        <BrainSelector activeBrainId={activeBrainId} onBrainChange={onBrainChange} />
-        <select
-          value={getApiBase()}
-          onChange={e => setApiBase(e.target.value)}
-          title="API host"
-          style={{
-            width: '100%',
-            background: 'rgba(148, 163, 184, 0.08)',
-            color: 'var(--text-secondary)',
-            border: '1px solid rgba(148, 163, 184, 0.18)',
-            borderRadius: 8,
-            padding: '6px 10px',
-            fontSize: 11,
-            fontWeight: 500,
-            outline: 'none',
-            cursor: 'pointer',
-            transition: 'border-color var(--transition-fast)',
-          }}
-        >
-          <option value="">Local API</option>
-          {import.meta.env.VITE_BRAIN_URL && (
-            <option value={import.meta.env.VITE_BRAIN_URL}>{new URL(import.meta.env.VITE_BRAIN_URL).host}</option>
-          )}
-        </select>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 11 }}>
-            {(() => {
-              const daemonOk = health?.daemon === 'running'
-              const serverOk = health && health.status !== 'unreachable'
-              const allGood = daemonOk && serverOk
-              const gate = networkGateTone(health?.fetch_gate)
-
-              if (!health) return <div style={{ color: 'var(--text-tertiary)' }}>Checking…</div>
-
-              return (
-                <>
-                  <style>{`@keyframes blink { 0%,100%{opacity:1;} 50%{opacity:0.3;} }`}</style>
-                  {allGood ? (
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 5, color: 'var(--text-tertiary)' }}>
-                      <span className="pulse" /> All Systems Go
-                    </div>
-                  ) : (
-                    <>
-                      <StatusDot ok={!!serverOk} label={serverOk ? 'Server online' : 'Server offline'} />
-                      <StatusDot ok={daemonOk} label={daemonOk ? 'Daemon' : 'Daemon ' + (health?.daemon ?? 'unknown')} />
-                    </>
-                  )}
-                  <div
-                    data-testid="network-gate-indicator"
-                    title={gate.title}
-                    style={{ display: 'flex', alignItems: 'center', gap: 5, color: 'var(--text-tertiary)' }}
-                  >
-                    <span
-                      style={{
-                        width: 7,
-                        height: 7,
-                        borderRadius: '50%',
-                        background: gate.color,
-                        boxShadow: `0 0 6px ${gate.color}80`,
-                        display: 'inline-block',
-                      }}
-                    />
-                    <NavLink
-                      to="/network"
-                      style={{ color: 'inherit', textDecoration: 'none', fontSize: 11 }}
-                      title={gate.title}
-                    >
-                      {gate.label}
-                    </NavLink>
-                  </div>
-                </>
-              )
-            })()}
-          </div>
-          {/* Logout button */}
-          <button
-            id="btn-logout"
-            onClick={onLogout}
-            title="Sign out"
-            style={{
-              background: 'none',
-              border: '1px solid var(--border)',
-              borderRadius: 6,
-              cursor: 'pointer',
-              color: 'var(--text-tertiary)',
-              display: 'flex',
-              alignItems: 'center',
-              gap: 5,
-              padding: '4px 8px',
-              fontSize: 11,
-              transition: 'color 0.15s, border-color 0.15s',
-            }}
-            onMouseEnter={e => { (e.currentTarget as HTMLElement).style.color = '#ef4444'; (e.currentTarget as HTMLElement).style.borderColor = '#ef4444' }}
-            onMouseLeave={e => { (e.currentTarget as HTMLElement).style.color = 'var(--text-tertiary)'; (e.currentTarget as HTMLElement).style.borderColor = 'var(--border)' }}
-          >
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/>
-              <polyline points="16 17 21 12 16 7"/>
-              <line x1="21" y1="12" x2="9" y2="12"/>
-            </svg>
-            Sign out
-          </button>
-        </div>
-      </div>
     </aside>
   )
+}
+
+const ACCOUNT_LINKS = [
+  ['network', 'Network'],
+  ['mesh', 'Mesh'],
+  ['webhooks', 'Webhooks'],
+  ['secrets', 'Secrets & Keys'],
+  ['notifications', 'Notifications'],
+  ['settings', 'Settings'],
+] as const
+
+function AccountMenu({ health, onLogout }: { health: HealthData | null; onLogout: () => void }) {
+  const menu = useRef<HTMLDetailsElement>(null)
+  const trigger = useRef<HTMLElement>(null)
+  const gate = networkGateTone(health?.fetch_gate)
+  const serverOk = health?.status !== 'unreachable'
+  const daemonOk = health?.daemon === 'running'
+
+  function close() {
+    if (menu.current) menu.current.open = false
+  }
+
+  return <details className="account-menu" ref={menu} onKeyDown={event => {
+    if (event.key === 'Escape') { close(); trigger.current?.focus() }
+  }}>
+    <summary className="btn btn-ghost btn-sm" ref={trigger}>Account</summary>
+    <nav className="account-menu-body" aria-label="Account">
+      {ACCOUNT_LINKS.map(([path, label]) => <NavLink key={path} to={`/${path}`} className={getNavLinkClass}
+        id={`nav-${path}`} onClick={close}>{label}</NavLink>)}
+      <NavLink to="/onboarding" className={getNavLinkClass} id="nav-onboarding-replay" onClick={close}>Setup guide</NavLink>
+      <label className="account-menu-host">API host
+        <select className="select" value={getApiBase()} onChange={event => setApiBase(event.target.value)}>
+          <option value="">Local API</option>
+          {import.meta.env.VITE_BRAIN_URL && <option value={import.meta.env.VITE_BRAIN_URL}>
+            {new URL(import.meta.env.VITE_BRAIN_URL).host}
+          </option>}
+        </select>
+      </label>
+      <div className="account-menu-health">
+        {health ? <>
+          {health.version && <span>v{health.version}</span>}
+          <StatusDot ok={serverOk} label={serverOk ? 'Server online' : 'Server offline'} />
+          <StatusDot ok={daemonOk} label={daemonOk ? 'Daemon running' : `Daemon ${health.daemon ?? 'unknown'}`} />
+          <NavLink to="/network" title={gate.title} data-testid="network-gate-indicator" onClick={close}>
+            <span aria-hidden="true" style={{ color: gate.color }}>● </span>{gate.label}
+          </NavLink>
+        </> : <span>Checking status…</span>}
+      </div>
+      <button type="button" className="btn btn-ghost btn-sm" id="btn-logout" onClick={onLogout}>Sign out</button>
+    </nav>
+  </details>
 }
 
 // ─── Main content (routes) ────────────────────────────────────────────────────
@@ -304,11 +164,18 @@ function Sidebar({ onLogout, health, activeBrainId, onBrainChange }: SidebarProp
 function OnboardingRedirect() {
   const location = useLocation()
   // First visit: force guided onboarding until complete (local flag or vault profile)
-  if (!isOnboardingComplete() && location.pathname !== '/onboarding') {
+  if (!isOnboardingComplete() && !['/onboarding', '/plugins', '/help'].includes(location.pathname)) {
     return <Navigate to="/onboarding" replace />
   }
 
   return null
+}
+
+function LegacyPluginsRoute() {
+  const [params] = useSearchParams()
+  const id = params.get('id') || params.get('plugin')
+  const selection = new URLSearchParams(id ? { plugin: id } : { plugins: 'open' })
+  return <Navigate to={{ pathname: isOnboardingComplete() ? '/memory' : '/onboarding', search: `?${selection}` }} replace />
 }
 
 function MainContent({ activeBrainId }: { activeBrainId: string }) {
@@ -326,16 +193,16 @@ function MainContent({ activeBrainId }: { activeBrainId: string }) {
           <Route path="/tasks" element={<Navigate to="/plugins?id=automations" replace />} />
           <Route path="/skills" element={<Navigate to="/plugins?id=skill-manager" replace />} />
           <Route path="/openwiki" element={<Navigate to="/plugins?id=openwiki" replace />} />
-          <Route path="/plugins" element={<PluginsPage activeBrainId={activeBrainId} />} />
+          <Route path="/plugins" element={<LegacyPluginsRoute />} />
           <Route path="/integrations" element={<Navigate to="/plugins?id=meta-harness" replace />} />
           <Route path="/keys" element={<Navigate to="/secrets" replace />} />
           <Route path="/settings" element={<SettingsPage activeBrainId={activeBrainId} />} />
           <Route path="/network" element={<NetworkPage />} />
           <Route path="/mesh" element={<Navigate to="/plugins?id=mesh" replace />} />
           <Route path="/webhooks" element={<WebhooksPage />} />
-          <Route path="/secrets" element={<Navigate to="/plugins?id=auth" replace />} />
+          <Route path="/secrets" element={<Navigate to="/memory?brain=global&plugin=auth" replace />} />
           <Route path="/notifications" element={<NotificationsPage />} />
-          <Route path="/help" element={<HelpPage />} />
+          <Route path="/help" element={<Navigate to={isOnboardingComplete() ? '/memory?drawer=help' : '/onboarding?drawer=help'} replace />} />
           {/* Legacy OS-control-plane routes → core product */}
           <Route path="/vault" element={<Navigate to="/memory" replace />} />
           <Route path="/inbox" element={<Navigate to="/tasks" replace />} />
@@ -360,18 +227,51 @@ function MainContent({ activeBrainId }: { activeBrainId: string }) {
 // ─── Root App with auth gate ──────────────────────────────────────────────────
 
 const BRAIN_STORAGE_KEY = 'total-recall-active-brain'
+const SIDEBAR_IDLE_MS = 5000
 
-function App() {
+function Dashboard() {
+  const location = useLocation()
+  const [params, setParams] = useSearchParams()
+  const requestedEdge = new URLSearchParams(location.search).get('drawer') === 'help' ? 'right' : null
+  const [drawerEntry, setDrawerEntry] = useState<{ key: string; edge: WorkspaceEdge | null }>(
+    () => ({ key: location.key, edge: requestedEdge })
+  )
+  if (drawerEntry.key !== location.key) setDrawerEntry({ key: location.key, edge: requestedEdge })
+  const edge = drawerEntry.key === location.key ? drawerEntry.edge : requestedEdge
+  const setEdge = useCallback((edge: WorkspaceEdge | null) => {
+    setDrawerEntry({ key: location.key, edge })
+  }, [location.key])
   const [authState, setAuthState] = useState<AuthState>('loading')
   const [health, setHealth] = useState<HealthData | null>(null)
-  const [activeBrainId, setActiveBrainId] = useState(
+  const sidebarOpen = edge === 'left'
+  const sidebarToggle = useRef<HTMLButtonElement>(null)
+  const sidebarTimer = useRef<number | undefined>(undefined)
+  const [storedBrainId, setStoredBrainId] = useState(
     () => localStorage.getItem(BRAIN_STORAGE_KEY) || 'global'
   )
+  const pageId = location.pathname === '/memory' ? params.get('page') : null
+  const linkedBrainId = (pageId || params.has('plugin')) ? params.get('brain') : null
+  const activeBrainId = linkedBrainId || storedBrainId
+  const pageBrainId = activeBrainId.includes(',') ? undefined : activeBrainId
+  function setActiveBrainId(id: string) {
+    setStoredBrainId(id)
+    if (pageId && id !== activeBrainId) {
+      const next = new URLSearchParams(params)
+      next.delete('page')
+      next.delete('brain')
+      next.delete('plugin')
+      setParams(next, { replace: true })
+    } else if (!pageId && linkedBrainId) {
+      const next = new URLSearchParams(params)
+      next.delete('brain')
+      setParams(next, { replace: true })
+    }
+  }
 
   // Persist activeBrainId to localStorage on change
   useEffect(() => {
-    localStorage.setItem(BRAIN_STORAGE_KEY, activeBrainId)
-  }, [activeBrainId])
+    localStorage.setItem(BRAIN_STORAGE_KEY, storedBrainId)
+  }, [storedBrainId])
 
   // Register 401 interceptor so any API call that gets a 401 flips us to unauthed
   useEffect(() => {
@@ -402,12 +302,34 @@ function App() {
 
   async function handleLogout() {
     await logout()
+    setEdge(null)
     setAuthState('unauthed')
   }
 
   function handleAuthenticated() {
     setAuthState('authed')
   }
+
+  const closeSidebar = useCallback(() => {
+    setEdge(null)
+    if (document.activeElement?.closest('#workspace-sidebar')) sidebarToggle.current?.focus()
+  }, [setEdge])
+
+  const closeDrawer = useCallback(() => {
+    if (edge === 'left') closeSidebar()
+    else setEdge(null)
+  }, [edge, closeSidebar, setEdge])
+
+  const queueSidebarClose = useCallback(() => {
+    window.clearTimeout(sidebarTimer.current)
+    sidebarTimer.current = window.setTimeout(closeSidebar, SIDEBAR_IDLE_MS)
+  }, [closeSidebar])
+
+  useEffect(() => {
+    if (!sidebarOpen) return
+    queueSidebarClose()
+    return () => window.clearTimeout(sidebarTimer.current)
+  }, [sidebarOpen, queueSidebarClose])
 
   // Loading state — blank dark screen, no flash of unprotected content
   if (authState === 'loading') {
@@ -434,14 +356,39 @@ function App() {
 
   // Authed — render full dashboard
   return (
-    <BrowserRouter>
-      <div className="app-layout">
-        <Sidebar onLogout={handleLogout} health={health} activeBrainId={activeBrainId} onBrainChange={setActiveBrainId} />
-        <MainContent activeBrainId={activeBrainId} />
-      </div>
-      <ContextualHelp />
-    </BrowserRouter>
+      <PluginWorkspace activeBrainId={activeBrainId} onOpenPlugin={closeSidebar}
+        renderShell={(pluginFolder, pluginPage, plugins) => {
+          const page = pageId ? <WorkspacePage id={pageId} brainId={pageBrainId} plugins={plugins} /> : pluginPage
+          return <div className="app-layout">
+              <Sidebar activeBrainId={activeBrainId} onBrainChange={setActiveBrainId}
+                open={sidebarOpen} onClose={closeSidebar} onActivity={queueSidebarClose} pluginFolder={pluginFolder}
+                savedPagesFolder={<SavedPages brainId={pageBrainId} drawerOpen={sidebarOpen}
+                  activePageId={pageId} onOpenPage={closeSidebar} />} />
+              {edge && <div className="sidebar-scrim" aria-hidden="true" onClick={closeDrawer} />}
+              <button type="button" className="sidebar-handle" ref={sidebarToggle} aria-label="Workspace navigation"
+                aria-controls="workspace-sidebar" aria-expanded={sidebarOpen} onClick={() => setEdge(sidebarOpen ? null : 'left')}
+                onKeyDown={event => { if (event.key === 'Escape' && sidebarOpen) closeSidebar() }}>
+                <svg width="14" height="18" viewBox="0 0 14 18" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true">
+                  <path d={sidebarOpen ? 'M9 4 4 9l5 5' : 'm5 4 5 5-5 5'} />
+                </svg>
+              </button>
+              <div className="workspace-main" inert={edge !== null}>
+                <header className="workspace-toolbar" aria-label="Dashboard">
+                  <BrandMark height={64} className="workspace-logo" />
+                  <AccountMenu health={health} onLogout={handleLogout} />
+                </header>
+                <div className="workspace-body" hidden={!!page}>
+                  <MainContent activeBrainId={activeBrainId} />
+                </div>
+                {page}
+              </div>
+              <WorkspaceDrawers edge={edge} onChange={setEdge} plugins={plugins} activeBrainId={activeBrainId} />
+            </div>
+        }}
+      />
   )
 }
 
-export default App
+export default function App() {
+  return <BrowserRouter><Dashboard /></BrowserRouter>
+}

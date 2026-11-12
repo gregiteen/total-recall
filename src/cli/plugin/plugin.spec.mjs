@@ -113,8 +113,9 @@ describe('CLI Plugin Manager', () => {
       expect(manifest.tasks).toBeUndefined();
       expect(fs.existsSync(path.join(pluginDir, 'cli.mjs'))).toBe(true);
       expect(fs.existsSync(path.join(pluginDir, 'generator.mjs'))).toBe(true);
-      expect(fs.existsSync(path.join(pluginDir, 'capability', 'index.mjs'))).toBe(true);
-      expect(fs.existsSync(path.join(pluginDir, 'capability', 'BRICK.md'))).toBe(true);
+      expect(manifest.capability).toBeUndefined();
+      expect(fs.existsSync(path.join(pluginDir, 'capability'))).toBe(false);
+      expect(fs.readFileSync(path.join(pluginDir, 'README.md'), 'utf8')).toContain('total-recall plugin chunks page');
     } finally {
       cwdSpy.mockRestore();
       fs.rmSync(tmpParent, { recursive: true, force: true });

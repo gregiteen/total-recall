@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url';
 import { validateAppCliSpec } from './plugin-contracts/app-cli.mjs';
 import { validateUiSpec } from './plugin-contracts/ui.mjs';
 import { validateConfigurationSpec } from './plugin-contracts/configuration.mjs';
-import { validateCardContract } from './plugin-contracts/card.mjs';
+import { validateManifestContract } from './plugin-contracts/manifest.mjs';
 import { validateStartupCheck } from './plugin-contracts/startup-check.mjs';
 
 const ID_PATTERN = /^[a-z][a-z0-9-]{1,63}$/;
@@ -25,6 +25,8 @@ export function projectPluginsDir(projectRoot = process.cwd()) {
 }
 
 export function globalPluginsDir() {
+  // A staged server can use its matching plugin packages with the same brain and Auth store.
+  if (process.env.TR_RUNTIME_PLUGINS_DIR) return path.resolve(process.env.TR_RUNTIME_PLUGINS_DIR);
   const agentDir = process.env.AGENT_DIR || process.env._TR_TEST_AGENT_DIR || path.join(os.homedir(), '.agent');
   return path.join(agentDir, 'skills', 'total-recall', 'plugins');
 }
@@ -95,8 +97,8 @@ export function validatePluginManifest(manifest) {
     return { valid: false, errors: ['Manifest must be a non-null object'] };
   }
   if (manifest.configuration !== undefined) errors.push(...validateConfigurationSpec(manifest.configuration));
-  const cardContract = validateCardContract(manifest);
-  errors.push(...cardContract.errors);
+  const contract = validateManifestContract(manifest);
+  errors.push(...contract.errors);
   errors.push(...validateStartupCheck(manifest));
 
   if (!manifest.id || typeof manifest.id !== 'string') {
@@ -334,7 +336,7 @@ export function validatePluginManifest(manifest) {
   return {
     valid: errors.length === 0,
     errors,
-    warnings: cardContract.warnings
+    warnings: contract.warnings
   };
 }
 
@@ -414,7 +416,7 @@ export function readPluginsDir(dir, scope) {
 /**
  * Discover installed plugins across project and global directories.
  * A project plugin shadows a global plugin with the same id.
- * @param {string} [projectRoot] - Current project root directory
+ * @param {string|null} [projectRoot] - Current project root, or null for only shared and bundled plugins
  */
 export function discoverPlugins(projectRoot = process.cwd()) {
   const seen = new Set();

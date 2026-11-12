@@ -42,7 +42,7 @@ describe('stdout survives process exit through a pipe', () => {
     fs.writeFileSync(path.join(dir, 'ui', 'card.js'), 'export {};\n');
     fs.writeFileSync(path.join(dir, 'plugin.json'), JSON.stringify({
       id: 'bulk', name: 'Bulk', version: '1.0.0', description: 'Prints a large report.',
-      ui: { elements: [{ id: 'card', kind: 'card', tag: 'tr-bulk-card', module: 'ui/card.js' }] },
+      ui: { home: 'home', design_tokens: 'DESIGN.md', elements: [{ id: 'home', kind: 'panel', tag: 'tr-bulk-home', module: 'ui/home.js' }] },
       cli: { command: 'bulk', handler: './cli.mjs', subcommands: [{ name: 'report', description: 'Print' }] },
     }));
   }

@@ -15,60 +15,34 @@ const PROVIDER_KEY_MAP = {
 /**
  * Checks token readiness across supported providers.
  */
-export function getTokenStatus() {
-  const result = spawnSync('total-recall', ['auth', 'secret', 'list', '--json'], {
+export function getTokenStatus({ run = spawnSync } = {}) {
+  const result = run('total-recall', ['auth', 'secret', 'list', '--json'], {
     encoding: 'utf8',
     timeout: 5000,
   });
 
-  const configured = {
-    openrouter: false,
-    google: false,
-  };
-
-  if (result.status === 0 && result.stdout) {
-    try {
-      const parsed = JSON.parse(result.stdout);
-      const keys = Array.isArray(parsed)
-        ? parsed.map((k) => (typeof k === 'string' ? k : k.key || k.name))
-        : (parsed.keys || []);
-
-      configured.openrouter = keys.includes('OPENROUTER_API_KEY') || Boolean(process.env.OPENROUTER_API_KEY);
-      configured.google = keys.includes('GOOGLE_API_KEY') || Boolean(process.env.GOOGLE_API_KEY);
-    } catch {
-      configured.openrouter = Boolean(process.env.OPENROUTER_API_KEY);
-      configured.google = Boolean(process.env.GOOGLE_API_KEY);
-    }
-  } else {
-    configured.openrouter = Boolean(process.env.OPENROUTER_API_KEY);
-    configured.google = Boolean(process.env.GOOGLE_API_KEY);
-  }
-
-  return {
-    ok: true,
-    tokens: {
-      openrouter: {
-        key: 'OPENROUTER_API_KEY',
-        configured: configured.openrouter,
-        status: configured.openrouter ? 'configured' : 'missing',
-      },
-      google: {
-        key: 'GOOGLE_API_KEY',
-        configured: configured.google,
-        status: configured.google ? 'configured' : 'missing',
-      },
-    },
-  };
+  if (result.status !== 0) throw new Error('Auth credential metadata is unavailable');
+  let payload;
+  try { payload = JSON.parse(result.stdout); }
+  catch { throw new Error('Auth credential metadata is invalid'); }
+  const rows = Array.isArray(payload) ? payload : payload?.keys;
+  if (!Array.isArray(rows)) throw new Error('Auth credential metadata is invalid');
+  const saved = new Set(rows.filter(row => row?.set !== false)
+    .map(row => typeof row === 'string' ? row : row?.key ?? row?.name));
+  const tokens = Object.fromEntries(Object.entries(PROVIDER_KEY_MAP).map(([provider, key]) => {
+    const configured = saved.has(key);
+    return [provider, { key, configured, status: configured ? 'configured' : 'missing' }];
+  }));
+  return { ok: true, tokens };
 }
 
 /**
  * Securely writes a token into Total Recall auth secrets store using --stdin.
  */
-export function setTokenValue(provider, secretValue) {
-  const keyName = PROVIDER_KEY_MAP[provider?.toLowerCase()] || provider;
-  if (!keyName) {
-    throw new Error(`Unsupported token provider '${provider}'. Allowed: openrouter, google`);
-  }
+export function setTokenValue(provider, secretValue, { run = spawnSync } = {}) {
+  const id = typeof provider === 'string' && provider.toLowerCase();
+  if (!Object.hasOwn(PROVIDER_KEY_MAP, id)) throw new Error('Supported token providers are openrouter and google');
+  const keyName = PROVIDER_KEY_MAP[id];
 
   if (!secretValue || typeof secretValue !== 'string' || !secretValue.trim()) {
     throw new Error(`Token value for ${keyName} must be a non-empty string`);
@@ -77,14 +51,14 @@ export function setTokenValue(provider, secretValue) {
   const trimmed = secretValue.trim();
 
   // Pipe into total-recall auth secret set <KEY> --stdin
-  const child = spawnSync('total-recall', ['auth', 'secret', 'set', keyName, '--stdin'], {
+  const child = run('total-recall', ['auth', 'secret', 'set', keyName, '--stdin'], {
     input: trimmed,
     encoding: 'utf8',
     timeout: 5000,
   });
 
   if (child.status !== 0) {
-    throw new Error(child.stderr || child.error?.message || `Failed to set ${keyName} in secrets store`);
+    throw new Error(`Auth could not save ${keyName}`);
   }
 
   return {

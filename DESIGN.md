@@ -36,7 +36,7 @@ spacing:
 
 # Total Recall (VibeBrain) — Design System Tokens
 
-Canonical design specifications for Total Recall web interfaces, visual card plugins, and marketing landing pages.
+Canonical design specifications for Total Recall web interfaces, native plugin Homes, and marketing landing pages.
 
 ## Color Tokens & Brand Personality
 
@@ -47,9 +47,9 @@ The Total Recall visual identity balances high-velocity engineering precision wi
 - **Emerald Pulse (`#10b981`)**: Signifies local-first zero-cost intelligence and Ollama fleet readiness.
 - **Amber Signal (`#f59e0b`)**: Telemetry indicators, warning states, and supervisor gateways.
 
-## Touch Ergonomics & Card Contracts
+## Native plugin Homes
 
-Every plugin card face must adhere to strict spatial and touch standards:
+The workspace displays each plugin's native Home and its SSSS composition. Each owner defines its presentation in its own DESIGN.md.
+
 - Interactive click and touch targets must measure at least 44px in height.
-- Component corners maintain uniform 10px rounding (`--radius-md`).
-- Dark-mode elevation relies on translucent surface borders rather than synthetic drop shadows.
+- The workspace shell uses its own 10px corner token and translucent surface borders.

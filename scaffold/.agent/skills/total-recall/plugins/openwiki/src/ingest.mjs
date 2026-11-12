@@ -13,6 +13,7 @@ function printHelp() {
     --dry-run                 Preview import without writing
     --global                  Target the global brain
     --project                 Target the project brain (default)
+    --json                    Return a structured import receipt
     --help, -h                Show this help
   `);
 }
@@ -22,6 +23,9 @@ export async function runOpenWikiIngest(args = []) {
   let dryRun = false;
   let layerFlag = '--project';
   let help = false;
+  const json = args.includes('--json');
+  const log = message => { if (!json) console.log(message); };
+  const warn = message => { if (!json) console.error(message); };
 
   for (let i = 0; i < args.length; i++) {
     const arg = args[i];
@@ -37,20 +41,20 @@ export async function runOpenWikiIngest(args = []) {
     }
   }
 
-  if (help || !openwikiPath) {
+  if (help || (!json && !openwikiPath)) {
     printHelp();
     return { ok: true, imported: 0, errors: 0 };
   }
 
-  if (openwikiPath && !fs.existsSync(openwikiPath)) {
-    console.error(`Error: OpenWiki directory not found at ${openwikiPath}`);
-    process.exitCode = 1;
-    return { ok: false, error: `Directory not found: ${openwikiPath}` };
+  if (!openwikiPath || !fs.statSync(openwikiPath, { throwIfNoEntry: false })?.isDirectory()) {
+    const error = 'An existing OpenWiki directory is required';
+    warn(error);
+    return { ok: false, error };
   }
 
-  console.log(`\n  Importing OpenWiki from: ${openwikiPath}`);
-  console.log(`  Target Brain: ${layerFlag.replace('--', '')}`);
-  if (dryRun) console.log('  DRY RUN: No actual writes will be committed.\n');
+  log(`\n  Importing OpenWiki from: ${openwikiPath}`);
+  log(`  Target Brain: ${layerFlag.replace('--', '')}`);
+  if (dryRun) log('  DRY RUN: No actual writes will be committed.\n');
 
   const mdFiles = [];
   function scanDir(dir) {
@@ -69,6 +73,7 @@ export async function runOpenWikiIngest(args = []) {
   scanDir(openwikiPath);
 
   let imported = 0;
+  let planned = 0;
   let errors = 0;
 
   for (const file of mdFiles) {
@@ -85,8 +90,8 @@ export async function runOpenWikiIngest(args = []) {
       const slug = 'openwiki-' + slugBase.toLowerCase();
 
       if (dryRun) {
-        console.log(`  [DRY RUN] Would import: ${slug} ("${title}")`);
-        imported++;
+        log(`  [DRY RUN] Would import: ${slug} ("${title}")`);
+        planned++;
         continue;
       }
 
@@ -101,27 +106,27 @@ export async function runOpenWikiIngest(args = []) {
 
       const result = spawnSync(TR_BIN, cliArgs, { encoding: 'utf8' });
       if (result.status === 0) {
-        console.log(`  Imported: ${slug}`);
+        log(`  Imported: ${slug}`);
         imported++;
       } else {
-        console.error(`  Error importing ${slug}: ${result.stderr}`);
+        warn(`  Error importing ${slug}: ${result.stderr}`);
         errors++;
       }
     } catch (err) {
-      console.error(`  Exception on ${file}: ${err.message}`);
+      warn(`  Exception on ${file}: ${err.message}`);
       errors++;
     }
   }
 
-  console.log(`\n  Import Summary:`);
-  console.log(`  Imported: ${imported} files`);
-  console.log(`  Errors:   ${errors} files`);
+  log('\n  Import Summary:');
+  log(dryRun ? `  Would import: ${planned} files` : `  Imported: ${imported} files`);
+  log(`  Errors:   ${errors} files`);
 
   if (!dryRun && imported > 0) {
-    console.log(`\n  OpenWiki knowledge graph successfully indexed into Total Recall.`);
+    log('\n  OpenWiki knowledge graph successfully indexed into Total Recall.');
   }
 
-  return { ok: errors === 0, imported, errors };
+  return { ok: errors === 0, dryRun, imported, planned, errors };
 }
 
 export default runOpenWikiIngest;

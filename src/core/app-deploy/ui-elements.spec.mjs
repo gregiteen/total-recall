@@ -52,11 +52,11 @@ const ELEMENT_SOURCE = [
   '',
 ].join('\n');
 
-const CARD_FACE_SOURCE = [
-  'class NotesCard extends HTMLElement {',
+const HOME_SOURCE = [
+  'class NotesHome extends HTMLElement {',
   '  connectedCallback() { this.textContent = "notes"; }',
   '}',
-  "customElements.define('notes-card', NotesCard);",
+  "customElements.define('notes-home', NotesHome);",
 ].join('\n');
 
 const ELEMENT = {
@@ -87,20 +87,16 @@ const designMd = ({ text, surface, md = '16px' }) => [
   '',
 ].join('\n');
 
-// Every plugin declares exactly one bespoke card face. A `panel` is a secondary
-// screen and does not satisfy that requirement, so the fixture declares both:
-// the card face the contract requires, plus the panel these specs exercise.
-const CARD_FACE = { id: 'card', kind: 'card', tag: 'notes-card', module: 'ui/notes-card.js' };
+const HOME = { id: 'home', kind: 'panel', tag: 'notes-home', module: 'ui/notes-home.js' };
 
-function manifest(ui = { design_tokens: 'ui/DESIGN.md', elements: [CARD_FACE, ELEMENT] }) {
+function manifest(ui = { home: HOME.id, design_tokens: 'ui/DESIGN.md', elements: [HOME, ELEMENT] }) {
   return { id: 'notes', name: 'Notes', version: '1.2.0', description: 'Notes capability', ui };
 }
 
 function writePlugin(dir, { ui, source = ELEMENT_SOURCE } = {}) {
   fs.mkdirSync(path.join(dir, 'ui'), { recursive: true });
   fs.writeFileSync(path.join(dir, 'plugin.json'), JSON.stringify(manifest(ui)));
-  // The declared card face must exist on disk, like any other element module.
-  fs.writeFileSync(path.join(dir, 'ui', 'notes-card.js'), CARD_FACE_SOURCE);
+  fs.writeFileSync(path.join(dir, 'ui', 'notes-home.js'), HOME_SOURCE);
   fs.writeFileSync(path.join(dir, 'ui', 'notes-panel.js'), source);
   fs.writeFileSync(path.join(dir, 'ui', 'DESIGN.md'), designMd({ text: '#222222', surface: '#fafafa' }));
   return dir;
@@ -196,7 +192,7 @@ describe('UI element generation', () => {
     const a = generateUiElements(manifest(), { pluginDir: plugin, target: 'web-components', tokens });
     const b = generateUiElements(manifest(), { pluginDir: plugin, target: 'web-components', tokens });
     expect(b.files).toEqual(a.files);
-    expect(a.files.map((f) => f.path)).toEqual(['elements/card.js', 'elements/notes-panel.js', 'index.js', 'tokens.css', UI_MANIFEST_FILE]);
+    expect(a.files.map((f) => f.path)).toEqual(['elements/home.js', 'elements/notes-panel.js', 'index.js', 'tokens.css', UI_MANIFEST_FILE]);
     const file = (p) => a.files.find((f) => f.path === p).content;
     expect(file('tokens.css')).toContain('--color-text: #101010;');
     expect(file('tokens.css')).toContain("from the app's DESIGN.md");
@@ -207,10 +203,11 @@ describe('UI element generation', () => {
     expect(uiManifest.tokens.source).toBe('app');
     for (const f of a.files.filter((x) => x.path !== UI_MANIFEST_FILE)) expect(uiManifest.files[f.path]).toBe(f.sha256);
     expect(a.warnings).toEqual(['element \'notes-panel\': optional tokens not defined, the element\'s fallbacks apply: --color-accent']);
-    // `usage` documents the plugin's primary face, which is the declared
-    // card. The panel is still generated as a secondary screen.
-    expect(a.usage).toContain('<notes-card></notes-card>');
+    expect(a.usage).toContain('<notes-home></notes-home>');
     expect(a.files.some((f) => f.path === 'elements/notes-panel.js')).toBe(true);
+    const reversed = generateUiElements(manifest({ ...manifest().ui, elements: [ELEMENT, HOME] }),
+      { pluginDir: plugin, target: 'web-components', tokens });
+    expect(reversed.usage).toContain('<notes-home></notes-home>');
   });
 
   it('restyles through tokens alone: element files stay byte-identical', () => {
@@ -266,7 +263,7 @@ describe('UI element generation', () => {
     expect(tsx).toContain('  notes: unknown[];');
     expect(tsx).toContain('  heading?: string;');
     expect(tsx).toContain('  onRefresh?: (event: CustomEvent) => void;');
-    expect(r.elements[0].react).toEqual({ component: 'Card', file: 'react/Card.tsx' });
+    expect(r.elements[0].react).toEqual({ component: 'Home', file: 'react/Home.tsx' });
     expect(r.elements[1].react).toEqual({ component: 'NotesPanel', file: 'react/NotesPanel.tsx' });
     const dts = r.files.find((f) => f.path === 'elements/notes-panel.d.ts').content;
     expect(dts).toContain('"notes-panel": HTMLElement & { notes: unknown[]; heading?: string };');

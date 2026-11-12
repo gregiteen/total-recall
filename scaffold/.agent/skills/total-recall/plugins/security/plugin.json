@@ -2,15 +2,14 @@
   "$schema": "https://github.com/gregiteen/total-recall/blob/main/metadata.plugin.schema.json",
   "id": "security",
   "name": "Security Assessments",
-  "version": "0.3.7",
+  "version": "0.4.0",
   "description": "Machine and device security assessments for macOS, Linux, Windows, Android, Chromebook, iPhone and iPad, with explicit measured and manual coverage.",
   "license": "MIT",
   "requires": [{ "id": "auth", "range": ">=1.2.1" }],
   "branding": {
     "name": "Security Assessments",
-    "color": "#f43f5e",
-    "badge": "Security Enclave",
-    "font": "chivo-mono"
+    "color": "#31564b",
+    "badge": "Evidence desk"
   },
   "auth": {
     "plugin": "auth",
@@ -19,29 +18,6 @@
       "google-oauth2"
     ],
     "session_verification": true
-  },
-  "card_face": {
-    "headline": "Security & Hardening Suite",
-    "quick_actions": [
-      {
-        "subcommand": "machine",
-        "label": "THIS MACHINE"
-      },
-      {
-        "subcommand": "fleet",
-        "label": "MESH FLEET"
-      },
-      {
-        "subcommand": "plugins",
-        "label": "PLUGINS"
-      },
-      {
-        "subcommand": "harden",
-        "label": "HARDENING PLAN"
-      }
-    ],
-    "touch_layout": "comfortable",
-    "interactive": true
   },
   "ssss_schemas": {
     "categories": [
@@ -171,12 +147,14 @@
       {
         "name": "encrypt",
         "description": "Perform AES-256-GCM authenticated envelope encryption",
-        "effect": "write"
+        "effect": "write",
+        "sensitive_output": true
       },
       {
         "name": "decrypt",
         "description": "Decrypt an AES-256-GCM envelope and display plaintext in an interactive terminal",
         "effect": "read",
+        "sensitive_output": true,
         "output": "text"
       },
       {
@@ -187,17 +165,20 @@
       {
         "name": "token",
         "description": "Inspect or save the auth-managed security master key through stdin",
-        "effect": "write"
+        "effect": "write",
+        "sensitive_output": true
       },
       {
         "name": "challenge",
         "description": "Create, solve or verify authenticated proof-of-work challenges",
-        "effect": "write"
+        "effect": "write",
+        "sensitive_output": true
       },
       {
         "name": "bot-mitigate",
         "description": "Evaluate submission risk with optional provider challenge verification",
-        "effect": "read"
+        "effect": "read",
+        "sensitive_output": true
       },
       {
         "name": "site-audit",
@@ -212,36 +193,22 @@
     ]
   },
   "ui": {
-    "design_tokens": "ui/DESIGN.md",
+    "home": "home",
+    "design_tokens": "DESIGN.md",
     "elements": [
       {
-        "id": "panel",
+        "id": "home",
         "kind": "panel",
-        "tag": "security-panel",
-        "module": "ui/panel.js",
-        "description": "Machine, network and mesh security audit console",
-        "events": [],
+        "tag": "tr-security-home",
+        "module": "ui/home.js",
+        "description": "Security evidence desk with local coverage and deliberate assessments",
         "tokens": [
           "color-text",
           "color-surface",
           "color-border",
           "spacing-md",
           "radius-md"
-        ],
-        "optional_tokens": [],
-        "props": {
-          "view": {
-            "type": "object",
-            "description": "Printed by `total-recall security token status --json`: { present, secretKey }"
-          }
-        }
-      },
-      {
-        "id": "card",
-        "kind": "card",
-        "tag": "tr-security-card",
-        "module": "ui/card.js",
-        "description": "Fortress Card Face"
+        ]
       }
     ]
   },

@@ -31,8 +31,8 @@ import {
 } from './plugin-bundle.mjs';
 import { writeVfsDocument, patchVfsDocument, deleteVfsDocument, appendVfsEvent } from './ssss-operation-service.mjs';
 import { findVfsDocumentByPath } from './vfs-documents.mjs';
-import { readActivationRecord, projectActivationOverride } from './plugin-state.mjs';
-import { REQUIRED_INSTALLATION_PLUGIN_IDS } from './default-plugins.mjs';
+import { readActivationRecord, projectActivationOverride, pluginActivation } from './plugin-state.mjs';
+import { DEFAULT_PLUGIN_IDS, REQUIRED_INSTALLATION_PLUGIN_IDS } from './default-plugins.mjs';
 
 const execFileAsync = promisify(execFile);
 const ID_PATTERN = /^[a-z][a-z0-9-]{1,63}$/;
@@ -183,7 +183,7 @@ export async function patchPluginRecord(plugin, patches) {
  * setting so it follows the shared one again. The overlay never installs the
  * plugin: a repository without it uses the shared folder's copy.
  */
-export async function patchProjectActivationRecord(id, projectRoot, runtimeEnabled, { manifest = null } = {}) {
+export async function patchProjectActivationRecord(id, projectRoot, runtimeEnabled, { manifest = null, onUse = false } = {}) {
   if (!ID_PATTERN.test(id)) throw new Error('Invalid plugin identity');
   const pluginsDir = projectPluginsDir(projectRoot);
   const vaultRoot = vaultForPluginsDir(pluginsDir);
@@ -194,7 +194,7 @@ export async function patchProjectActivationRecord(id, projectRoot, runtimeEnabl
   if (runtimeEnabled === null) {
     const existing = readProjectActivationRecord(id, projectRoot);
     if (!existing) return null;
-    const { runtime_enabled: _dropped, ...frontmatter } = { ...(existing.frontmatter || {}) };
+    const { runtime_enabled: _dropped, runtime_on_use: _onUse, ...frontmatter } = { ...(existing.frontmatter || {}) };
     await writeVfsDocument(recordPath(id), {
       ...frontmatter,
       type: 'plugin_record',
@@ -210,7 +210,7 @@ export async function patchProjectActivationRecord(id, projectRoot, runtimeEnabl
   if (typeof runtimeEnabled !== 'boolean') throw new Error('Plugin activation requires a boolean or null');
   const previous = readProjectActivationRecord(id, projectRoot);
   if (previous) {
-    return patchVfsDocument(recordPath(id), { runtime_enabled: runtimeEnabled, timestamp: now }, {
+    return patchVfsDocument(recordPath(id), { runtime_enabled: runtimeEnabled, runtime_on_use: onUse, timestamp: now }, {
       actorRole: 'system',
       intent: `Set repository activation for plugin ${id}`,
       vaultRoot
@@ -226,6 +226,7 @@ export async function patchProjectActivationRecord(id, projectRoot, runtimeEnabl
     category: 'plugins',
     tags: ['plugin', 'activation-override'],
     runtime_enabled: runtimeEnabled,
+    runtime_on_use: onUse,
     source: { kind: 'shared', ref: globalPluginsDir() }
   };
   await writeVfsDocument(recordPath(id), frontmatter, buildPluginDocumentBody(m, id), {
@@ -236,8 +237,19 @@ export async function patchProjectActivationRecord(id, projectRoot, runtimeEnabl
   return frontmatter;
 }
 
+function describeActivation(plugin, projectRoot) {
+  const required = REQUIRED_INSTALLATION_PLUGIN_IDS.includes(plugin.id);
+  try {
+    const { state, enabled, mode } = pluginActivation(plugin, { projectRoot });
+    return { state, enabled, required, ...(mode ? { mode } : {}) };
+  } catch {
+    // An unreadable repository policy is an error, never shared enablement.
+    return { state: 'error', enabled: false, required };
+  }
+}
+
 /** Facts about one installed plugin, merged with its record. */
-export function describePlugin(plugin) {
+export function describePlugin(plugin, projectRoot = process.cwd()) {
   const record = readPluginRecord(plugin);
   const m = plugin.manifest || {};
   let current = null;
@@ -248,6 +260,7 @@ export function describePlugin(plugin) {
   const taskRuns = record?.task_runs || {};
   return {
     id: plugin.id,
+    core: DEFAULT_PLUGIN_IDS.includes(plugin.id),
     name: m.name || plugin.id,
     version: m.version || '0.0.0',
     description: m.description || '',
@@ -284,13 +297,18 @@ export function describePlugin(plugin) {
     ui: m.ui || null,
     configuration: m.configuration || null,
     manifest: m,
-    card_face: record?.card_face || m.card_face || null,
-    activation: { state: plugin.valid && record?.runtime_enabled !== false ? 'active' : 'inactive', enabled: plugin.valid && record?.runtime_enabled !== false }
+    activation: describeActivation(plugin, projectRoot)
   };
 }
 
-export function listInstalledPlugins(projectRoot = process.cwd()) {
-  return discoverPlugins(projectRoot).map(describePlugin);
+export function listInstalledPlugins(projectRoot = process.cwd(), { descriptions } = {}) {
+  return discoverPlugins(projectRoot).map(plugin => {
+    const description = descriptions?.get(plugin.dir);
+    if (description) return { ...description, activation: describeActivation(plugin, projectRoot) };
+    const result = describePlugin(plugin, projectRoot);
+    descriptions?.set(plugin.dir, result);
+    return result;
+  });
 }
 
 /** Bundled plugins shipped in the package, flagged with whether they are installed here. */
@@ -344,7 +362,8 @@ export async function recompileAfterPluginMutation(projectRoot = process.cwd(), 
     // read on demand at preflight, so a shared plugin change compiles no other repository
     // (ON-DEMAND-CONTEXT-01; one install used to rebuild all registered brains).
     await compileLayer(compileSurface, projectRoot, isGlobal);
-    if (isGlobal) {
+    // A shared change made from the dashboard's global brain has no repository to refresh.
+    if (isGlobal && projectRoot) {
       // The repository the command ran in refreshes its own catalog now, so its plugin library
       // never lags the change. That compile is cheap: entry files and vault indexes keep their
       // own triggers, so only the catalog and CLI index move.

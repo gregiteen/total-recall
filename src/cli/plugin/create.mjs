@@ -113,10 +113,7 @@ export async function createPlugin(args = []) {
   // Every plugin is installed in the shared folder; --global is accepted and changes nothing.
   let withCli = args.includes("--with-cli");
   const withGenerator = args.includes("--with-generator");
-  // A card face is bespoke owner code, authored by hand once the plugin's
-  // function is understood. The scaffold deliberately ships without one, so
-  // there is nothing to generate here; `--with-ui` is accepted only to explain
-  // that to anyone who asks for it.
+  // The owner authors the native Home after defining the plugin's workflows.
   const asksForUi = args.includes("--with-ui");
   const withTask = args.includes("--with-task");
   const createGithub = args.includes("--github");
@@ -251,17 +248,15 @@ export async function createPlugin(args = []) {
     version: "0.1.0",
     description: pluginDesc,
     license: "MIT",
-    // Declares this plugin as a fresh scaffold so it can install before its
-    // bespoke card face exists. Remove the flag when the face is authored.
+    auth: { plugin: "auth", methods: ["passkey", "google-oauth2"], session_verification: true },
+    // An unfinished scaffold can install while the owner writes its Home.
     scaffold: true,
     // How work reaches this plugin. `preflight coverage` reports it until tasks are written.
     gate: { tasks: [], owned_commands: [] }
   };
   if (useCases.length > 0) manifest.use_cases = useCases;
 
-  // House rule: a plugin for a service that needs an API key ships a CLI to save
-  // it, so it works the moment the key is pasted. Its card face is authored by
-  // hand later, like every other face.
+  // A plugin with a provider credential can save it through the shared Auth CLI.
   if (apiKeys.length) {
     withCli = true;
     manifest.secrets = apiKeys.map((key) => ({ key, description: `${pluginName} service API key (paste it in the plugin UI)`, required: true }));
@@ -301,8 +296,7 @@ export async function createPlugin(args = []) {
         ]
       });
     }
-    // The card contract reads the plugin's real state through a declared read
-    // command; a scaffold without this shows no live status.
+    // Give the Home a declared read operation for live status.
     manifest.status = { command: "status", refresh_seconds: 60 };
 
     const cliContent = `#!/usr/bin/env node
@@ -357,12 +351,6 @@ export default run;
   if (withTask) {
     manifest.tasks = [{ intent: taskIntent, schedule: taskSchedule, command: taskCommand, placement: 'selected-node' }];
   }
-
-  // No UI is generated. Every plugin must have a card face, but a face is
-  // bespoke owner code authored by hand once the plugin's function is known:
-  // a generated stub is what produced a ecosystem of identical cards. The
-  // scaffold therefore reports the face as outstanding rather than faking one.
-  const cardOutstanding = true;
 
   if (isCapability) {
     manifest.deploy = {
@@ -445,19 +433,12 @@ export default generateContext;
     fs.writeFileSync(path.join(pluginDir, "generator.mjs"), generatorContent, "utf8");
   }
 
-  manifest.capability = {
-    entry: "capability/index.mjs",
-    exports: ["getCapabilityStatus"]
-  };
-
   const validation = validatePluginManifest(manifest);
   if (!validation.valid) {
     console.error("❌ Validation failed for generated manifest:", validation.errors);
     fs.rmSync(pluginDir, { recursive: true, force: true });
     process.exit(1);
   }
-  // The scaffold installs without a card face, and says so. Its face is
-  // authored by hand next; the warning is the reminder, not a failure.
   if (validation.warnings?.length) {
     for (const warning of validation.warnings) console.log(`⚠️  ${warning}`);
   }
@@ -492,7 +473,7 @@ export default generateContext;
   if (category) lines.push(`- **SSSS Category**: \`${category}\``);
   if (withCli) lines.push(`- **CLI Command**: \`npx total-recall ${id}\``);
   if (withTask) lines.push(`- **Scheduled task**: \`${taskCommand}\` at \`${taskSchedule}\` (selected node; implement the command and choose a node before use)`);
-  if (asksForUi) lines.push('- **UI**: no card face is generated. Author `ui/card.js` and `ui/DESIGN.md` by hand for this plugin\'s own function, then declare the face in `ui.elements[]`');
+  if (asksForUi) lines.push('- **UI**: author the plugin workspace and its native panels for this plugin’s own function. Declare the panels in `ui.elements[]`.');
   if (apiKeys.length) lines.push('- **API key**: paste it in the plugin UI (`save-token` event) or pipe it to `npx total-recall ' + id + ' token set --stdin`; stored as `' + apiKeys[0] + '` in the secrets store');
   lines.push(
     "",
@@ -506,6 +487,24 @@ export default generateContext;
     ""
   );
 
+  lines.push(
+    "## Authoring generative UI",
+    "",
+    "Keep a bespoke `DESIGN.md` at the plugin root. Describe the palette, typography, layout, interaction and accessibility. Work with the user on the design and assets. Package this file and the authored blocks with the plugin.",
+    "",
+    "Author one SSSS Markdown document per reusable block at `ui/chunks/<id>.md`. Use `type: ui-chunk:chunk`, the manifest ID as `plugin`, the filename stem as `id`, a `title`, `description`, ISO `timestamp`, meaningful `intents` and supported `surfaces` from `page`, `left`, `right` and `bottom`. Use raw HTML for the body.",
+    "",
+    "Declare the native workspace entry in `ui.home` and its design in `ui.design_tokens`. Bind each block to exact manifest operation names in `operations` and verified fields in `data` using `operation:/json/pointer`. Declare browser-safe inputs so users can run the operation in place. Use a native `panel` for specialized editable controls. Keep credentials and private data out of routing metadata.",
+    "",
+    "Find the extension with `total-recall plugin chunks registry` and verify each block with `total-recall plugin chunks validate <file>`. Compare `total-recall plugin chunks coverage --plugin <id>` with the owner inventory. Use `total-recall plugin chunks <intent> --surface <surface>` to find blocks. Add `--decision` to request an explicit typed choice. The result identifies a block by its stable `plugin:id`.",
+    "",
+    "Keep packaged defaults in the owner repository. Users can choose and arrange installed blocks, provide their own HTML and edit the design with their agent. Submit broadly useful owner changes to the plugin repository.",
+    "",
+    "An agent can author any additional SSSS block for an enabled plugin. For a task-specific block, use `total-recall plugin chunks add <id.md> --plugin <owner> --brain <brain> --json` to validate and publish it. Read the result back by its stable `owner:id` key.",
+    "",
+    "For contextual selection, use `total-recall decision compose --plugin <owner> --intent <intent> --page <id> --title <title> --brain <brain>`. For exact placement, use `total-recall plugin chunks page <id> <owner:block>... --title <title> --brain <brain>`. To edit an existing page, read it with the same command without block keys, then pass its complete ordered keys and `--revision <version>` instead of `--title`. Reopen the saved page and verify each workflow against real data.",
+    ""
+  );
   fs.writeFileSync(path.join(pluginDir, "README.md"), lines.join("\n"), "utf8");
 
   // ── Standalone repository files ──────────────────────────────────────────
@@ -533,34 +532,7 @@ export default generateContext;
   fs.writeFileSync(path.join(pluginDir, '.gitignore'), 'node_modules/\n.env*\n.agent/skills/total-recall/\ndist/\nreports/\n.DS_Store\nINSTRUCTIONS.md\nAGENTS.md\n', 'utf8');
   fs.writeFileSync(path.join(pluginDir, 'LICENSE'), mitLicense(holder), 'utf8');
 
-  // Capability brick
-  fs.mkdirSync(path.join(pluginDir, 'capability'), { recursive: true });
-  fs.writeFileSync(path.join(pluginDir, 'capability', 'index.mjs'), `/**
- * Portable capability brick for ${pluginName}.
- * Zero host dependencies; pure portable JavaScript.
- */
-export async function getCapabilityStatus() {
-  return { ready: true, initialized: true };
-}
-`, 'utf8');
-  fs.writeFileSync(path.join(pluginDir, 'capability', 'BRICK.md'), `# ${pluginName} — Capability Brick
-
-Portable core capability for ${pluginName}.
-
-## Exported Functions
-- \`getCapabilityStatus()\`: Returns capability readiness and initialization status.
-`, 'utf8');
-
   fs.mkdirSync(path.join(pluginDir, 'test'), { recursive: true });
-  fs.writeFileSync(path.join(pluginDir, 'test', 'capability.test.mjs'), `import test from 'node:test';
-import assert from 'node:assert/strict';
-import { getCapabilityStatus } from '../capability/index.mjs';
-
-test('capability brick loads and exports status', async () => {
-  const status = await getCapabilityStatus();
-  assert.equal(status.ready, true);
-});
-`, 'utf8');
   fs.writeFileSync(path.join(pluginDir, 'test', 'manifest.test.mjs'), `import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';

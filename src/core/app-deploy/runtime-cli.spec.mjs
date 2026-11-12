@@ -77,7 +77,7 @@ describe('app_cli spec validation', () => {
   });
 
   it('makes the plugin manifest invalid when app_cli is invalid', () => {
-    const face = { ui: { elements: [{ id: 'card', kind: 'card', tag: 'tr-fixture-card', module: 'ui/card.js' }] } };
+    const face = { ui: { home: 'home', design_tokens: 'DESIGN.md', elements: [{ id: 'home', kind: 'panel', tag: 'tr-fixture-home', module: 'ui/home.js' }] } };
     const manifest = { id: 'notes', name: 'Notes', version: '1.0.0', description: 'Notes capability', ...face, app_cli: withSpec((s) => { s.commands = []; }) };
     const result = validatePluginManifest(manifest);
     expect(result.valid).toBe(false);
@@ -260,7 +260,7 @@ describe('total-recall app cli', () => {
     root = fs.mkdtempSync(path.join(os.tmpdir(), 'tr-app-cli-cmd-'));
     plugin = path.join(root, 'notes');
     fs.mkdirSync(plugin);
-    fs.writeFileSync(path.join(plugin, 'plugin.json'), JSON.stringify({ id: 'notes', name: 'Notes', version: '1.2.0', description: 'Notes capability', ui: { elements: [{ id: 'card', kind: 'card', tag: 'tr-fixture-card', module: 'ui/card.js' }] }, app_cli: SPEC }));
+    fs.writeFileSync(path.join(plugin, 'plugin.json'), JSON.stringify({ id: 'notes', name: 'Notes', version: '1.2.0', description: 'Notes capability', ui: { home: 'home', design_tokens: 'DESIGN.md', elements: [{ id: 'home', kind: 'panel', tag: 'tr-fixture-home', module: 'ui/home.js' }] }, app_cli: SPEC }));
     logSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
     errSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
     exitSpy = vi.spyOn(process, 'exit').mockImplementation((code) => { throw new Error(`process.exit(${code})`); });
@@ -292,7 +292,7 @@ describe('total-recall app cli', () => {
     await expect(runAppCli(['app', 'cli', plugin, '--adapter', 'rails'])).rejects.toThrow('process.exit(3)');
     const bare = path.join(root, 'bare');
     fs.mkdirSync(bare);
-    fs.writeFileSync(path.join(bare, 'plugin.json'), JSON.stringify({ id: 'bare', name: 'Bare', version: '1.0.0', description: 'No app CLI here', ui: { elements: [{ id: 'card', kind: 'card', tag: 'tr-fixture-card', module: 'ui/card.js' }] }, }));
+    fs.writeFileSync(path.join(bare, 'plugin.json'), JSON.stringify({ id: 'bare', name: 'Bare', version: '1.0.0', description: 'No app CLI here', ui: { home: 'home', design_tokens: 'DESIGN.md', elements: [{ id: 'home', kind: 'panel', tag: 'tr-fixture-home', module: 'ui/home.js' }] }, }));
     await expect(runAppCli(['app', 'cli', bare, '--lang', 'node'])).rejects.toThrow('process.exit(1)');
     expect(errSpy.mock.calls.flat().join('\n')).toMatch(/declares no app_cli/);
   });

@@ -6,8 +6,8 @@ import { installPlugin as installLocal, readPluginRecord, patchPluginRecord, des
   findInstalled, emit, vaultFor } from './plugin-store.mjs';
 export * from './plugin-store.mjs';
 
-function describePluginWithShare(plugin) {
-  const result = describePlugin(plugin);
+function describePluginWithShare(plugin, projectRoot) {
+  const result = describePlugin(plugin, projectRoot);
   result.share_url = result.shared && result.sha256 ? publicPluginShareUrl(plugin.id, result.sha256) : null;
   return result;
 }
@@ -50,7 +50,7 @@ export async function setPluginShared(id, shared, options = {}) {
   if (shared && !plugin.valid) throw new Error(`Plugin '${id}' has an invalid manifest and cannot be shared`);
   await patchPluginRecord(plugin, { shared: !!shared, public_shared: !!shared });
   await emit(vaultFor(plugin), id, shared ? 'shared' : 'unshared', { scope: plugin.scope });
-  return describePluginWithShare(plugin);
+  return describePluginWithShare(plugin, options.projectRoot);
 }
 
 export async function setPluginBranding(id, branding, options = {}) {
@@ -68,7 +68,7 @@ export async function setPluginBranding(id, branding, options = {}) {
   };
   await patchPluginRecord(plugin, { branding: cleanBranding });
   await emit(vaultFor(plugin), id, 'branding_updated', { branding: cleanBranding, scope: plugin.scope });
-  return describePluginWithShare(plugin);
+  return describePluginWithShare(plugin, options.projectRoot);
 }
 
 export async function setPluginLocked(id, locked, options = {}) {
@@ -76,7 +76,7 @@ export async function setPluginLocked(id, locked, options = {}) {
   if (!plugin) throw new Error(`Plugin '${id}' is not installed`);
   await patchPluginRecord(plugin, { locked: !!locked });
   await emit(vaultFor(plugin), id, locked ? 'locked' : 'unlocked', { scope: plugin.scope });
-  return describePluginWithShare(plugin);
+  return describePluginWithShare(plugin, options.projectRoot);
 }
 
 export async function deployPluginToStore(id, options = {}) {
@@ -97,7 +97,7 @@ export async function deployPluginToStore(id, options = {}) {
     scope: plugin.scope,
     locked: autoLock
   });
-  return describePluginWithShare(plugin);
+  return describePluginWithShare(plugin, options.projectRoot);
 }
 
 /** What this node offers to mesh peers: valid installed plugins whose record says shared. */

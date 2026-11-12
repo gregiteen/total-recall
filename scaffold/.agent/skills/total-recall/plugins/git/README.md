@@ -13,6 +13,8 @@ total-recall git --help             # the plugin's operations
 total-recall git commit --help      # one plugin operation's help (-h is git's usage)
 ```
 
+The native Home opens with an audit and registered worktrees. It reads diff statistics on request and confirms the exact destination or target before a worktree change. Its [design](DESIGN.md) and SSSS blocks under `ui/chunks/` ship with the plugin.
+
 ## Install
 
 ```bash

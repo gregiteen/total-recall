@@ -121,6 +121,7 @@ import updateRouter       from './routes/update.mjs';
 import { rulesRouter }    from './routes/rules.mjs';
 import notificationsRouter from './routes/notifications.mjs';
 import pluginsRouter      from './routes/plugins.mjs';
+import uiChunksRouter     from './routes/ui-chunks.mjs';
 // ollamaUrl removed — CLI agents replace Ollama
 import {
   AGENT_DIR,
@@ -235,6 +236,7 @@ router.use(ssssRouter);
 router.use(rulesRouter);
 router.use(notificationsRouter);
 router.use(pluginsRouter);
+router.use(uiChunksRouter);
 for (const pluginRouter of await (await import('../core/plugin-runtime.mjs')).loadPluginRouters()) router.use(pluginRouter);
 
 export { router as restRouter };

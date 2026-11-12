@@ -29,22 +29,28 @@ describe('project-id', () => {
     const global = path.join(root, 'global');
     const a = path.join(root, 'a');
     const b = path.join(root, 'b');
+    const c = path.join(root, 'c');
+    const registered = '00000000-0000-4000-8000-000000000001';
     fs.mkdirSync(path.join(b, 'config'), { recursive: true });
     fs.writeFileSync(path.join(b, 'config', 'brain.json'), JSON.stringify({ project_id: 'brain-side-id' }));
     fs.mkdirSync(a, { recursive: true });
+    fs.mkdirSync(c, { recursive: true });
     fs.mkdirSync(path.join(global, 'config'), { recursive: true });
     fs.writeFileSync(
       path.join(global, 'config', 'project-registry.json'),
       JSON.stringify([
         { name: 'a', brainDir: a },
         { name: 'b', brainDir: b, project_id: 'stale-registry-id' },
+        { name: 'c', brainDir: c, project_id: registered },
         { name: 'gone', brainDir: path.join(root, 'nope') },
       ]),
     );
-    expect(repairProjectIds(global)).toEqual({ total: 3, created: 1, synced: 2, missing_brain: 1 });
+    expect(repairProjectIds(global)).toEqual({ total: 4, created: 2, synced: 2, missing_brain: 1 });
     const reg = JSON.parse(fs.readFileSync(path.join(global, 'config', 'project-registry.json'), 'utf8'));
     expect(reg[0].project_id).toMatch(UUID);
     expect(reg[1].project_id).toBe('brain-side-id');
+    expect(reg[2].project_id).toBe(registered);
+    expect(readProjectId(c)).toBe(registered);
   });
   it('does not overwrite malformed or non-object identities', () => {
     const file = path.join(root, 'config/brain.json');

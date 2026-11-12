@@ -29,13 +29,14 @@ export function extractRoutes(router) {
 
     for (const layer of stack) {
       if (layer.route) {
-        const pathStr = layer.route.path;
+        // Express keeps aliases and regular expressions in Route.path.
+        const paths = [layer.route.path].flat(Infinity).map(String);
         const methods = Object.keys(layer.route.methods)
           .filter((method) => layer.route.methods[method])
           .map((method) => method.toUpperCase());
 
         for (const method of methods) {
-          routes.push({ method, path: pathStr });
+          for (const path of paths) routes.push({ method, path });
         }
       } else if (layer.name === 'router' && layer.handle && layer.handle.stack) {
         // Sub-router mounted via router.use()

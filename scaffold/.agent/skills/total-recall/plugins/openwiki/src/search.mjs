@@ -36,11 +36,9 @@ export async function searchWikiHubs(query, {
 
   // If remote mesh node specified, dispatch via mesh
   if (node && node !== 'local' && node !== 'self') {
-    const escapedQuery = query.replace(/"/g, '\\"');
-    const meshRes = execOnMeshNode(
-      node,
-      `total-recall openwiki search "${escapedQuery}" ${allVaults ? '--all-vaults' : ''} --json`
-    );
+    const meshRes = execOnMeshNode(node, [
+      'search', query, ...(allVaults ? ['--all-vaults'] : []), '--limit', String(limit), '--json',
+    ]);
     if (meshRes.ok) {
       try {
         return JSON.parse(meshRes.stdout);

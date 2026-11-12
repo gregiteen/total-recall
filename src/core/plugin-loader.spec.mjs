@@ -59,7 +59,7 @@ describe('Plugin Loader & Schema Validation', () => {
         },
         use_cases: ['research'],
         cli: { command: 'my-plugin', handler: './cli.mjs' },
-        ui: { elements: [{ id: 'card', kind: 'card', tag: 'my-plugin-card', module: 'ui/card.js' }] },
+        ui: { home: 'home', design_tokens: 'DESIGN.md', elements: [{ id: 'home', kind: 'panel', tag: 'my-plugin-home', module: 'ui/home.js' }] },
         tasks: [
           { intent: 'Run daily crawl', schedule: '0 0 * * *', command: 'crawl' }
         ]
@@ -101,7 +101,7 @@ describe('Plugin Loader & Schema Validation', () => {
           resources: { db: 'sqlite' }
         },
         skills: [{ id: 'cap-plugin', path: './skills/cap/SKILL.md' }],
-        ui: { elements: [{ id: 'card', kind: 'card', tag: 'cap-plugin-card', module: 'ui/card.js' }] },
+        ui: { home: 'home', design_tokens: 'DESIGN.md', elements: [{ id: 'home', kind: 'panel', tag: 'cap-plugin-home', module: 'ui/home.js' }] },
         commands: [{ name: 'cap', handler: './cli.mjs' }]
       };
       expect(validatePluginManifest(validDeploy).valid).toBe(true);
@@ -144,7 +144,7 @@ describe('Plugin Loader & Schema Validation', () => {
         name: 'Paid Plugin',
         version: '1.0.0',
         description: 'Commercial capability with license key',
-        ui: { elements: [{ id: 'card', kind: 'card', tag: 'paid-plugin-card', module: 'ui/card.js' }] },
+        ui: { home: 'home', design_tokens: 'DESIGN.md', elements: [{ id: 'home', kind: 'panel', tag: 'paid-plugin-home', module: 'ui/home.js' }] },
         monetization: {
           model: 'take-rate',
           take_rate_basis_points: 250,
@@ -189,8 +189,8 @@ describe('Plugin Loader & Schema Validation', () => {
       expect(bundled.length).toBeGreaterThan(0);
       for (const p of bundled) {
         // A templated plugin is invalid by construction; each one is rebuilt by
-        // hand with its own card face. This assertion is the migration gauge.
-        expect(p.errors, `${p.id} still declares a template or has no bespoke card face`).toEqual([]);
+        // hand with its own Home. This assertion is the migration gauge.
+        expect(p.errors, `${p.id} has no valid native Home`).toEqual([]);
         expect(p.valid).toBe(true);
         expect(
           p.dir.startsWith(bundledPluginsDir()) ||
@@ -242,8 +242,8 @@ describe('Plugin Loader & Schema Validation', () => {
               { name: 'user-projects' },
             ],
           },
-          // A card face is mandatory: the plugin owns its own interface.
-          ui: { elements: [{ id: 'card', kind: 'card', tag: 'scientific-frontiers-card', module: 'ui/card.js' }] },
+          // A native Home is mandatory: the plugin owns its own interface.
+          ui: { home: 'home', design_tokens: 'DESIGN.md', elements: [{ id: 'home', kind: 'panel', tag: 'scientific-frontiers-home', module: 'ui/home.js' }] },
           // getPluginWatchPaths only returns paths that exist on disk.
           compile: { watch: ['watched'] },
         }),

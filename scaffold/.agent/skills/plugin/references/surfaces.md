@@ -109,19 +109,20 @@ Five-field cron. `command` must be a declared subcommand.
 
 Live behaviour rather than a command. Module keys are lowercase kebab-case.
 
-## UI — the card face
+## UI — native Home
 
 ```json
 "ui": {
-  "design_tokens": "ui/DESIGN.md",
+  "home": "fleet",
+  "design_tokens": "DESIGN.md",
   "elements": [
-    { "id": "card", "kind": "card", "tag": "tr-host-telemetry-card", "module": "ui/card.js",
+    { "id": "fleet", "kind": "panel", "tag": "tr-host-telemetry-home", "module": "ui/home.js",
       "description": "Fleet telemetry board" }
   ]
 }
 ```
 
-**Every plugin has a card**: exactly one element of kind `card`, and **no `card_layout`** — a declared template is an error, not a fallback. `description` says what the element is. See [card](card.md).
+Package the owner design and [SSSS page blocks](generative-home.md) alongside the native Home. Additional panels are available by their declared IDs.
 
 ## Deploy
 

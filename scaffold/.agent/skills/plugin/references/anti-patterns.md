@@ -12,7 +12,7 @@ Every entry below was observed in a real plugin in this ecosystem, with the evid
 
 **Hard-coded claims.** A header rendered `Stripe API (Live Secret)` and `HMAC-SHA256 Verified` with no command behind either. A merchant with no key and no webhook secret saw an identical card.
 
-**Fixed text where a command belongs.** `card_face.metrics` held literal strings such as `ONLINE`. The validator warns on it; the card must never carry it.
+**Fixed text where a command belongs.** `card_face.metrics` held literal strings such as `ONLINE`. The validator rejects it; the card must never carry it.
 
 > **Rule.** A value appears only if a command or the host returned it. If a source fails, show the failure and when it was last attempted.
 
@@ -34,7 +34,7 @@ Related: a missing upstream comparison becoming `unpushedCommits: 0` instead of 
 - A card built three separate key-entry screens.
 - A plugin's error text told the *application's* users to run a Total Recall command.
 
-> **Rule.** One credential path exists in the whole plugin, and it is `total-recall auth secret`. The card reports present or missing, never renders a value, and never collects one.
+> **Rule.** One credential path exists in the whole plugin, and it is `total-recall auth secret`. The Home reports present or missing, never renders a value, and never collects one.
 
 ## Templates
 

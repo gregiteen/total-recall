@@ -165,3 +165,12 @@ docs/projects/
 
 # Plugin state written by commands run in this checkout (SSSS VFS). Private, never published.
 /.ssss/
+
+# Total Recall brain state (machine-local: holds a live PAT)
+.agent/skills/total-recall/config/brain.json
+.agent/skills/total-recall/config/brain.json.bak-*
+.agent/skills/total-recall/config/keys.jsonl
+.agent/skills/total-recall/config/secrets.enc
+.agent/skills/total-recall/config/secrets.enc.bak-*
+.agent/skills/total-recall/config/leader.json
+.agent/skills/total-recall/*.pid

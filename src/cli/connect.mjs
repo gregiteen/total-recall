@@ -5,6 +5,7 @@ import { agentDir as configAgentDir, brainDir as configBrainDir, xdgConfigHome, 
 import { fileURLToPath } from 'node:url';
 import { resolveAgentDir, getBothBrains, detectProjectBrain } from './agent-dir.mjs';
 import { discoverRepoSkills, projectSkillsAsCommands } from './skill-projection.mjs';
+import { writeBrainConnection } from '../core/memory-brain.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 // Resolve templates dir relative to this file (src/cli/ → ../../templates/)
@@ -379,13 +380,7 @@ function readInstructions(cwd, agentDir) {
 
 function ensureBrainConfig(brainDir, opts) {
   if (!opts.brain) return null;
-  const configDir = path.join(brainDir, 'config');
-  fs.mkdirSync(configDir, { recursive: true });
-  const config = { url: opts.brain };
-  if (opts.token) config.token = opts.token;
-  const filePath = path.join(configDir, 'brain.json');
-  fs.writeFileSync(filePath, JSON.stringify(config, null, 2));
-  return filePath;
+  return writeBrainConnection(brainDir, { url: opts.brain, token: opts.token || undefined });
 }
 
 function registerClient(brainDir, clientName, preset, projectionPath) {

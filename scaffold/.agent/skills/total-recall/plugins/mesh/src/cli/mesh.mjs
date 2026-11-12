@@ -50,6 +50,8 @@ function printHelp() {
     view <screen>          Read Machines, Flows, Placement, Boundary or Join sources (--json)
     doctor                 Probe reachability & compute capabilities across all nodes
     nodes                  List mesh nodes and how to reach each one
+    token-status           Read whether Auth has a saved mesh credential (--json)
+    token status           Show credential presence and its Auth binding
     ssh <node> [cmd…]      Open a session using the node's recorded access
     exec <node> <cmd…>     Execute a command on a node non-interactively (--json)
     leader [--json]        Show the elected leader and its server port
@@ -226,7 +228,7 @@ export default async function meshCli(argv = []) {
           error: null
         };
         nodeInfo.tested_runtimes = ['ollama', 'docker', 'node', 'git'];
-        nodeInfo.tested_harnesses = ['agy', 'claude', 'codex', 'gemini'];
+        nodeInfo.tested_harnesses = ['agy', 'claude', 'codex'];
 
         if (node.self) {
           try {
@@ -239,7 +241,7 @@ export default async function meshCli(argv = []) {
           nodeInfo.reachable = true;
         } else if (resolved.complete) {
           try {
-            const probeCmd = 'echo "agy=$(which agy 2>/dev/null) claude=$(which claude 2>/dev/null) codex=$(which codex 2>/dev/null) gemini=$(which gemini 2>/dev/null) ollama=$(which ollama 2>/dev/null) docker=$(which docker 2>/dev/null) node=$(which node 2>/dev/null) git=$(which git 2>/dev/null)"';
+            const probeCmd = 'echo "agy=$(which agy 2>/dev/null) claude=$(which claude 2>/dev/null) codex=$(which codex 2>/dev/null) ollama=$(which ollama 2>/dev/null) docker=$(which docker 2>/dev/null) node=$(which node 2>/dev/null) git=$(which git 2>/dev/null)"';
             const { execMeshCommand } = await import('../core/mesh.mjs');
             // Cloud peers routinely need several seconds; a 4 s budget reported
             // reachable machines as down.
@@ -250,7 +252,7 @@ export default async function meshCli(argv = []) {
               for (const part of parts) {
                 const [k, v] = part.split('=');
                 if (v && v.trim()) {
-                  if (['agy', 'claude', 'codex', 'gemini'].includes(k)) {
+                  if (nodeInfo.tested_harnesses.includes(k)) {
                     nodeInfo.harnesses.push(k);
                   } else {
                     nodeInfo.runtimes.push(k);

@@ -254,7 +254,11 @@ function worktrees(cwd) {
 }
 
 function worktreeOperation(action, values, target, cwd) {
-  if (action === 'worktree-list') return { ok: true, worktrees: worktrees(cwd) };
+  if (action === 'worktree-list') {
+    const registered = worktrees(cwd);
+    const root = git(['rev-parse', '--show-toplevel'], cwd);
+    return { ok: true, worktrees: registered, current: root.ok ? root.stdout.replace(/\n$/, '') : null };
+  }
   const targetPath = path.resolve(cwd, target);
   if (action === 'worktree-create') {
     const commit = resolveCommit(values.base ?? 'HEAD', cwd);

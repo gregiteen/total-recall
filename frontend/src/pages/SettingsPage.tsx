@@ -876,7 +876,7 @@ export default function SettingsPage({ activeBrainId }: { activeBrainId?: string
           </div>
 
           <p style={{ fontSize: 12, color: 'var(--text-tertiary)', margin: '0 0 12px', lineHeight: 1.5 }}>
-            Active vault layer is chosen in the <strong>sidebar brain selector</strong> (bottom left).
+            Choose the active vault layer under <strong>Brains</strong> in the left drawer.
             Fields below edit this install’s <code>brain.json</code> identity — not the active layer.
           </p>
 

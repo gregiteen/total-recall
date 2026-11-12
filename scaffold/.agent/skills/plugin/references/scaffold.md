@@ -12,7 +12,7 @@ Measured against the current ecosystem, vendoring a plugin copies its whole tree
 
 | What a builder receives | Why it fails |
 | --- | --- |
-| the card face | its only data channel is `host.run`, a Total Recall host the app does not have |
+| the native Home | its only data channel is `host.run`, a Total Recall host the app does not have |
 | an auth client that shells out to `total-recall` | the app breaks the moment Total Recall is absent — `Auth credential read failed` |
 | request logic inlined in `argv`-parsing handlers | there is nothing to import; 19 of 34 plugins export only `run` |
 | `https://example.com/checkout/success`, a default amount of `2000` | a real app would send paying customers to a placeholder domain |
@@ -44,7 +44,7 @@ The rules the shape enforces:
 - **Returned data, not printed text.** Printing is the CLI's job.
 - **Thrown errors, never `process.exitCode`.** The application decides how to fail.
 - **No Total Recall.** The capability does not know it exists.
-- **No card, no design tokens, no logo.** There is no dashboard to render them.
+- **Keep dashboard presentation assets in the plugin.** There is no dashboard to render them.
 
 **Plus a builder entry point** — `BRICK.md`, short and concrete:
 
@@ -68,8 +68,8 @@ It states what to import, what to pass, where credentials come from, and what co
 
 ## What a scaffold never contains
 
-- the card face, `ui/DESIGN.md`, a logo
-- the plugin manifest — a manifest of Total Recall commands, secrets and a card means nothing in an app
+- the native Home, `DESIGN.md`, a logo
+- the plugin manifest — a manifest of Total Recall commands, secrets and dashboard UI means nothing in an app
 - any call to `total-recall`, `TOTAL_RECALL_BIN`, or an auth store
 - `argv` parsing or `console.log` as its output
 - a placeholder URL, an example default, or the author's own values
@@ -103,7 +103,7 @@ The CLI becomes a **thin adapter**: parse arguments, resolve credentials through
 - [ ] Every exported function is callable with caller-supplied arguments and an injected transport.
 - [ ] No `total-recall` string is reachable from the payload.
 - [ ] No `example.com`, no author default, no placeholder value.
-- [ ] No `ui/`, no `card.js`, no manifest.
+- [ ] Keep `ui/` and the manifest in the plugin package.
 - [ ] The suite fails if the capability spawns a process — proving standalone operation rather than assuming it.
 - [ ] Vendored into a clean app, its suite passes there.
 

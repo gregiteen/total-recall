@@ -1,9 +1,8 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import request from 'supertest';
 import express from 'express';
 import fs from 'node:fs';
 import path from 'node:path';
-import os from 'node:os';
 
 // Mock dependencies
 vi.mock('../auth.mjs', () => ({
@@ -33,6 +32,11 @@ app.use(brainsRouter);
 describe('Brains Router', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.stubEnv('AGENT_DIR', '/configured/agent');
+  });
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.unstubAllEnvs();
   });
 
   describe('GET /api/brains', () => {
@@ -48,6 +52,7 @@ describe('Brains Router', () => {
       const globalBrain = res.body.brains.find(b => b.id === 'global');
       expect(globalBrain).toBeDefined();
       expect(globalBrain.layer).toBe('global');
+      expect(globalBrain.path).toBe('/configured/agent/skills/total-recall');
     });
 
     it('includes project brains from registry', async () => {
@@ -58,7 +63,7 @@ describe('Brains Router', () => {
         if (typeof p === 'string' && (p.includes('project-registry.json') || p.includes('my-project'))) return true;
         return false;
       });
-      vi.spyOn(fs, 'readFileSync').mockImplementation((p) => {
+      const readRegistry = vi.spyOn(fs, 'readFileSync').mockImplementation((p) => {
         if (typeof p === 'string' && p.includes('project-registry.json')) return JSON.stringify(mockRegistry);
         throw new Error('not found');
       });
@@ -69,6 +74,31 @@ describe('Brains Router', () => {
       const projectBrain = res.body.brains.find(b => b.id === 'project:my-project');
       expect(projectBrain).toBeDefined();
       expect(projectBrain.layer).toBe('project');
+      expect(readRegistry).toHaveBeenCalledWith('/configured/agent/skills/total-recall/config/project-registry.json', 'utf8');
+    });
+
+    it('reads the dashboard registry and vault outside the isolated runtime', async () => {
+      vi.stubEnv('TR_DASHBOARD_BRAIN_DIR', '/home-install/brain');
+      vi.spyOn(fs, 'existsSync').mockReturnValue(true);
+      vi.spyOn(fs, 'readdirSync').mockReturnValue([]);
+      const project_id = '4ec99376-7681-4d46-ad03-d1638e703bc4';
+      const readRegistry = vi.spyOn(fs, 'readFileSync').mockReturnValue(JSON.stringify([
+        { name: 'Personal settings', path: '/projects/settings', brainDir: '/projects/settings/brain', project_id },
+      ]));
+      getNodes.mockReturnValue([]);
+
+      const list = await request(app).get('/api/brains');
+      expect(list.status).toBe(200);
+      expect(list.headers['cache-control']).toBe('private, no-store');
+      expect(list.body.brains.map(({ id, path }) => [id, path])).toEqual([
+        ['global', '/home-install/brain'], ['project:Personal settings', '/projects/settings/brain'],
+      ]);
+      expect(readRegistry).toHaveBeenCalledWith('/home-install/brain/config/project-registry.json', 'utf8');
+      expect(getNodes).toHaveBeenCalledWith('/home-install/brain/memory-vault');
+      const nodes = await request(app).get(`/api/brains/project:${project_id}/nodes`);
+      expect(nodes.status).toBe(200);
+      expect(nodes.headers['cache-control']).toBe('private, no-store');
+      expect(getNodes).toHaveBeenLastCalledWith('/projects/settings/brain/memory-vault');
     });
   });
 
@@ -81,6 +111,7 @@ describe('Brains Router', () => {
       expect(res.status).toBe(200);
       expect(res.body.brain_id).toBe('global');
       expect(Array.isArray(res.body.nodes)).toBe(true);
+      expect(getNodes).toHaveBeenCalledWith('/configured/agent/skills/total-recall/memory-vault');
     });
 
     it('returns 404 for unknown project', async () => {

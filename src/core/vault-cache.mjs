@@ -9,7 +9,8 @@ import { brainDir } from './local-config.mjs';
  * Supports multiple vault directories (global + project brains)
  * without cross-contamination.
  */
-const cacheMap = new Map();   // vaultDir → { nodes, watcher }
+const cacheMap = new Map();   // vaultDir → { nodes, watcher, retryWatcherAt }
+const WATCH_RETRY_MS = 30_000;
 
 /**
  * Files the runtime regenerates itself (OKF bundle manifest and changelog, the
@@ -35,19 +36,15 @@ export function isGeneratedVaultPath(relPath) {
  */
 export function getNodes(vaultDir) {
   const resolvedDir = vaultDir || path.join(brainDir, 'memory-vault');
+  start(resolvedDir);
   const entry = cacheMap.get(resolvedDir);
-  if (entry?.nodes !== null && entry?.nodes !== undefined) {
+  if (entry.nodes !== null) {
     logger.debug('Vault cache hit', { vaultDir: resolvedDir });
     return entry.nodes;
   }
   logger.debug('Vault cache miss, loading nodes from disk', { vaultDir: resolvedDir });
   const nodes = loadNodes(resolvedDir);
-  if (entry) {
-    entry.nodes = nodes;
-  } else {
-    cacheMap.set(resolvedDir, { nodes, watcher: null });
-    startWatcher(resolvedDir);
-  }
+  if (entry.watcher) entry.nodes = nodes;
   return nodes;
 }
 
@@ -86,61 +83,56 @@ export function invalidate(vaultDir) {
  *
  * @param {string} root - Directory to watch
  * @param {(eventType: string, filename: string) => void} onChange - Receives paths relative to root
+ * @param {(error: Error) => void} onError - Stops the whole watch if coverage is lost
  * @returns {{ close: () => void }}
  */
-function watchTree(root, onChange) {
+function watchTree(root, onChange, onError) {
   if (process.platform === 'darwin' || process.platform === 'win32') {
     const watcher = fs.watch(root, { recursive: true }, onChange);
+    watcher.on('error', onError);
     watcher.unref();
     return watcher;
   }
 
   const watchers = new Map();
+  const close = () => {
+    for (const watcher of watchers.values()) watcher.close();
+    watchers.clear();
+  };
   const watchDir = (dir) => {
     if (watchers.has(dir)) return;
-    let watcher;
-    try {
-      watcher = fs.watch(dir, (eventType, filename) => {
-        if (!filename) return;
-        const full = path.join(dir, String(filename));
-        if (eventType === 'rename') {
-          try {
-            if (fs.statSync(full).isDirectory()) walk(full);
-          } catch {
-            // Removed; its watcher closes itself on error.
+    const watcher = fs.watch(dir, (eventType, filename) => {
+      if (!filename) return;
+      const full = path.join(dir, String(filename));
+      if (eventType === 'rename') {
+        try {
+          if (fs.lstatSync(full).isDirectory()) walk(full);
+        } catch (error) {
+          if (error.code !== 'ENOENT') {
+            onError(error);
+            return;
           }
         }
-        onChange(eventType, path.relative(root, full));
-      });
-    } catch {
-      return;
-    }
-    watcher.on('error', () => {
-      watcher.close();
-      watchers.delete(dir);
+      }
+      onChange(eventType, path.relative(root, full));
     });
+    watcher.on('error', onError);
     watcher.unref();
     watchers.set(dir, watcher);
   };
   const walk = (dir) => {
     watchDir(dir);
-    let entries = [];
-    try {
-      entries = fs.readdirSync(dir, { withFileTypes: true });
-    } catch {
-      return;
-    }
-    for (const item of entries) {
+    for (const item of fs.readdirSync(dir, { withFileTypes: true })) {
       if (item.isDirectory()) walk(path.join(dir, item.name));
     }
   };
-  walk(root);
-  return {
-    close() {
-      for (const watcher of watchers.values()) watcher.close();
-      watchers.clear();
-    },
-  };
+  try {
+    walk(root);
+  } catch (error) {
+    close();
+    throw error;
+  }
+  return { close };
 }
 
 /**
@@ -150,29 +142,36 @@ function watchTree(root, onChange) {
  * @param {string} [vaultDir] - Path to the vault directory to watch
  */
 function startWatcher(vaultDir) {
-  const resolvedDir = vaultDir || path.join(brainDir, 'memory-vault');
-  const entry = cacheMap.get(resolvedDir);
-  if (!entry || entry.watcher) return;
+  const entry = cacheMap.get(vaultDir);
+  if (entry.watcher || entry.retryWatcherAt > Date.now()) return;
 
-  if (!fs.existsSync(resolvedDir)) {
-    try {
-      fs.mkdirSync(resolvedDir, { recursive: true });
-    } catch (err) {
-      logger.error('Failed to create vault directory for watcher', { error: err.message });
-      return;
-    }
-  }
-
-  logger.info('Starting filesystem watcher for vault cache', { vaultDir: resolvedDir });
+  const onError = (error) => {
+    const watcher = entry.watcher;
+    entry.watcher = null;
+    entry.nodes = null;
+    entry.retryWatcherAt = Date.now() + WATCH_RETRY_MS;
+    watcher?.close();
+    logger.warn('Vault cache watcher unavailable. Reading from disk until the watcher recovers.', {
+      vaultDir,
+      code: error.code,
+      error: error.message,
+    });
+  };
   try {
-    entry.watcher = watchTree(resolvedDir, (eventType, filename) => {
+    if (!fs.existsSync(vaultDir)) fs.mkdirSync(vaultDir, { recursive: true });
+    logger.info('Starting filesystem watcher for vault cache', { vaultDir });
+    const watcher = watchTree(vaultDir, (eventType, filename) => {
       if (filename && filename.endsWith('.md') && !isGeneratedVaultPath(filename)) {
         logger.debug(`Vault filesystem change detected (${eventType}: ${filename}), invalidating cache`);
-        invalidate(resolvedDir);
+        invalidate(vaultDir);
       }
+    }, (error) => {
+      if (entry.watcher === watcher) onError(error);
     });
-  } catch (err) {
-    logger.warn('Failed to start vault fs watcher, cache will rely on explicit invalidations', { error: err.message });
+    entry.watcher = watcher;
+    entry.retryWatcherAt = 0;
+  } catch (error) {
+    onError(error);
   }
 }
 
@@ -184,7 +183,7 @@ function startWatcher(vaultDir) {
 export function start(vaultDir) {
   const resolvedDir = vaultDir || path.join(brainDir, 'memory-vault');
   if (!cacheMap.has(resolvedDir)) {
-    cacheMap.set(resolvedDir, { nodes: null, watcher: null });
+    cacheMap.set(resolvedDir, { nodes: null, watcher: null, retryWatcherAt: 0 });
   }
   startWatcher(resolvedDir);
 }

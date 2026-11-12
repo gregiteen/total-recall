@@ -1,24 +1,18 @@
+import type { PluginInfo } from '../../api/plugins'
+
 const inlineJson = (value: unknown) => JSON.stringify(value).replace(/</g, '\\u003c')
 
-export interface PluginScreen { id: string; label: string }
-
-/** Bound untrusted screen metadata without deriving any screen from commands. */
-export function sanitizePluginScreens(value: unknown): PluginScreen[] {
-  if (!Array.isArray(value)) return []
-  const seen = new Set<string>()
-  return value.slice(0, 128).flatMap(item => {
-    if (!item || typeof item !== 'object' || typeof item.id !== 'string' || !/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/.test(item.id)
-      // eslint-disable-next-line no-control-regex -- rejects labels that contain control characters
-      || typeof item.label !== 'string' || !item.label.trim() || item.label.length > 160 || /[\u0000-\u001f\u007f]/.test(item.label) || seen.has(item.id)) return []
-    seen.add(item.id)
-    return [{ id: item.id, label: item.label.trim() }]
-  })
+export function browserPluginOperations(plugin: PluginInfo) {
+  const manifestCli = plugin.manifest?.cli as { subcommands?: NonNullable<PluginInfo['cli']>['subcommands'] } | undefined
+  const blocked = (command: { sensitive_output?: boolean; terminal_only?: boolean }) => command.sensitive_output === true || command.terminal_only === true
+  const excluded = new Set(manifestCli?.subcommands?.filter(blocked).map(command => command.name))
+  return (plugin.cli?.subcommands || []).filter(command => !blocked(command) && !excluded.has(command.name))
 }
 
 /** Owner code runs in an opaque origin, with no dashboard DOM/storage or direct network. */
-export function pluginFrameDocument(source: string, tag: string, channel: string, theme: Record<string, string> = {}, pluginId = '', commandTimeouts: Record<string, number> = {}, operations: readonly string[] = []) {
+export function pluginFrameDocument(source: string, tag: string, channel: string, theme: Record<string, string> = {}, pluginId = '', commandTimeouts: Record<string, number> = {}, operations: readonly string[] = [], credentialPanel = false, authInventory = false, authChanges = false) {
   return `<!doctype html><html><head>
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'nonce-${channel}' blob:; style-src 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com data:; img-src data: https:; connect-src 'none'; frame-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'nonce-${channel}' blob:; style-src 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com data:; img-src data:${authChanges ? '' : ' https:'}; connect-src 'none'; frame-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'">
 <meta name="referrer" content="no-referrer">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -27,20 +21,16 @@ export function pluginFrameDocument(source: string, tag: string, channel: string
 </head><body><script nonce="${channel}" type="module">
 const channel=${inlineJson(channel)};
 const pending=new Map();let sequence=0;
+const baseStyle=document.createElement('style');
+const designStyle=document.createElement('style');
+baseStyle.textContent=':root{}';
+document.head.append(baseStyle,designStyle);
 const send=(type,extra={})=>parent.postMessage({channel,type,...extra},'*');
-let ownerScreens=[];
-const sanitizeScreens=${sanitizePluginScreens.toString()};
-function publishScreens(element){
- ownerScreens=sanitizeScreens(element.screens);
- send('screens',{screens:ownerScreens});
- if(ownerScreens.some(screen=>screen.id===element.screen))host.screenChanged(element.screen);
-}
-window.addEventListener('contextmenu',event=>{event.preventDefault();send('contextmenu');});
-for(const [name,value] of Object.entries(${inlineJson(theme)}))document.documentElement.style.setProperty(name,value);
+for(const [name,value] of Object.entries(${inlineJson(theme)}))baseStyle.sheet.cssRules[0].style.setProperty(name,value);
 window.addEventListener('message',event=>{
  if(event.source!==parent||event.data?.channel!==channel)return;
- if(event.data.type==='show-screen'){
-  if(ownerScreens.some(screen=>screen.id===event.data.screen))window.dispatchEvent(new CustomEvent('plugin-show-screen',{detail:{pluginId:${inlineJson(pluginId)},screen:event.data.screen}}));
+ if(event.data.type==='design'&&typeof event.data.css==='string'){
+  designStyle.textContent=event.data.css;
   return;
  }
  if(event.data.type!=='result')return;
@@ -48,22 +38,43 @@ window.addEventListener('message',event=>{
  pending.delete(event.data.requestId);clearTimeout(request.timer);
  if(event.data.error)request.reject(new Error(event.data.error));else request.resolve(event.data.result);
 });
-const host=Object.freeze({pluginId:${inlineJson(pluginId)},operations:Object.freeze(${inlineJson(operations)}),screenChanged(screen){if(ownerScreens.some(item=>item.id===screen))send('screen-changed',{screen});},run(subcommand,args=[],options={}){return new Promise((resolve,reject)=>{
+function request(type, extra, timeout=30000){return new Promise((resolve,reject)=>{
  const requestId=String(++sequence);
+ const timer=setTimeout(()=>{pending.delete(requestId);reject(new Error('Operation timed out'));},timeout+5000);
+ pending.set(requestId,{resolve,reject,timer});send(type,{requestId,...extra});
+});}
+const host=Object.freeze({pluginId:${inlineJson(pluginId)},operations:Object.freeze(${inlineJson(operations)}),
+ ...(${authInventory}?{readInventory:resource=>request('auth-inventory',{resource})}:{}),
+ ...(${authChanges}?{changeCredential:change=>request('auth-credential-mutate',{change})}:{}),
+ run(subcommand,args=[],options={}){
  const declared=${inlineJson(commandTimeouts)}[subcommand];
  const timeout=Number.isInteger(declared)&&declared>=1&&declared<=600000?declared:30000;
- const timer=setTimeout(()=>{pending.delete(requestId);reject(new Error('Operation timed out'));},timeout+5000);
- pending.set(requestId,{resolve,reject,timer});send('run',{requestId,subcommand,args,...(options.stdin!==undefined?{stdin:options.stdin}:{})});
-});}});
+ return request('run',{subcommand,args,...(options.stdin!==undefined?{stdin:options.stdin}:{})},timeout);
+}});
 try{
  const url=URL.createObjectURL(new Blob([${inlineJson(source)}],{type:'text/javascript'}));
  try{await import(url);}finally{URL.revokeObjectURL(url);}
  const tag=${inlineJson(tag)};
  if(!customElements.get(tag))throw new Error('The plugin did not register its declared interface');
- const element=document.createElement(tag);element.host=host;document.body.append(element);
- publishScreens(element);
+ const element=document.createElement(tag);element.host=host;
+ if(${credentialPanel}){
+  const message=document.createElement('p');message.setAttribute('role','status');
+  message.textContent='Checking saved credentials…';document.body.append(message);
+  try{
+   element.view=await request('credential-status',{});
+   message.textContent='';
+   element.addEventListener('save-token',async event=>{
+    message.textContent='Checking the credential…';
+    try{
+     element.view=await request('credential-save',{key:event.detail?.key,value:event.detail?.token});
+     message.textContent='Credential saved.';
+    }catch(error){message.textContent=error.message;}
+   });
+   document.body.append(element);
+  }catch(error){message.textContent=error.message;}
+ }else document.body.append(element);
  if(typeof element.load==='function'&&!element.hasAttribute('data-loaded')){try{element.load();}catch(_){}}
- if('view' in element||tag==='domains-console'||tag==='stripe-panel'){
+ if(!${credentialPanel}&&('view' in element||tag==='domains-console'||tag==='stripe-panel')){
   host.run('view').then(v=>{element.view=v;}).catch(()=>{
    host.run('status').then(s=>{element.view=s;}).catch(()=>{});
   });

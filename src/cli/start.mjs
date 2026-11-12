@@ -39,6 +39,7 @@ export default function start(args) {
     --help           Show this help
 
   The server reads config from ~/.agent/config/security.yml.
+  TR_DASHBOARD_BRAIN_DIR can select the dashboard's global memory and project registry.
   Use Cloudflare or Caddy in front for HTTPS when accessing remotely.
 `);
     return;

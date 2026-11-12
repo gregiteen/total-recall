@@ -2,7 +2,7 @@
   "$schema": "https://github.com/gregiteen/total-recall/blob/main/metadata.plugin.schema.json",
   "id": "mesh",
   "name": "Headscale",
-  "version": "0.2.10",
+  "version": "0.3.0",
   "description": "Control-server mesh administration, Tailscale SSH, and peer node discovery.",
   "license": "MIT",
   "requires": [
@@ -21,34 +21,6 @@
       "name": "Headscale",
       "url": "https://headscale.net"
     }
-  },
-  "card_face": {
-    "skin": "mesh-telemetry",
-    "theme": "vibrant",
-    "headline": "Mesh Control Deck",
-    "primary_color": "#2563eb",
-    "secondary_color": "#1e3a8a",
-    "accent_color": "#3b82f6",
-    "quick_actions": [
-      {
-        "subcommand": "status",
-        "label": "STATUS"
-      },
-      {
-        "subcommand": "nodes",
-        "label": "NODES"
-      },
-      {
-        "subcommand": "doctor",
-        "label": "DOCTOR"
-      },
-      {
-        "subcommand": "leader",
-        "label": "LEADER"
-      }
-    ],
-    "touch_layout": "comfortable",
-    "interactive": true
   },
   "ssss_schemas": {
     "categories": [
@@ -222,7 +194,8 @@
         "name": "preauthkey",
         "description": "Issue a secret enrollment key to an interactive terminal",
         "effect": "write",
-        "output": "text"
+        "output": "text",
+        "sensitive_output": true
       },
       {
         "name": "policy",
@@ -233,6 +206,12 @@
         "name": "probe",
         "description": "Mesh probe operation",
         "effect": "read"
+      },
+      {
+        "name": "token-status",
+        "description": "Check whether Auth has a saved mesh credential",
+        "effect": "read",
+        "output": "json"
       },
       {
         "name": "token",
@@ -262,14 +241,40 @@
     ]
   },
   "ui": {
-    "design_tokens": "ui/DESIGN.md",
+    "design_tokens": "DESIGN.md",
+    "home": "network",
     "elements": [
+      {
+        "id": "network",
+        "kind": "panel",
+        "tag": "mesh-home",
+        "module": "ui/home.js",
+        "description": "Mesh network atlas",
+        "tokens": [
+          "color-background",
+          "color-surface",
+          "color-text",
+          "color-border",
+          "spacing-md",
+          "radius-md"
+        ],
+        "optional_tokens": [
+          "color-muted",
+          "color-accent",
+          "color-ok",
+          "color-warn",
+          "color-danger",
+          "typography-body-font-family",
+          "typography-heading-font-family",
+          "typography-mono-font-family"
+        ]
+      },
       {
         "id": "panel",
         "kind": "panel",
         "tag": "mesh-panel",
         "module": "ui/panel.js",
-        "description": "Mesh panel",
+        "description": "Mesh credential setup through Auth",
         "events": [
           "save-token"
         ],
@@ -287,13 +292,6 @@
             "description": "Printed by `total-recall mesh token status --json`: { present, secretKey }"
           }
         }
-      },
-      {
-        "id": "card",
-        "kind": "card",
-        "tag": "tr-mesh-card",
-        "module": "ui/card.js",
-        "description": "Meshlink Card Face"
       }
     ]
   },

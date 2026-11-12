@@ -140,7 +140,7 @@ describe('vendoring a capability as a brick', () => {
     fs.writeFileSync(path.join(src, 'plugin.json'), JSON.stringify({
       id: 'pay', name: 'Pay', version: '1.0.0', description: 'd',
       capability: { entry: 'capability/index.mjs', exports: ['charge'] },
-      ui: { elements: [{ id: 'card', kind: 'card', tag: 'pay-card', module: 'ui/card.js' }] },
+      ui: { home: 'home', design_tokens: 'DESIGN.md', elements: [{ id: 'home', kind: 'panel', tag: 'pay-home', module: 'ui/home.js' }] },
       cli: { command: 'pay', handler: './cli.mjs' }
     }));
     fs.writeFileSync(path.join(src, 'capability', 'index.mjs'), 'export const charge = (n) => n * 2;\n');

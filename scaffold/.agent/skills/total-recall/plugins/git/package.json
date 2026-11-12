@@ -1,6 +1,6 @@
 {
   "name": "tr-plugin-git",
-  "version": "1.1.5",
+  "version": "2.2.0",
   "type": "module",
   "description": "Reports the state of the current git repository: branch, dirty files, unpushed commits and stashes.",
   "scripts": {
@@ -11,6 +11,7 @@
   "files": [
     "cli.mjs",
     "plugin.json",
+    "DESIGN.md",
     "src/",
     "README.md",
     "LICENSE",

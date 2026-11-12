@@ -19,10 +19,9 @@ export async function buildKnowledgeGraph({
 } = {}) {
   // If remote mesh node specified, dispatch via mesh
   if (node && node !== 'local' && node !== 'self') {
-    const meshRes = execOnMeshNode(
-      node,
-      `total-recall openwiki graph ${allVaults ? '--all-vaults' : ''} --format=${format} --json`
-    );
+    const meshRes = execOnMeshNode(node, [
+      'graph', ...(allVaults ? ['--all-vaults'] : []), '--format', format, '--json',
+    ]);
     if (meshRes.ok) {
       try {
         return JSON.parse(meshRes.stdout);

@@ -2,7 +2,7 @@
   "$schema": "https://github.com/gregiteen/total-recall/blob/main/metadata.plugin.schema.json",
   "id": "code-quality",
   "name": "Code Quality Gates",
-  "version": "0.2.7",
+  "version": "0.3.0",
   "description": "Fail-closed deterministic code-quality gates, lint rules, and test compliance reporting.",
   "author": "Total Recall contributors",
   "license": "MIT",
@@ -21,6 +21,15 @@
         "name": "report",
         "description": "Read the latest gate report or --review-diagnostics, with --json for machine output. Never starts a check",
         "effect": "read"
+      },
+      {
+        "name": "run",
+        "description": "Run the selected repository's configured fast or full gates once and persist the report",
+        "effect": "write",
+        "timeoutMs": 600000,
+        "args": [
+          { "name": "tier", "flag": "--tier", "type": "choice", "options": ["fast", "full"], "label": "Gate tier" }
+        ]
       },
       {
         "name": "snapshot",
@@ -63,7 +72,37 @@
     }
   ],
   "ui": {
+    "home": "code-quality-home",
+    "design_tokens": "DESIGN.md",
     "elements": [
+      {
+        "id": "code-quality-home",
+        "kind": "panel",
+        "tag": "code-quality-home",
+        "module": "ui/home.mjs",
+        "description": "Home: verdict, freshness, coverage, findings and the declared operations for this repository. Data comes from `code-quality report --json`; absent data never renders as passing.",
+        "props": {
+          "view": {
+            "type": "object",
+            "description": "JSON printed by `total-recall code-quality report --json`. Absent view renders as no data, never as passing."
+          }
+        },
+        "optional_tokens": [
+          "font-body",
+          "font-mono",
+          "color-primary",
+          "color-primary-strong",
+          "color-on-primary",
+          "color-background",
+          "color-surface",
+          "color-border",
+          "color-text",
+          "color-muted",
+          "color-success",
+          "color-warning",
+          "color-danger"
+        ]
+      },
       {
         "id": "code-quality-report",
         "kind": "panel",
@@ -76,10 +115,6 @@
             "description": "JSON printed by `total-recall code-quality report json`. Absent view renders as no data, never as passing."
           }
         },
-        "events": [
-          "run-check",
-          "reload"
-        ],
         "optional_tokens": [
           "font-body",
           "color-text",
@@ -91,41 +126,6 @@
           "radius-md",
           "space-4"
         ]
-      },
-      {
-        "id": "card",
-        "kind": "card",
-        "tag": "tr-code-quality-card",
-        "module": "ui/card.js",
-        "description": "Gatekeeper Card Face"
-      }
-    ]
-  },
-  "card_face": {
-    "skin": "winamp-classic",
-    "theme": "vibrant",
-    "headline": "Deterministic Code Gates & Lint",
-    "primary_color": "#06b6d4",
-    "secondary_color": "#164e63",
-    "accent_color": "#22d3ee",
-    "touch_layout": "comfortable",
-    "interactive": true,
-    "quick_actions": [
-      {
-        "subcommand": "report",
-        "label": "REPORT"
-      },
-      {
-        "subcommand": "gate",
-        "label": "GATE"
-      },
-      {
-        "subcommand": "config",
-        "label": "CONFIG"
-      },
-      {
-        "subcommand": "detect",
-        "label": "DETECT"
       }
     ]
   },

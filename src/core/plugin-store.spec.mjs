@@ -96,7 +96,7 @@ describe('plugin-store', () => {
   it('describes installed plugins with verifiable facts only', async () => {
     await installPlugin('code-quality', { projectRoot: projA });
     const [p] = listInstalledPlugins(projA);
-    expect(p).toMatchObject({ id: 'code-quality', scope: 'global', shared: false, modified_since_install: false });
+    expect(p).toMatchObject({ id: 'code-quality', core: true, scope: 'global', shared: false, modified_since_install: false });
     expect(p.sha256).toMatch(/^[0-9a-f]{64}$/);
     expect(Object.keys(p).filter(k => FORBIDDEN.test(k))).toEqual([]);
   });

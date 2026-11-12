@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, act } from '@testing-library/react';
+import { render, screen, act, fireEvent } from '@testing-library/react';
 import HelpPage from './HelpPage';
 import * as api from '../api';
 
@@ -54,7 +54,7 @@ describe('HelpPage', () => {
     expect(await screen.findByText(/CLI content/i, undefined, { timeout: 4000 })).toBeInTheDocument();
 
     await act(async () => {
-      screen.getByText(/Vault Structure/i).click();
+      fireEvent.change(screen.getByRole('combobox', { name: 'Topic' }), { target: { value: 'vault' } });
     });
 
     expect(api.fetchHelpContent).toHaveBeenCalledWith('vault');

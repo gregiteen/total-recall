@@ -43,7 +43,7 @@ function renderMarkdown(md: string) {
   return <div dangerouslySetInnerHTML={{ __html: html }} className="markdown-preview-block" />
 }
 
-export default function HelpPage() {
+export default function HelpPage({ embedded = false }: { embedded?: boolean }) {
   const [topics, setTopics] = useState<HelpTopic[]>([])
   const [selectedTopic, setSelectedTopic] = useState<string | null>(null)
   const [content, setContent] = useState<string>('')
@@ -82,54 +82,24 @@ export default function HelpPage() {
   }, [selectedTopic])
 
   return (
-    <div className="page" style={{ padding: '24px', maxWidth: '1100px', margin: '0 auto' }}>
-      <div className="page-header" style={{ marginBottom: '24px' }}>
+    <div className={embedded ? 'help-content' : 'page help-content'}>
+      {!embedded && <div className="page-header">
         <h1>Help & CLI Reference</h1>
         <p>Offline docs for portable memory: CLI commands, vault layout, dream, tasks, and IDE connect.</p>
-      </div>
+      </div>}
 
       {error && <div className="badge badge-error" style={{ marginBottom: '16px' }}>{error}</div>}
 
-      <div style={{ display: 'grid', gridTemplateColumns: '260px 1fr', gap: '30px', minHeight: '500px' }}>
-        {/* Sidebar */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-          {topics.map((t) => (
-            <button
-              key={t.id}
-              onClick={() => setSelectedTopic(t.id)}
-              style={{
-                textAlign: 'left',
-                minHeight: '44px',
-                padding: '12px 16px',
-                borderRadius: 'var(--radius-md, 10px)',
-                background: selectedTopic === t.id ? 'var(--color-primary, #8b5cf6)' : 'rgba(12, 18, 32, 0.72)',
-                color: '#fff',
-                border: selectedTopic === t.id ? '1px solid var(--purple-border, #a78bfa)' : '1px solid rgba(148, 163, 184, 0.12)',
-                backdropFilter: 'blur(16px)',
-                cursor: 'pointer',
-                transition: 'all 0.2s',
-              }}
-            >
-              <div style={{ fontWeight: 600, fontSize: '14px' }}>{t.title}</div>
-              <div style={{ fontSize: '12px', color: selectedTopic === t.id ? 'rgba(255, 255, 255, 0.9)' : 'var(--text-secondary)', marginTop: '4px' }}>
-                {t.description}
-              </div>
-            </button>
-          ))}
-        </div>
-
-        {/* Content Pane */}
-        <div
-          style={{
-            background: 'rgba(12, 18, 32, 0.72)',
-            backdropFilter: 'blur(16px)',
-            border: '1px solid rgba(148, 163, 184, 0.12)',
-            borderRadius: 'var(--radius-lg, 16px)',
-            padding: '32px',
-            overflowY: 'auto',
-            maxHeight: '75vh',
-          }}
-        >
+      <label className="help-topic-picker">
+        Topic
+        <select className="select" value={selectedTopic ?? ''} onChange={event => setSelectedTopic(event.target.value)}
+          disabled={!topics.length}>
+          {!topics.length && <option value="">{error ? 'Topics unavailable' : 'Loading topics…'}</option>}
+          {topics.map(topic => <option key={topic.id} value={topic.id}>{topic.title}</option>)}
+        </select>
+      </label>
+      <p className="help-topic-description">{topics.find(topic => topic.id === selectedTopic)?.description}</p>
+      <article className="help-article" aria-busy={loading}>
           {loading ? (
             <div className="skeleton" style={{ height: '400px' }} />
           ) : (
@@ -137,8 +107,7 @@ export default function HelpPage() {
               {renderMarkdown(content)}
             </div>
           )}
-        </div>
-      </div>
+      </article>
     </div>
   )
 }

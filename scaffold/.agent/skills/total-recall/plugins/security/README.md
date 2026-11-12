@@ -24,7 +24,9 @@ Auth owns credentials. Machine audits need no security master key. For signing/e
 
 Source scans report locations and rule IDs without matched secrets. Heuristic findings require source review; they are not proof of complete vulnerability coverage. Auth declarations alone do not establish runtime enforcement. Plugin audits never rewrite manifests to fabricate hardening.
 
-Exit 0 means the requested operation completed within its stated semantics; machine/fleet checks exit 1 for risks, review or incomplete coverage. `harden` without an apply flag returns a plan with zero applied changes. UI renders actual reports and failures.
+Exit 0 means the requested operation completed within its stated semantics. Machine and fleet checks exit 1 for risks, review or incomplete coverage. `harden` without an apply flag returns a plan with zero applied changes. Network inspection is read-only.
+
+The Security Home shows local capability metadata and gives you explicit controls for assessments. It displays coverage and finding counts, with raw reports available through the owner CLI. Envelope, credential and challenge operations use the terminal. The packaged SSSS blocks and [design tokens](DESIGN.md) support the workspace compositor.
 
 See [the operational skill](skills/security/SKILL.md). Official platform contracts: [OpenSSH](https://man.openbsd.org/sshd_config), [Ubuntu firewall administration](https://ubuntu.com/server/docs/how-to/security/firewalls/), [Apple platform protection](https://support.apple.com/guide/security/protecting-against-malware-sec469d47bd8/web).
 
@@ -60,7 +62,7 @@ Mount the middleware after trusted session/proxy resolution and before applicati
 
 `security plugins` reads the installed host registry and assesses source coverage and security declarations. [OWASP CSRF guidance](https://cheatsheetseries.owasp.org/cheatsheets/Cross-Site_Request_Forgery_Prevention_Cheat_Sheet.html), [Node HTTP](https://nodejs.org/api/http.html).
 
-The [Security project tracker](docs/projects/in-progress/SECURITY_CARD/SECURITY_CARD_PROJECT_TRACKER.md) records scanner coverage, runtime enforcement and card acceptance separately. The manifest does not declare a standalone application brick.
+The [Security project tracker](docs/projects/in-progress/SECURITY_CARD/SECURITY_CARD_PROJECT_TRACKER.md) records scanner coverage, runtime enforcement and Home acceptance separately.
 
 ## Using this from an agent
 

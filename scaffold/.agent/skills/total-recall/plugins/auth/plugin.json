@@ -2,8 +2,8 @@
   "$schema": "https://github.com/gregiteen/total-recall/blob/main/metadata.plugin.schema.json",
   "id": "auth",
   "name": "Auth & Secrets",
-  "version": "1.2.10",
-  "description": "Hardware WebAuthn biometric FIDO2 passkeys, OAuth session security, and access control.",
+  "version": "1.3.0",
+  "description": "Encrypted credentials, repository bindings, dashboard sign-in and access across brains and machines.",
   "author": "Total Recall contributors",
   "license": "MIT",
   "use_cases": [
@@ -15,41 +15,6 @@
     "color": "#10b981",
     "badge": "FIDO2 Vault",
     "font": "chivo-mono"
-  },
-  "card_face": {
-    "theme": "vibrant",
-    "headline": "Passkey & Google OAuth2 Authentication Engine",
-    "primary_color": "#6366f1",
-    "secondary_color": "#312e81",
-    "accent_color": "#818cf8",
-    "touch_layout": "comfortable",
-    "interactive": true,
-    "quick_actions": [
-      {
-        "subcommand": "status",
-        "label": "STATUS"
-      },
-      {
-        "subcommand": "audit",
-        "label": "AUDIT"
-      },
-      {
-        "subcommand": "passkey",
-        "label": "PASSKEY"
-      },
-      {
-        "subcommand": "google",
-        "label": "GOOGLE"
-      },
-      {
-        "subcommand": "rotate",
-        "label": "ROTATE"
-      },
-      {
-        "subcommand": "probe",
-        "label": "CHECK ENDPOINT"
-      }
-    ]
   },
   "secrets": [
     {
@@ -132,12 +97,14 @@
       {
         "name": "agent",
         "description": "Sign in an agent CLI that authenticates on its own terminal",
-        "effect": "destructive"
+        "effect": "destructive",
+        "sensitive_output": true
       },
       {
         "name": "secret",
         "description": "Manage and inspect auth secrets in the Total Recall store",
-        "effect": "write"
+        "effect": "write",
+        "sensitive_output": true
       },
       {
         "name": "password",
@@ -153,21 +120,16 @@
     ]
   },
   "ui": {
-    "design_tokens": "ui/DESIGN.md",
+    "home": "home",
+    "design_tokens": "DESIGN.md",
     "elements": [
       {
-        "id": "card",
-        "kind": "card",
-        "tag": "tr-auth-card",
-        "module": "ui/card.js",
-        "description": "Gatepass Card Face"
-      },
-      {
-        "id": "panel",
+        "id": "home",
         "kind": "panel",
-        "tag": "tr-auth-panel",
-        "module": "ui/panel.js",
-        "description": "Gatepass Auth & Credentials Management Panel"
+        "tag": "tr-auth-home",
+        "module": "ui/home.js",
+        "description": "Credential inventory, brains, machines and sign-in checks",
+        "events": ["auth-inventory", "auth-credential-mutate"]
       }
     ]
   },

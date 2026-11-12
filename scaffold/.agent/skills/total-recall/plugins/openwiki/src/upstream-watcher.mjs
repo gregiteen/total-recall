@@ -15,6 +15,15 @@ import { hasWiki, readProjects, refreshProject, resolveKey } from './refresh.mjs
 export const UPSTREAM_NPM_URL = 'https://registry.npmjs.org/openwiki/latest';
 export const UPSTREAM_GITHUB_URL = 'https://api.github.com/repos/langchain-ai/openwiki/releases/latest';
 
+export function bundledGeneratorVersion() {
+  try {
+    if (!fs.existsSync(new URL('../vendor/openwiki.mjs', import.meta.url))) return null;
+    const build = JSON.parse(fs.readFileSync(new URL('../vendor/build.json', import.meta.url), 'utf8'));
+    return typeof build.version === 'string' && /^\d+\.\d+\.\d+(?:[-+][a-zA-Z0-9.-]+)?$/.test(build.version)
+      ? build.version : null;
+  } catch { return null; }
+}
+
 /**
  * Resolves the path to the persistent upstream state file.
  * @param {string} [home] Home directory override
@@ -34,20 +43,21 @@ export function stateFile(home = os.homedir()) {
  * @returns {{ currentRecordedVersion: string, latestKnownVersion: string, lastCheckedAt: string | null, announcements: Array<object> }}
  */
 export function readUpstreamState({ statePath = stateFile() } = {}) {
+  const baseline = bundledGeneratorVersion() || '0.0.0';
   try {
     const raw = fs.readFileSync(statePath, 'utf8');
     const parsed = JSON.parse(raw);
     return {
-      currentRecordedVersion: typeof parsed.currentRecordedVersion === 'string' ? parsed.currentRecordedVersion : '0.7.2',
-      latestKnownVersion: typeof parsed.latestKnownVersion === 'string' ? parsed.latestKnownVersion : '0.7.2',
+      currentRecordedVersion: typeof parsed.currentRecordedVersion === 'string' ? parsed.currentRecordedVersion : baseline,
+      latestKnownVersion: typeof parsed.latestKnownVersion === 'string' ? parsed.latestKnownVersion : baseline,
       lastCheckedAt: typeof parsed.lastCheckedAt === 'string' ? parsed.lastCheckedAt : null,
       lastPropagatedAt: typeof parsed.lastPropagatedAt === 'string' ? parsed.lastPropagatedAt : null,
       announcements: Array.isArray(parsed.announcements) ? parsed.announcements : []
     };
   } catch {
     return {
-      currentRecordedVersion: '0.7.2',
-      latestKnownVersion: '0.7.2',
+      currentRecordedVersion: baseline,
+      latestKnownVersion: baseline,
       lastCheckedAt: null,
       lastPropagatedAt: null,
       announcements: []
@@ -62,13 +72,14 @@ export function readUpstreamState({ statePath = stateFile() } = {}) {
  * @param {string} [options.statePath] Custom state path
  */
 export function saveUpstreamState(state = {}, { statePath = stateFile() } = {}) {
+  const baseline = bundledGeneratorVersion() || '0.0.0';
   const dir = path.dirname(statePath);
   if (!fs.existsSync(dir)) {
     fs.mkdirSync(dir, { recursive: true });
   }
   const payload = {
-    currentRecordedVersion: state.currentRecordedVersion || '0.7.2',
-    latestKnownVersion: state.latestKnownVersion || '0.7.2',
+    currentRecordedVersion: state.currentRecordedVersion || baseline,
+    latestKnownVersion: state.latestKnownVersion || baseline,
     lastCheckedAt: state.lastCheckedAt || new Date().toISOString(),
     lastPropagatedAt: state.lastPropagatedAt || null,
     announcements: Array.isArray(state.announcements) ? state.announcements.slice(-20) : []

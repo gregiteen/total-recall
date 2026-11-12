@@ -6,7 +6,7 @@
  * non-zero on any failure and prints the real reason. Nothing here trusts a
  * declaration: every check reads the actual files or runs the actual command.
  *
- *   node record.mjs <pluginDir> [--manifest|--card|--secrets|--scaffold|--reuse|--json]
+ *   node record.mjs <pluginDir> [--manifest|--home|--secrets|--scaffold|--reuse|--json]
  *
  * Checks are marked PASS, FAIL or WARN. A WARN is a judgement call the agent
  * must resolve; a FAIL is a rejection.
@@ -17,8 +17,12 @@ import { execFileSync } from 'node:child_process';
 import { pathToFileURL } from 'node:url';
 
 const args = process.argv.slice(2);
+if (args.includes('--card')) {
+  console.error('Legacy plugin cards are retired. Verify the native Home with --home.');
+  process.exit(2);
+}
 const json = args.includes('--json');
-const only = ['--manifest', '--card', '--secrets', '--scaffold', '--reuse'].filter((f) => args.includes(f));
+const only = ['--manifest', '--home', '--secrets', '--scaffold', '--reuse'].filter((f) => args.includes(f));
 const root = path.resolve(args.find((a) => !a.startsWith('-')) || '.');
 const want = (section) => only.length === 0 || only.includes(section);
 
@@ -30,7 +34,6 @@ const record = (section, level, check, detail) => results.push({ section, level,
 const read = (rel) => {
   try { return fs.readFileSync(path.join(root, rel), 'utf8'); } catch { return ''; }
 };
-const exists = (rel) => fs.existsSync(path.join(root, rel));
 
 /** Files the plugin owns, excluding dependencies and the brain. */
 function walk(dir, out = [], base = root) {
@@ -63,10 +66,18 @@ let manifest = null;
   }
 }
 
-// Validate with the real contract when this skill is inside a Total Recall checkout.
-if (manifest && want('--manifest')) {
-  const loaderPath = path.resolve(import.meta.dirname, '../../../../src/core/plugin-loader.mjs');
-  if (fs.existsSync(loaderPath)) {
+// Use the host that runs block validation when it is given by path.
+if (manifest && (want('--manifest') || want('--home'))) {
+  const binary = process.env.TOTAL_RECALL_BIN;
+  const explicit = binary && path.isAbsolute(binary) && fs.existsSync(binary)
+    ? path.resolve(path.dirname(fs.realpathSync(binary)), '../src/core/plugin-loader.mjs')
+    : null;
+  const loaderPath = [
+    explicit,
+    path.resolve(import.meta.dirname, '../../../../src/core/plugin-loader.mjs'),
+    path.resolve(import.meta.dirname, '../../../../../src/core/plugin-loader.mjs'),
+  ].find(file => file && fs.existsSync(file));
+  if (loaderPath) {
     try {
       const { validatePluginManifest } = await import(pathToFileURL(loaderPath).href);
       const v = validatePluginManifest(manifest);
@@ -81,27 +92,21 @@ if (manifest && want('--manifest')) {
   } else {
     record('manifest', 'WARN', 'contract', 'validator not found; structural checks only');
   }
+}
 
-  // Card declaration
-  const elements = manifest.ui?.elements || [];
-  // One face (kind 'card') plus any number of screens (kind 'panel'); a panel is never the face.
-  const faces = elements.filter((e) => e && e.kind === 'card');
-  if (manifest.card_layout !== undefined) {
-    record('manifest', 'FAIL', 'no template', "'card_layout' is declared; a face is bespoke owner code");
-  } else {
-    record('manifest', 'PASS', 'no template', 'no card_layout');
+if (manifest && (want('--manifest') || want('--home'))) {
+  const elements = Array.isArray(manifest.ui?.elements) ? manifest.ui.elements : [];
+  const obsolete = ['card', 'card_face', 'card_layout'].filter(field => Object.hasOwn(manifest, field));
+  if (elements.some(element => ['card', 'card-face'].includes(element?.kind))) obsolete.push('ui.elements');
+  for (const file of walk(root).filter(file => /^ui\/(card|card-face)\.(m?js|css)$/.test(file))) obsolete.push(file);
+  record('manifest', obsolete.length ? 'FAIL' : 'PASS', 'native presentation only',
+    obsolete.length ? `Remove legacy declarations or assets: ${obsolete.join(', ')}` : 'No legacy declarations or assets');
+  if (!manifest.ui?.home && manifest.brick !== true && manifest.scaffold !== true) {
+    record('manifest', 'FAIL', 'UI declared', 'Declare a native ui.home.');
   }
-  if (faces.length === 0) {
-    record('manifest', 'FAIL', 'card declared', 'every plugin has a card; ui.elements declares none');
-  } else if (faces.length > 1) {
-    record('manifest', 'FAIL', 'card declared', `${faces.length} faces declared; exactly one is allowed`);
-  } else {
-    const face = faces[0];
-    record('manifest', 'PASS', 'card declared', `<${face.tag}> → ${face.module}`);
-    if (!exists(face.module)) record('manifest', 'FAIL', 'card module resolves', `${face.module} does not exist`);
-    else record('manifest', 'PASS', 'card module resolves', face.module);
-  }
+}
 
+if (manifest && want('--manifest')) {
   // Declared effects and typed arguments on the CLI surface.
   for (const sub of manifest.cli?.subcommands || []) {
     if (!['read', 'write', 'destructive', 'send'].includes(sub.effect)) {
@@ -122,6 +127,51 @@ if (manifest && want('--manifest')) {
     else if (sub.effect && sub.effect !== 'read') record('manifest', 'FAIL', 'status binds', `status.command '${status.command}' is not a read`);
     else record('manifest', 'PASS', 'status binds', status.command);
   }
+}
+
+if (want('--home') && manifest && (manifest.ui?.home || only.includes('--home'))) {
+  const hasAuth = manifest.auth?.plugin === 'auth' && manifest.auth.session_verification === true;
+  record('home', hasAuth ? 'PASS' : 'FAIL', 'Bundled Auth', hasAuth ? 'Host session verification' : 'Declare auth.plugin and auth.session_verification.');
+  const home = manifest.ui?.elements?.find(element => element.id === manifest.ui.home);
+  const files = walk(root);
+  const validHome = home && ['panel', 'form', 'list', 'detail', 'widget'].includes(home.kind) && files.includes(home.module);
+  record('home', validHome ? 'PASS' : 'FAIL', 'Home element', validHome ? home.id : 'Declare a valid native ui.home.');
+  if (validHome) {
+    const source = read(home.module);
+    const seeded = /\b(?:hostname|loadAvg|usedPercent|uptimeSeconds)\s*:\s*(?:["'][^"']+["']|\[\s*\d|\d)/;
+    if (seeded.test(source)) record('home', 'FAIL', 'no seeded values', 'A live reading is initialized with a literal.');
+    const reassurance = /(?:\|\||\?\?)\s*['"](?:Up to date|Synced|Repository Active|ONLINE|Healthy|Connected|All good|OK)['"]/;
+    if (reassurance.test(source)) record('home', 'FAIL', 'no reassuring default', 'An unverified reading defaults to a successful state.');
+    const credentialPanel = home.events?.includes('save-token') && home.props?.view && manifest.secrets?.length === 1;
+    const ownsCredentialStore = manifest.id === 'auth' && hasAuth &&
+      home.events?.includes('auth-inventory') && home.events?.includes('auth-credential-mutate');
+    if (!credentialPanel && !ownsCredentialStore && /type\s*=\s*["']password["']|input\.type\s*=\s*["']password["']/.test(source)) {
+      record('home', 'FAIL', 'credential interface', 'Use shared Auth or a declared host credential panel.');
+    }
+  }
+  const hasDesign = manifest.ui?.design_tokens === 'DESIGN.md' && !!read('DESIGN.md').trim();
+  record('home', hasDesign ? 'PASS' : 'FAIL', 'Owner design', hasDesign ? 'DESIGN.md' : 'Package and declare root DESIGN.md.');
+  const covered = new Set();
+  let pageBlocks = 0;
+  for (const file of files.filter(file => /^ui\/chunks\/[^/]+\.md$/.test(file))) {
+    try {
+      const output = execFileSync(process.env.TOTAL_RECALL_BIN || 'total-recall',
+        ['plugin', 'chunks', 'validate', path.join(root, file), '--plugin-dir', root, '--json'],
+        { cwd: root, encoding: 'utf8', timeout: 15000, stdio: ['ignore', 'pipe', 'pipe'] });
+      const { chunk } = JSON.parse(output);
+      if (chunk.surfaces.includes('page')) {
+        pageBlocks++;
+        for (const operation of chunk.operations || []) covered.add(operation);
+      }
+      record('home', 'PASS', 'SSSS block', chunk.key);
+    } catch (error) {
+      record('home', 'FAIL', 'SSSS block', `${file}: ${String(error.stdout || error.message).trim().slice(0, 500)}`);
+    }
+  }
+  if (!pageBlocks) record('home', 'FAIL', 'Page blocks', 'Home has no validated page blocks.');
+  const missing = (manifest.cli?.subcommands || []).map(operation => operation.name).filter(name => !covered.has(name));
+  if (missing.length) record('home', 'FAIL', 'Operation coverage', missing.join(', '));
+  else if (pageBlocks) record('home', 'PASS', 'Operation coverage', 'All declared operations have page blocks.');
 }
 
 /* ── reuse ───────────────────────────────────────────────────────────────── */
@@ -181,119 +231,6 @@ if (want('--reuse') && manifest) {
   }
 }
 
-/* ── card ────────────────────────────────────────────────────────────────── */
-
-if (want('--card') && manifest) {
-  const face = (manifest.ui?.elements || []).find((e) => e && e.kind === 'card');
-  const src = face ? read(face.module) : '';
-  if (!src) {
-    record('card', 'FAIL', 'card source readable', 'no card module to read');
-  } else {
-    const lines = src.split('\n');
-
-    // A credential must never be collectable from the face.
-    if (/type\s*=\s*["']password["']/.test(src) || /input\.type\s*=\s*["']password["']/.test(src)) {
-      record('card', 'FAIL', 'never collects a credential', 'a password input exists in the card');
-    } else {
-      record('card', 'PASS', 'never collects a credential', 'no password input');
-    }
-    if (/save-token|dispatchEvent\(\s*new CustomEvent\(\s*["']save-/.test(src)) {
-      record('card', 'FAIL', 'never transmits a credential', 'the card dispatches a credential event');
-    } else {
-      record('card', 'PASS', 'never transmits a credential', 'no credential event');
-    }
-
-    // Seeded values: a literal that looks like a reading, not a read of one.
-    // Each pattern requires an actual literal (a digit or a quoted string), so
-    // a ternary such as `? h.loadAvg : []` is not mistaken for a seed.
-    const seedPatterns = [
-      [/\bthis\.(sample|reading|status|telemetry|gateway|data)\s*=\s*\{[^}]*\b(hostname|loadAvg|usedPercent|uptimeSeconds)\b/s, 'a seeded reading object'],
-      [/hostname\s*:\s*["'][^"']+["']/, 'a literal hostname'],
-      [/usedPercent\s*:\s*\d/, 'a literal usedPercent'],
-      [/loadAvg\s*:\s*\[\s*\d/, 'a literal load average'],
-      [/\bvalue\s*=\s*["']\d+(\.\d+)?["']/, 'a seeded input value'],
-    ];
-    let seeded = [];
-    for (const [re, what] of seedPatterns) if (re.test(src)) seeded.push(what);
-    if (seeded.length) record('card', 'FAIL', 'no seeded values', seeded.join('; '));
-    else record('card', 'PASS', 'no seeded values', 'no literal reading found');
-
-    // A reassuring default is a *fallback* for an unknown — `x || 'Up to date'`
-    // or `x ?? 'Synced'`. The same word chosen by a ternary between two honest
-    // labels (`ok ? 'Connected' : 'Unconfigured'`) is not a default, so only a
-    // fallback position is flagged.
-    const reassuringWords = ['Up to date', 'Synced', 'Repository Active', 'ONLINE', 'Healthy', 'Connected', 'All good', 'OK'];
-    const reassuranceFallbacks = [];
-    for (const word of reassuringWords) {
-      for (const quote of ["'", '"']) {
-        const literal = `${quote}${word}${quote}`;
-        const index = src.indexOf(literal);
-        if (index === -1) continue;
-        // Look back for the operator that makes it a default.
-        const before = src.slice(Math.max(0, index - 40), index);
-        if (/\|\||\?\?\s*$/.test(before) || /\?\?\s*$/.test(src.slice(Math.max(0, index - 6), index))) {
-          reassuranceFallbacks.push(word);
-          break;
-        }
-        // A default inside a catch branch is a fallback too.
-        const sinceCatch = src.slice(src.lastIndexOf('catch', index) === -1 ? 0 : src.lastIndexOf('catch', index), index);
-        if (src.lastIndexOf('catch', index) !== -1 && sinceCatch.length < 200 && !/}\s*(else|finally)/.test(sinceCatch)) {
-          reassuranceFallbacks.push(`${word} (in a catch)`);
-          break;
-        }
-      }
-    }
-    if (reassuranceFallbacks.length) record('card', 'FAIL', 'no reassuring default', reassuranceFallbacks.join(', '));
-    else record('card', 'PASS', 'no reassuring default', 'none found');
-
-    // Randomness is how fabricated ids appear.
-    if (/Math\.random\(/.test(src)) record('card', 'FAIL', 'no invented identifiers', 'Math.random in the card');
-    else record('card', 'PASS', 'no invented identifiers', 'no Math.random');
-
-    // Every read must go through the host, and failures must be states.
-    if (!/host\.run|this\.host/.test(src)) {
-      record('card', 'WARN', 'reads through the host', 'no host.run reference; does it render real data?');
-    } else {
-      record('card', 'PASS', 'reads through the host', 'host.run is used');
-    }
-    if (!/catch/.test(src)) record('card', 'WARN', 'failures are states', 'no catch; can the card show a failed read?');
-    else record('card', 'PASS', 'failures are states', 'a catch exists');
-
-    // A timer left running after disconnect.
-    if (/setInterval/.test(src) && !/disconnectedCallback/.test(src)) {
-      record('card', 'FAIL', 'timers cleared', 'setInterval without disconnectedCallback');
-    } else {
-      record('card', 'PASS', 'timers cleared', 'no leaked interval');
-    }
-
-    // Raw hex outside a token block suggests a hard-coded palette.
-    const hex = [...src.matchAll(/#[0-9a-fA-F]{6}\b/g)];
-    const tokenBlockHex = (src.match(/--face-[a-z-]+:\s*#[0-9a-fA-F]{3,8}/g) || []).length;
-    if (hex.length - tokenBlockHex > 6) {
-      record('card', 'WARN', 'tokens only', `${hex.length - tokenBlockHex} raw hex values outside token declarations`);
-    } else {
-      record('card', 'PASS', 'tokens only', 'colour is declared as tokens');
-    }
-
-    // The host's tokens must actually be used.
-    for (const token of ['--text-primary', '--border']) {
-      if (!src.includes(token)) record('card', 'WARN', 'host tokens used', `${token} is not referenced; the face may not adapt to the dashboard`);
-    }
-
-    // Accessibility floor.
-    if (!/min-height:\s*(4[4-9]|[5-9]\d)px/.test(src)) {
-      record('card', 'WARN', 'touch targets', 'no control declares a >=44px minimum height');
-    } else {
-      record('card', 'PASS', 'touch targets', 'controls reach 44px');
-    }
-    if (!/prefers-reduced-motion/.test(src)) {
-      record('card', 'WARN', 'reduced motion', 'prefers-reduced-motion is not respected');
-    } else {
-      record('card', 'PASS', 'reduced motion', 'respected');
-    }
-  }
-}
-
 /* ── secrets ─────────────────────────────────────────────────────────────── */
 
 if (want('--secrets') && manifest) {
@@ -310,21 +247,6 @@ if (want('--secrets') && manifest) {
     }
     if (envRead) record('secrets', 'FAIL', 'declared secret is not ambient', `${key} read from process.env in ${envRead}`);
     else record('secrets', 'PASS', 'declared secret is not ambient', key);
-  }
-
-  // The card may name a credential's identifier — it must, so the operator
-  // knows which key to set. What it must never do is receive or render the
-  // value. The only channel a value could travel on is stdin, so that is the
-  // thing to forbid.
-  const faceSrc = read(manifest.ui?.elements?.find?.((e) => e.kind === 'card')?.module || '');
-  if (/stdin\s*:/.test(faceSrc)) {
-    record('secrets', 'FAIL', 'card never receives a credential', 'the card passes stdin to host.run');
-  } else {
-    record('secrets', 'PASS', 'card never receives a credential', 'no stdin channel from the face');
-  }
-  const names = (manifest.secrets || []).filter((s) => faceSrc.includes(s.key));
-  if (names.length) {
-    record('secrets', 'PASS', 'card names the identifier only', `${names.map((s) => s.key).join(', ')} — so the operator can fix it`);
   }
 
   // Credential access must go through auth.

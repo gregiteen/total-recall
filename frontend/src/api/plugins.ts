@@ -4,7 +4,7 @@
 // plugin came from, its content hash, whether it is shared, and — for peers —
 // whether that peer answered. There are no ratings, reviews or install counts.
 
-import { apiFetch, API_BASE, patch } from "./_base"
+import { apiFetch, API_BASE } from "./_base"
 
 export type PluginSourceKind = "bundled" | "public" | "peer" | "git" | "local" | "link"
 
@@ -21,33 +21,9 @@ export interface PluginTask {
   last_run: string | null
 }
 
-export interface CardFaceAction {
-  subcommand: string
-  label: string
-  icon?: string
-  color?: string
-}
-
-export interface CardFaceMetric {
-  label: string
-  value: string
-}
-
-export interface CardFaceConfig {
-  skin?: string
-  theme?: string
-  headline?: string
-  primary_color?: string
-  secondary_color?: string
-  accent_color?: string
-  touch_layout?: string
-  quick_actions?: CardFaceAction[]
-  metrics?: CardFaceMetric[]
-  interactive?: boolean
-}
-
 export interface PluginInfo {
   id: string
+  core?: boolean
   name: string
   version: string
   description: string
@@ -57,7 +33,7 @@ export interface PluginInfo {
   use_cases: string[]
   valid: boolean
   errors: string[]
-  scope: "project" | "global"
+  scope: "project" | "global" | "scaffold"
   linked: boolean
   dir: string
   shared: boolean
@@ -73,16 +49,26 @@ export interface PluginInfo {
   categories: Array<{ name: string; description?: string; node_type?: string }>
   tasks: PluginTask[]
   openwiki_hubs: Array<{ title?: string; path: string }>
-  cli: { command: string | null; subcommands: Array<{ name: string; description?: string }> } | null
+  cli: { command: string | null; subcommands: Array<{ name: string; description?: string; sensitive_output?: boolean; terminal_only?: boolean }> } | null
   has_generator: boolean
   branding?: { icon?: string | null; image?: string | null; color?: string | null; badge?: string | null; name?: string; wordmark?: string; accent?: string; background?: string }
-  card_face?: CardFaceConfig
   locked?: boolean
   store_deployed?: boolean
   secrets?: Array<{ key: string; description?: string; required?: boolean }>
   manifest?: Record<string, unknown>
-  activation?: { state: 'active' | 'inactive'; enabled: boolean }
-  ui?: { elements: Array<{ id: string; kind: string; tag: string; module: string; description?: string }> } | null
+  activation?: { state: 'active' | 'inactive' | 'error' | 'mixed'; enabled: boolean; required?: boolean; mode?: 'on-use' }
+  activationByBrain?: BrainPluginActivation[]
+  servingAvailable?: boolean
+  ui?: { home?: string; elements: Array<{ id: string; kind: string; tag: string; module: string; description?: string }> } | null
+}
+
+export interface BrainPluginActivation {
+  brainId: string
+  name: string
+  state: 'active' | 'inactive' | 'error' | 'unavailable'
+  enabled: boolean
+  required?: boolean
+  mode?: 'on-use'
 }
 
 export interface BundledPlugin {
@@ -154,20 +140,18 @@ async function post(url: string, body: unknown, method = "POST"): Promise<Result
   }
 }
 
-export async function fetchPlugins(): Promise<PluginInfo[]> {
-  try {
-    const res = await apiFetch(`${API_BASE}/api/plugins`)
-    if (!res.ok) return []
-    const data = await readJson(res)
-    return Array.isArray(data.plugins) ? data.plugins : []
-  } catch {
-    return []
-  }
+export async function fetchPlugins(brain?: string): Promise<PluginInfo[]> {
+  const selector = brain === undefined ? '' : `?brain=${encodeURIComponent(brain)}`
+  const res = await apiFetch(`${API_BASE}/api/plugins${selector}`, { cache: 'no-store' })
+  const data = await readJson(res)
+  if (!res.ok) throw new Error(data.error || `Could not load plugins (${res.status})`)
+  if (!Array.isArray(data.plugins)) throw new Error("The server did not return a plugin list")
+  return data.plugins
 }
 
 export async function fetchPlugin(id: string): Promise<PluginInfo | null> {
   try {
-    const res = await apiFetch(`${API_BASE}/api/plugins/${encodeURIComponent(id)}`)
+    const res = await apiFetch(`${API_BASE}/api/plugins/${encodeURIComponent(id)}`, { cache: 'no-store' })
     if (!res.ok) return null
     const data = await readJson(res)
     return data.plugin || null
@@ -178,7 +162,7 @@ export async function fetchPlugin(id: string): Promise<PluginInfo | null> {
 
 export async function fetchBundledPlugins(): Promise<BundledPlugin[]> {
   try {
-    const res = await apiFetch(`${API_BASE}/api/plugins/available`)
+    const res = await apiFetch(`${API_BASE}/api/plugins/available`, { cache: 'no-store' })
     if (!res.ok) return []
     const data = await readJson(res)
     return Array.isArray(data.plugins) ? data.plugins : []
@@ -190,7 +174,7 @@ export async function fetchBundledPlugins(): Promise<BundledPlugin[]> {
 /** Asks every mesh peer live; `null` means this node could not ask at all. */
 export async function fetchPeerPlugins(): Promise<PeersResponse | null> {
   try {
-    const res = await apiFetch(`${API_BASE}/api/plugins/peers`)
+    const res = await apiFetch(`${API_BASE}/api/plugins/peers`, { cache: 'no-store' })
     if (!res.ok) return null
     const data = await readJson(res)
     return { mesh: data.mesh || { available: false, configured: false }, peers: Array.isArray(data.peers) ? data.peers : [] }
@@ -215,20 +199,20 @@ export function updatePluginBranding(id: string, branding: { icon?: string; imag
   return post(`${API_BASE}/api/plugins/${encodeURIComponent(id)}/branding`, { branding })
 }
 
-export function updatePluginCardFace(
-  id: string,
-  updates: { card_face?: CardFaceConfig; branding?: Record<string, unknown> }
-): Promise<Result & { card_face?: CardFaceConfig; branding?: Record<string, unknown> }> {
-  return patch(`${API_BASE}/api/plugins/${encodeURIComponent(id)}/card-face`, updates)
-}
-
 export function setPluginLocked(id: string, locked: boolean): Promise<Result> {
   return post(`${API_BASE}/api/plugins/${encodeURIComponent(id)}/lock`, { locked })
 }
 
-export function setPluginActivation(id: string, enabled: boolean): Promise<Result & { activation?: { enabled: boolean; state: string } }> {
-  return post(`${API_BASE}/api/plugins/${encodeURIComponent(id)}/activation`, { enabled }, "PUT")
+export function setPluginActivation(id: string, value: boolean | 'on-use' | 'use', brainIds?: string[]): Promise<Result & {
+  activation?: { enabled: boolean; state: string }
+  cleanup?: PluginCleanup
+  results?: Array<Pick<BrainPluginActivation, 'brainId' | 'name'> & Result & { cleanup?: PluginCleanup }>
+}> {
+  const policy = typeof value === 'boolean' ? { enabled: value } : { mode: value }
+  return post(`${API_BASE}/api/plugins/${encodeURIComponent(id)}/activation`, { ...policy, brainIds }, "PUT")
 }
+
+interface PluginCleanup { ok: boolean; state: string; error?: string }
 
 export function deployPluginToStore(id: string, autoLock = true): Promise<Result & { storePackage?: any }> {
   return post(`${API_BASE}/api/plugins/${encodeURIComponent(id)}/deploy-store`, { autoLock })
@@ -238,7 +222,7 @@ export async function runPluginCommand(
   id: string,
   subcommand = "",
   args: string[] = [],
-  options?: { stdin?: string; execution?: PluginExecution }
+  options?: { stdin?: string; execution?: PluginExecution; brainId?: string }
 ): Promise<{ success: boolean; output?: string; error?: string; exitCode?: number | null; timedOut?: boolean }> {
   const res = await post(`${API_BASE}/api/plugins/${encodeURIComponent(id)}/run`, { subcommand, args, ...(options || {}) })
   if (res.error) return { success: false, error: res.error }

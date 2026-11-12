@@ -2,7 +2,7 @@
   "$schema": "https://github.com/gregiteen/total-recall/blob/main/metadata.plugin.schema.json",
   "id": "embeddings",
   "name": "Embeddings",
-  "version": "0.1.4",
+  "version": "0.2.0",
   "description": "Local embedding model management: provider/model status, benchmark, index build and coverage",
   "license": "MIT",
   "branding": {
@@ -58,20 +58,23 @@
       }
     ]
   },
-  "card": {
-    "handler": "./ui/card.js",
-    "element": "tr-embeddings-card"
-  },
   "ui": {
+    "home": "home",
+    "design_tokens": "DESIGN.md",
     "elements": [
       {
-        "id": "card",
-        "kind": "card",
-        "tag": "tr-embeddings-card",
-        "module": "ui/card.js",
-        "description": "Embeddings card face"
+        "id": "home",
+        "kind": "panel",
+        "tag": "tr-embeddings-home",
+        "module": "ui/home.js",
+        "description": "Embeddings page: provider and locality, vault coverage, model roster, credentials ownership, benchmark and pull"
       }
     ]
+  },
+  "auth": {
+    "plugin": "auth",
+    "methods": ["passkey", "google-oauth2"],
+    "session_verification": true
   },
   "status": {
     "command": "status",

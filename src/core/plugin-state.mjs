@@ -1,8 +1,14 @@
 /** Read-only host activation, safe during configuration bootstrap. */
 import fs from 'node:fs';
+import crypto from 'node:crypto';
 import path from 'node:path';
 import matter from './frontmatter.mjs';
 import { globalPluginsDir, projectPluginsDir, vaultForPluginsDir } from './plugin-loader.mjs';
+
+/** Bundled fallback packages use the same shared policy as a global install. */
+export function usesSharedPluginPolicy(plugin) {
+  return plugin.scope === 'global' || plugin.scope === 'scaffold';
+}
 
 /**
  * Enablement has two layers. The plugin's own brain holds the shared setting —
@@ -26,14 +32,17 @@ export function pluginActivation(plugin, { projectRoot } = {}) {
   const record = readActivationRecord(file, plugin.id);
   // Only a plugin owned by the shared (global) folder has an override to read:
   // a project's own copy already is that repository's setting.
-  const override = plugin.scope === 'global' && projectRoot ? projectActivationOverride(plugin.id, projectRoot).record : null;
+  const override = usesSharedPluginPolicy(plugin) && projectRoot ? projectActivationOverride(plugin.id, projectRoot).record : null;
   const applied = override?.runtime_enabled;
   const source = typeof applied === 'boolean' ? 'project' : 'shared';
   const shared = record?.runtime_enabled !== false;
   const enabled = plugin.valid === true && (typeof applied === 'boolean' ? applied : shared);
+  const localRecord = usesSharedPluginPolicy(plugin) ? override : record;
+  const onUse = !!projectRoot && localRecord?.runtime_on_use === true && localRecord.runtime_enabled === false;
   const runtime = plugin.manifest?.runtime || {};
   return {
     state: enabled ? 'active' : 'inactive', enabled, source,
+    ...(onUse ? { mode: 'on-use' } : {}),
     overridden: source === 'project' && applied !== shared,
     evidence: 'Host activation policy, not external process or provider health',
     hasRuntime: Boolean(plugin.manifest?.tasks?.length || Object.keys(runtime).length),
@@ -55,13 +64,13 @@ export function pluginExecutionEnabled(plugin, { projectRoot } = {}) {
   if (!/^[a-z][a-z0-9-]{1,63}$/.test(plugin.id)) throw new Error('Invalid plugin identity');
   const file = path.join(vaultForPluginsDir(pluginsDir), 'system', 'plugins', `${plugin.id}.md`);
   const record = readActivationRecord(file, plugin.id);
-  const override = plugin.scope === 'global' && projectRoot ? projectActivationOverride(plugin.id, projectRoot).record : null;
+  const override = usesSharedPluginPolicy(plugin) && projectRoot ? projectActivationOverride(plugin.id, projectRoot).record : null;
   const applied = override?.runtime_enabled;
   return typeof applied === 'boolean' ? applied : record?.runtime_enabled !== false;
 }
 
 /** Pure bootstrap read, avoiding configuration/kernel cycles; malformed existing policy fails closed. */
-export function readActivationRecord(file, id) {
+export function readActivationRecord(file, id, { withHash = false } = {}) {
   if (!file) return null;
   let stat;
   try { stat = fs.lstatSync(file); } catch (error) { if (error.code === 'ENOENT') return null; throw error; }
@@ -71,7 +80,12 @@ export function readActivationRecord(file, id) {
     const directory = fs.lstatSync(parent);
     if (!directory.isDirectory() || directory.isSymbolicLink()) throw new Error('Plugin policy cannot follow a linked vault path');
   }
-  const record = matter(fs.readFileSync(file, 'utf8')).data;
+  const bytes = fs.readFileSync(file);
+  const record = matter(bytes.toString('utf8')).data;
   if (record.type !== 'plugin_record' || record.plugin_id !== id || ['title', 'description', 'timestamp'].some(key => typeof record[key] !== 'string' || !record[key].trim()) || record.runtime_enabled !== undefined && typeof record.runtime_enabled !== 'boolean') throw new Error('Plugin policy is malformed; repair it before execution');
-  return record;
+  if (record.runtime_on_use !== undefined &&
+      (typeof record.runtime_on_use !== 'boolean' || (record.runtime_on_use && record.runtime_enabled !== false))) {
+    throw new Error('Plugin on-use policy is malformed; repair it before execution');
+  }
+  return withHash ? { record, hash: 'sha256:' + crypto.createHash('sha256').update(bytes).digest('hex') } : record;
 }

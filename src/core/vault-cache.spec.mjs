@@ -6,6 +6,7 @@ vi.mock('./logger.mjs', () => ({
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
+import { EventEmitter } from 'node:events';
 import { spawnSync } from 'node:child_process';
 import { pathToFileURL } from 'node:url';
 import * as vault from './vault.mjs';
@@ -87,6 +88,36 @@ describe('Vault Cache', () => {
     expect(spy.mock.calls.length).toBeGreaterThanOrEqual(1);
   });
 
+  it('reads from disk after an asynchronous watcher error and caches again after retry', async () => {
+    const failed = Object.assign(new EventEmitter(), { close: vi.fn(), unref: vi.fn() });
+    const recovered = Object.assign(new EventEmitter(), { close: vi.fn(), unref: vi.fn() });
+    const watch = vi.spyOn(fs, 'watch').mockReturnValueOnce(failed).mockReturnValueOnce(recovered);
+    const clock = vi.spyOn(Date, 'now');
+    const startedAt = Date.now();
+    clock.mockReturnValue(startedAt);
+    const loadNodes = vi.spyOn(vault, 'loadNodes');
+
+    expect(getNodes(tempDir)).toEqual([]);
+    expect(watch).toHaveBeenCalledTimes(1);
+    await Promise.resolve();
+    failed.emit('error', Object.assign(new Error('Too many open files'), { code: 'EMFILE' }));
+    expect(failed.close).toHaveBeenCalledTimes(1);
+
+    const node = path.join(tempDir, 'node.md');
+    fs.writeFileSync(node, '---\ntype: memory\nslug: new-node\ntitle: New Node\ncategory: facts\n---\nbody');
+    expect(getNodes(tempDir).map((item) => item.slug)).toEqual(['new-node']);
+    fs.unlinkSync(node);
+    expect(getNodes(tempDir)).toEqual([]);
+    expect(watch).toHaveBeenCalledTimes(1);
+    expect(loadNodes).toHaveBeenCalledTimes(3);
+
+    clock.mockReturnValue(startedAt + 31_000);
+    expect(getNodes(tempDir)).toEqual([]);
+    expect(watch).toHaveBeenCalledTimes(2);
+    expect(getNodes(tempDir)).toEqual([]);
+    expect(loadNodes).toHaveBeenCalledTimes(4);
+  });
+
   it('does not keep a CLI process alive after loading a nested vault', () => {
     // On Linux, recursive fs.watch is one inotify watcher per directory and
     // unref() on the wrapper did not reach them, so every CLI command hung.
@@ -110,19 +141,20 @@ describe('Vault Cache', () => {
     expect(isGeneratedVaultPath(path.join('facts', 'index.md'))).toBe(false);
   });
 
-  it('keeps the cache when only index.md or log.md are rewritten', async () => {
-    fs.mkdirSync(path.join(tempDir, 'facts'), { recursive: true });
-    fs.writeFileSync(path.join(tempDir, 'facts', 'n.md'), '---\nslug: n\ntitle: N\ncategory: facts\n---\nbody');
+  it('keeps the cache when only index.md or log.md change', () => {
+    const watcher = Object.assign(new EventEmitter(), { close: vi.fn(), unref: vi.fn() });
+    vi.spyOn(fs, 'watch').mockImplementation((_root, options, listener) => {
+      watcher.on('change', typeof options === 'function' ? options : listener);
+      return watcher;
+    });
     const spy = vi.spyOn(vault, 'loadNodes');
     getNodes(tempDir);
-    // Let the watcher drain events for the node written above, then settle.
-    await new Promise((resolve) => setTimeout(resolve, 400));
+    watcher.emit('change', 'change', 'index.md');
+    watcher.emit('change', 'change', 'log.md');
     getNodes(tempDir);
-    const settled = spy.mock.calls.length;
-    fs.writeFileSync(path.join(tempDir, 'index.md'), '# generated\n');
-    fs.writeFileSync(path.join(tempDir, 'log.md'), '# generated\n');
-    await new Promise((resolve) => setTimeout(resolve, 400));
+    expect(spy).toHaveBeenCalledTimes(1);
+    watcher.emit('change', 'change', 'actual-node.md');
     getNodes(tempDir);
-    expect(spy.mock.calls.length).toBe(settled);
+    expect(spy).toHaveBeenCalledTimes(2);
   });
 });

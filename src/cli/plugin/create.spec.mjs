@@ -83,7 +83,7 @@ Instructions here.
     expect(manifest.skills[0].path).toBe('./skills/packaged-cap/SKILL.md');
     expect(manifest.cli.command).toBe('packaged-cap');
 
-    // The scaffold declares a real read status command and binds the card to it,
+    // The scaffold declares a real read status command for the native Home,
     // so a new plugin is contract-conformant and shows live state (no fixed metrics).
     const statusSub = manifest.cli.subcommands.find((s) => s.name === 'status');
     expect(statusSub.effect).toBe('read');
@@ -101,7 +101,7 @@ Instructions here.
     expect(fs.existsSync(path.join(pluginDir, 'cli.mjs'))).toBe(true);
   });
 
-  it('creates a scheduled plugin without generating a card face', async () => {
+  it('creates a scheduled plugin without generating the owner Home', async () => {
     const cwdSpy = vi.spyOn(process, 'cwd').mockReturnValue(tmpProject);
     try {
       await createPlugin(['daily-review', '--name', 'Daily Review', '--with-task', '--task-command', 'refresh', '--task-schedule', '0 6 * * *', '--task-intent', 'Refresh the review', '--with-ui']);
@@ -109,12 +109,12 @@ Instructions here.
     const dir = sharedPlugin('daily-review');
     const manifest = JSON.parse(fs.readFileSync(path.join(dir, 'plugin.json'), 'utf8'));
     expect(manifest.tasks).toEqual([{ intent: 'Refresh the review', schedule: '0 6 * * *', command: 'refresh', placement: 'selected-node' }]);
-    // A card face is bespoke owner code, authored by hand. No generator may
+    // The native Home is bespoke owner code, authored by hand. No generator may
     // emit one, so --with-ui produces no UI module of any kind.
     expect(fs.existsSync(path.join(dir, 'ui', 'panel.js'))).toBe(false);
-    expect(fs.existsSync(path.join(dir, 'ui', 'card.js'))).toBe(false);
+    expect(fs.existsSync(path.join(dir, 'ui', 'home.js'))).toBe(false);
     expect(manifest.scaffold).toBe(true);
-    expect(fs.readFileSync(path.join(dir, 'README.md'), 'utf8')).toMatch(/no card face is generated.*by hand/s);
+    expect(fs.readFileSync(path.join(dir, 'README.md'), 'utf8')).toContain('total-recall plugin chunks validate <file>');
   });
 
   it('--api-key scaffolds a token CLI and a declared secret, but no generated face', async () => {

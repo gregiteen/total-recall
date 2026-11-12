@@ -41,7 +41,7 @@ function parse(argv) {
   return out;
 }
 
-async function call(method, routePath, { query, data }) {
+export async function callApi(method, routePath, { query = {}, data } = {}) {
   const { url, token } = brainConnection();
   const qs = new URLSearchParams(query).toString();
   const res = await fetch(`${url.replace(/\/$/, '')}${routePath}${qs ? `?${qs}` : ''}`, {
@@ -97,7 +97,7 @@ export default async function apiCli(argv = []) {
       console.error('Usage: total-recall api call <METHOD> </api/path> [--data json] [--query k=v]');
       process.exit(1);
     }
-    return finish(await call(method, routePath, opts), opts);
+    return finish(await callApi(method, routePath, opts), opts);
   }
 
   const group = first;
@@ -121,7 +121,7 @@ export default async function apiCli(argv = []) {
   route.params.forEach((name, i) => {
     p = p.replace(`:${name}`, encodeURIComponent(rest[i]));
   });
-  return finish(await call(route.method, p, opts), opts);
+  return finish(await callApi(route.method, p, opts), opts);
 }
 
 function finish(r, opts) {

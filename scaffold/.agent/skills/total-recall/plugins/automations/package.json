@@ -1,6 +1,6 @@
 {
   "name": "tr-plugin-automations",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "type": "module",
   "description": "Scheduled plugin task runner plus automation sources, triggers, observed outcomes and coverage across the Total Recall mesh.",
   "scripts": {
@@ -19,9 +19,10 @@
     "cron.mjs",
     "capability/",
     "BRICK.md",
-    "ui/card.js",
+    "DESIGN.md",
+    "ui/home.js",
     "ui/automations.js",
-    "ui/DESIGN.md"
+    "ui/chunks/"
   ],
   "publishConfig": {
     "access": "public"

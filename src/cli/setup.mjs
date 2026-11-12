@@ -22,6 +22,7 @@ import path from 'node:path';
 import https from 'node:https';
 import { fileURLToPath } from 'node:url';
 import { resolveAgentDir, resolveBrainDir } from './agent-dir.mjs';
+import { writeBrainConnection } from '../core/memory-brain.mjs';
 const { loadSecrets, saveSecrets } = await __loadOwnedPlugin('auth', 'secrets-store');
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -375,15 +376,7 @@ async function getGitHubUser(githubToken) {
 // ─── Store brain config ───────────────────────────────────────────────────────
 
 async function storeBrainConfig(brDir, brainUrl, token, provider, apiKey, extra = {}) {
-  const configDir = path.join(brDir, 'config');
-  fs.mkdirSync(configDir, { recursive: true });
-
-  // brain.json
-  fs.writeFileSync(
-    path.join(configDir, 'brain.json'),
-    JSON.stringify({ url: brainUrl, token, provider, ...extra }, null, 2),
-    'utf8'
-  );
+  writeBrainConnection(brDir, { url: brainUrl, token, provider, ...extra });
 
   // secrets.enc
   let secrets = {};
