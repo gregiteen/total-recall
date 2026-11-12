@@ -68,7 +68,7 @@ class GitHome extends HTMLElement {
         pre { overflow:auto; max-height:16rem; white-space:pre-wrap; overflow-wrap:anywhere; }
       </style>
       <header class="bar">
-        <div><p class="kicker">Git Sentinel</p><h2>Repository ledger</h2></div>
+        <div><p class="kicker">Git</p><h2>Repository ledger</h2></div>
         <button type="button" id="refresh">Refresh repository</button>
       </header>
       <section aria-labelledby="audit-heading">

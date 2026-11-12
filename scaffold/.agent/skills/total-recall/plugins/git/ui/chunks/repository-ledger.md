@@ -1,6 +1,6 @@
 ---
 type: ui-chunk:chunk
-title: Git Sentinel repository ledger
+title: Git repository ledger
 description: Read the active checkout, local upstream comparison, dirty files, conflicts, and stashes.
 timestamp: "2026-11-08T09:20:00Z"
 plugin: git
@@ -19,7 +19,7 @@ data: ["audit:/headState", "audit:/upstreamStatus", "audit:/isClean", "audit:/un
   .sentinel-ledger small { text-transform:uppercase; letter-spacing:.11em; color:var(--color-accent); }
 </style>
 <header class="sentinel-ledger">
-  <small>Git Sentinel</small>
+  <small>Git</small>
   <h2>Read the current checkout</h2>
   <p>Review repository state and its registered worktrees. Ahead and behind come from the local tracking ref.</p>
 </header>

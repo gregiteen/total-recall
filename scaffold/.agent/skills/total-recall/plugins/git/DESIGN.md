@@ -1,5 +1,5 @@
 ---
-name: Git Sentinel Copper Ledger
+name: Git Copper Ledger
 description: A copper and paper ledger for repository state and linked worktrees.
 colors:
   background: "#fcf7ef"
@@ -22,7 +22,7 @@ rounded:
   md: 6px
 ---
 
-# Git Sentinel Copper Ledger
+# Git Copper Ledger
 
 Use a warm paper background, a serif title, and tabular monospace counts. The repository audit reads first. Present conflicts and unpushed commits beside separate staged, unstaged, and untracked counts. Reserve copper for navigation and focus, and use red with a written label for failures.
 
