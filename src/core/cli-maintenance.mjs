@@ -21,7 +21,10 @@ export function cliInputFingerprint(root) {
 
 export async function maintainCliSurfaces({brainDir,brains,force=false,run=runBounded,fingerprint=cliInputFingerprint}={}) {
   const results=[];
-  for(const brain of brains || listLocalBrains({globalBrainDir:brainDir})) {
+  // By default only the global brain: entry files are static and each repository reads its
+  // rules and commands on demand, so the daemon never fans a refresh out across registered
+  // repositories (ON-DEMAND-CONTEXT-01). An explicit brain list is still honoured.
+  for(const brain of brains || listLocalBrains({globalBrainDir:brainDir}).filter(item=>item.kind==='global')) {
     if(!brain.exists || brain.enabled===false)continue;
     const root=brain.root || path.dirname(path.dirname(brain.brainDir));
     const file=path.join(brain.brainDir,'memory-derived/cli-maintenance.json');

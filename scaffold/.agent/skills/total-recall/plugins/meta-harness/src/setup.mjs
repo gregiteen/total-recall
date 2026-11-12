@@ -26,10 +26,13 @@ export async function setupIntegrations({ node, cwd = process.cwd(), env = proce
     const target=mesh.findMeshNode(node);
     if(!target)throw new Error('Maintenance node is not recorded in the mesh');
     const plugin=getPlugin('meta-harness',cwd) || getPlugin('cli-agents',cwd);
-    if(!plugin?.valid)throw new Error('Meta-harness (cli-agents) is not installed in the selected workspace');
-    await ensurePluginRecord(plugin);
+    if(!plugin?.valid)throw new Error('Metaharness (cli-agents) is not installed in the selected workspace');
+    const record=await ensurePluginRecord(plugin);
     placement=target.hostname;
-    await patchPluginRecord(plugin,{task_nodes:{maintenance:placement}});
+    const manifest=JSON.parse(fs.readFileSync(new URL('../plugin.json',import.meta.url),'utf8'));
+    const taskNodes={...(record?.task_nodes || {})};
+    for(const task of manifest.tasks.filter(task=>task.placement==='selected-node'))taskNodes[task.command]=placement;
+    await patchPluginRecord(plugin,{task_nodes:taskNodes});
   }
   return {ok:true,connected,universalInstructions:'AGENTS.md; every dispatch also receives a freshly generated bootstrap',maintenanceNode:placement};
 }

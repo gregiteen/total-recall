@@ -16,71 +16,18 @@
  * builds are not permitted. A check names the problem and leaves the build
  * where it belongs.
  */
-import { readdir, stat } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { checkDistFreshness, dashboardTargets, newestUnder } from '../src/core/dashboard-bundle.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
-const IGNORED_DIRS = new Set(['node_modules', '.git', 'dist']);
-
-/**
- * Newest mtime under a file or directory, and the path carrying it.
- * Missing paths contribute nothing rather than failing — vite.config.ts and
- * friends are allowed not to exist.
- */
-export async function newestUnder(target) {
-  let info;
-  try {
-    info = await stat(target);
-  } catch {
-    return null;
-  }
-
-  if (info.isFile()) return { path: target, mtimeMs: info.mtimeMs };
-
-  let best = null;
-  const entries = await readdir(target, { withFileTypes: true });
-  for (const entry of entries) {
-    if (entry.isDirectory() && IGNORED_DIRS.has(entry.name)) continue;
-    const found = await newestUnder(path.join(target, entry.name));
-    if (found && (!best || found.mtimeMs > best.mtimeMs)) best = found;
-  }
-  return best;
-}
-
-/**
- * Whether the built bundle can be trusted to represent the sources.
- * Returns { ok, reason, bundle, source } — never throws, never prints, so the
- * decision can be tested apart from how it is reported.
- */
-export async function checkDistFreshness({ distDir, sourcePaths }) {
-  const bundle = await newestUnder(distDir);
-  if (!bundle) return { ok: false, reason: 'missing-bundle', bundle: null, source: null };
-
-  let source = null;
-  for (const candidate of sourcePaths) {
-    const found = await newestUnder(candidate);
-    if (found && (!source || found.mtimeMs > source.mtimeMs)) source = found;
-  }
-
-  if (source && source.mtimeMs > bundle.mtimeMs) {
-    return { ok: false, reason: 'stale-bundle', bundle, source };
-  }
-  return { ok: true, reason: 'current', bundle, source };
-}
+// One definition of a stale bundle, shared with the server that rebuilds it.
+export { checkDistFreshness, newestUnder };
 
 /** Sources whose change should invalidate the bundle. */
 export function defaultTargets(root = ROOT) {
-  return {
-    distDir: path.join(root, 'frontend', 'dist'),
-    sourcePaths: [
-      path.join(root, 'frontend', 'src'),
-      path.join(root, 'frontend', 'index.html'),
-      path.join(root, 'frontend', 'vite.config.ts'),
-      path.join(root, 'frontend', 'package.json'),
-    ],
-  };
+  return dashboardTargets(root);
 }
 
 async function main() {

@@ -1,5 +1,5 @@
 /**
- * Gate Adapters registry for Meta Harness (tr-plugin-cli-agents).
+ * Gate Adapters registry for Metaharness (tr-plugin-cli-agents).
  * Provides harness-specific parsing, emission, installation and verification.
  */
 import { claudeAdapter } from './claude.mjs';

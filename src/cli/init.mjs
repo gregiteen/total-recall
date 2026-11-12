@@ -407,31 +407,6 @@ export default async function init(args) {
     logOk('Default memory vault seeded');
   }
 
-  // ── Step 3.5: Seed the onboarding interview task ──
-  logStep('3.5/4', 'Seeding onboarding interview into scheduler queue');
-
-  const queueDir = path.join(brainDir, 'scheduler', 'queue');
-  const interviewDest = path.join(queueDir, 'onboarding-interview.md');
-  const interviewSrc = path.join(ROOT, 'templates', 'onboarding-interview.md');
-
-  if (!fs.existsSync(interviewDest)) {
-    if (!opts.dryRun) {
-      fs.mkdirSync(queueDir, { recursive: true });
-      if (fs.existsSync(interviewSrc)) {
-        const now = new Date().toISOString();
-        const content = fs.readFileSync(interviewSrc, 'utf8').replace(/\{\{CREATED_AT\}\}/g, now);
-        fs.writeFileSync(interviewDest, content);
-        logOk('Onboarding interview task queued — agent will conduct it on first chat');
-      } else {
-        logWarn('Interview template not found — skipping');
-      }
-    } else {
-      log(`  Would write ${path.relative(cwd, interviewDest)}`);
-    }
-  } else {
-    logSkip('onboarding-interview.md already in queue');
-  }
-
   // Seed non-credential settings. Auth owns password and signing state.
   if (!opts.dryRun) {
     const configDir = path.join(brainDir, 'config');

@@ -185,6 +185,14 @@ Keys are camelCase and may not contain `password`, `secret`, `apiKey` or `token`
 
 `command` must be a declared `read` subcommand. `refresh_seconds` is 5–86400.
 
+## Startup check — what a session should see when it starts
+
+```json
+"startup_check": { "command": "unmerged", "args": ["--json"], "timeout_ms": 20000 }
+```
+
+Optional. `command` must be a declared `read` subcommand; `args` are at most 8 plain arguments; `timeout_ms` is 1000–30000 (default 15000). `total-recall startup check` and `brief` run it in the session's directory and show its `summary` when `outstanding` is above zero. The command prints one JSON object `{ "ok": true, "outstanding": 0, "summary": "one line: what and where" }`. A failure, a timeout or any other shape is shown as unavailable, never as clean. Declare it only for something that needs attention at the start of work, and keep it fast.
+
 ## Gate — how work reaches your plugin
 
 Every plugin declares this, even one with nothing to claim. Write it by hand from what your plugin actually does.

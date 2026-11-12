@@ -24,6 +24,7 @@ describe('init --project', () => {
         { cwd: repo, encoding: 'utf8', env: { ...env, HOME: home } }).stderr;
       expect(output).toContain('skills/total-recall/SKILL.md');
       expect(output).not.toMatch(/skills\/total-recall\/plugins\//);
+      expect(output).not.toContain('onboarding-interview');
     } finally {
       fs.rmSync(home, { recursive: true, force: true });
       fs.rmSync(repo, { recursive: true, force: true });

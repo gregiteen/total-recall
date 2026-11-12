@@ -190,7 +190,7 @@ function MainContent({ activeBrainId }: { activeBrainId: string }) {
           <Route path="/memory" element={<MemoryPage activeBrainId={activeBrainId} />} />
           <Route path="/rules" element={<RulesPage activeBrainId={activeBrainId} />} />
           <Route path="/graph" element={<GraphPage activeBrainId={activeBrainId} />} />
-          <Route path="/tasks" element={<Navigate to="/plugins?id=user-automations" replace />} />
+          <Route path="/tasks" element={<Navigate to="/plugins?id=automations" replace />} />
           <Route path="/skills" element={<Navigate to="/plugins?id=skill-manager" replace />} />
           <Route path="/openwiki" element={<Navigate to="/plugins?id=openwiki" replace />} />
           <Route path="/plugins" element={<LegacyPluginsRoute />} />
@@ -206,7 +206,7 @@ function MainContent({ activeBrainId }: { activeBrainId: string }) {
           {/* Legacy OS-control-plane routes → core product */}
           <Route path="/vault" element={<Navigate to="/memory" replace />} />
           <Route path="/inbox" element={<Navigate to="/tasks" replace />} />
-          <Route path="/automations" element={<Navigate to="/plugins?id=user-automations" replace />} />
+          <Route path="/automations" element={<Navigate to="/plugins?id=automations" replace />} />
           <Route path="/files" element={<Navigate to="/memory" replace />} />
           <Route path="/sandbox" element={<Navigate to="/memory" replace />} />
           <Route path="/models" element={<Navigate to="/settings" replace />} />

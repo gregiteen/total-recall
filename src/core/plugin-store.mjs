@@ -358,6 +358,31 @@ export function isGitSource(source) {
 export async function recompileAfterPluginMutation(projectRoot = process.cwd(), isGlobal = false, dependencies = {}) {
   try {
     const { compileSurface } = dependencies.compileSurface ? dependencies : await import('./surface.mjs');
+    // Only this layer's catalog changes. Entry files are static and rules and commands are
+    // read on demand at preflight, so a shared plugin change compiles no other repository
+    // (ON-DEMAND-CONTEXT-01; one install used to rebuild all registered brains).
+    await compileLayer(compileSurface, projectRoot, isGlobal);
+    if (isGlobal) {
+      // The repository the command ran in refreshes its own catalog now, so its plugin library
+      // never lags the change. That compile is cheap: entry files and vault indexes keep their
+      // own triggers, so only the catalog and CLI index move.
+      const agentDir = path.dirname(path.dirname(path.dirname(globalPluginsDir())));
+      const projectBrain = path.dirname(projectPluginsDir(projectRoot));
+      if (path.resolve(projectRoot, '.agent') !== path.resolve(agentDir) && fs.existsSync(projectBrain)) {
+        await compileLayer(compileSurface, projectRoot, false);
+      }
+    }
+    return { ok: true, inventoryUpdated: true };
+  } catch (err) {
+    try {
+      const { logger } = await import('./logger.mjs');
+      logger.warn('plugin-store', `Automatic compilation after plugin change failed: ${err.message}`);
+    } catch {}
+    return { ok: false, error: err.message };
+  }
+}
+
+async function compileLayer(compileSurface, projectRoot, isGlobal) {
     // Match the actual destination chosen by install/remove, not an ambient brain override.
     const pluginsDir = isGlobal ? globalPluginsDir() : projectPluginsDir(projectRoot);
     const brainDir = path.dirname(pluginsDir);
@@ -377,19 +402,6 @@ export async function recompileAfterPluginMutation(projectRoot = process.cwd(), 
     const instructionsFile = path.join(surfaceDir, 'INSTRUCTIONS.md');
     const result = await compileSurface({ vaultDir, skillsDir, derivedDir, instructionsFile, force: true, semantic: false });
     if (result.skipped && result.reason === 'stale-surface-code') throw new Error('Instruction compiler is stale; restart the host or run total-recall compile');
-    if (isGlobal) {
-      const { compileRegisteredProjects } = dependencies.compileRegisteredProjects ? dependencies : await import('../cli/rebuild.mjs');
-      const failed = await compileRegisteredProjects();
-      if (failed) throw new Error(`${failed} registered project surface compilation(s) failed`);
-    }
-    return { ok: true, inventoryUpdated: true };
-  } catch (err) {
-    try {
-      const { logger } = await import('./logger.mjs');
-      logger.warn('plugin-store', `Automatic compilation after plugin change failed: ${err.message}`);
-    } catch {}
-    return { ok: false, error: err.message };
-  }
 }
 
 /**
@@ -503,12 +515,16 @@ export function pruneReplacementArchives(archiveDir, { id, keep = 1, apply = tru
  * @param {{ projectRoot?: string, global?: boolean, link?: boolean, peerDeps?: object, publicDeps?: object }} [options]
  */
 export async function installPlugin(source, options = {}) {
-  const { projectRoot = process.cwd(), global: isGlobal = false, link = false, resolveBundle } = options;
+  const { projectRoot = process.cwd(), link = false, resolveBundle } = options;
   if (!source || typeof source !== 'string') throw new Error('Missing plugin source');
   source = source.trim();
+  // Nothing is installed per repository: every install goes to the shared
+  // folder, and a repository switches the plugin on or off with `plugin on|off`.
+  if (options.project === true) throw new Error("Plugins are installed only in the shared folder; a repository switches them with 'total-recall plugin on|off <id>'");
+  const isGlobal = true;
 
-  const scope = isGlobal ? 'global' : 'project';
-  const pluginsDir = isGlobal ? globalPluginsDir() : projectPluginsDir(projectRoot);
+  const scope = 'global';
+  const pluginsDir = globalPluginsDir();
 
   let manifest;
   let dest;
@@ -628,13 +644,9 @@ export async function installPlugin(source, options = {}) {
   }
 }
 
-export function findInstalled(id, { projectRoot = process.cwd(), global: isGlobal } = {}) {
-  const all = isGlobal === true ? [] : discoverPlugins(projectRoot);
-  if (isGlobal === true) {
-    // discoverPlugins() hides a global plugin shadowed by a project one.
-    return readPluginsDir(globalPluginsDir(), 'global').find((p) => p.id === id) || null;
-  }
-  return all.find((p) => p.id === id) || null;
+export function findInstalled(id) {
+  // Every install lives in the shared folder.
+  return readPluginsDir(globalPluginsDir(), 'global').find((p) => p.id === id) || null;
 }
 
 export async function uninstallPlugin(id, options = {}) {

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { ackDirectory, capsuleVerb, decide, findOwnedCommand, GATE_PACKAGE, isAckCommand, isCheckCommand, isPlainTotalRecall, isRepoSweep, isRouteCommand, isSatisfyingCommand, SWEEP_CONSULT_MS, TOOL_CLASSES, whenGateFails } from './preflight-gate.mjs';
+import { ackDirectory, capsuleVerb, decide, findOwnedCommand, GATE_PACKAGE, gatePackageBroken, isAckCommand, isCheckCommand, isPlainTotalRecall, isRepoSweep, isRouteCommand, isSatisfyingCommand, SWEEP_CONSULT_MS, TOOL_CLASSES, whenGateFails } from './preflight-gate.mjs';
 
 describe('compact in the gate', () => {
   it('is open when plain and closed when chained or piped', () => {
@@ -454,5 +454,25 @@ describe('isCheckCommand', () => {
     for (const command of ['total-recall tr-preflight --ack --task "--check"', 'total-recall tr-preflight --check | tail', 'total-recall context "check"']) {
       expect(isCheckCommand(command), command).toBe(false);
     }
+  });
+});
+
+describe('a broken gate package keeps its repair open', () => {
+  const boom = new Error('broken');
+  it('opens a shell command that changes into the package first', () => {
+    expect(whenGateFails({ tool: 'shell', cwd: '/elsewhere', command: `cd ${GATE_PACKAGE} && npm install` }, boom)).toMatchObject({ decision: 'allow', rule: 'gate-error:repair' });
+    expect(whenGateFails({ tool: 'shell', cwd: '/elsewhere', command: `cd "${GATE_PACKAGE}"; ls node_modules` }, boom)).toMatchObject({ decision: 'allow' });
+    expect(whenGateFails({ tool: 'shell', cwd: '/elsewhere', command: 'cd /tmp && rm -rf x' }, boom)).toMatchObject({ decision: 'deny' });
+  });
+  it('reports a package whose dependency tree was deleted, and only then', async () => {
+    const fs = await import('node:fs'); const os = await import('node:os'); const path = await import('node:path');
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'tr-gate-pkg-'));
+    expect(gatePackageBroken(root)).toBeNull();
+    fs.writeFileSync(path.join(root, 'package-lock.json'), '{}');
+    expect(gatePackageBroken(root)).toContain("run 'npm install' there");
+    fs.mkdirSync(path.join(root, 'node_modules'));
+    fs.writeFileSync(path.join(root, 'node_modules', '.package-lock.json'), '{}');
+    expect(gatePackageBroken(root)).toBeNull();
+    fs.rmSync(root, { recursive: true, force: true });
   });
 });

@@ -208,7 +208,7 @@ export default async function proposals(args) {
         console.log(`  ${String(days).padStart(4)}d  [i${n.importance}]  ${n.slug}`);
       }
       if (stale.length > 40) console.log(`\n  … and ${stale.length - 40} more.`);
-      console.log('\n  The dream cycle queues these for research automatically.\n');
+      console.log('\n  This query is read-only. Request research explicitly for a node that needs verification.\n');
       return;
     }
 

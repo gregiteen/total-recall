@@ -6,7 +6,7 @@ vi.mock('./logger.mjs', () => ({
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
-import { createProposal, generateMemoryCleanupProposals, generateSkillImprovementProposals, generateWorkflowRepairProposals, generateModelRoutingProposals, generateStaleKnowledgeRefreshProposals, evaluateProposalGate, runSmartDecay, proposalKey, loadOpenProposalKeys, dedupeProposals } from './optimizer.mjs';
+import { createProposal, generateMemoryCleanupProposals, evaluateProposalGate, runSmartDecay, proposalKey, loadOpenProposalKeys, dedupeProposals } from './optimizer.mjs';
 
 describe('optimizer.mjs', () => {
   it('exports createProposal', () => {
@@ -14,18 +14,6 @@ describe('optimizer.mjs', () => {
   });
   it('exports generateMemoryCleanupProposals', () => {
     expect(generateMemoryCleanupProposals).toBeDefined();
-  });
-  it('exports generateSkillImprovementProposals', () => {
-    expect(generateSkillImprovementProposals).toBeDefined();
-  });
-  it('exports generateWorkflowRepairProposals', () => {
-    expect(generateWorkflowRepairProposals).toBeDefined();
-  });
-  it('exports generateModelRoutingProposals', () => {
-    expect(generateModelRoutingProposals).toBeDefined();
-  });
-  it('exports generateStaleKnowledgeRefreshProposals', () => {
-    expect(generateStaleKnowledgeRefreshProposals).toBeDefined();
   });
   it('exports evaluateProposalGate', () => {
     expect(evaluateProposalGate).toBeDefined();

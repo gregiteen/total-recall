@@ -26,6 +26,6 @@ export default async function plugin(args = []) {
     const result = await uninstallPlugin(value, { projectRoot: process.cwd(), global: global ? true : undefined });
     console.log(JSON.stringify(result, null, 2));
   } else if (['help', '--help', '-h'].includes(action)) {
-    console.log('Usage: total-recall plugin list|info <id>|install <directory-or-git-url>|remove <id> [--global] [--link]');
+    console.log('Usage: total-recall plugin list|info <id>|install <directory-or-git-url>|remove <id> [--link]');
   } else throw new Error(`Unsupported plugin action '${action}'`);
 }

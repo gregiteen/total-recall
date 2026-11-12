@@ -22,7 +22,7 @@ function parseArgs(args) {
  * `includes` makes a short query match inside unrelated words: searching "git"
  * returned the signing plugin, whose description begins "Digital agreement…".
  * A hit inside a word is only accepted at a word start so that real substrings
- * still work ("sent" finds "git-sentinel") without matching "digital".
+ * still work ("qual" finds "code-quality") without matching "digital".
  */
 function matches(p, query, useCase) {
   if (useCase && !(p.use_cases || []).includes(useCase)) return false;
@@ -32,7 +32,7 @@ function matches(p, query, useCase) {
   const words = query.split(/\s+/).filter(Boolean);
   return words.every((word) => {
     const escaped = word.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    // Anchor at a word start so "sent" matches "git-sentinel" but "git" does
+    // Anchor at a word start so "qual" matches "code-quality" but "git" does
     // not match "digital".
     const bounded = new RegExp(`(^|[^a-z0-9])${escaped}`, 'i');
     return haystacks.some((h) => bounded.test(h) || h.startsWith(word));

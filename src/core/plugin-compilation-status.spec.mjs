@@ -21,10 +21,11 @@ describe('truthful plugin compilation status', () => {
     mocks.compile.mockResolvedValue({ skipped: true, reason: 'stale-surface-code' });
     expect((await recompileAfterPluginMutation(root, false, deps)).ok).toBe(false);
   });
-  it('global mutations fan out and report any registered-project failure', async () => {
+  it('a global plugin change compiles only the global layer, never every registered project (ODC-R1)', async () => {
     mocks.compile.mockResolvedValue({ skipped: false }); mocks.projects.mockResolvedValue(2);
     const result = await recompileAfterPluginMutation(root, true, deps);
-    expect(mocks.projects).toHaveBeenCalledOnce(); expect(result.ok).toBe(false);
-    expect(result.error).toContain('2 registered project');
+    expect(result).toEqual({ ok: true, inventoryUpdated: true });
+    expect(mocks.projects).not.toHaveBeenCalled();
+    expect(mocks.compile).toHaveBeenCalledOnce();
   });
 });

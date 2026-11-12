@@ -4,8 +4,8 @@ import { loadPluginModule as __loadOwnedPlugin } from './plugin-runtime.mjs';
  *
  * Durable worker over the open task envelope queue.
  * - Dispatches via executor registry (fail-loud on unknown)
- * - Does NOT invent idle work unless TR_IDLE_TASKS=1
- * - Periodically runs dream (system memory consolidation)
+ * - Automations owns scheduled maintenance; empty queues stay empty
+ * - Executes dream tasks scheduled by the automations plugin
  * - Ingests sessions on boot; recompiles surfaces every N ticks
  * - Auto-syncs all .md files from registered repos into Total Recall
  *
@@ -17,7 +17,7 @@ import { DAEMON_PID_FILE } from './daemon-control.mjs';
 import fs from 'fs';
 import { fileURLToPath } from 'node:url';
 import { readProcessCommand, entryPathHint, shouldHonorPidLock } from './pid-lock.mjs';
-import { createScheduler, updateTaskStatus, persistTaskToDisk } from './scheduler.mjs';
+import { createScheduler, updateTaskStatus } from './scheduler.mjs';
 import { scanAndIngest } from './session-watcher.mjs';
 import { syncAllRepos } from './repo-sync.mjs';
 import { refreshProviderUsage } from './usage-fetcher.mjs';
@@ -26,7 +26,7 @@ import { updateQueueItem } from './research-queue.mjs';
 import { agentDir, brainDir, detectProjectBrain } from './config.mjs';
 import { runCrons } from './crons.mjs';
 import { dispatchTask as registryDispatch } from './task-executors.mjs';
-import { buildTaskEnvelope, publishTaskSchedulerProtocol } from './task-envelope.mjs';
+import { publishTaskSchedulerProtocol } from './task-envelope.mjs';
 
 const AGENT_DIR = agentDir;
 const BRAIN_DIR = brainDir;
@@ -61,8 +61,16 @@ const RECOMPILE_EVERY_N_TASKS = 20;
 const TASK_SLEEP_MS = 10000;
 const EMPTY_SLEEP_MS = 30000;
 
-// Run a system dream every N empty ticks (memory consolidation without busy-work)
-const DREAM_EVERY_N_EMPTY = 20;
+/** An empty queue only sleeps. Plugin services own recurring task creation. */
+export async function nextDaemonTask(scheduler, { localOnly = false, sleep = ms => new Promise(resolve => setTimeout(resolve, ms)) } = {}) {
+  const next = scheduler.next({ localOnly });
+  if (!next.task) {
+    const sleepMs = localOnly ? TASK_SLEEP_MS : EMPTY_SLEEP_MS;
+    logger.info({ subsystem: 'daemon-loop', message: `Queue empty — sleeping ${sleepMs}ms` });
+    await sleep(sleepMs);
+  }
+  return next;
+}
 
 function executorContext(runtimeConfig) {
   return {
@@ -242,6 +250,7 @@ let running = true;
 let vaultWatcher = null;
 let shuttingDown = false;
 let schedulerProtocolActive = false;
+let lastLessonScan = 0;
 
 // Upper bound on a graceful stop. A loop iteration can be mid-task, so the
 // signal cannot exit instantly — but it must exit *eventually*.
@@ -259,7 +268,7 @@ import { releaseLease } from './leader-election.mjs';
  * daemon.log across three separate SIGTERMs. The fallback timer bounds that, so
  * even a wedged iteration cannot keep the daemon alive indefinitely.
  */
-let stopPluginTasks = null;
+let stopPluginServices = null;
 let stopCliMaintenance = null;
 let stopAutomaticUpdates = null;
 
@@ -269,7 +278,7 @@ function shutdown(signal) {
   logger.info({ subsystem: 'daemon-loop', message: `${signal} received — shutting down gracefully` });
   running = false;
   if (vaultWatcher) vaultWatcher.stop();
-  if (stopPluginTasks) stopPluginTasks();
+  if (stopPluginServices) stopPluginServices();
   stopCliMaintenance?.();
   stopAutomaticUpdates?.();
 
@@ -451,15 +460,16 @@ async function main() {
     }
   }
 
-  let emptyTicks = 0;
 
-  // Plugin tasks are per node (a plugin installed here runs here), so they are
-  // scheduled on their own timer rather than inside the leader-only task loop.
+  // Per-node services owned by plugins (scheduled plugin tasks belong to
+  // automations) start here; core runs whatever active plugins declare.
   try {
-    const { startPluginTaskScheduler } = await import('./plugin-tasks.mjs');
-    stopPluginTasks = startPluginTaskScheduler();
+    const { startPluginDaemonServices } = await import('./plugin-runtime.mjs');
+    const services = await startPluginDaemonServices();
+    stopPluginServices = services.stop;
+    logger.info('daemon-loop', `Plugin daemon services started: ${services.started.join(', ') || 'none'}${services.failed.length ? `; failed: ${services.failed.join(', ')}` : ''}`);
   } catch (err) {
-    logger.warn('daemon-loop', `Plugin task scheduler failed to start: ${err.message}`);
+    logger.warn('daemon-loop', `Plugin daemon services failed to start: ${err.message}`);
   }
 
   while (running) {
@@ -560,14 +570,20 @@ async function main() {
         }
       }
 
-      if (!await isLeader()) {
-        await new Promise(r => setTimeout(r, TASK_SLEEP_MS));
-        taskCount++;
-        continue;
+      const localOnly = !await isLeader();
+
+      // Local transcripts stay on their node. Followers also queue and run reviews.
+      if (Date.now() - lastLessonScan >= 60_000) {
+        lastLessonScan = Date.now();
+        try {
+          scanAndIngest(SESSIONS_DIR);
+          const { enqueueSessionReviews } = await import('./lessons.mjs');
+          enqueueSessionReviews({ brainDir: BRAIN_DIR });
+        } catch (error) { logger.warn('daemon-loop', `Local lesson ingest failed: ${error.message}`); }
       }
 
       // Periodically recompile surfaces (LEADER ONLY)
-      if (taskCount > 0 && taskCount % RECOMPILE_EVERY_N_TASKS === 0) {
+      if (!localOnly && taskCount > 0 && taskCount % RECOMPILE_EVERY_N_TASKS === 0) {
         logger.info({ subsystem: 'daemon-loop', message: 'Running scheduled surface recompile...' });
         try {
           const { compileSurface } = await import('./surface.mjs');
@@ -579,16 +595,6 @@ async function main() {
           });
         } catch (err) {
           logger.info({ subsystem: 'daemon-loop', message: `Surface recompile error: ${err.message}` });
-        }
-
-        try {
-          const { compactAppendLogs } = await import('./append-log.mjs');
-          const compactResult = compactAppendLogs();
-          if (compactResult.logs_compacted > 0) {
-            logger.info({ subsystem: 'daemon-loop', message: `Compacted ${compactResult.logs_compacted} append logs (${compactResult.total_entries} entries)` });
-          }
-        } catch (err) {
-          logger.info({ subsystem: 'daemon-loop', message: `Append log compaction error: ${err.message}` });
         }
 
         try {
@@ -627,42 +633,13 @@ async function main() {
         queueDir: QUEUE_DIR,
         vaultDir: VAULT_DIR,
         sessionsDir: SESSIONS_DIR,
+        localOnly,
       });
 
-      let { task, source } = scheduler.next();
-
-      // Empty queue: optional system dream, then sleep (no busy-work invention)
+      const { task, source } = await nextDaemonTask(scheduler, { localOnly });
       if (!task) {
-        emptyTicks++;
-        if (emptyTicks % DREAM_EVERY_N_EMPTY === 0) {
-          const dreamEnv = buildTaskEnvelope({
-            intent: 'Scheduled system dream cycle',
-            slug: `dream-system-${Date.now().toString(36)}`,
-            kind: 'system',
-            executor: 'dream',
-            category: 'memory-maintenance',
-            priority: 70,
-            system: true,
-            origin: { agent: 'daemon', created_by: 'daemon-system' },
-            capabilities: ['vault:read', 'vault:write'],
-          });
-          persistTaskToDisk(dreamEnv, QUEUE_DIR);
-          task = dreamEnv;
-          source = 'system';
-          logger.info({
-            subsystem: 'daemon-loop',
-            message: `Empty queue → enqueue system dream (${emptyTicks} empty ticks)`,
-          });
-        } else {
-          logger.info({
-            subsystem: 'daemon-loop',
-            message: `Queue empty (tick ${emptyTicks}) — sleeping ${EMPTY_SLEEP_MS}ms`,
-          });
-          await new Promise((r) => setTimeout(r, EMPTY_SLEEP_MS));
-          continue;
-        }
-      } else {
-        emptyTicks = 0;
+        if (localOnly) taskCount++;
+        continue;
       }
 
       taskCount++;

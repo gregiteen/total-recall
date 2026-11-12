@@ -1,3 +1,57 @@
+## 3.45.0 — 2026-11-09
+
+- Instruction surfaces compile on demand (ODC): a task capsule is compiled when an agent asks for
+  it, not for every repository on every change.
+- Memory decay with an active-day ledger: nodes nobody reads lose weight only on days the brain is
+  in use, and reading a node refreshes it.
+- `update --all-brains` keeps each checkout's install tree as found. A checkout with no
+  `node_modules` gets only its pin updated; `--install-missing` installs those trees. Automatic
+  runs had restored about 10 GB of reclaimed trees and filled the disk twice.
+- Dependencies are installed when work starts in a repository (preflight), not kept in every
+  checkout.
+- Preflight never reinstalls the Total Recall package it runs from. `npm ci` deletes `node_modules`
+  first, so a lockfile change (a version bump) broke every command, the gate included, until a
+  manual install. A tree npm already installed (`node_modules/.package-lock.json` matching the
+  lockfile) counts as current, so an install by hand is not repeated.
+- The preflight gate treats its own package with no installed dependencies as a gate failure, so
+  repairs stay open instead of a stale receipt that cannot be renewed; `cd <package> && …` counts as
+  a repair inside the package.
+- `fleet status` reports `not_installed` and installs it; `dream --all-brains` takes strict options;
+  `server ensure` repoints the server service to the current install.
+- Idle tasks run again: skill gaps route to the skill manager, and a lesson review reads recent
+  agent sessions for lessons and rules to save.
+- The vector field is wired into recall behind a flag, so its effect can be measured first.
+- One remote surface: remote agents use `/v1/invoke` and SSSS. Unused features removed (UNUSED-01).
+- The semantic CLI index writes declared plugin arguments as usage text (`<arg>`,
+  `[--flag <value>]`) instead of `[object Object]`.
+- The recompile after `command create|update|remove` records its exit code and log in
+  `<agentDir>/state/command-compile.json`; the next `command` call reports a failure.
+- Fix brain detection taking the package's own `scaffold/` template for a project. A context call
+  or `project-id` from inside it wrote `brain.json` and derived ledgers into the template, which
+  ships to every install. The walk now skips `<package>/scaffold` in a checkout or `node_modules`.
+- The collab server refuses to start without a `JWT_SECRET` of at least 32 characters.
+- Nothing is installed per repository. `plugin install` and `plugin create` always use the shared
+  plugin folder (`--project` is refused, `--global` changes nothing), discovery reads only the
+  shared folder and the bundled plugins, and a shared install also recompiles the repository it ran
+  in. A repository switches a plugin with `plugin on|off`.
+- `plugin copies` reports repository-only installs, deletes them with `--apply --drop-repo-only`,
+  and with `--apply` removes install records of plugins installed nowhere. On/off records and
+  records of shared plugins are kept.
+- The plugin-task scheduler moved out of core into the bundled user-automations plugin (1.1.0).
+  Core keeps only generic `runtime.daemon` services, which the daemon starts from the shared folder.
+- `update --all-brains`: a lockfile-only update passes `--ignore-scripts` (a never-installed
+  checkout's own `postinstall` failed the run), and a brain package's own source checkout is no
+  longer treated as a consumer, so its pins move only with its releases. The rewritten pin had left
+  the server's checkout dirty, which `deploy release` refuses.
+- Bundled plugins renamed: `user-automations` is `automations` (1.1.0) and `git-sentinel` is `git`
+  (2.0.1), which now runs the whole git CLI with guarded commits and pushes.
+- Bundles Metaharness 0.3.13: a question to the operator ends the agent's turn and costs nothing
+  while it waits, jobs get the commands that match their task instead of whole inventories, and a
+  launch refused for quota records the wall so routing picks another included harness, and uninstall
+  removes the Hermes gate even after another tool rewrote its config. Also bundles
+  Auth 1.2.10 (`auth secret scan --stdin`), SSSS 0.1.3, Mesh 0.2.10, OpenWiki 0.1.11, Composable
+  CLI 0.2.6, Code Quality 0.2.7, Security 0.3.7 and Embeddings 0.1.4.
+
 ## 3.44.0 — 2026-11-07
 
 - `connect openclaw` no longer writes the workspace's `MEMORY.md`, which is OpenClaw's own memory.
@@ -20,7 +74,7 @@
 - Fix `update --all-brains` moving a consumer's SSSS dependency but not the `@ssss/cli` override that
   shadows it, which left every plugin asking for two versions of the engine.
 - Bundles Auth 1.2.9, which adds `auth secret gh-login status|adopt|use-store` and stops the mesh
-  sync undoing a `gh` login changed on the machine. Also bundles SSSS 0.1.3, Meta Harness 0.3.9,
+  sync undoing a `gh` login changed on the machine. Also bundles SSSS 0.1.3, Metaharness 0.3.9,
   Mesh 0.2.9, OpenWiki 0.1.10, Composable CLI 0.2.5, Code Quality 0.2.6, Security 0.3.6,
   Embeddings 0.1.3 and Git Sentinel 1.1.5, all on SSSS 0.14.5.
 - Plugin state written by commands run inside a checkout (`.ssss/`) is ignored.
@@ -77,7 +131,7 @@
 
 ## 3.43.0 — 2026-11-05
 
-- Add a preflight gate for every harness. Total Recall ships the hooks and Meta Harness ships an
+- Add a preflight gate for every harness. Total Recall ships the hooks and Metaharness ships an
   adapter per harness, so `init`, `update` and `preflight install` set them up with no hand
   edits, and installing never changes a vault. An agent reads the rules and acknowledges before
   it works. The acknowledgement belongs to its session, follows it across repositories, and
@@ -93,7 +147,7 @@
   a link. A linked plugin is never replaced.
 - Fix default plugins that changed without a new version never reaching existing installs. A new
   release check, `check:plugin-versions`, fails a release that forgets.
-- Add a preflight gate for OpenClaw. It is a small OpenClaw plugin, shipped by Meta Harness and
+- Add a preflight gate for OpenClaw. It is a small OpenClaw plugin, shipped by Metaharness and
   installed by `init`, `update` and `preflight install` through OpenClaw's own CLI. A running
   gateway loads it without a restart. Warnings reach the agent inside the tool's result. If the
   gate cannot run, work stays denied, while reading, plain Total Recall commands and changes
@@ -125,7 +179,7 @@
 
 ## 3.42.0 — 2026-11-05
 
-- Meta Harness owns harness, process and reasoning execution. `src/core/meta-harness.mjs`,
+- Metaharness owns harness, process and reasoning execution. `src/core/meta-harness.mjs`,
   `agent-manager.mjs` and `runtime.mjs` now delegate to the plugin. Unknown auth needs an
   explicit opt-in, failures exit nonzero and `--json` prints one result.
 - Task context retrieves supporting knowledge by default: hybrid vault search, explicit
@@ -140,7 +194,7 @@
   versions. Plugins stay in the shared folder. Repositories initialised earlier keep their
   copies until `plugin copies --apply`, which removes only identical ones.
 - `decision` and `meta-harness` skills now ship from their owner plugins, not the scaffold.
-- Bundled plugins: Meta Harness routing, gated escalation, worktree isolation, whole-job
+- Bundled plugins: Metaharness routing, gated escalation, worktree isolation, whole-job
   budgets and receipt voiding; OpenWiki's task context provider; auth `provider-keys` and
   rotation fixes.
 

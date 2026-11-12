@@ -34,15 +34,35 @@ export async function listTargets() {
 }
 
 export function workerProgram(request) {
-  const source = fs.readFileSync(new URL('./worker.mjs', import.meta.url), 'utf8');
-  return source + '\nrunWorker(' + JSON.stringify(request) + ').then(result=>console.log(JSON.stringify(result))).catch(error=>{console.error(String(error?.message||"Selected agent worker failed"));process.exitCode=1;});\n';
+  // Materialize a portable module graph. The stdin launcher imports only Node
+  // built-ins. Relative imports resolve inside this owned bundle on the node.
+  const names = ['worker.mjs', 'control.mjs', 'jobs.mjs', 'paths.mjs', 'mcp-server.mjs',
+    ...fs.readdirSync(new URL('./session/', import.meta.url)).filter(name => name.endsWith('.mjs')).map(name => `session/${name}`)];
+  const files = Object.fromEntries(names.map(name => [name, fs.readFileSync(new URL(name, import.meta.url), 'utf8')]));
+  return `import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import { pathToFileURL } from 'node:url';
+const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'metaharness-worker-'));
+try {
+  for (const [name, source] of Object.entries(${JSON.stringify(files)})) {
+    const file = path.join(directory, name);
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    fs.writeFileSync(file, source, { mode: 0o600 });
+  }
+  const { runWorker } = await import(pathToFileURL(path.join(directory, 'worker.mjs')).href);
+  console.log(JSON.stringify(await runWorker(${JSON.stringify(request)})));
+} catch (error) { console.error(String(error?.message || 'Selected agent worker failed')); process.exitCode = 1; }
+finally { fs.rmSync(directory, { recursive: true, force: true }); }
+`;
+
 }
 
 function destinationDispatchResult(result, node, request) {
   let payload;
   try { payload = JSON.parse(result.output); } catch { /* No structured result from the installed owner. */ }
   if (!payload || typeof payload.ok !== 'boolean' || (payload.ok && !result.ok)) {
-    throw notReady(`Installed Meta Harness on ${node} returned no valid dispatch outcome (exit ${result.exitCode ?? 'unknown'})`);
+    throw notReady(`Installed Metaharness on ${node} returned no valid dispatch outcome (exit ${result.exitCode ?? 'unknown'})`);
   }
   return { ...payload, execution: { node, workspace: request.cwd, remote: true,
     ...(typeof payload.receiptId === 'string' ? { receiptOwner: 'destination' } : {}) } };
@@ -60,7 +80,9 @@ export async function executeOnNode(node, request, { worker = runWorker, process
   if (dispatch) {
     const input = JSON.stringify(destinationDispatchRequest(request));
     if (Buffer.byteLength(input) > 65536) throw new Error('Remote dispatch request is too large');
-    transport = { operation: 'direct', cwd: request.cwd, argv: ['total-recall', 'meta-harness', 'dispatch', '--stdin', '--json'], input, timeoutMs: 600000 };
+    // The transport outlives the attempt it carries by a minute, so the destination reports its own timeout (A-101).
+    transport = { operation: 'direct', cwd: request.cwd, argv: ['total-recall', 'meta-harness', 'dispatch', '--stdin', '--json'], input,
+      timeoutMs: Number.isInteger(request.timeoutMs) && request.timeoutMs > 0 ? request.timeoutMs + 60_000 : 600000 };
   }
   const managed = dispatch || (transport.argv?.[1] === 'meta-harness' &&
     ['route', 'coordinate', 'review', 'process', 'run-command', 'usage-retry'].includes(transport.argv[2]));

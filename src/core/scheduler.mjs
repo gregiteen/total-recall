@@ -7,14 +7,13 @@ import config from './config.mjs';
 import { getNodes } from './vault-cache.mjs';
 import { logger } from './logger.mjs';
 import { loadQueue, updateQueueItem } from './research-queue.mjs';
-import { transitionTaskStatus } from './task-envelope.mjs';
+import { transitionTaskStatus, getTask } from './task-envelope.mjs';
 
 /**
  * Total Recall Task Scheduler
  *
  * A priority queue that dispatches tasks to cognitive layer engines.
- * The queue is NEVER empty — when explicit tasks run out, the scheduler
- * auto-generates idle improvement tasks from vault analysis.
+ * An empty queue stays empty. Automations schedules maintenance explicitly.
  *
  * Task categories map to cognitive layers:
  *   conscious-enforcement  → Conscious Layer  (weight 1.0)
@@ -34,7 +33,6 @@ export const LAYER_WEIGHTS = Object.freeze({
   'skill-engineering': 0.5,
   'proactive-research': 0.4,
   'self-evaluation': 0.3,
-  'exploration': 0.2,
 });
 
 // ─── Priority Queue ─────────────────────────────────────────────────────────────
@@ -198,9 +196,8 @@ const RESEARCH_PHASE_COUNT = Object.keys(RESEARCH_PHASES).length;
 let _idleCycleCounter = 0;
 
 /**
- * Generate an idle improvement task when the explicit queue is empty.
- * Purely local maintenance, round-robin: inference, post-mortem, clarity
- * review, memory compaction. Idle ticks never research on their own; research
+ * Generate a maintenance candidate for an explicit scheduled run.
+ * Purely local maintenance: inference, clarity review and compaction. Research
  * only runs for topics a human asked for or the project gate approved.
  */
 export function generateIdleTask({ vaultDir, sessionsDir }) {
@@ -208,7 +205,6 @@ export function generateIdleTask({ vaultDir, sessionsDir }) {
   // Absolutely no automated/proactive web searches or staleness checks that make internet queries.
   const cleanStrategies = [
     () => generateInferenceTask(vaultDir),
-    () => generatePostMortemTask(sessionsDir),
     () => generateClarityReviewTask(vaultDir),
     () => generateMemoryCompactionTask(vaultDir),
   ];
@@ -222,6 +218,26 @@ export function generateIdleTask({ vaultDir, sessionsDir }) {
     // Local fallback only — never query the internet or make automated web searches
     return makeFallbackTask('memory-maintenance', 'Wait for active conversation task');
   }
+}
+
+/** Called by an automations manifest task, never by queue exhaustion. */
+export async function enqueueScheduledIdleTasks({ vaultDir, queueDir, now = new Date(),
+  leader = async () => (await import('./leader-election.mjs')).isLeader() } = {}) {
+  if (!await leader()) return { enqueued: [], skipped: 'not-leader' };
+  const tasks = [generateInferenceTask(vaultDir), generateClarityReviewTask(vaultDir), generateMemoryCompactionTask(vaultDir)];
+  const enqueued = [];
+  for (const task of tasks) {
+    if (task.slug.startsWith('idle-')) continue;
+    const kind = task.slug.startsWith('inference-') ? 'inference' : task.slug.startsWith('clarity-') ? 'clarity-review' : 'memory-compaction';
+    const identity = crypto.createHash('sha256').update(String(task.target)).digest('hex').slice(0, 12);
+    task.slug = `${kind}-${now.toISOString().slice(0, 10)}-${identity}`;
+    if (getTask(queueDir, task.slug) || fs.existsSync(path.join(queueDir, 'archive', `${task.slug}.md`))) continue;
+    task.created_by = 'automations';
+    task.payload = { scheduledIdle: true };
+    persistTaskToDisk(task, queueDir);
+    enqueued.push(task.slug);
+  }
+  return { enqueued };
 }
 
 /**
@@ -259,7 +275,7 @@ function generateMemoryCompactionTask(vaultDir) {
     status: 'pending',
     created_by: 'scheduler-idle',
     reason: `Idle task: scan vault for fragmented nodes to merge into comprehensive master documents.`,
-    body: `Scan for highly overlapping or fragmented memory nodes and fuse them into comprehensive master nodes, archiving the fragments.`,
+    body: `File memory-cleanup proposals for overlapping memory nodes. Keep canonical nodes unchanged until proposal review.`,
   };
 }
 
@@ -344,23 +360,6 @@ function generatePostMortemTask(sessionsDir) {
   };
 }
 
-/**
- * Generate a cutoff audit task — scans vault for nodes with intrinsic LLM
- * knowledge that may have drifted since the model's training cutoff.
- */
-function generateCutoffAuditTask() {
-  return {
-    type: 'task',
-    slug: `cutoff-audit-${Date.now().toString(36)}`,
-    priority: 60,
-    category: 'cutoff-audit',
-    status: 'pending',
-    created_by: 'scheduler-idle',
-    reason: 'Idle task: scan vault for training-cutoff assumption drift',
-    body: 'Identify memory nodes containing time-sensitive claims based on intrinsic LLM knowledge. Flag high-drift items (API versions, pricing, model specs, framework changes) for verification against current real-world sources.',
-  };
-}
-
 function makeFallbackTask(category, reason) {
   return {
     type: 'task',
@@ -385,7 +384,7 @@ function makeFallbackTask(category, reason) {
  * @param {string} opts.sessionsDir  Path to .agent/skills/total-recall/sessions/
  * @returns {{ queue: TaskQueue, stats: object }}
  */
-export function createScheduler({ queueDir, vaultDir, sessionsDir }) {
+export function createScheduler({ queueDir, vaultDir, sessionsDir, localOnly = false }) {
   const queue = new TaskQueue();
 
   // Load explicit tasks from disk
@@ -397,7 +396,7 @@ export function createScheduler({ queueDir, vaultDir, sessionsDir }) {
   // Optional remote vault sync job (env-configured only)
   try {
     const { remoteVaultSync } = config;
-    if (remoteVaultSync.enabled) {
+    if (!localOnly && remoteVaultSync.enabled) {
       const statusFile = path.join(path.dirname(remoteVaultSync.vaultDir), 'sync-status.json');
       let lastRunMs = 0;
       if (fs.existsSync(statusFile)) {
@@ -442,7 +441,7 @@ export function createScheduler({ queueDir, vaultDir, sessionsDir }) {
       : 60 * 60 * 1000; // 1 hour default
 
     let resetCount = 0;
-    for (const item of loadQueue()) {
+    for (const item of localOnly ? [] : loadQueue()) {
       if (item.status !== 'failed') continue;
       if ((item.attempts || 0) >= MAX_RESEARCH_ATTEMPTS) continue;
       const failedAt = new Date(item.updated_at || item.created_at || 0).getTime();
@@ -469,7 +468,7 @@ export function createScheduler({ queueDir, vaultDir, sessionsDir }) {
     }
 
     // User requests run before autonomous background research; oldest first within each.
-    const researchItems = loadQueue()
+    const researchItems = (localOnly ? [] : loadQueue())
       .filter((i) => i.status === 'pending' && RESEARCH_PHASES[i.research_phase || 'acquisition'])
       .sort((a, b) => {
         const ua = a.origin === 'autonomous' ? 1 : 0;
@@ -532,27 +531,20 @@ export function createScheduler({ queueDir, vaultDir, sessionsDir }) {
      * Get the next task.
      *
      * Default: only explicit (and research-queue) tasks — never invent work.
-     * Idle generation requires TR_IDLE_TASKS=1 or opts.allowIdle === true.
+     * Automations is the only recurring maintenance trigger.
      *
      * @param {{ allowIdle?: boolean }} [opts]
      * @returns {{ task: object|null, source: 'explicit'|'idle'|'empty' }}
      */
     next(opts = {}) {
+      if (opts.localOnly) {
+        const local = queue._items.findIndex(({ task }) => ['lesson-review', 'skill-manager'].includes(task.executor) || ['lesson-review', 'self-evaluation', 'skill-engineering'].includes(task.category));
+        return local < 0 ? { task: null, source: 'empty' } : { task: queue._items.splice(local, 1)[0].task, source: 'explicit' };
+      }
       const explicit = queue.dequeue();
       if (explicit) return { task: explicit, source: 'explicit' };
 
-      const allowIdle =
-        opts.allowIdle === true ||
-        process.env.TR_IDLE_TASKS === '1' ||
-        process.env.TR_IDLE_TASKS === 'true';
-
-      if (!allowIdle) {
-        return { task: null, source: 'empty' };
-      }
-
-      const idle = generateIdleTask({ vaultDir, sessionsDir });
-      persistTaskToDisk(idle, queueDir);
-      return { task: idle, source: 'idle' };
+      return { task: null, source: 'empty' };
     },
   };
 }

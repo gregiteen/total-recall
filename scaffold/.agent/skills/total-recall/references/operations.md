@@ -4,6 +4,8 @@ This is the maintained operations reference for Total Recall 3.39.1 source. Core
 
 Run `startup check --json`, `status --json`, `daemon status`, and relevant plugin status/help. Check configured backend health, authenticated instructions access, selected project/brain, daemon identity, SSSS tooling and freshness separately. A listening port or process is not health. `startup ensure` starts only configured managed stopped services; preserve running/unknown/foreign services. Scope/auth failures are not transport retries.
 
+`startup check` and `brief` also show what needs attention without affecting readiness: a dashboard bundle older than its frontend sources, and each installed plugin's `startup_check` (for example the git plugin's `unmerged`: branches and worktrees whose work is not in the default branch). Act on those lines; land or report every branch and worktree `total-recall git unmerged` lists before ending work. A server running from a source checkout rebuilds a missing or stale dashboard in the background, keeps serving the current bundle until the new one is complete, never installs dependencies, and reports its state in `/health` `dashboard`.
+
 Before tests/build/release, read the owning test/code-quality skills and actual repository config. Use the sanctioned remote test node, resolved by Total Recall. Run one background checker at a time; honor live locks and never delete another job's lock. Hash/synchronize the exact tested sources, inspect raw completion and exit status, and clean owned test fixtures/jobs. Run full suites for significant changes. Browser mocks do not certify live provider delivery. Never infer publication from a local version bump, a package build or a wrapper exit.
 
 Use the five project files plus source OpenWiki hubs throughout work. Append timestamped actions/failures/verification to the tracker's bottom Action Log. Keep implementation, tests, gates, package, release, deployed source and live evidence distinct. No deferred required work without the user's instruction.
@@ -16,7 +18,7 @@ Publication/deployment use the owning push/deploy procedures when authorized. Sh
 
 Use `brain status` to check the current project and physical global storage. Preview `brain relocate-global <dir>` before adding `--apply`. The destination must be a new private directory outside Git on the same filesystem as home. The home skills path links to the relocated tree. Keep repository brains in their own directories.
 
-Run normal preflight from home for global orchestration. Pass a repository working directory when routing repository work through Meta Harness. Use `plugin copies` to audit old project copies of shared defaults. `--apply` deletes verified bundled matches. Add `--archive-stale` to retain differing older copies in the replacement archive and use the shared versions.
+Run normal preflight from home for global orchestration. Pass a repository working directory when routing repository work through Metaharness. Use `plugin copies` to audit old project copies of shared defaults. `--apply` deletes verified bundled matches. Add `--archive-stale` to retain differing older copies in the replacement archive and use the shared versions.
 
 ## Optional developer API
 

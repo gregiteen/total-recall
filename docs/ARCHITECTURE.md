@@ -85,7 +85,7 @@ The Setup Web Wizard is served by a local Express instance during installation/d
 - **File-Native Indexes**: Vector indexes are written directly to plain JSONL (`embeddings.jsonl`) under the meta-skill's `memory-derived/` directory, backed by a high-speed cosine memory cache (`embeddings-cache.json`) for <50ms lookup times.
 - **Auto-Healing Dimension Mismatch Purging**: If you switch embedding models (e.g. from a 384-dim Ollama model to the 768-dim Google API), the engine detects the dimension length mismatch, automatically clears out the obsolete cache files, and indexes the entire vault cleanly from scratch.
 
-#### 2. 🤖 Meta Harness & Headless CLI Agent Dispatch
+#### 2. 🤖 Metaharness & Headless CLI Agent Dispatch
 Total Recall executes background cognitive tasks (post-mortems, web research crawls, dream cycle updates, and multi-agent councils) through headlessly spawned CLI agent harnesses and local neural models:
 
 - **Antigravity CLI** (`agy`): Ingests massive token context bounds for broad log post-mortems, complex reasoning, and repository-wide gap discovery.
@@ -136,7 +136,9 @@ Total Recall partitions your brain memory into two virtual directories:
 
 ## 🌀 The Daemon Loop & Priority Task Scheduler
 
-The background daemon (`dream.mjs`) manages the **Continuous Intelligent Scheduler** ([src/core/scheduler.mjs](../src/core/scheduler.mjs)) and task execution loops:
+The background daemon (`daemon-loop.mjs`) manages the **Continuous Intelligent Scheduler** ([src/core/scheduler.mjs](../src/core/scheduler.mjs)) and task execution loops.
+
+The automations plugin schedules `total-recall dream --all-brains` per node. The cloud daemon runs scheduled tasks on every node through mesh. Dream runs the global brain and registered project brains sequentially. Each brain has its own vault, derived directory, sessions and instruction surface. Phase 4 runs decay for that brain. Empty daemon queues only sleep. `dream --all-brains --dry-run` lists the brains and decay candidates without changes.
 
 ### 1. Priority-Driven Queue Mechanics
 Tasks are enqueued dynamically as standard Markdown files (`type: task`) located in your vault's `scheduler/queue/` directory. The scheduler resolves an **Effective Priority** by multiplying the task's base `priority` (10 to 100) by a strictly-regulated **layer weight** (`LAYER_WEIGHTS`), prioritizing critical correctness and active developer guidance over passive exploration:
@@ -150,9 +152,10 @@ Tasks are enqueued dynamically as standard Markdown files (`type: task`) located
 - `exploration` (Speculative tangents): **0.2**
 
 ### 2. The Dream Cycle Consolidation
-Every 20 task ticks, the background daemon conducts the **Dream Cycle**:
+The automations plugin schedules `dream --all-brains` per node. The cloud daemon runs scheduled tasks on every node through mesh. Each node runs the **Dream Cycle** for each of its brains:
 - **Light Sleep**: Scans for modified files, updates vector embeddings, and purges/re-indexes caches upon detecting embedding model dimension mismatches.
-- **REM**: Conducts clustering, prunes low-confidence nodes, and decays confidence scores on disused cards.
+- **REM**: Promotes candidate memories and records conflicts.
+- **Lucid Dreaming**: Proposes cleanups and runs memory decay on memories the access ledger shows unused for 60 active days of their brain. The gate verifies each proposal; verified decay is applied with an undo snapshot. See [Memory decay](guides/memory-decay.md).
 - **Deep Sleep**: Re-compiles rules and shims, and writes a daily summary note (`daily/YYYY-MM-DD.md`).
 
 ### 3. Continuous Idle Self-Improvement Loops (The Queue is NEVER Empty)
@@ -272,7 +275,7 @@ Plugin code never runs inside the brain server: the dashboard runner (`POST /api
 
 ---
 
-## 🌐 Mesh Compute Topology & Meta-Harness Layer
+## 🌐 Mesh Compute Topology & Metaharness Layer
 
 Total Recall unifies developer machines, remote compute nodes, and cloud servers across a private **Headscale WireGuard mesh network** (tailnet `100.64.0.0/10`), providing zero-configuration cross-host execution without third-party cloud dependencies or open incoming firewall ports.
 
@@ -284,9 +287,9 @@ Each machine on the network is tracked as an SSSS `mesh_node` entity in the vaul
 - **Cluster Diagnostics (`total-recall mesh doctor`)**: Concurrently audits reachability, development runtimes (`node`, `docker`, `git`), and AI harnesses (`agy`, `claude`, `codex`, `gemini`, `ollama`) across all cluster nodes, formatting the results into character-aligned terminal tables or structured JSON (`--json`).
 - **Cryptographic SSH Access Resolution**: Automatically resolves SSH user, port, and key path from the local `mesh_node` entity or `~/.ssh/config` using `IdentitiesOnly=yes` pinning.
 
-### 2. Meta-Harness Layer (`src/core/meta-harness.mjs`)
+### 2. Metaharness Layer (`src/core/meta-harness.mjs`)
 
-The Meta-Harness treats external AI CLI tools and local neural models as pluggable execution engines:
+The Metaharness treats external AI CLI tools and local neural models as pluggable execution engines:
 
 | Harness ID | Engine | Execution Mode | Role |
 | :--- | :--- | :--- | :--- |

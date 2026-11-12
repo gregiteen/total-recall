@@ -195,22 +195,4 @@ router.get('/api/brains/:id/nodes', requireAuth, requireScope('ssss:read', 'memo
   } catch (err) { serverError(res, err); }
 });
 
-/**
- * POST /api/brains/sync
- * Trigger a repo-sync across all registered repos.
- * Returns sync results per repo.
- */
-router.post('/api/brains/sync', requireAuth, requireScope('memory:write'), async (req, res) => {
-  try {
-    const { syncAllRepos } = await import('../../core/repo-sync.mjs');
-    const result = await syncAllRepos();
-    res.json({
-      ok: true,
-      totalIngested: result.totalIngested,
-      totalSkipped: result.totalSkipped,
-      repos: result.repos,
-    });
-  } catch (err) { serverError(res, err); }
-});
-
 export default router;

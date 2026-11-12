@@ -46,11 +46,11 @@ describe('instruction artifact integrity', () => {
       const shim = path.join(surface, 'AGENTS.md');
       fs.unlinkSync(shim);
       expect((await compileSurface(options)).skipped).not.toBe(true);
-      expect(fs.readFileSync(shim, 'utf8')).toContain('TOTAL RECALL');
+      expect(fs.readFileSync(shim, 'utf8')).toContain('Total Recall: start here');
       fs.writeFileSync(options.instructionsFile, '# authored note\n');
       expect((await compileSurface(options)).skipped).not.toBe(true);
       const repaired = fs.readFileSync(options.instructionsFile, 'utf8');
-      expect(repaired).toContain('TOTAL RECALL');
+      expect(repaired).toContain('Total Recall: start here');
       expect(repaired).toContain('# authored note');
       expect((await compileSurface(options)).skipped).toBe(true);
     }));
@@ -59,13 +59,48 @@ describe('instruction artifact integrity', () => {
       await compileSurface(options);
       fs.writeFileSync(path.join(config, 'clients.json'), JSON.stringify(['codex', 'claude-code']));
       expect((await compileSurface(options)).skipped).not.toBe(true);
-      expect(fs.readFileSync(path.join(surface, 'CLAUDE.md'), 'utf8')).toContain('TOTAL RECALL');
+      expect(fs.readFileSync(path.join(surface, 'CLAUDE.md'), 'utf8')).toContain('Total Recall: start here');
+    }));
+
+    it(`${layer}: entry files carry no rules, CLI list, plugin table or command list (ODC-R4, ODC-R5)`, () => withBrain(layer, async ({ surface, options }) => {
+      fs.writeFileSync(path.join(options.vaultDir, 'invariants-probe.md'), '---\ntype: memory\nslug: invariants-probe\ncategory: invariants\ntitle: Probe rule\nstatus: active\nconfidence: 1\nimportance: 5\nmodality: must\n---\n\nPROBE-RULE-BODY must never be copied into an entry file.\n');
+      await compileSurface(options);
+      const entry = fs.readFileSync(path.join(surface, 'AGENTS.md'), 'utf8');
+      expect(entry).toContain('Total Recall: start here');
+      expect(entry).toContain('tr-preflight --ack');
+      for (const copied of ['PROBE-RULE-BODY', 'Built-in commands', 'Mandatory Plugin Enforcement', 'Composable Commands']) expect(entry).not.toContain(copied);
+      expect(Buffer.byteLength(entry)).toBeLessThan(2048);
+    }));
+
+    it(`${layer}: a vault change rebuilds indexes and rewrites no entry file (ODC-R2, ODC-R5)`, () => withBrain(layer, async ({ surface, options }) => {
+      await compileSurface(options);
+      const entryFile = path.join(surface, 'AGENTS.md');
+      const before = { text: fs.readFileSync(entryFile, 'utf8'), mtime: fs.statSync(entryFile).mtimeMs };
+      const vaultHash = fs.readFileSync(path.join(options.derivedDir, 'vault-hash.txt'), 'utf8');
+      fs.writeFileSync(path.join(options.vaultDir, 'facts-probe.md'), '---\ntype: memory\nslug: facts-probe\ncategory: facts\ntitle: Probe fact\nstatus: active\n---\n\nA new fact.\n');
+      expect((await compileSurface(options)).skipped).not.toBe(true);
+      expect(fs.readFileSync(path.join(options.derivedDir, 'vault-hash.txt'), 'utf8')).not.toBe(vaultHash);
+      expect(fs.readFileSync(entryFile, 'utf8')).toBe(before.text);
+      expect(fs.statSync(entryFile).mtimeMs).toBe(before.mtime);
+    }));
+
+    it(`${layer}: a plugin catalog change rewrites no entry file and rebuilds no vault index (ODC-R1)`, () => withBrain(layer, async ({ surface, options }) => {
+      await compileSurface(options);
+      const entryFile = path.join(surface, 'AGENTS.md');
+      const graph = path.join(options.derivedDir, 'graph-index.jsonl');
+      const before = { entry: fs.statSync(entryFile).mtimeMs, graph: fs.statSync(graph).mtimeMs };
+      fs.writeFileSync(path.join(options.derivedDir, 'cli-index-hash.txt'), 'an older plugin catalog');
+      expect((await compileSurface(options)).skipped).not.toBe(true);
+      expect(fs.statSync(entryFile).mtimeMs).toBe(before.entry);
+      expect(fs.statSync(graph).mtimeMs).toBe(before.graph);
+      expect(fs.readFileSync(path.join(options.derivedDir, 'cli-index-hash.txt'), 'utf8')).not.toBe('an older plugin catalog');
+      expect((await compileSurface(options)).skipped).toBe(true);
     }));
 
     it(`${layer}: compiles Hermes as an AGENTS.md client and writes no Hermes memory`, () => withBrain(layer, async ({ surface, config, options }) => {
       fs.writeFileSync(path.join(config, 'clients.json'), JSON.stringify({ clients: { hermes: { mode: 'symlink' } } }));
       await compileSurface(options);
-      expect(fs.readFileSync(path.join(surface, 'AGENTS.md'), 'utf8')).toContain('TOTAL RECALL');
+      expect(fs.readFileSync(path.join(surface, 'AGENTS.md'), 'utf8')).toContain('Total Recall: start here');
       expect(fs.existsSync(path.join(surface, '.hermes', 'memories'))).toBe(false);
     }));
 
@@ -96,7 +131,7 @@ describe('instruction artifact integrity', () => {
 
       const artifacts = JSON.parse(fs.readFileSync(path.join(options.derivedDir, 'surface-artifacts.json'), 'utf8'));
       expect(artifacts.files.map(entry => entry.file)).toEqual(['INSTRUCTIONS.md', 'AGENTS.md']);
-      expect(fs.readFileSync(path.join(surface, 'AGENTS.md'), 'utf8')).toContain('TOTAL RECALL');
+      expect(fs.readFileSync(path.join(surface, 'AGENTS.md'), 'utf8')).toContain('Total Recall: start here');
       if (mode === 'missing') expect(fs.existsSync(memoryPath)).toBe(false);
       else expect(fs.readFileSync(destination, 'utf8')).toBe(nativeMemory);
       if (mode === 'symlink') expect(fs.readlinkSync(memoryPath)).toBe(destination);
@@ -131,7 +166,7 @@ describe('compileSurface writes the surface where the harness reads it', () => {
       // compile where INSTRUCTIONS.md does not exist yet.
       const canonical = path.join(agentDir, 'INSTRUCTIONS.md');
       expect(fs.existsSync(canonical)).toBe(true);
-      expect(fs.readFileSync(canonical, 'utf8')).toContain('TOTAL RECALL');
+      expect(fs.readFileSync(canonical, 'utf8')).toContain('Total Recall: start here');
       // The relocation bug wrote the surface here instead. It must never return.
       expect(fs.existsSync(path.join(home, 'INSTRUCTIONS.md'))).toBe(false);
       expect(fs.existsSync(path.join(home, 'AGENTS.md'))).toBe(false);
@@ -159,7 +194,7 @@ describe('compileSurface writes the surface where the harness reads it', () => {
         instructionsFile: path.join(agentDir, 'INSTRUCTIONS.md'),
         force: true, semantic: false,
       });
-      expect(fs.readFileSync(path.join(agentDir, 'INSTRUCTIONS.md'), 'utf8')).toContain('TOTAL RECALL');
+      expect(fs.readFileSync(path.join(agentDir, 'INSTRUCTIONS.md'), 'utf8')).toContain('Total Recall: start here');
       expect(fs.existsSync(path.join(home, 'INSTRUCTIONS.md'))).toBe(false);
     } finally {
       fs.rmSync(home, { recursive: true, force: true });

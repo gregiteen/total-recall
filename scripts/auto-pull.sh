@@ -74,10 +74,21 @@ checkout_version() {
 
 # The version the RUNNING server reports, or nothing when it is down. A pulled
 # checkout proves nothing until the server serving it has restarted.
-running_version() {
+probe_version() {
   curl -s -m 5 "http://127.0.0.1:$SERVER_PORT/health" 2>/dev/null \
     | "$NODE_BIN" -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{try{process.stdout.write(JSON.parse(s).version||"")}catch{}})' \
     || true
+}
+# One slow /health answer is not a dead server: a busy brain missed the 5-second probe and the
+# old single probe called that "nothing", which triggered a reinstall and restart every few minutes.
+running_version() {
+  local got="" attempt
+  for attempt in 1 2 3; do
+    got="$(probe_version)"
+    [ -n "$got" ] && break
+    [ "$attempt" -lt 3 ] && sleep 5
+  done
+  printf '%s' "$got"
 }
 
 port_in_use() {
@@ -187,6 +198,40 @@ restart_brain() {
 install_deps() {
   log "Installing dependencies (npm ci)..."
   npm ci --no-audit --no-fund >> "$LOG_FILE" 2>&1 || { log "❌ npm ci failed; not restarting."; exit 1; }
+  lock_hash > "$LOCK_STAMP" 2>/dev/null || true
+}
+
+# npm ci deletes node_modules before reinstalling, so every total-recall command that runs
+# meanwhile fails (a deploy broke mid-upload this way). Reinstall only when the lockfile
+# changed since the last successful install.
+LOCK_STAMP="$REPO_DIR/node_modules/.tr-auto-pull-lock.sha256"
+lock_hash() {
+  if command -v shasum >/dev/null 2>&1; then shasum -a 256 "$REPO_DIR/package-lock.json"; else sha256sum "$REPO_DIR/package-lock.json"; fi | cut -d' ' -f1
+}
+deps_current() {
+  [ -d "$REPO_DIR/node_modules" ] || return 1
+  if [ -f "$LOCK_STAMP" ]; then
+    [ "$(cat "$LOCK_STAMP")" = "$(lock_hash)" ]
+    return
+  fi
+  # No stamp: the tree was installed by something other than this script (npm install,
+  # the brain updater), which never writes it. Wiping a complete tree for that reason
+  # cost a full npm ci on every version mismatch, broke every total-recall command for
+  # its duration, and during a Time Machine snapshot every rewrite stays on the disk
+  # (2026-11-10, ~20 GB pinned). The tree is current when npm's own record of what it
+  # installed (node_modules/.package-lock.json) has every locked package at its locked
+  # version; optional packages for other platforms are never installed and do not count.
+  # (`npm ls --all` cannot decide this: it fails on those unmet optional dependencies.)
+  if "$NODE_BIN" -e '
+    const [lock, hidden] = process.argv.slice(1).map(f => require(f).packages || {});
+    for (const [key, entry] of Object.entries(lock)) {
+      if (!key || (entry.optional && !hidden[key])) continue;
+      if (hidden[key]?.version !== entry.version) process.exit(1);
+    }' "$REPO_DIR/package-lock.json" "$REPO_DIR/node_modules/.package-lock.json" >/dev/null 2>&1; then
+    lock_hash > "$LOCK_STAMP" 2>/dev/null || true
+    return 0
+  fi
+  return 1
 }
 
 log "Checking $REPO_DIR (node: $NODE_BIN)"
@@ -225,9 +270,13 @@ if [ "$LOCAL" = "$REMOTE" ]; then
     log "✅ Up to date and serving $WANT."
     exit 0
   fi
-  log "⚠️ Code is up to date but the server reports '${RUNNING:-nothing}', not $WANT. Reinstalling and restarting."
-  install_deps
-  build_frontend
+  if deps_current; then
+    log "⚠️ Code is up to date but the server reports '${RUNNING:-nothing}', not $WANT. Dependencies are current; restarting only."
+  else
+    log "⚠️ Code is up to date but the server reports '${RUNNING:-nothing}', not $WANT. Reinstalling and restarting."
+    install_deps
+    build_frontend
+  fi
   restart_brain
   exit 0
 fi

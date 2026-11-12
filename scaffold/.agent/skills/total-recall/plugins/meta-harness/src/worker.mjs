@@ -2,7 +2,7 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { spawn } from 'node:child_process';
+import { spawn, execFileSync } from 'node:child_process';
 import { createInterface } from 'node:readline';
 import { randomUUID } from 'node:crypto';
 
@@ -172,9 +172,18 @@ export function findBinary(name, env = process.env) {
 }
 
 /** Process groups this process started and has not finished, so termination can stop them. */
-const ACTIVE_GROUPS = new Set();
+const ACTIVE_GROUPS = new Map();
+let cancellation = null;
+export const cancellationResult = () => cancellation && { ...cancellation };
+/** Set the stop state before signalling a child, so its exit cannot start another attempt. */
+export function cancelExecution(signal = 'SIGTERM', graceMs = 500) {
+  cancellation ||= { ok: false, cancelled: true, failureKind: 'cancelled', signal,
+    exitCode: signal === 'SIGINT' ? 130 : signal === 'SIGHUP' ? 129 : 143, error: `Cancelled by ${signal}.` };
+  for (const stop of ACTIVE_GROUPS.values()) stop('cancelled', graceMs);
+  return cancellationResult();
+}
 export function stopActiveProcesses(signal = 'SIGTERM') {
-  for (const pid of ACTIVE_GROUPS) { try { process.kill(process.platform === 'win32' ? pid : -pid, signal); } catch { /* already gone */ } }
+  for (const pid of ACTIVE_GROUPS.keys()) { if (typeof pid !== 'number') continue; try { process.kill(process.platform === 'win32' ? pid : -pid, signal); } catch { /* already gone */ } }
   return ACTIVE_GROUPS.size;
 }
 
@@ -263,25 +272,29 @@ function toolEvidence(toolResults) {
   };
 }
 
-export function runProcess(binary, args, { cwd, input = '', timeoutMs = 300000, env = agentEnvironment(), maxBytes = 2 * 1024 * 1024, codexJsonl = false, claudeJsonl = false, piJsonl = false } = {}) {
+export function runProcess(binary, args, { cwd, input = '', timeoutMs = 300000, env = agentEnvironment(), maxBytes = 2 * 1024 * 1024, codexJsonl = false, claudeJsonl = false, piJsonl = false, onFrame } = {}) {
+  if (cancellation) return Promise.resolve({ ...cancellationResult(), stdout: '', stderr: '', reason: 'cancelled' });
   return new Promise(resolve => {
     let stdout = '', stderr = '', bytes = 0, reason = null, child, timer, escalation, settled = false;
     const kill = signal => { try { if (process.platform !== 'win32') process.kill(-child.pid, signal); else child.kill(signal); } catch {} };
     const finish = (exitCode, signal) => {
       if (settled) return;
       settled = true; clearTimeout(timer);
-      if (child?.pid) ACTIVE_GROUPS.delete(child.pid);
+      const complete = () => {
+        if (child?.pid) ACTIVE_GROUPS.delete(child.pid);
+        resolve({ exitCode, signal, stdout, stderr, reason, ...(reason === 'cancelled' ? cancellationResult() : {}) });
+      };
       // A parent can exit on TERM while a descendant still holds the process group.
       // Finish the owned group cleanup before releasing an aborted operation.
       if (reason && escalation) {
         clearTimeout(escalation);
-        escalation = setTimeout(() => { kill('SIGKILL'); resolve({ exitCode, signal, stdout, stderr, reason }); }, 500);
-      } else resolve({ exitCode, signal, stdout, stderr, reason });
+        escalation = setTimeout(() => { kill('SIGKILL'); complete(); }, 500);
+      } else complete();
     };
-    const stop = cause => { if (reason) return; reason = cause; kill('SIGTERM'); escalation = setTimeout(() => kill('SIGKILL'), 500); };
+    const stop = (cause, graceMs = 500) => { if (reason) return; reason = cause; kill('SIGTERM'); escalation = setTimeout(() => kill('SIGKILL'), graceMs); };
     try { child = spawn(binary, args, { cwd, env, shell: false, detached: process.platform !== 'win32', stdio: ['pipe', 'pipe', 'pipe'] }); }
     catch { finish(null); return; }
-    if (child.pid) ACTIVE_GROUPS.add(child.pid);
+    if (child.pid) ACTIVE_GROUPS.set(child.pid, stop);
     timer = setTimeout(() => stop('timeout'), timeoutMs);
     child.on('error', () => { reason = 'spawn-error'; finish(null); });
     child.stdin.on('error', () => {});
@@ -304,6 +317,8 @@ export function runProcess(binary, args, { cwd, input = '', timeoutMs = 300000, 
         if (reason || !line.trim()) return;
         let frame;
         try { frame = JSON.parse(line); } catch { /* Keep malformed data so validation fails. */ }
+        // A-107: every parsed frame reaches the live progress log as it arrives.
+        if (frame && onFrame) { try { onFrame(frame); } catch { /* progress never stops the run */ } }
         if (codexJsonl && typeof frame?.type === 'string' && frame.type.startsWith('item.') &&
             frame.item?.type !== 'agent_message' && !frameError(frame)) {
           const toolFrame = completedCodexTool(frame);
@@ -377,8 +392,11 @@ function agentFailure(message, stderr = '') {
 }
 const PLAIN_TEXT_ADAPTERS = ['ollama', 'openclaw', 'aider', 'goose', 'openhands', 'cline'];
 export function parseAgentResult(id, result) {
+  if (result.cancelled || result.reason === 'cancelled') return { ...result, ok: false, cancelled: true, failureKind: 'cancelled', error: result.error || 'Cancelled.' };
   const stderr = String(result.stderr || '').trim().slice(-2000);
-  const processFailure = result.reason ? { ok: false, error: result.reason, failureKind: 'process' } : null;
+  // A killed run (timeout, output limit) keeps the tail of what the agent printed, so the failure can be diagnosed (A-103).
+  const processFailure = result.reason ? { ok: false, error: result.reason, failureKind: 'process',
+    partialOutput: String(result.stdout || '').slice(-8000) || null, stderr: stderr || null } : null;
   if (PLAIN_TEXT_ADAPTERS.includes(id) || loadCustomAdapters().some(c => c.id === id)) {
     if (processFailure) return processFailure;
     if (result.exitCode !== 0) return agentFailure(null, stderr || `Agent process exited ${result.exitCode}`);
@@ -432,7 +450,7 @@ export function parseAgentResult(id, result) {
   return typeof text === 'string' && text.trim() ? { ok: true, response: text, ...metadata } : { ok: false, error: 'Agent did not produce a recognized completed result', failureKind: 'agent', ...metadata };
 }
 
-async function readOpenClawResult(execution, { binary, cwd, env, probe, sessionId }) {
+export async function readOpenClawResult(execution, { binary, cwd, env, probe, sessionId }) {
   const fallback = parseAgentResult('openclaw', execution);
   let run;
   try { run = JSON.parse(execution.stdout); } catch { /* No structured run to attribute. */ }
@@ -511,19 +529,18 @@ export async function totalRecallBootstrap(request, { probe = runProcess, env = 
   await acknowledge(cwd);
   // A receipt is per checkout, and the agent's own gate reads the one where it works.
   if (request.cwd !== cwd) await acknowledge(request.cwd);
-  const help = await invoke(['--help']);
-  const plugins = JSON.parse(await invoke(['plugin', 'library', '--json']));
-  const commands = JSON.parse(await invoke(['composable-cli', 'library', '--json']));
+  // A-121: give the agent the commands that match its task from the semantic CLI index, not whole
+  // inventories (the plugin and composed libraries were about 550 KB together). It looks up anything else.
   const docs = JSON.parse(await invoke(['meta-harness', 'docs-ensure', '--agent', request.agent, '--json']));
   if (docs.ok !== true) throw notReady('Official agent documentation is unavailable or stale');
-  let references;
-  if (request.bootstrapDirectory) {
-    const file = path.join(request.bootstrapDirectory, 'cli-reference.json');
-    fs.writeFileSync(file, JSON.stringify({ help, plugins, commands }), { mode: 0o600 });
-    references = `Complete CLI, installed-plugin and composed-command inventories: ${file}. Retrieve only the applicable operations; use total-recall <namespace> --help for current arguments.`;
-  } else references = `Complete CLI help:\n${help}\nInstalled plugin command library:\n${JSON.stringify(plugins)}\nComposed command library:\n${JSON.stringify(commands)}`;
+  // Node built-ins only here (this file ships to remote nodes): the result is the pretty-printed JSON after any log lines.
+  let found = null;
+  try { const out = await invoke(['help', task, '--json']); const at = out.indexOf('{\n'); found = JSON.parse(at >= 0 ? out.slice(at) : out); }
+  catch (error) { if (error.code === 'NOT_READY') throw error; found = null; }
+  const matches = Array.isArray(found?.matches) ? found.matches.slice(0, 12) : [];
+  const references = `${matches.length ? `Commands that match this task (Total Recall semantic command search):\n${matches.map(m => `- ${m.verb} — ${m.description}`).join('\n')}\n` : ''}For anything else, run total-recall help "<what you need>" to find the command, then total-recall <namespace> --help for its arguments. Do not load whole command inventories.`;
   const operatingContext = hasEvidence ? capsule.context.slice(0, evidenceStart).trimEnd() : capsule.context;
-  const prompt = `Requester: the operator of this Total Recall workspace.\nThe Total Recall preflight is already acknowledged for this checkout, so do not run it again; a sandboxed session cannot write its receipt.\nUse Total Recall and its owning plugin CLI for this task. Context was assembled automatically for this task on this node. Official documentation is cached at ${docs.directory}; read applicable references before changing an integration.\n\nTask context:\n${operatingContext}\n\nCLI reference:\n${references}`;
+  const prompt = `Requester: the operator of this Total Recall workspace.\nThe Total Recall preflight is already acknowledged for this checkout, so do not run it again; a sandboxed session cannot write its receipt.\nUse Total Recall and its owning plugin CLI for this task. Context was assembled automatically for this task on this node. Official documentation is cached at ${docs.directory}; read applicable references before changing an integration.\n\nTask context:\n${operatingContext}\n\nCommands:\n${references}`;
   const requestedTask = `\n\nRequested task:\n${request.prompt}`;
   if (!hasEvidence) return prompt + requestedTask;
 
@@ -574,7 +591,7 @@ export async function inspectAgents({ probe = runProcess, env = process.env, ids
   return { agents, evidence: 'Version and login probes only; actual execution requires a completed run' };
 }
 
-export async function dispatchAgent(request, { probe = runProcess, env = process.env, bootstrap = totalRecallBootstrap } = {}) {
+export async function dispatchAgent(request, { probe = runProcess, env = process.env, bootstrap = totalRecallBootstrap, sessionRunner } = {}) {
   const adapter = getActiveAdapters().find(item => item.id === request.agent);
   if (!adapter || !path.isAbsolute(request.cwd || '') || typeof request.prompt !== 'string' || !request.prompt.trim()) throw new Error('Explicit supported agent, absolute workspace and prompt required');
   if (Buffer.byteLength(request.prompt) > 65536) throw notReady(`The prompt is ${Buffer.byteLength(request.prompt)} bytes and the limit is 65536, so it was not sent`);
@@ -674,30 +691,67 @@ export async function dispatchAgent(request, { probe = runProcess, env = process
     }
   }
   const allowWrites = request.permissions?.write === true;
-  if (adapter.id === 'codex') args[args.indexOf('--sandbox') + 1] = allowWrites ? 'workspace-write' : 'read-only';
+  // A writing agent gets full access (Greg, 2026-11-09): workspace-write blocked the vault lock,
+  // the auth store and the mesh, so routed operational work could not run (A-106).
+  // Every launch gets full access (Greg, 2026-11-09). Codex's read-only sandbox and Claude's plan mode
+  // block the Keychain, the network and every command, so a read-only job could not unlock the auth
+  // store or run the Total Recall CLI (A-110). Read-only work is contained by its disposable checkout
+  // (dispatch.mjs), not by the harness sandbox.
+  if (adapter.id === 'codex') args[args.indexOf('--sandbox') + 1] = 'danger-full-access';
   if (billing && adapter.id === 'codex') args.unshift(...CODEX_PLAN_ARGS);
   if (claudePlan) args.unshift(...CLAUDE_PLAN_ARGS);
-  if (adapter.id === 'claude') args[args.indexOf('--permission-mode') + 1] = allowWrites ? 'acceptEdits' : 'plan';
+  // acceptEdits denied every command a headless run cannot approve, including the preflight and tests (A-104).
+  if (adapter.id === 'claude') args[args.indexOf('--permission-mode') + 1] = 'bypassPermissions';
   if (adapter.id === 'agy') args[args.indexOf('--mode') + 1] = allowWrites ? 'accept-edits' : 'plan';
   if (adapter.id === 'muse' && !allowWrites) args.push('--disable-write');
   if (adapter.id === 'pi') args[args.indexOf('--tools') + 1] = allowWrites ? 'read,bash,edit,write' : 'read';
   if (adapter.id === 'ollama') args.push(env.TR_OLLAMA_MODEL || state.chatModels[0]);
-  const input = adapter.input === 'stdin' ? prompt : '';
-  if (adapter.input === 'argument' || adapter.input === 'file') {
-    const file = path.join(temporary, 'prompt.txt'); fs.writeFileSync(file, prompt, { mode: 0o600 });
-    if (adapter.input === 'file') args.push('--prompt-file', file);
-    else args.push(`Read ${file} completely before taking action. It contains the required Total Recall task context, CLI reference location, official documentation location and the requested task. Carry out that task using the supplied context.`);
-  }
-  const execution = await probe(binary, args, { cwd: request.cwd, input, timeoutMs: request.timeoutMs || 900000,
-    codexJsonl: adapter.id === 'codex', claudeJsonl: adapter.id === 'claude', piJsonl: adapter.id === 'pi',
-    env: { ...agentEnvironment(env), ...credentials, TR_META_HARNESS_RUN: '1' } });
-  const parsed = openClawSession ? await readOpenClawResult(execution, {
-    binary, cwd: request.cwd, env: agentEnvironment(env), probe, sessionId: openClawSession,
-  }) : parseAgentResult(adapter.id, execution);
-  const frames = parsed.events || [];
-  return { agent: adapter.id, ...parsed, exitCode: execution.exitCode ?? null,
-    model: parsed.model ?? frames.find(frame => frame.model)?.model ?? null,
-    finishedReason: parsed.finishedReason ?? frames.findLast(frame => frame.finished_reason || frame.stopReason)?.finished_reason ?? execution.reason ?? null };
+  const progressFile = request.progressFile || path.join(
+    env.TR_SECRETS_BRAIN || path.join(env.AGENT_DIR || path.join(env.HOME || os.homedir(), '.agent'), 'skills/total-recall'),
+    'config/meta-harness/jobs', `${request.jobId || process.env.TR_METAHARNESS_JOB || `session-${randomUUID()}`}.events.jsonl`);
+  const progress = createProgress({ file: progressFile, harness: adapter.id,
+    onStall: reason => sendStallAlert(`Metaharness: ${adapter.id} stalled`, `${reason}. Live log: ${progressFile}`) });
+  const ownerId = request.jobId || process.env.TR_METAHARNESS_JOB;
+  const ownerFile = ownerId ? path.join(path.dirname(progressFile), `${ownerId}.events.jsonl`) : progressFile;
+  const ownerProgress = ownerFile !== progressFile ? createProgress({ file: ownerFile, harness: adapter.id }) : null;
+  const liveProgress = ownerProgress ? { event: frame => { progress.event(frame); ownerProgress.event(frame); } } : progress;
+  const { runSession, sessionOptions } = await import('./session/run.mjs');
+  const savedRequest = Object.fromEntries(['agent', 'model', 'tools', 'settingSources', 'allowedTools', 'permissions', 'allowUnknownAuth',
+    'goal', 'maxTurns', 'maxTokens', 'maxBudgetUsd', 'resultSchema', 'approvalPolicy', 'questionTimeoutMs', 'effort', 'fallbackModel'].filter(key => request[key] !== undefined).map(key => [key, request[key]]));
+  if (savedRequest.resultSchema !== undefined) savedRequest.resultSchema = sessionOptions(request).resultSchema;
+  const snapshot = JSON.stringify({ workspace: request.contextCwd || request.cwd, branch: request.branch, request: savedRequest });
+  fs.writeFileSync(progressFile.replace('.events.jsonl', '.session.json'), snapshot, { mode: 0o600 });
+  if (ownerProgress) fs.writeFileSync(ownerFile.replace('.events.jsonl', '.session.json'), snapshot, { mode: 0o600 });
+  let parsed;
+  const frames = [];
+  const captureFrame = frame => {
+    if (frames.length >= 80) return;
+    if (adapter.id === 'claude') {
+      const content = claudeToolBlocks(frame);
+      if (content.length) frames.push({ type: frame.type, message: { content } });
+    } else if (adapter.id === 'codex') {
+      const item = frame.method === 'item/completed' ? frame.params?.item : null;
+      if (item?.type === 'commandExecution' && Number.isInteger(item.exitCode)) frames.push({ type: 'item.completed',
+        item: { type: 'command_execution', status: item.status, exit_code: item.exitCode, aggregated_output: toolOutput(item.aggregatedOutput) } });
+    } else if (['tool_call', 'tool_result', 'tool_execution_end'].includes(frame.type)) frames.push(frame);
+  };
+  try {
+    parsed = await (sessionRunner || runSession)({ request, adapter, binary, args,
+      env: { ...agentEnvironment(env), ...credentials, TR_META_HARNESS_RUN: '1' }, prompt, progress: liveProgress, onFrame: captureFrame,
+      register: stop => { const id = Symbol('session'); ACTIVE_GROUPS.set(id, stop); return () => ACTIVE_GROUPS.delete(id); } });
+    if (cancellationResult()) parsed = { ...parsed, ...cancellationResult() };
+    if (frames.length) Object.assign(parsed, toolEvidence(nativeToolResults(adapter.id, frames)));
+    if (openClawSession && parsed.execution) {
+      const evidence = await readOpenClawResult(parsed.execution, { binary, cwd: request.cwd, env: agentEnvironment(env), probe, sessionId: openClawSession });
+      Object.assign(parsed, toolEvidence(evidence.toolResults || []), { provider: evidence.provider, toolEvidenceError: evidence.toolEvidenceError });
+      if (!evidence.ok) Object.assign(parsed, { ok: false, error: evidence.error, failureKind: evidence.failureKind });
+      delete parsed.execution;
+    }
+  } catch (error) { parsed = { ok: false, error: error.message, failureKind: error.failureKind || 'agent' }; }
+  finally { progress.close(parsed); ownerProgress?.close(parsed); }
+  return { agent: adapter.id, ...parsed, progressFile, statusFile: progress.statusFile,
+    sessionId: parsed.sessionId || progress.status().session_id,
+    exitCode: parsed.ok ? 0 : parsed.exitCode ?? null };
   } finally { fs.rmSync(temporary, { recursive: true, force: true }); }
 }
 
@@ -728,4 +782,175 @@ export async function runWorker(request) {
     return { ok: result.exitCode === 0 && !result.reason, output: result.stdout, error: result.reason || (result.exitCode ? 'CLI command failed' : undefined), exitCode: result.exitCode, commandExecutionVerified: result.exitCode === 0 && !result.reason };
   }
   throw new Error('Unknown meta-harness worker operation');
+}
+
+// ─── Live progress (A-107) ─────────────────────────────────────────────────────
+// Kept inside this file: executor.mjs ships worker.mjs whole to remote nodes, so it may
+// import only Node built-ins.
+/**
+ * Live visibility into a dispatched agent (A-107).
+ *
+ * Claude Code (`--output-format stream-json --verbose`) and Codex (`exec --json`) stream every
+ * event while they run. Each event, normalized to one line, goes to the job's event log as it
+ * arrives; a status record sits beside it; a watchdog flags a stalled run.
+ *   <job>.events.jsonl   one JSON line per event: { t, kind, text }
+ *   <job>.status.json    { state, harness, session_id, started_at, last_event_at, events, current, in_progress, result }
+ */
+export const STALL_MS = 5 * 60_000;
+export const LONG_STEP_MS = 30 * 60_000;
+const CHECK_MS = 30_000;
+const TEXT_MAX = 300;
+
+const clip = value => {
+  const text = String(value ?? '').replace(/\s+/g, ' ').trim();
+  return text.length > TEXT_MAX ? `${text.slice(0, TEXT_MAX - 1)}…` : text;
+};
+
+/** One readable event per agent frame, or null for frames that carry nothing a person needs. */
+export function normalizeFrame(harness, frame) {
+  if (!frame || typeof frame !== 'object') return null;
+  if (typeof frame.kind === 'string') {
+    const entry = { ...frame, text: clip(toolOutput(frame.text)) };
+    // Native tool frames can be megabytes long and contain command output.
+    // The worker keeps bounded tool evidence separately from the live view.
+    delete entry.item;
+    delete entry.input;
+    delete entry.response;
+    delete entry.structured;
+    delete entry.server;
+    if (entry.request) entry.request = toolOutput(JSON.stringify(entry.request));
+    return entry;
+  }
+  if (harness === 'codex') {
+    const item = frame.item || {};
+    switch (frame.type) {
+      case 'thread.started': return { kind: 'session', text: `Codex session ${frame.thread_id || ''}`.trim(), session: frame.thread_id || null };
+      case 'turn.started': return { kind: 'turn', text: 'Turn started' };
+      case 'turn.completed': return { kind: 'usage', text: `Turn completed (${frame.usage?.input_tokens ?? '?'} in, ${frame.usage?.output_tokens ?? '?'} out tokens)` };
+      case 'turn.failed': return { kind: 'error', text: `Turn failed: ${clip(frame.error?.message || frame.error)}` };
+      case 'error': return { kind: 'error', text: `Error: ${clip(frame.message || frame.error)}` };
+      case 'item.started':
+        if (item.type === 'command_execution') return { kind: 'step-start', text: `Running: ${clip(item.command)}` };
+        if (item.type === 'mcp_tool_call') return { kind: 'step-start', text: `Calling ${item.server || ''}.${item.tool || ''}` };
+        return null;
+      case 'item.completed':
+        if (item.type === 'command_execution') return { kind: 'step-end', text: `Ran: ${clip(item.command)} (exit ${item.exit_code ?? '?'})` };
+        if (item.type === 'mcp_tool_call') return { kind: 'step-end', text: `Called ${item.server || ''}.${item.tool || ''}` };
+        if (item.type === 'file_change') return { kind: 'edit', text: `Changed ${clip((item.changes || []).map(change => change.path).join(', '))}` };
+        if (item.type === 'agent_message') return { kind: 'message', text: clip(item.text) };
+        if (item.type === 'web_search') return { kind: 'search', text: `Searched: ${clip(item.query)}` };
+        if (item.type === 'todo_list') return { kind: 'plan', text: `Plan: ${clip((item.items || []).map(entry => `${entry.completed ? '✓' : '·'} ${entry.text}`).join('; '))}` };
+        return null;
+      default: return null;
+    }
+  }
+  if (harness === 'claude') {
+    if (frame.type === 'system' && frame.subtype === 'init') return { kind: 'session', text: `Claude session ${frame.session_id || ''} (${frame.model || 'model unknown'})`.trim(), session: frame.session_id || null };
+    if (frame.type === 'system' && frame.subtype === 'api_retry') return { kind: 'retry', text: `API retry ${frame.attempt}/${frame.max_retries}: ${frame.error || 'unknown'}` };
+    if (frame.type === 'system' && frame.subtype === 'permission_denied') return { kind: 'error', text: `Permission denied: ${clip(frame.tool_name || frame.message)}` };
+    if (frame.type === 'result') return { kind: frame.is_error ? 'error' : 'usage', text: `Result: ${frame.subtype || ''}${frame.total_cost_usd !== undefined ? `, cost $${frame.total_cost_usd}` : ''}`, session: frame.session_id || null };
+    const blocks = Array.isArray(frame.message?.content) ? frame.message.content : [];
+    if (frame.type === 'assistant') {
+      const tool = blocks.find(block => block.type === 'tool_use');
+      if (tool) return { kind: 'step-start', text: `${tool.name}: ${clip(tool.input?.command || tool.input?.file_path || tool.input?.pattern || tool.input?.description || JSON.stringify(tool.input || {}))}` };
+      const text = blocks.filter(block => block.type === 'text').map(block => block.text).join(' ');
+      return text.trim() ? { kind: 'message', text: clip(text) } : null;
+    }
+    if (frame.type === 'user' && blocks.some(block => block.type === 'tool_result')) {
+      const failed = blocks.some(block => block.type === 'tool_result' && block.is_error);
+      return { kind: 'step-end', text: failed ? 'Tool returned an error' : 'Tool finished' };
+    }
+    return null;
+  }
+  return null;
+}
+
+/**
+ * Track one dispatched run. `event(frame)` records an agent frame; `close(result)` records the
+ * outcome. A watchdog marks the run stalled once, and calls `onStall`, when no event arrives for
+ * `stallMs` while no step is running, or one step runs past `longStepMs`.
+ */
+export function createProgress({ file, harness, stallMs = STALL_MS, longStepMs = LONG_STEP_MS, onStall, now = () => Date.now(), checkMs = CHECK_MS } = {}) {
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  const statusFile = file.replace(/\.events\.jsonl$/, '') + '.status.json';
+  const status = { state: 'running', harness, pid: process.pid, session_id: null, started_at: new Date(now()).toISOString(), last_event_at: null,
+    events: 0, current: null, in_progress: 0, step_started_at: null, events_file: file, result: null };
+  const saveStatus = () => {
+    const temp = `${statusFile}.${process.pid}.tmp`;
+    try { fs.writeFileSync(temp, JSON.stringify(status, null, 2), { mode: 0o600 }); fs.renameSync(temp, statusFile); } catch { /* status is best effort; events stay authoritative */ }
+  };
+  const write = (kind, text, fields = {}) => {
+    const at = new Date(now()).toISOString();
+    try { fs.appendFileSync(file, JSON.stringify({ ...fields, t: at, kind, text }) + '\n', { mode: 0o600 }); } catch { /* keep the run going */ }
+    status.events += 1; status.last_event_at = at;
+  };
+  write('start', `${harness} started`);
+  saveStatus();
+  let stalled = false;
+  const check = () => {
+    if (status.state !== 'running') return;
+    const idle = now() - new Date(status.last_event_at).getTime();
+    const stepAge = status.step_started_at ? now() - new Date(status.step_started_at).getTime() : 0;
+    const reason = status.in_progress > 0
+      ? (stepAge > longStepMs ? `One step has run ${Math.round(stepAge / 60000)} min: ${status.current}` : null)
+      : (idle > stallMs ? `No agent event for ${Math.round(idle / 60000)} min` : null);
+    if (reason && !stalled) {
+      stalled = true; status.state = 'stalled'; write('stall', reason); saveStatus();
+      try { onStall?.(reason, { ...status }); } catch { /* alerting never stops the run */ }
+    }
+  };
+  const timer = setInterval(check, checkMs); timer.unref?.();
+  return {
+    statusFile,
+    status: () => ({ ...status }),
+    check,
+    event(frame) {
+      const entry = normalizeFrame(harness, frame);
+      if (!entry) return;
+      if (entry.session || entry.sessionId) status.session_id = entry.session || entry.sessionId;
+      if (entry.capabilities) status.capabilities = entry.capabilities;
+      if (entry.kind === 'usage') status.usage = { ...entry };
+      if (entry.kind === 'session') status.cwd = entry.cwd || status.cwd;
+      if (entry.kind === 'step-start') { status.in_progress += 1; status.step_started_at = new Date(now()).toISOString(); }
+      if (entry.kind === 'step-end') { status.in_progress = Math.max(0, status.in_progress - 1); if (!status.in_progress) status.step_started_at = null; }
+      if (['step-start', 'message', 'edit', 'plan', 'search'].includes(entry.kind)) status.current = entry.text;
+      // A new event after a stall means the agent is working again.
+      if (stalled && status.state === 'stalled') { stalled = false; status.state = 'running'; }
+      write(entry.kind, entry.text, entry);
+      saveStatus();
+    },
+    close(result = {}) {
+      clearInterval(timer);
+      // The CLI and its active attempt can share the job status. Keep the last
+      // session snapshot when the CLI writes the terminal bookkeeping record.
+      try {
+        const latest = JSON.parse(fs.readFileSync(statusFile, 'utf8'));
+        for (const key of ['session_id', 'capabilities', 'usage']) if (latest[key] != null) status[key] = latest[key];
+      } catch { /* no prior status */ }
+      status.state = result.cancelled ? 'cancelled' : result.ok ? 'finished' : 'failed';
+      status.in_progress = 0;
+      status.step_started_at = null;
+      status.result = { ok: result.ok === true, ...(result.cancelled ? { cancelled: true } : {}), error: result.error || null, failureKind: result.failureKind || null };
+      write(result.cancelled ? 'cancel' : result.ok ? 'finish' : 'fail', result.cancelled ? 'Cancelled' : result.ok ? 'Finished' : `Failed: ${clip(result.error || 'unknown')}`);
+      saveStatus();
+    },
+  };
+}
+
+/** Status and the last `tail` events of a job, for `meta-harness watch`. */
+export function readProgress(file, tail = 20) {
+  const statusFile = file.replace(/\.events\.jsonl$/, '') + '.status.json';
+  let status = null;
+  try { status = JSON.parse(fs.readFileSync(statusFile, 'utf8')); } catch { /* not started or not a job */ }
+  let events = [];
+  try { events = fs.readFileSync(file, 'utf8').trim().split('\n').filter(Boolean).slice(-tail).map(line => JSON.parse(line)); } catch { /* none yet */ }
+  return { status, events };
+}
+
+
+/** Raise an operator alert without importing alerts.mjs, so remote workers can send it too. */
+function sendStallAlert(title, message) {
+  try {
+    execFileSync(process.env.TOTAL_RECALL_BIN || 'total-recall', ['alerts', 'send', '--title', title, '--message', message, '--severity', 'warning', '--source', 'meta-harness'], { stdio: 'pipe', timeout: 15000 });
+  } catch { /* an unavailable alert channel never stops the run */ }
 }

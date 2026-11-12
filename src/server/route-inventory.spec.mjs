@@ -35,6 +35,20 @@ describe('Express Router Stack Inventory', () => {
     ]));
   });
 
+  it('retires the seven one-off routes and append compaction while retaining dashboard routes and one SSSS reader', () => {
+    const routes = extractRoutes(restRouter);
+    for (const retired of ['/api/context/preview', '/api/context/stream', '/api/context/flash/health',
+      '/api/brains/sync', '/api/tasks/cleanup', '/api/tasks/failed', '/api/vault/hash', '/api/vault/compact']) {
+      expect(routes.filter(route => route.path === retired)).toEqual([]);
+    }
+    for (const kept of ['/api/context', '/api/tasks', '/api/vault/status', '/api/vault/compile', '/api/v1/ssss']) {
+      expect(routes.some(route => route.path === kept)).toBe(true);
+    }
+    for (const kept of ['/api/ssss', '/api/ssss/instructions', '/api/ssss/skill/ssss',
+      '/api/ssss/spec', '/api/ssss/references', '/api/ssss/references/:name']) {
+      expect(routes.filter(route => route.method === 'GET' && route.path === kept)).toHaveLength(1);
+    }
+  });
   it('exactly matches the committed route-manifest.json', () => {
     const expectedRoutes = sortRoutes(JSON.parse(fs.readFileSync(MANIFEST_PATH, 'utf8')));
     const liveRoutes = sortRoutes(extractRoutes(restRouter));

@@ -27,6 +27,17 @@ vi.mock('./embeddings.mjs', () => ({
 import { semanticSearch } from './search.mjs';
 
 describe('semanticSearch', () => {
+  it('applies the optional ranking stage before top-k and preserves metadata filters', async () => {
+    const rankResults = vi.fn(results => [...results].reverse());
+    const result = await semanticSearch('deploys', { vaultDir: '/v', derivedDir: '/d', top_k: 1,
+      includeSessions: false, rankResults });
+    expect(rankResults.mock.calls[0][0]).toHaveLength(2);
+    expect(result[0].slug).toBe('other');
+    expect((await semanticSearch('deploys', { vaultDir: '/v', derivedDir: '/d', top_k: 1,
+      includeSessions: false }))[0].slug).toBe('match');
+    expect(await semanticSearch('deploys', { vaultDir: '/v', derivedDir: '/d', category: 'missing',
+      includeSessions: false, rankResults })).toHaveLength(0);
+  });
   it('attaches raw cosine similarity to vault results alongside the rank-fused score', async () => {
     const results = await semanticSearch('deploys', { vaultDir: '/v', derivedDir: '/d', top_k: 5, includeSessions: false });
     const bySlug = Object.fromEntries(results.map(r => [r.slug, r]));

@@ -48,7 +48,7 @@ function mutate(work) {
   for (let attempt = 0; attempt < 8; attempt += 1) {
     const store = storeForThreads();
     const state = readState(store);
-    const result = work(state.threads);
+    const result = work(state.threads, state);
     validateThreads(state.threads);
     try {
       store.write({ ...state, version: '2.0.0', updatedAt: new Date().toISOString(), threads: state.threads });
@@ -115,5 +115,36 @@ export function deleteThread(id) {
     if (index < 0) return false;
     threads.splice(index, 1);
     return true;
+  });
+}
+
+// Exact titles from test/threads.test.mjs and test/coordinator.test.mjs.
+// Real multiply-job threads do not match, including failed end-to-end attempts.
+const FIXTURE_TITLES = new Set([
+  'Implement Multi-Platform Threads', 'Canonical state', 'concurrent',
+  'Implement token bucket', 'task one', 'task two', 'task three', 'task four', 'failed verification',
+]);
+const CLEANUP_ID = 'a118-fixture-threads-v1';
+
+/** Delete the known fixture titles once. The same SSSS operation records every removal. */
+export function cleanupFixtureThreads({ dryRun = false } = {}) {
+  const plan = (threads, state) => {
+    const previous = state.cleanups?.find(row => row.id === CLEANUP_ID);
+    if (previous) return { ok: true, alreadyApplied: true, record: previous };
+    const removed = threads.filter(thread => FIXTURE_TITLES.has(thread.title))
+      .map(({ id, title, status }) => ({ id, title, status }));
+    const kept = threads.filter(thread => !FIXTURE_TITLES.has(thread.title)).map(thread => thread.id);
+    return { ok: true, record: { id: CLEANUP_ID, timestamp: new Date().toISOString(), sources: ['test/threads.test.mjs', 'test/coordinator.test.mjs'], removed, kept } };
+  };
+  const state = readState(storeForThreads());
+  const preview = plan(state.threads, state);
+  if (dryRun || preview.alreadyApplied) return { ...preview, dryRun };
+  return mutate((threads, current) => {
+    const result = plan(threads, current);
+    if (result.alreadyApplied) return result;
+    const ids = new Set(result.record.removed.map(row => row.id));
+    threads.splice(0, threads.length, ...threads.filter(thread => !ids.has(thread.id)));
+    current.cleanups = [...(current.cleanups || []), result.record];
+    return result;
   });
 }

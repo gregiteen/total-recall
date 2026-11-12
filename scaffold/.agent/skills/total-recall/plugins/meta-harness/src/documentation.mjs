@@ -73,7 +73,7 @@ async function download(url, fetchImpl, declaredOrigin) {
   if (declaredOrigin) allowed.add(declaredOrigin);
   for(let redirects=0;redirects<5;redirects++) {
     if(target.protocol!=='https:' || target.username || target.password || !allowed.has(target.hostname)) throw new Error(`Unapproved official documentation origin: ${target.hostname}`);
-    const response=await fetchImpl(target,{redirect:'manual',signal:AbortSignal.timeout(20000),headers:{'User-Agent':'Total-Recall-Meta-Harness-Docs','Accept':'*/*'}});
+    const response=await fetchImpl(target,{redirect:'manual',signal:AbortSignal.timeout(20000),headers:{'User-Agent':'Total-Recall-Metaharness-Docs','Accept':'*/*'}});
     if(response.status>=300 && response.status<400){target=new URL(response.headers.get('location'),target);continue;}
     // Some entries advertise Markdown exports which no longer exist while the
     // same official HTML document remains available. Fetch that representation.
@@ -196,11 +196,15 @@ export async function ensureDocumentation(options={}) {
 
 export async function maintainDocumentation(options={}) {
   const status=documentationStatus(options);
-  const next=status.agents.filter(row=>!row.fresh).sort((a,b)=>String(a.lastAttempt || '').localeCompare(String(b.lastAttempt || '')))[0];
-  if(!next)return {...status,scope:'all-agent-documentation-current'};
-  const refreshed=await refreshDocumentation({...options,agent:next.id});
+  const pending=status.agents.filter(row=>!row.fresh).sort((a,b)=>String(a.lastAttempt || '').localeCompare(String(b.lastAttempt || '')));
+  const reports=[];
+  // Missing documentation for one harness must not prevent attempts for the others.
+  for(const row of pending) {
+    try { reports.push(...(await refreshDocumentation({...options,agent:row.id})).agents); }
+    catch(error) { reports.push({id:row.id,ok:false,error:error.message}); }
+  }
   const current=documentationStatus(options);
-  return {...refreshed,scope:'one-stale-agent-refreshed',coverage_complete:current.ok,pending:current.agents.filter(row=>!row.fresh).map(row=>row.id)};
+  return {...current,ok:current.ok && reports.every(row=>row.ok),scope:'all-agent-documentation',refresh:reports,coverage_complete:current.ok,pending:current.agents.filter(row=>!row.fresh).map(row=>row.id)};
 }
 
 export function readDocumentation({agent,url,directory=documentationDirectory()}) {

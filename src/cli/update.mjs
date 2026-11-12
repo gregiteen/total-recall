@@ -50,6 +50,7 @@ export function parseArgs(args) {
     else if (a === '--port' && args[i + 1]) opts.port = Number(args[++i]);
     else if (a === '--no-build') opts.noBuild = true;
     else if (a === '--all-brains') opts.allBrains = true;
+    else if (a === '--install-missing') opts.installMissing = true;
     else if (a === '--json') opts.json = true;
     else if (a === '--automatic') opts.automatic = true;
     else if (a === '--status') opts.status = true;
@@ -70,9 +71,11 @@ function printHelp() {
     total-recall update --apply --force Ignore throttle / disabled flag
     total-recall update --repo <path>   Include extra root (repeatable)
     total-recall update --all-brains    Plan SSSS + Total Recall updates, including plugins/nested packages
-    total-recall update --all-brains --apply [--json]
+    total-recall update --all-brains --apply [--install-missing] [--json]
         Pin the same published versions, use npm/pnpm, replace shared dependency
         links with independent local installs, and verify every resolved version.
+        A checkout with no node_modules keeps none: only its pin is updated.
+        --install-missing installs those trees too (never done automatically).
         A plugin checkout linked into a brain but not registered as a project is
         only installed here: its dev dependencies are skipped (it runs under the
         shared install) and its runtime ones update with --omit=dev, without
@@ -127,7 +130,7 @@ export default async function update(args = []) {
 
   if (opts.allBrains) {
     const summary = await updateAllBrains({ brainDir, roots: opts.repos,
-      dryRun: !opts.apply || opts.dryRun, ensureDefaults: true });
+      dryRun: !opts.apply || opts.dryRun, ensureDefaults: true, installMissing: opts.installMissing === true });
     if (summary.failed) process.exitCode = 1;
     if (opts.apply && !opts.dryRun) {
       const hooks = await installHarnessHooks({ log: (line) => { if (!opts.json) console.log(line); } });
@@ -137,6 +140,7 @@ export default async function update(args = []) {
     if (opts.json) console.log(JSON.stringify(summary, null, 2));
     else {
       console.log(`\n  Uniform brain updates: ${summary.consumer_count || 0} consumers`);
+      console.log(`  Missing: ${summary.not_installed || 0}; current: ${summary.up_to_date || 0}; would update: ${summary.would_update || 0}; updated: ${summary.updated || 0}; failed: ${summary.failed || 0}`);
       if (summary.reason) console.log(`  ${summary.reason}`);
       for (const row of summary.results) {
         console.log(`  ${row.root}: ${row.status}`);

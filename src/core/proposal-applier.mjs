@@ -3,7 +3,7 @@ import path from 'path';
 import matter from './frontmatter.mjs';
 import { loadNodes, writeNode, atomicWrite } from './vault.mjs';
 import { updateNodeInPlace } from './validated-write.mjs';
-import { proposalKey } from './optimizer.mjs';
+import { proposalKey, verifySmartDecay } from './optimizer.mjs';
 import { logger } from './logger.mjs';
 
 /**
@@ -50,8 +50,14 @@ const TERMINAL_STATUSES = new Set(['applied', 'rejected', 'superseded']);
  * the same checks. The only difference is that a human presses the button.
  *
  * To re-enable: put 'memory-cleanup' back in this set. That is the whole change.
+ * (Still manual as of 2026-11-09; re-enabling it is Greg's decision, DECAY-01.)
+ *
+ * `smart-decay` (DECAY-01, 2026-11-09) meets the bar: the gate and the handler both
+ * re-verify against live state and the access ledger (exists, active, unprotected,
+ * unused since judged and for the full decay age), rules are never candidates, and
+ * the change is a reversible status with an undo snapshot.
  */
-export const AUTO_APPLICABLE_TOPICS = new Set([]);
+export const AUTO_APPLICABLE_TOPICS = new Set(['smart-decay']);
 
 /**
  * Nodes this module refuses to archive under any proposal.
@@ -389,8 +395,31 @@ async function applyMemoryCleanup(vaultDir, proposal, { dryRun }) {
   return { ok: true, canonical: canonical.slug, merged: duplicates.map(n => n.slug) };
 }
 
+/**
+ * Decay one unused memory (DECAY-01): re-verify against live state and the access ledger,
+ * snapshot it for undo, then mark it `deprecated`. Reversible; rules are never touched.
+ */
+async function applySmartDecay(vaultDir, proposal, { dryRun }) {
+  const reason = verifySmartDecay(proposal, vaultDir);
+  if (reason) return { ok: false, reason, supersede: true };
+  const slug = String(proposal.target_path).trim();
+  const node = loadNodes(vaultDir).find(n => n.slug === slug);
+  if (dryRun) return { ok: true, dryRun: true, deprecated: slug };
+  writeUndoSnapshot(vaultDir, proposal.proposal_id, [node._filePath]);
+  const { _filePath, _filepath, body, ...frontmatter } = node;
+  await writeNode({
+    ...frontmatter,
+    body,
+    status: 'deprecated',
+    x_decayed_by_proposal: proposal.proposal_id,
+    updated: new Date().toISOString(),
+  }, vaultDir);
+  return { ok: true, deprecated: slug };
+}
+
 const HANDLERS = {
   'memory-cleanup': applyMemoryCleanup,
+  'smart-decay': applySmartDecay,
 };
 
 export function hasHandler(topic) {

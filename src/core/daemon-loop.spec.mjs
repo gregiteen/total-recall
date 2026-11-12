@@ -6,7 +6,7 @@ vi.mock('./logger.mjs', async () => ({
 }));
 vi.mock('./leader-election.mjs', () => ({ releaseLease: vi.fn() }));
 
-import { writeInterrupt, acquirePidLock, releasePidLock, reassertPidLock } from './daemon-loop.mjs';
+import { writeInterrupt, acquirePidLock, releasePidLock, reassertPidLock, nextDaemonTask } from './daemon-loop.mjs';
 import fs from 'fs';
 
 
@@ -36,6 +36,26 @@ describe('daemon-loop.mjs', () => {
 
   it('exports writeInterrupt', () => {
     expect(writeInterrupt).toBeDefined();
+  });
+
+  it('keeps the follower heartbeat sleep and requests only local lesson work', async () => {
+    const scheduler = { next: vi.fn(() => ({ task: null, source: 'empty' })) };
+    const sleep = vi.fn(async () => {});
+    await nextDaemonTask(scheduler, { localOnly: true, sleep });
+    expect(scheduler.next).toHaveBeenCalledWith({ localOnly: true });
+    expect(sleep).toHaveBeenCalledWith(10000);
+  });
+
+  it('sleeps through repeated empty queues without writing dream tasks', async () => {
+    const scheduler = { next: vi.fn(() => ({ task: null, source: null })) };
+    const sleep = vi.fn(async () => {});
+    for (let i = 0; i < 25; i++) expect(await nextDaemonTask(scheduler, { sleep })).toEqual({ task: null, source: null });
+    expect(sleep).toHaveBeenCalledTimes(25);
+    expect(fs.writeFileSync).not.toHaveBeenCalled();
+    const task = { slug: 'plugin-scheduled-dream', executor: 'dream' };
+    scheduler.next.mockReturnValue({ task, source: 'explicit' });
+    expect(await nextDaemonTask(scheduler, { sleep })).toEqual({ task, source: 'explicit' });
+    expect(sleep).toHaveBeenCalledTimes(25);
   });
 
   describe('acquirePidLock', () => {

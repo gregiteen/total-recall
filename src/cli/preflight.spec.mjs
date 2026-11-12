@@ -14,7 +14,7 @@ let bare;
 let repo;
 
 const run = (args, { cwd, input } = {}) => {
-  const r = spawnSync(process.execPath, [BIN, ...args], { cwd, input, encoding: 'utf8', env: { ...process.env, HOME: home, TR_PREFLIGHT_MAX_AGE_MIN: '' } });
+  const r = spawnSync(process.execPath, [BIN, ...args], { cwd, input, encoding: 'utf8', env: { ...process.env, HOME: home, TR_PREFLIGHT_MAX_AGE_MIN: '', TR_META_HARNESS_RUN: '' } });
   return { code: r.status, out: r.stdout, err: r.stderr };
 };
 const gate = (call, cwd, args = []) => {
@@ -101,7 +101,7 @@ describe('the gate survives a broken owner plugin (it can never lock out its own
     fs.writeFileSync(path.join(pluginDir(), 'adapters.mjs'), adapter);
   };
   const hook = (payload, cwd) => {
-    const r = spawnSync(process.execPath, [BIN, 'preflight', 'gate', '--harness', 'claude'], { cwd, input: JSON.stringify({ cwd, ...payload }), encoding: 'utf8', env: { ...process.env, HOME: pluginHome, AGENT_DIR: path.join(pluginHome, '.agent'), _TR_TEST_AGENT_DIR: '', TR_PREFLIGHT_MAX_AGE_MIN: '' } });
+    const r = spawnSync(process.execPath, [BIN, 'preflight', 'gate', '--harness', 'claude'], { cwd, input: JSON.stringify({ cwd, ...payload }), encoding: 'utf8', env: { ...process.env, HOME: pluginHome, AGENT_DIR: path.join(pluginHome, '.agent'), _TR_TEST_AGENT_DIR: '', TR_PREFLIGHT_MAX_AGE_MIN: '', TR_META_HARNESS_RUN: '' } });
     return { code: r.status, out: r.stdout, err: r.stderr };
   };
   const EDIT = { tool_name: 'Edit', tool_input: { file_path: '/x/plugin.json' } };
@@ -225,7 +225,7 @@ describe('total-recall preflight check and the tr-preflight alias', () => {
 describe('gate modes through the real command', () => {
   let modeHome;
   let modeRepo;
-  const env = () => ({ ...process.env, HOME: modeHome, AGENT_DIR: path.join(modeHome, '.agent'), _TR_TEST_AGENT_DIR: '', TR_PREFLIGHT_MAX_AGE_MIN: '' });
+  const env = () => ({ ...process.env, HOME: modeHome, AGENT_DIR: path.join(modeHome, '.agent'), _TR_TEST_AGENT_DIR: '', TR_PREFLIGHT_MAX_AGE_MIN: '', TR_META_HARNESS_RUN: '' });
   const pluginDir = () => path.join(modeHome, '.agent', 'skills', 'total-recall', 'plugins', 'fx');
   const cli = (args, input) => spawnSync(process.execPath, [BIN, ...args], { cwd: modeRepo, input, encoding: 'utf8', env: env() });
   const rawCall = () => {
@@ -312,7 +312,7 @@ describe('bookkeeping never decides anything (a sandbox may refuse every write t
   let tmp;
   const state = () => path.join(home, '.agent', 'tr-preflight');
   const pluginDir = () => path.join(home, '.agent', 'skills', 'total-recall', 'plugins', 'fx');
-  const env = () => ({ ...process.env, HOME: home, AGENT_DIR: path.join(home, '.agent'), _TR_TEST_AGENT_DIR: '', TR_PREFLIGHT_MAX_AGE_MIN: '', TMPDIR: tmp });
+  const env = () => ({ ...process.env, HOME: home, AGENT_DIR: path.join(home, '.agent'), _TR_TEST_AGENT_DIR: '', TR_PREFLIGHT_MAX_AGE_MIN: '', TMPDIR: tmp, TR_META_HARNESS_RUN: '' });
   const gate = (call) => {
     const r = spawnSync(process.execPath, [BIN, 'preflight', 'gate'], { cwd: repo, input: JSON.stringify({ cwd: repo, ...call }), encoding: 'utf8', env: env() });
     return { code: r.status, answer: JSON.parse(r.stdout.trim().split('\n').pop()) };
@@ -444,7 +444,7 @@ describe('receipts count per session', () => {
     expect(child.code).toBe(0);
     expect(child.answer.warned).toBeUndefined();
   });
-  it('never stops a run Meta Harness started', () => {
+  it('never stops a run Metaharness started', () => {
     const run = gate({ ...WORK, session_id: 'dispatched-child' }, { TR_META_HARNESS_RUN: '1' });
     expect(run.code).toBe(0);
     expect(run.answer.warned).toBeUndefined();
@@ -646,7 +646,7 @@ describe('an agent is not bound to one repo', () => {
     expect(acknowledge({ root: repo, task: 'spec', home, run: ready }).ok).toBe(true);
     expect(gate(repo, WORK).code).toBe(0);
   });
-  it('never stops a subagent or a Meta Harness run in another repository', () => {
+  it('never stops a subagent or a Metaharness run in another repository', () => {
     const child = gate(other, { ...WORK, session_id: 'unacked-parent', agent_id: 'sub' });
     expect(child.code).toBe(0);
     expect(child.answer.warned).toBeUndefined();

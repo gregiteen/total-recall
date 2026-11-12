@@ -47,6 +47,11 @@ export function detectProjectBrain(startDir = process.cwd()) {
     // sibling in src/cli/agent-dir.mjs checked both, so the two could disagree
     // about whether a project brain exists at all. It is now the single
     // implementation and the sibling delegates here.
+    // The Total Recall package's own `scaffold/` is the template every install copies. It carries
+    // a SKILL.md, so the walk took it for a project: a context call or `project-id` from inside
+    // it wrote brain.json and derived ledgers into the template, which then ships (2026-11-09).
+    // Skip it: the project that contains the package (its checkout or the consumer) is the brain.
+    if (isPackageScaffold(dir)) { dir = path.dirname(dir); continue; }
     for (const name of ['.agent', '.agents']) {
       const candidate = path.join(dir, name, 'skills', 'total-recall');
       if (fs.existsSync(path.join(candidate, 'SKILL.md')) || fs.existsSync(path.join(candidate, 'memory-vault'))) {
@@ -130,4 +135,14 @@ function pluginTargets(pluginsRoot) {
     try { targets.add(fs.realpathSync(path.join(pluginsRoot, entry.name))); } catch { /* broken link */ }
   }
   return targets;
+}
+
+/** True for the Total Recall package's install template: `<package>/scaffold`, in a checkout or in node_modules. */
+export function isPackageScaffold(dir) {
+  if (path.basename(dir) !== 'scaffold') return false;
+  try {
+    return JSON.parse(fs.readFileSync(path.join(path.dirname(dir), 'package.json'), 'utf8')).name === 'total-recall-brain';
+  } catch {
+    return false;
+  }
 }

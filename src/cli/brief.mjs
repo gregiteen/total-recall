@@ -177,6 +177,9 @@ const { queryHarnessUsage } = await import('../core/meta-harness.mjs');
 const harnesses = await queryHarnessUsage().catch(() => []);
 const warnings = [];
 if (!runtime.ready) warnings.push('Shared runtime readiness failed or unknown: total-recall startup check --json.');
+// Unfinished merges, a stale dashboard and other plugin startup checks.
+const { startupFindings } = await import('./startup.mjs');
+for (const line of startupFindings(runtime)) warnings.push(line);
 if (!project?.project_id) warnings.push('No project brain here (total-recall init) — memory, secrets and rules are global-only.');
 if (secrets.rotation_due && secrets.rotation_due !== 0) warnings.push(`Secrets overdue for rotation: ${secrets.rotation_due} (total-recall auth secret rotation-due).`);
 if (secrets.shared_values && secrets.shared_values !== 0) warnings.push(`Credential values reused across keys/apps: ${secrets.shared_values} group(s) (total-recall auth secret shared).`);

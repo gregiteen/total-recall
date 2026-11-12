@@ -10,6 +10,23 @@ import { CLI_COMMANDS } from './cli-commands.mjs';
 const packageRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 export const cliEntry = path.join(packageRoot, 'bin/total-recall.mjs');
 
+/** Whether this package's dashboard bundle is as new as its frontend sources (the server rebuilds it). */
+async function defaultDashboardCheck() {
+  try {
+    const { checkDistFreshness, dashboardTargets } = await import('./dashboard-bundle.mjs');
+    if (!fs.existsSync(path.join(packageRoot, 'frontend', 'package.json'))) return { status: 'not-shipped' };
+    const result = await checkDistFreshness(dashboardTargets(packageRoot));
+    const status = result.ok ? 'current' : result.reason === 'missing-bundle' ? 'missing' : 'stale';
+    return {
+      status,
+      ...(result.bundle ? { built_at: new Date(result.bundle.mtimeMs).toISOString() } : {}),
+      ...(!result.ok && result.source ? { newer_source: path.relative(packageRoot, result.source.path) } : {}),
+    };
+  } catch (error) {
+    return { status: 'unknown', reason: error.message };
+  }
+}
+
 export function runBounded(binary, args, { cwd = process.cwd(), timeoutMs = 15000, maxBytes = 262144 } = {}) {
   return new Promise(resolve => {
     let child, output = '', stderr = '', size = 0, reason = null, settled = false, timer, escalation;
@@ -130,7 +147,8 @@ export async function fetchStartup(url, options = {}, fetchImpl = fetch) {
 }
 
 export async function startupHealth({ cwd = process.cwd(), brainDir, brainUrl = null, token = null, brainId = null, ensure = false,
-  appCheck = null, appStart = null, run = runBounded, fetchImpl = fetch, onDiskVersion = packageVersionOnDisk, listener = verifyListener, platform = process.platform, home = os.homedir(), identity = processIdentity } = {}) {
+  appCheck = null, appStart = null, run = runBounded, fetchImpl = fetch, onDiskVersion = packageVersionOnDisk, listener = verifyListener, platform = process.platform, home = os.homedir(), identity = processIdentity,
+  dashboardCheck = null, pluginChecks = null } = {}) {
   const actions = [];
   const serverFile = path.join(brainDir, 'server.pid');
   const report = { checked_at: new Date().toISOString(), server: { status: 'not-configured' }, brain: { status: 'unknown' }, daemon: { status: 'unknown' },
@@ -148,7 +166,12 @@ export async function startupHealth({ cwd = process.cwd(), brainDir, brainUrl = 
       remoteDaemon = { status: body.daemon === 'running' ? 'running' : ['dead', 'stopped', 'not-started'].includes(body.daemon) ? 'stopped' : 'unknown', source: 'remote-health' };
       if (local) {
         const own = identity(serverFile, path.join(packageRoot, 'src', 'server', 'index.mjs'));
-        if (own.status !== 'running') return { status: own.status === 'conflict' ? 'conflict' : 'unknown', reason: 'server-process-unverified' };
+        if (own.status !== 'running') {
+          const actualRoot = own.entry?.endsWith(path.join('src', 'server', 'index.mjs'))
+            ? path.resolve(path.dirname(own.entry), '../..') : null;
+          return { status: own.status === 'conflict' ? 'conflict' : 'unknown',
+            reason: actualRoot ? `server runs from ${actualRoot}; expected ${packageRoot}; run total-recall server ensure` : 'server-process-unverified' };
+        }
         if (!await listener(own.pid, new URL(brainUrl), { run, cwd })) return { status: 'unknown', reason: 'server-listener-unverified' };
       }
       const drift = local && verdict.status === 'ready' ? serverCodeDrift(verdict.version, onDiskVersion()) : null;
@@ -230,6 +253,13 @@ export async function startupHealth({ cwd = process.cwd(), brainDir, brainUrl = 
   }
   const { inspectRequiredPlugins } = await import('./required-plugins.mjs');
   report.required_plugins = inspectRequiredPlugins(brainDir);
+  // Reported, not part of readiness: a stale dashboard or unfinished work still
+  // leaves the runtime usable, but neither may stay invisible.
+  report.dashboard = await (dashboardCheck ?? defaultDashboardCheck)();
+  report.plugin_checks = await (pluginChecks ?? (async () => {
+    const { runPluginStartupChecks } = await import('./plugin-startup-checks.mjs');
+    return runPluginStartupChecks({ cwd });
+  }))();
   report.shared_ready = report.required_plugins.status === 'ready' && report.server.status === 'ready' && report.brain.status === 'ready' && report.daemon.status === 'running' && report.ssss.status === 'available';
   report.ready_scope = appCheck ? 'shared-and-declared-current-repo-app' : 'shared-runtime-only';
   report.ready = report.shared_ready && (!appCheck || report.app.status === 'ready');

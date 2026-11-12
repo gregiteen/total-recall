@@ -30,6 +30,19 @@ const PLUGIN_ROOT = fileURLToPath(new URL('..', import.meta.url));
 const RETENTION_NOTE = 'pages are a projection, not canonical memory';
 const DEFAULT_LOCK_MS = 6 * 60 * 60 * 1000;
 
+const gitRun = (_command, args, options) => spawnSync('total-recall', ['git', ...args], options);
+
+function readJson(file) {
+  try { return JSON.parse(fs.readFileSync(file, 'utf8')); } catch { return null; }
+}
+
+/** An unfinished init must resume as init, even after it has written pages. */
+export function generationMode(root) {
+  const state = readJson(path.join(root, 'openwiki', '.run.json'));
+  if (state?.mode === 'init' && state.phase && !['complete', 'idle'].includes(state.phase)) return 'init';
+  return hasWiki(root) ? 'update' : 'init';
+}
+
 export function registryPath(home = os.homedir()) {
   return path.join(home, '.agent', 'skills', 'total-recall', 'config', 'project-registry.json');
 }
@@ -69,7 +82,7 @@ export function readProjects({ registry = registryPath() } = {}) {
   });
 }
 
-/** Does this project carry generated pages at all? A repo with no openwiki/ is skipped, never created. */
+/** Does this project carry generated Markdown pages? */
 export function hasWiki(root) {
   const dir = path.join(root, 'openwiki');
   const stat = fs.lstatSync(dir, { throwIfNoEntry: false });
@@ -82,15 +95,18 @@ export function hasWiki(root) {
  * since the recorded generation, which is the same measure the per-repo driver
  * used. Uncommitted work is not counted, so an open edit does not read as drift.
  */
-export function isGitRepo(root, { git = spawnSync } = {}) {
+export function isGitRepo(root, { git = gitRun } = {}) {
   if (fs.existsSync(path.join(root, '.git'))) return true;
   const res = git('git', ['-C', root, 'rev-parse', '--is-inside-work-tree'], { encoding: 'utf8' });
-  return !res.error && res.status === 0;
+  if (res.error || res.status !== 0 || String(res.stdout).trim() !== 'true') return false;
+  const top = git('git', ['-C', root, 'rev-parse', '--show-toplevel'], { encoding: 'utf8' });
+  if (top.error || top.status !== 0) return false;
+  return fs.realpathSync(root) === fs.realpathSync(String(top.stdout).trim());
 }
 
-export function staleness(root, { git = spawnSync } = {}) {
+export function staleness(root, { git = gitRun } = {}) {
   if (!isGitRepo(root, { git })) {
-    return { root, head: '', generatedAt: null, generatedStatus: null, files: null, lastCodeChange: null, commitsSince: 0, stale: false };
+    return { root, head: '', generationCommit: null, generationTime: null, generatedAt: null, generatedStatus: null, files: null, lastCodeChange: null, commitsSince: 0, stale: false };
   }
   const marker = path.join(root, 'openwiki', '.last-update.json');
   let head = '';
@@ -104,6 +120,11 @@ export function staleness(root, { git = spawnSync } = {}) {
     generatedAt = typeof parsed.updatedAt === 'string' ? parsed.updatedAt : null;
     generatedStatus = typeof parsed.status === 'string' ? parsed.status : null;
   } catch { /* no marker: never generated, or unreadable */ }
+  const receipt = readJson(path.join(root, 'openwiki', '.generation.json'));
+  const validReceipt = typeof receipt?.commit === 'string' && /^[a-f0-9]{7,64}$/i.test(receipt.commit)
+    && typeof receipt.completedAt === 'string' && Number.isFinite(Date.parse(receipt.completedAt));
+  const generationCommit = validReceipt ? receipt.commit : null;
+  const generationTime = validReceipt ? receipt.completedAt : null;
 
   // The page contents, so a refresh can be judged on what it actually rewrote.
   // openwiki writes its marker when generation begins, so the marker alone
@@ -122,12 +143,15 @@ export function staleness(root, { git = spawnSync } = {}) {
   const lastCodeChange = !log.error && log.status === 0 ? String(log.stdout || '').trim() || null : null;
 
   let commitsSince = null;
-  if (generatedAt) {
-    const count = git('git', ['-C', root, 'rev-list', '--count', `--since=${generatedAt}`, 'HEAD', '--', '.', ':!openwiki'], { encoding: 'utf8' });
-    if (!count.error && count.status === 0) commitsSince = Number(String(count.stdout || '').trim());
+  if (generationCommit || generatedAt) {
+    const range = generationCommit ? [`${generationCommit}..HEAD`] : [`--since=${generatedAt}`, 'HEAD'];
+    const count = git('git', ['-C', root, 'rev-list', '--count', ...range, '--', '.', ':!openwiki'], { encoding: 'utf8' });
+    const value = String(count.stdout || '').trim();
+    if (!count.error && count.status === 0 && /^\d+$/.test(value)) commitsSince = Number(value);
   }
-  const stale = generatedAt === null || (Number.isFinite(commitsSince) && commitsSince > 0);
-  return { root, head, generatedAt, generatedStatus, files, lastCodeChange, commitsSince, stale };
+  const incomplete = generatedStatus === 'interrupted' || stillGenerating(root);
+  const stale = incomplete || generatedAt === null || commitsSince === null || commitsSince > 0;
+  return { root, head, generationCommit, generationTime, generatedAt, generatedStatus, files, lastCodeChange, commitsSince, stale, mode: generationMode(root) };
 }
 
 /**
@@ -250,14 +274,81 @@ export function stillGenerating(root) {
   }
 }
 
+function writeReceipt(root, name, value) {
+  const dir = path.join(root, 'openwiki');
+  fs.mkdirSync(dir, { recursive: true });
+  const target = path.join(dir, name);
+  const tmp = `${target}.${process.pid}.${Date.now()}.tmp`;
+  try {
+    fs.writeFileSync(tmp, `${JSON.stringify(value, null, 2)}\n`, { flag: 'wx', mode: 0o600 });
+    fs.renameSync(tmp, target);
+  } finally {
+    fs.rmSync(tmp, { force: true });
+  }
+}
+
+function redact(value, key) {
+  let text = String(value || '');
+  if (key) text = text.split(key).join('[REDACTED]');
+  return text.replace(/\bBearer\s+\S+/gi, 'Bearer [REDACTED]').replace(/\bsk-[\w-]+/g, '[REDACTED]');
+}
+
+function finishRefresh(project, { before, result, git, key, mode, startedAt, via, clock }) {
+  const after = staleness(project.root, { git });
+  const exitCode = result.error ? (result.error.code || 1) : result.signal ? 1 : result.status;
+  const completedAt = new Date(clock()).toISOString();
+  const stdout = redact(result.stdout, key), stderr = redact(result.stderr, key);
+  const error = redact(result.error?.message, key);
+  const lines = `${stderr}\n${stdout}`.replace(/\x1b\[[0-9;]*m/g, '').split('\n').map(line => line.trim()).filter(Boolean);
+  const diagnostic = lines.find(line => /context_length_exceeded|Provider returned error|exited without|Could not restore|interrupted OpenWiki|fetch failed/.test(line));
+  const reason = error || (result.signal ? `terminated by ${result.signal}` : diagnostic || lines.filter(line => !/^(\[ERR\]\s*)?Error Diagnostics$/.test(line)).at(-1) || `exit ${exitCode}`);
+  const wrote = pagesWritten(before, after) || (!before.files && hasWiki(project.root) ? 1 : 0);
+  const advanced = after.generatedAt !== before.generatedAt;
+  let action, failureReason;
+  if (after.generatedStatus === 'interrupted' || stillGenerating(project.root)) {
+    action = 'partial';
+    failureReason = `${wrote} page(s) rewritten, but the run did not finish; it resumes on the next refresh (${reason})`;
+  } else if (exitCode !== 0) {
+    action = 'failed'; failureReason = reason;
+  } else if (!advanced && !wrote) {
+    action = 'failed'; failureReason = 'command exited 0 and no page changed';
+  } else if (!before.head) {
+    action = 'failed'; failureReason = 'Cannot record generation without a source commit';
+  } else {
+    action = mode === 'init' ? 'initialized' : 'refreshed';
+  }
+  const logPath = path.join(project.root, 'openwiki', '.refresh-attempt.json');
+  const report = { ...project, ...after, action, reason: failureReason, exitCode, signal: result.signal || null, from: before.generatedAt, to: after.generatedAt, durationMs: clock() - startedAt, via, mode, logPath };
+  try {
+    writeReceipt(project.root, '.refresh-attempt.json', { startedAt: new Date(startedAt).toISOString(), completedAt, sourceCommit: before.head || null, action, mode, exitCode, signal: result.signal || null, error, stdout, stderr });
+    if (action === 'initialized' || action === 'refreshed') {
+      writeReceipt(project.root, '.generation.json', { commit: before.head, completedAt });
+      report.generationCommit = before.head;
+      report.generationTime = completedAt;
+      report.commitsSince = after.head === before.head ? 0 : null;
+      report.stale = after.head !== before.head;
+    } else if (before.generationCommit && before.generationTime) {
+      // Init can replace openwiki/ before it fails. Retain the last success.
+      writeReceipt(project.root, '.generation.json', { commit: before.generationCommit, completedAt: before.generationTime });
+      report.generationCommit = before.generationCommit;
+      report.generationTime = before.generationTime;
+    }
+  } catch (error) {
+    report.action = 'failed'; report.reason = `Could not save refresh receipt: ${error.message}`;
+  }
+  return report;
+}
+
 export function refreshProject(project, {
-  key, model = null, provider = null, binary = null, binaryArgs = [], timeoutMs = 30 * 60 * 1000, run = spawnSync, now = Date.now(), targetVersion = null, pluginRoot = PLUGIN_ROOT,
+  key, model = null, provider = null, binary = null, binaryArgs = [], timeoutMs = 30 * 60 * 1000, run = spawnSync, now = Date.now(), clock = Date.now, targetVersion = null, pluginRoot = PLUGIN_ROOT,
 } = {}) {
-  if (!isGitRepo(project.root, { git: run })) {
+  const git = run === spawnSync ? gitRun : run;
+  if (!isGitRepo(project.root, { git })) {
     return { ...project, action: 'skipped', reason: 'not a git repository' };
   }
-  const before = staleness(project.root, { git: run });
+  const before = staleness(project.root, { git });
   const uninitialized = !hasWiki(project.root);
+  const mode = generationMode(project.root);
 
   let command = binary, args = binaryArgs, via = binary ? 'explicit' : null;
   if (!command) {
@@ -273,17 +364,10 @@ export function refreshProject(project, {
   const selectedModel = model || config.model;
   const selectedProvider = provider || config.provider;
 
-  const modeFlag = uninitialized ? '--init' : '--update';
+  const modeFlag = `--${mode}`;
   const cmdArgs = [...args, modeFlag, '-p'];
   if (selectedModel) {
     cmdArgs.push('--modelId', selectedModel);
-  }
-
-  if (uninitialized) {
-    const runFile = path.join(project.root, 'openwiki', '.run.json');
-    if (fs.existsSync(runFile)) {
-      try { fs.unlinkSync(runFile); } catch {}
-    }
   }
 
   const childEnv = { ...process.env };
@@ -312,47 +396,18 @@ export function refreshProject(project, {
     timeout: timeoutMs,
   });
 
-  const after = staleness(project.root, { git: run });
-  const exitCode = result.error ? (result.error.code || 1) : result.status;
-  const advanced = after.generatedAt !== before.generatedAt || (uninitialized && hasWiki(project.root));
-  const wrote = pagesWritten(before, after) || (uninitialized && hasWiki(project.root) ? 1 : 0);
-
-  const outcome = after.generatedStatus === 'interrupted' || stillGenerating(project.root)
-    ? 'partial'
-    : (advanced ? (uninitialized ? 'initialized' : 'refreshed') : 'unchanged');
-
-  if (exitCode !== 0 && !wrote) {
-    return { ...project, action: 'failed', reason: result.error?.message || `exit ${exitCode}`, exitCode, ...after };
-  }
-  if (!advanced && !wrote) {
-    return { ...project, action: 'failed', reason: `command exited ${exitCode} and no page changed`, exitCode, ...after };
-  }
-  if (outcome === 'partial') {
-    return {
-      ...project,
-      action: 'partial',
-      reason: `${wrote} page(s) rewritten, but the run did not finish (the generator was cut off); it resumes on the next refresh`,
-      exitCode,
-      from: before.generatedAt,
-      to: after.generatedAt,
-      via,
-      ...after,
-    };
-  }
-  if (exitCode !== 0) {
-    return { ...project, action: 'failed', reason: result.error?.message || `exit ${exitCode}`, exitCode, ...after };
-  }
-  return { ...project, action: uninitialized ? 'initialized' : 'refreshed', from: before.generatedAt, to: after.generatedAt, durationMs: Date.now() - startedAt, via, ...after };
+  return finishRefresh(project, { before, result, git, key, mode, startedAt, via, clock });
 }
 
 export async function refreshProjectAsync(project, {
-  key, model = null, provider = null, binary = null, binaryArgs = [], timeoutMs = 30 * 60 * 1000, now = Date.now(), targetVersion = null, pluginRoot = PLUGIN_ROOT,
+  key, model = null, provider = null, binary = null, binaryArgs = [], timeoutMs = 30 * 60 * 1000, now = Date.now(), clock = Date.now, targetVersion = null, pluginRoot = PLUGIN_ROOT, git = gitRun, spawnProcess = spawn,
 } = {}) {
-  if (!isGitRepo(project.root, { git: spawnSync })) {
+  if (!isGitRepo(project.root, { git })) {
     return { ...project, action: 'skipped', reason: 'not a git repository' };
   }
-  const before = staleness(project.root, { git: spawnSync });
+  const before = staleness(project.root, { git });
   const uninitialized = !hasWiki(project.root);
+  const mode = generationMode(project.root);
   let command = binary, args = binaryArgs, via = binary ? 'explicit' : null;
   if (!command) {
     const resolved = resolveGenerator({ run: spawnSync, targetVersion, pluginRoot, requireBundled: uninitialized });
@@ -367,17 +422,10 @@ export async function refreshProjectAsync(project, {
   const selectedModel = model || config.model;
   const selectedProvider = provider || config.provider;
 
-  const modeFlag = uninitialized ? '--init' : '--update';
+  const modeFlag = `--${mode}`;
   const cmdArgs = [...args, modeFlag, '-p'];
   if (selectedModel) {
     cmdArgs.push('--modelId', selectedModel);
-  }
-
-  if (uninitialized) {
-    const runFile = path.join(project.root, 'openwiki', '.run.json');
-    if (fs.existsSync(runFile)) {
-      try { fs.unlinkSync(runFile); } catch {}
-    }
   }
 
   const childEnv = { ...process.env };
@@ -399,74 +447,33 @@ export async function refreshProjectAsync(project, {
 
   const startedAt = now;
   const result = await new Promise((resolve) => {
-    const proc = spawn(command, cmdArgs, {
+    const proc = spawnProcess(command, cmdArgs, {
       cwd: project.root,
       env: childEnv,
       stdio: ['ignore', 'pipe', 'pipe'],
       timeout: timeoutMs,
     });
-    let stdout = '', stderr = '';
+    let stdout = '', stderr = '', error = null;
     proc.stdout?.on('data', (d) => { stdout += d; });
     proc.stderr?.on('data', (d) => { stderr += d; });
-    proc.on('error', (err) => resolve({ error: err, status: 1, stdout, stderr }));
-    proc.on('close', (status) => resolve({ status: status ?? 0, stdout, stderr }));
+    proc.on('error', (err) => { error = err; });
+    proc.on('close', (status, signal) => resolve({ error, status, signal, stdout, stderr }));
   });
-
-  const after = staleness(project.root, { git: spawnSync });
-  const exitCode = result.error ? (result.error.code || 1) : result.status;
-  const advanced = after.generatedAt !== before.generatedAt || (uninitialized && hasWiki(project.root));
-  const wrote = pagesWritten(before, after) || (uninitialized && hasWiki(project.root) ? 1 : 0);
-
-  const outcome = after.generatedStatus === 'interrupted' || stillGenerating(project.root)
-    ? 'partial'
-    : (advanced ? (uninitialized ? 'initialized' : 'refreshed') : 'unchanged');
-
-  const extractReason = (rawErr, rawOut) => {
-    if (result.error?.message) return result.error.message;
-    const combined = `${rawErr || ''}\n${rawOut || ''}`.trim();
-    if (!combined) return `exit ${exitCode}`;
-    const lines = combined.split('\n').map((l) => l.trim()).filter(Boolean);
-    const diag = lines.find((l) => l.includes('Error Diagnostics') || l.includes('exited without') || l.includes('Could not restore') || l.includes('Provider returned error') || l.includes('fetch failed'));
-    if (diag) return diag.replace(/^\[ERR\]\s*/, '');
-    const last = lines[lines.length - 1];
-    return last ? last.replace(/^\[ERR\]\s*/, '') : `exit ${exitCode}`;
-  };
-  const failReason = extractReason(result.stderr, result.stdout);
-
-  if (exitCode !== 0 && !wrote) {
-    return { ...project, action: 'failed', reason: failReason, exitCode, ...after };
-  }
-  if (!advanced && !wrote) {
-    return { ...project, action: 'failed', reason: failReason || `command exited ${exitCode} and no page changed`, exitCode, ...after };
-  }
-  if (outcome === 'partial') {
-    return {
-      ...project,
-      action: 'partial',
-      reason: `${wrote} page(s) rewritten, but the run did not finish (the generator was cut off); it resumes on the next refresh`,
-      exitCode,
-      from: before.generatedAt,
-      to: after.generatedAt,
-      via,
-      ...after,
-    };
-  }
-  if (exitCode !== 0) {
-    return { ...project, action: 'failed', reason: failReason, exitCode, ...after };
-  }
-  return { ...project, action: uninitialized ? 'initialized' : 'refreshed', from: before.generatedAt, to: after.generatedAt, durationMs: Date.now() - startedAt, via, ...after };
+  return finishRefresh(project, { before, result, git, key, mode, startedAt, via, clock });
 }
 
 /** Is a refresh due for this project under the configured interval? */
-export function isDue(project, { lockMs = DEFAULT_LOCK_MS, now = Date.now(), git = spawnSync } = {}) {
+export function isDue(project, { lockMs = DEFAULT_LOCK_MS, now = Date.now(), git = gitRun, force = false } = {}) {
   if (!isGitRepo(project.root, { git })) {
     return { due: false, skipped: true, reason: 'not a git repository' };
   }
   const state = staleness(project.root, { git });
+  if (force) return { due: true, uninitialized: !hasWiki(project.root), ...state };
   if (!hasWiki(project.root)) {
     return { due: true, uninitialized: true, reason: 'uninitialized (missing openwiki/ pages)', ...state };
   }
   if (!state.stale) return { due: false, ...state };
+  if (state.generatedStatus === 'interrupted' || stillGenerating(project.root)) return { due: true, reason: 'resume incomplete generation', ...state };
   if (state.generatedAt) {
     const at = Date.parse(state.generatedAt);
     if (Number.isFinite(at) && now - at < lockMs) return { due: false, reason: 'refreshed recently', ...state };

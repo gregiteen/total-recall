@@ -20,12 +20,22 @@ describe('CLI Plugin Manager', () => {
   let consoleLogSpy;
   let consoleErrorSpy;
 
+  let previousAgentDir;
+  let sharedAgent;
+
   beforeEach(() => {
+    // `plugin create` links into the shared folder; keep that folder private to the test.
+    previousAgentDir = process.env._TR_TEST_AGENT_DIR;
+    sharedAgent = fs.mkdtempSync(path.join(os.tmpdir(), 'tr-plugin-cli-shared-'));
+    process.env._TR_TEST_AGENT_DIR = sharedAgent;
     consoleLogSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
     consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
   });
 
   afterEach(() => {
+    if (previousAgentDir === undefined) delete process.env._TR_TEST_AGENT_DIR;
+    else process.env._TR_TEST_AGENT_DIR = previousAgentDir;
+    fs.rmSync(sharedAgent, { recursive: true, force: true });
     consoleLogSpy.mockRestore();
     consoleErrorSpy.mockRestore();
   });
@@ -92,7 +102,7 @@ describe('CLI Plugin Manager', () => {
 
     try {
       await run(['plugin', 'create', 'test-widget', '--name', 'Test Widget', '--use-case', 'research', '--with-cli', '--with-generator']);
-      const pluginDir = path.join(tmpDir, '.agent', 'skills', 'total-recall', 'plugins', 'test-widget');
+      const pluginDir = path.join(sharedAgent, 'skills', 'total-recall', 'plugins', 'test-widget');
       const manifestPath = path.join(pluginDir, 'plugin.json');
       expect(fs.existsSync(manifestPath)).toBe(true);
       const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
@@ -120,7 +130,7 @@ describe('CLI Plugin Manager', () => {
 
     try {
       await run(['plugin', 'create', 'mon-plugin', '--name', 'Monetized Plugin', '--with-cli']);
-      const pluginDir = path.join(tmpDir, '.agent', 'skills', 'total-recall', 'plugins', 'mon-plugin');
+      const pluginDir = path.join(sharedAgent, 'skills', 'total-recall', 'plugins', 'mon-plugin');
       const manifestPath = path.join(pluginDir, 'plugin.json');
       expect(fs.existsSync(manifestPath)).toBe(true);
 

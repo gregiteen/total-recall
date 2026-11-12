@@ -226,14 +226,14 @@ describe('per-repository activation of a shared plugin', () => {
     expect(fs.readFileSync(path.join(shared, 'state.txt'), 'utf8')).toBe('shared');
   });
 
-  it('switches through the CLI-facing command, refusing a shared switch on a repository copy', async () => {
+  it('switches through the CLI-facing command and ignores a plugin left in a repository folder', async () => {
     const result = await setPluginActive('shared-demo', false, { projectRoot: repoA });
     expect(result.scope).toBe('project');
     expect(result.activation.enabled).toBe(false);
-    // scope 'shared' is only meaningful for a plugin installed in the shared folder.
+    // Only the shared folder installs plugins; a folder left in a repository is not one.
     const local = path.join(repoA, '.agent', 'skills', 'total-recall', 'plugins', 'local-demo');
     writeSharedPlugin(local, 'local-demo');
-    await expect(setPluginActive('local-demo', false, { projectRoot: repoA, scope: 'shared' })).rejects.toThrow(/shared setting/);
+    await expect(setPluginActive('local-demo', false, { projectRoot: repoA, scope: 'shared' })).rejects.toThrow(/missing/);
   });
 });
 

@@ -70,13 +70,15 @@ async function printHelp() {
     preflight <cmd>     ack | check | gate: the receipt every harness hook enforces (alias: tr-preflight)
     auth secret <cmd>   Credentials (the only secrets path): list|get|set|rotate|remote deploy|diff-env|export-env
     compile             Rebuild instruction surfaces
-    dream               Memory consolidation cycle
+    dream               Memory consolidation cycle (--all-brains for this node)
+    lessons tick        Queue local session lessons at a turn interval or session end
+    server              Repair the macOS server LaunchAgent (ensure --dry-run to preview)
     proposals <cmd>     Review / apply optimizer proposals (list|apply|revert)
     task <cmd>          Enqueue daemon work (open envelope)
     daemon <cmd>        Background worker (start|stop|status)
     skill <cmd>         Skills registry, deploy, multi-repo sync
     plugin <cmd>        Plugin manager: list, install, search, remove, info
-    harness <cmd>       Meta-harness manager: list, usage (5h/weekly quotas), dispatch, council
+    harness <cmd>       Metaharness manager: list, usage (5h/weekly quotas), dispatch, council
     agent <cmd>         Process controller: spawn, list, logs, kill across mesh
     brain <cmd>         Register / ensure any project brain
     status / doctor     Health and diagnostics
@@ -136,10 +138,10 @@ async function main() {
   // Core built-in memory and rules commands that always run from core
   const CORE_BUILTINS = new Set([
     'remember', 'forget', 'edit', 'recall', 'context', 'compact', 'rules',
-    'compile', 'rebuild', 'dream', 'proposals', 'proposal', 'task',
+    'compile', 'rebuild', 'dream', 'lessons', 'proposals', 'proposal', 'task',
     'daemon', 'skill', 'plugin', 'plugins',
     'harness', 'agent', 'agents', 'brain', 'status',
-    'doctor', 'brief', 'startup', 'init', 'connect', 'new', 'preflight', 'tr-preflight'
+    'doctor', 'brief', 'startup', 'server', 'init', 'connect', 'new', 'preflight', 'tr-preflight'
   ]);
 
   // Consulting Total Recall is what the repository-sweep policy looks for. Never fatal.

@@ -147,3 +147,18 @@ describe('CLI Semantic Index', () => {
     expect(results[0]).toMatchObject({ description: 'Current daemon status.', vectorScore: null });
   });
 });
+
+describe('formatSubcommandArgs', () => {
+  it('writes declared plugin arguments as usage text, never [object Object]', async () => {
+    const { formatSubcommandArgs } = await import('./cli-semantic-index.mjs');
+    const usage = formatSubcommandArgs([
+      { name: 'commit', type: 'string', required: true, positional: true },
+      { name: 'out', flag: '--out', type: 'string' },
+      { name: 'force', flag: '--force', type: 'boolean' },
+      { name: 'base', flag: '--base', type: 'string', required: true },
+    ]);
+    expect(usage).toBe(' <commit> [--out <out>] [--force] --base <base>');
+    expect(formatSubcommandArgs('<path>')).toBe(' <path>');
+    expect(formatSubcommandArgs(undefined)).toBe('');
+  });
+});

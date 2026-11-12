@@ -17,10 +17,12 @@ is removed after execution. Setup failure or an unready context stops dispatch.
 `docs-refresh`, `docs-ensure`, `docs-status`, `docs-read` and `docs-search` manage
 downloaded official documentation rather than a list of links. Content is hashed,
 bounded and refreshed after 24 hours. Maintenance uses the existing Total Recall
-daemon's plugin task, refreshing one stale adapter per run. Failed pages remain
+daemon's plugin task, attempting every stale adapter per run. Failed pages remain
 visible as failures and cannot certify complete coverage; successful cached
 content remains readable. `setup --node <recorded-node>` selects maintenance
-placement without creating a second scheduler.
+placement for `maintenance`, `maintenance --models` and `alerts check` without
+creating a second scheduler. Each maintenance step reports its failures. A failed
+setup or gate install does not prevent documentation refresh for other harnesses.
 
 Standalone Total Recall owner for CLI-agent discovery and explicit mesh command execution. Install with `total-recall plugin install <path-or-private-git-url>`. Installation rebuilds the plugin inventory, CLI library and connected instruction surfaces. No model account is created or selected automatically.
 
@@ -126,6 +128,20 @@ SSSS execution receipts. Actual process exit and finish metadata are distinct fr
 verification results; unavailable model metadata remains null. Thread operations
 include list, show, create, update, close and delete, using native SSSS state.
 
+Every review result is stored in an append-only SSSS ledger beside the thread
+store. It retains the selected diff, commit, reviewer, verdict and disposition,
+including failed reviews and `NO_DIFF`. `reviews --json` reads the ledger.
+Deleting a thread does not remove its reviews. A failed ledger write returns
+`ok: false` with `reviewStoreError` and the completed result.
+
+`learn` reports scorecards, walls and proposals from run receipts. Routing reads
+these receipts directly. The memory emit option has been removed.
+
+`threads cleanup-fixtures --dry-run` previews the one-time cleanup of exact test
+fixture titles. `threads cleanup-fixtures` applies it and stores the removed IDs,
+titles, statuses, source test files and retained IDs in the same SSSS operation.
+Real end-to-end job threads stay in place, including failed attempts.
+
 Custom adapter declarations preserve scoped credentials, optional authentication
 probes and HTTPS documentation URLs. IDs and paths reject traversal and symbolic
 links. Credentials reach only the declaring runner through the auth store. A
@@ -156,25 +172,6 @@ follows this foundation and requires its own current audit and plan.
 ### Installed and standalone verification
 
 Use the installed plugin for CLI execution and maintenance. The repository has a pure planning capability under `capability/`. The current manifest does not declare it for vendoring. See the [Metaharness tracker](docs/projects/in-progress/META_HARNESS_UNIFICATION/META_HARNESS_UNIFICATION_PROJECT_TRACKER.md) for current package, execution and hook acceptance.
-
-## Default Chat
-
-Open **Metaharness** from the dashboard's Plugins folder to select and save a
-default harness. The Chat drawer uses that default with the selected brains.
-Customize the native Home in `DESIGN.md`. The owner blocks in `ui/chunks/`
-cover execution, routing, usage, documentation, maintenance and run evidence.
-
-`total-recall meta-harness chat-default codex --json` sets the host's default
-Chat harness. Choose an adapter from the catalog or from the choices returned
-by `total-recall meta-harness chat-target --json`. The default applies to every
-brain selection.
-
-For example, `total-recall meta-harness chat-target --brains global,project:docs --json`
-returns the chosen harness and draft context for those two brain IDs. A Codex
-target opens a native draft that the operator can review before sending. Other
-harnesses can use an explicit HTTPS launch URL configured with `--url` and
-copyable context. Use a launch URL without embedded credentials, a query, or a
-fragment. Omitting `--url` selects the adapter's built-in handoff, if available.
 
 ## Using this from an agent
 

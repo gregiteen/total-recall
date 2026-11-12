@@ -90,7 +90,7 @@ export async function retryIncludedJob(id, { dispatch, route, now = Date.now() }
       result = await dispatch(claimed.replay.request, { role: 'Dispatch', retryId: id });
     } else if (claimed.replay.kind === 'route') {
       route ??= (await import('./cascade.mjs')).executeRoutedTask;
-      result = await route(claimed.task, { cwd: claimed.workspace, gate: claimed.replay.gate, gateOptions: claimed.replay.gateOptions,
+      result = await route(claimed.task, { ...claimed.replay.controls, cwd: claimed.workspace, gate: claimed.replay.gate, gateOptions: claimed.replay.gateOptions,
         route: { selected: claimed.agent }, pool: [claimed.agent], retryId: id });
     } else throw new Error('Unknown included usage job operation.');
   } catch (error) {

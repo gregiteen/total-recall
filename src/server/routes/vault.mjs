@@ -1,6 +1,5 @@
 import { Router } from 'express';
 import fs from 'node:fs';
-import path from 'node:path';
 import { requireAuth, requireScope } from '../auth.mjs';
 import {
   serverError,
@@ -16,6 +15,7 @@ import { compileSurface } from '../../core/surface.mjs';
 import { getNodes, invalidate } from '../../core/vault-cache.mjs';
 import { loadEmbeddingsIndex, loadSessionEmbeddingsIndex } from '../../core/embeddings.mjs';
 import { logger } from '../../core/logger.mjs';
+import { ruleLengthStats } from '../../core/rule-length.mjs';
 
 const router = Router();
 
@@ -63,28 +63,6 @@ router.post('/api/vault/compile', requireAuth, requireScope('memory:recompile'),
   }
 });
 
-router.post('/api/vault/compact', requireAuth, requireScope('memory:write'), async (req, res) => {
-  try {
-    const { compactAppendLogs } = await import('../../core/append-log.mjs');
-    const result = compactAppendLogs();
-    res.json({ compacted: true, ...result });
-  } catch (err) {
-    serverError(res, err);
-  }
-});
-
-router.get('/api/vault/hash', requireAuth, requireScope('memory:read'), (req, res) => {
-  try {
-    const vaultDir = resolveVaultFromQuery(req);
-    const { derivedDir } = pathsForVault(vaultDir);
-    const hashFile = path.join(derivedDir, 'vault-hash.txt');
-    const hash = fs.existsSync(hashFile) ? fs.readFileSync(hashFile, 'utf8').trim() : null;
-    res.json({ vault_hash: hash, vault_dir: vaultDir });
-  } catch (err) {
-    serverError(res, err);
-  }
-});
-
 router.get('/api/vault/status', requireAuth, requireScope('memory:read'), async (req, res) => {
   try {
     const vaultDir = resolveVaultFromQuery(req);
@@ -116,6 +94,7 @@ router.get('/api/vault/status', requireAuth, requireScope('memory:read'), async 
 
     res.json({
       vault_dir:     vaultDir,
+      rule_length:   ruleLengthStats(),
       node_count:    nodeCount,
       skill_count:   skillCount,
       derived_files: derivedFiles,

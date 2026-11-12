@@ -151,7 +151,7 @@ describe('executor registry', () => {
       },
     );
     expect(result.success).toBe(false);
-    expect(result.error).toMatch(/Unknown task executor/i);
+    expect(result.error).toBe('unsupported');
   });
 
   it('custom executor with vault:write writes inbox draft', async () => {

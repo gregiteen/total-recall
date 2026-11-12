@@ -294,6 +294,8 @@ function printHelp() {
     carriers              Find shell profiles and /etc files that export the master
                            password to every process; --remove-ambient deletes them
                            once an owner-only carrier holds the same password.
+    scan --stdin          Name the keys whose stored values occur in the text on stdin
+                           (values are never printed; exit 1 when one occurs)
     fingerprint           Identify a credential without printing it: length, type
                            prefix, fingerprint and the store keys holding the same
                            value. --from-clipboard | --stdin; --expect-prefix <p>
@@ -773,7 +775,7 @@ export default async function secretCli(argv) {
   }
   const brainDir = secretsStoreDir();
 
-  if (opts.stdin && opts.command !== 'fingerprint') {
+  if (opts.stdin && opts.command !== 'fingerprint' && opts.command !== 'scan') {
     if (!['set', 'rotate', 'rekey'].includes(opts.command)) {
       console.error('❌ --stdin is only valid with `set`, `rotate`, `rekey`, or `fingerprint`');
       await exitAfterFlush(1);
@@ -1289,6 +1291,23 @@ export default async function secretCli(argv) {
         console.log('');
       }
       if (found.length) process.exitCode = 1;
+      return;
+    }
+
+    if (opts.command === 'scan') {
+      // Name every store key whose value occurs in the text on stdin. Values never leave this
+      // process: callers (the git plugin's secret firewall) get key names only. One call per scan.
+      if (!opts.stdin) {
+        console.error('Usage: total-recall auth secret scan --stdin [--json]   (exit 1 when a stored value occurs)');
+        await exitAfterFlush(2);
+      }
+      // Diffs and staged files are large; one value check is not, so scan alone gets 64 MB.
+      const text = readAllStdinSync({ maxBytes: 64 * 1024 * 1024 }).toString();
+      const { textContainsSecrets } = await import('./secrets-store.mjs');
+      const result = await textContainsSecrets(brainDir, text);
+      if (opts.json) console.log(JSON.stringify({ ok: !result.leak, leak: result.leak, keys: result.keys, scanned_bytes: Buffer.byteLength(text) }));
+      else console.log(result.leak ? `  ❌ stored values found for: ${result.keys.join(', ')}` : '  ✅ no stored value found');
+      if (result.leak) process.exitCode = 1;
       return;
     }
 

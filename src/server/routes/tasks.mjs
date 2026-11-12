@@ -38,32 +38,6 @@ router.get('/api/tasks', requireAuth, requireScope('tasks:read'), (req, res) => 
   } catch (err) { serverError(res, err); }
 });
 
-router.delete('/api/tasks/cleanup', requireAuth, requireScope('tasks:write'), (req, res) => {
-  try {
-    if (!fs.existsSync(TASKS_DIR)) {
-      return res.json({ deleted: 0 });
-    }
-    let deleted = 0;
-    const files = fs.readdirSync(TASKS_DIR);
-    for (const file of files) {
-      if (!file.endsWith('.md')) continue;
-      const filePath = path.join(TASKS_DIR, file);
-      try {
-        const raw = fs.readFileSync(filePath, 'utf8');
-        const { data } = matter(raw);
-        if (data.status === 'completed') {
-          fs.unlinkSync(filePath);
-          deleted++;
-        }
-      } catch (e) {
-        // skip
-      }
-    }
-    res.json({ deleted });
-    
-  } catch (err) { serverError(res, err); }
-});
-
 router.post('/api/tasks', requireAuth, requireScope('tasks:write'), (req, res) => {
   try {
     const { category, target, body, priority = 5 } = req.body || {};

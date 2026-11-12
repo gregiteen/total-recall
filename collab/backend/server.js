@@ -14,7 +14,12 @@ import {
   getAnnotations 
 } from './db.js';
 
-const JWT_SECRET = process.env.JWT_SECRET || 'total-recall-collab-secret-key-1234';
+// No default: a published fallback secret would let anyone sign a session token.
+const JWT_SECRET = process.env.JWT_SECRET;
+if (!JWT_SECRET || JWT_SECRET.length < 32) {
+  console.error('collab: set JWT_SECRET to a random value of 32 or more characters (for example from `total-recall auth secret`).');
+  process.exit(1);
+}
 const PORT = process.env.PORT || 3001;
 
 const app = express();

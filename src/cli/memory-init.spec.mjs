@@ -35,10 +35,12 @@ describe('memory-init writes a project surface at the repo root', () => {
 
     const atRoot = path.join(root, 'INSTRUCTIONS.md');
     expect(fs.existsSync(atRoot), 'project surface belongs at the repo root').toBe(true);
-    expect(fs.readFileSync(atRoot, 'utf8')).toContain('TOTAL RECALL');
+    expect(fs.readFileSync(atRoot, 'utf8')).toContain('Total Recall: start here');
     expect(inspectRequiredPlugins(path.join(root, '.agent/skills/total-recall')).status).toBe('ready');
     const content = fs.readFileSync(atRoot, 'utf8');
-    expect(content.indexOf('Built-in commands:')).toBeLessThan(content.indexOf('MANDATORY FIRST STEP'));
+    // ODC-R4: no CLI inventory in an entry file; agents look commands up when needed.
+    expect(content).not.toContain('Built-in commands:');
+    expect(content).toContain('tr-preflight --ack');
 
     // The bug wrote the surface here instead; it must never return.
     expect(

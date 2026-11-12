@@ -16,6 +16,23 @@ export async function inspectStartup(options = {}) {
   return startupHealth({ brainDir: globalBrain, brainUrl: url, token, brainId: cfg.layer === 'project' && cfg.name ? `project:${cfg.name}` : null, ...options });
 }
 
+/**
+ * One line per thing a session should see at start: a dashboard older than its
+ * sources, and each plugin startup check that needs attention or could not run.
+ */
+export function startupFindings(report) {
+  const lines = [];
+  const dashboard = report.dashboard;
+  if (dashboard && ['stale', 'missing'].includes(dashboard.status)) {
+    lines.push(`Dashboard: bundle ${dashboard.status}${dashboard.newer_source ? ` (${dashboard.newer_source} is newer)` : ''}; the server rebuilds it, see /health dashboard.`);
+  } else if (dashboard?.status === 'unknown') lines.push(`Dashboard: freshness unknown (${dashboard.reason}).`);
+  for (const check of report.plugin_checks || []) {
+    if (check.status === 'attention') lines.push(`${check.command}: ${check.summary}`);
+    else if (check.status === 'unavailable') lines.push(`${check.command}: unavailable (${check.reason})${check.summary ? ` ${check.summary}` : ''}`);
+  }
+  return lines;
+}
+
 export default async function startup(args = []) {
   if (!args.length || args.includes('--help') || args.includes('-h')) {
     console.log('Usage: total-recall startup check|ensure [--json] [--app-check <registered-repo-command>] [--app-start <registered-repo-command>]\ncheck is read-only. ensure starts only missing configured local managed services and an explicitly declared current-repo app command; never restarts running/unknown or remote services. SSSS is checked as tooling, not a fabricated daemon. App health JSON must contain ok:true and status:ready|healthy|running. No declaration means app readiness is unknown.');
@@ -36,8 +53,10 @@ export default async function startup(args = []) {
   if (args.includes('--json')) console.log(JSON.stringify(report, null, 2));
   else {
     console.log(`Startup: required plugins ${report.required_plugins?.status || 'unknown'}; server ${report.server?.status || 'unknown'}; brain ${report.brain?.status || 'unknown'}; daemon ${report.daemon?.status || 'unknown'}; SSSS tooling ${report.ssss?.status || 'unknown'}; app ${report.app?.status || 'unknown'}`);
+    if (report.server?.reason) console.log(`Server: ${report.server.reason}`);
     if (report.server?.stale) console.log(`Server: running ${report.server.stale.running} with ${report.server.stale.on_disk} on disk; it has not been replaced.`);
     for (const error of report.required_plugins?.errors || []) console.log(`Required plugin: ${error}`);
+    for (const line of startupFindings(report)) console.log(line);
     const harnesses = await queryHarnessUsage().catch(() => []);
     const availH = harnesses.filter(h => h.available);
     const readyH = availH.filter(h => h.authed);

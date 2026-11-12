@@ -1,5 +1,7 @@
 import { describe, it, expect, vi, afterAll } from 'vitest';
 vi.mock('./required-plugins.mjs', () => ({ inspectRequiredPlugins: vi.fn(() => ({ status: 'ready', errors: [] })) }));
+// Plugin startup checks and the dashboard check read this machine's plugins and checkout; keep these specs hermetic.
+vi.mock('./plugin-startup-checks.mjs', () => ({ runPluginStartupChecks: vi.fn(async () => []) }));
 import { inspectRequiredPlugins } from './required-plugins.mjs';
 import fs from 'node:fs';
 import os from 'node:os';
@@ -11,6 +13,13 @@ const health = { status: 'healthy', version: '1', uptime_seconds: 1, embedding_c
 const run = async () => ({ code: 0, output: 'SSSS tooling', reason: null });
 const fetchGood = async url => url.pathname === '/health' ? new Response(JSON.stringify(health)) : new Response('# Instructions');
 describe('startup health truth and boundaries', () => {
+  it('reports both checkout paths and the repair command for a foreign server', async () => {
+    const report = await startupHealth({ brainDir: '/missing', brainUrl: 'http://localhost:3000',
+      identity: () => ({ status: 'conflict', entry: '/old/checkout/src/server/index.mjs' }), fetchImpl: fetchGood, run });
+    expect(report.server).toMatchObject({ status: 'conflict' });
+    expect(report.server.reason).toBe(`server runs from /old/checkout; expected ${process.cwd()}; run total-recall server ensure`);
+    expect(report.actions).toEqual([]);
+  });
   it('identifies a real child as its own entry and a foreign installation for this daemon', async () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'daemon-real-'));
     let child;
@@ -201,5 +210,13 @@ describe('startup health truth and boundaries', () => {
   it('handles spawn failure and bounds real synthetic child lifetime', async () => {
     expect((await runBounded('definitely-missing-startup-binary', [])).reason).toBe('spawn-failed');
     expect((await runBounded(process.execPath, ['-e', 'setInterval(()=>{},1000)'], { timeoutMs: 20 })).reason).toBe('timeout');
+  });
+  it('reports the dashboard and plugin startup checks without changing readiness', async () => {
+    const pluginChecks = async () => [{ plugin: 'git', command: 'git unmerged', status: 'attention', outstanding: 2, summary: '2 unmerged' }];
+    const dashboardCheck = async () => ({ status: 'stale', newer_source: 'frontend/src/App.tsx' });
+    const report = await startupHealth({ listener: async () => true, brainDir: '/missing', brainUrl: 'https://example.invalid', identity: () => ({ status: 'running' }), fetchImpl: fetchGood, run, pluginChecks, dashboardCheck });
+    expect(report.dashboard).toEqual({ status: 'stale', newer_source: 'frontend/src/App.tsx' });
+    expect(report.plugin_checks).toEqual([{ plugin: 'git', command: 'git unmerged', status: 'attention', outstanding: 2, summary: '2 unmerged' }]);
+    expect(report.ready).toBe(true);
   });
 });

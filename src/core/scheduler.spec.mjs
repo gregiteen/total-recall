@@ -42,7 +42,7 @@ function writeTask(dir, slug, overrides = {}) {
 describe('TaskQueue', () => {
   it('enqueues and dequeues by effective priority', () => {
     const q = new TaskQueue();
-    q.enqueue({ slug: 'low', priority: 10, category: 'exploration' });
+    q.enqueue({ slug: 'low', priority: 10, category: 'self-evaluation' });
     q.enqueue({ slug: 'high', priority: 90, category: 'conscious-enforcement' });
     q.enqueue({ slug: 'mid', priority: 50, category: 'memory-maintenance' });
 
@@ -51,7 +51,7 @@ describe('TaskQueue', () => {
     const second = q.dequeue();
     expect(second.slug).toBe('mid'); // 50 * 0.6 = 30
     const third = q.dequeue();
-    expect(third.slug).toBe('low'); // 10 * 0.2 = 2
+    expect(third.slug).toBe('low'); // 10 * 0.3 = 3
   });
 
   it('returns null when empty', () => {
@@ -203,7 +203,7 @@ describe('generateIdleTask', () => {
     expect(categories.size).toBeGreaterThanOrEqual(2);
   });
 
-  it('generates post-mortem tasks when sessions exist', () => {
+  it('leaves session review to the lesson hooks and ingest path', () => {
     // Write a fake session
     fs.writeFileSync(
       path.join(sessionsDir, 'test-session.jsonl'),
@@ -220,7 +220,7 @@ describe('generateIdleTask', () => {
         break;
       }
     }
-    expect(found).toBe(true);
+    expect(found).toBe(false);
   });
 });
 
@@ -289,14 +289,13 @@ describe('createScheduler', () => {
     if (prev !== undefined) process.env.TR_IDLE_TASKS = prev;
   });
 
-  it('falls back to idle tasks when TR_IDLE_TASKS=1', () => {
+  it('keeps an empty queue empty even with the obsolete idle opt-in', () => {
     const prev = process.env.TR_IDLE_TASKS;
     process.env.TR_IDLE_TASKS = '1';
     const sched = createScheduler({ queueDir, vaultDir, sessionsDir });
     const { task, source } = sched.next();
-    expect(source).toBe('idle');
-    expect(task.type).toBe('task');
-    expect(task.created_by).toContain('scheduler');
+    expect(source).toBe('empty');
+    expect(task).toBeNull();
     if (prev === undefined) delete process.env.TR_IDLE_TASKS;
     else process.env.TR_IDLE_TASKS = prev;
   });

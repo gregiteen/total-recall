@@ -37,6 +37,7 @@ function printHelp() {
     --object <string>         SPO Object (default: brain)
     --related <list>          Comma-separated list of related slugs
     --expires <duration>       TTL for temporary rules (e.g. "7d", "2w", "30d", "6h", "3m")
+    --allow-long              Permit a rule above 800 characters (context:policy also permits it)
     --confined-fact            Create a descriptive fact with generated identity; refresh local search without executable generators
 
   Examples:
@@ -73,9 +74,6 @@ function parseDuration(str) {
   }
   return date;
 }
-
-const RULE_SOFT_LIMIT = 300;
-const RULE_HARD_LIMIT = 800;
 
 export default async function remember(args) {
   // Parse layer flag first
@@ -244,16 +242,6 @@ export default async function remember(args) {
     }
   }
 
-  // Rules load into every task capsule, so they must be brief.
-  if (['invariants', 'preferences', 'anti-patterns'].includes(category) && !tags.includes('context:policy')) {
-    const n = bodyContent.trim().length;
-    if (n > RULE_HARD_LIMIT && !allowLong) {
-      console.error(`❌ Rule is ${n} characters (limit ${RULE_HARD_LIMIT}). Rules must be brief: one or two sentences, no history, dates, quotes or incident detail (save those as a fact). Shorten it, or pass --allow-long.`);
-      process.exit(1);
-    }
-    if (n > RULE_SOFT_LIMIT) console.error(`⚠️  Rule is ${n} characters. Keep rules brief (under ${RULE_SOFT_LIMIT}): state the constraint only, move history and examples to a fact. Shorten with: total-recall edit <slug> "<shorter>"`);
-  }
-
   const resolvedAgentDir = resolveAgentDir(layer);
   const resolvedBrainDir = resolveBrainDir(layer);
   const skillsDir = path.join(resolvedAgentDir, 'skills');
@@ -344,7 +332,7 @@ export default async function remember(args) {
 
   // Saving memory never optimizes or archives other canonical documents.
 
-  const vaultResult = await writeNodeValidatedAsync(node, vaultDir);
+  const vaultResult = await writeNodeValidatedAsync(node, vaultDir, { allowLong });
   if (!vaultResult.success) {
     console.error(`  ❌ Validation failed: ${vaultResult.validation.errors.join('; ')}`);
     if (vaultResult.repair) {
@@ -355,6 +343,7 @@ export default async function remember(args) {
     }
     process.exit(1);
   }
+  for (const warning of vaultResult.validation?.warnings || []) console.error(`  ⚠️  ${warning}`);
   console.log(`  ✅ Permanent SSSS memory node created ${layerLabel} in vault: memory-vault/${category}/${finalSlug}.md`);
 
   // Automatically recompile surfaces and local indexes

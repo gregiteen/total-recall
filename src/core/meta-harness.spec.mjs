@@ -19,7 +19,7 @@ const core = await import('./meta-harness.mjs');
 
 beforeEach(() => { vi.clearAllMocks(); load.mockResolvedValue(owner); });
 
-describe('Meta Harness owner boundary', () => {
+describe('Metaharness owner boundary', () => {
   it('keeps discovery and usage compatibility without a second adapter or auth engine', async () => {
     expect(core.HARNESS_SPECS).toBe(owner.HARNESS_SPECS);
     expect(core.detectHarnesses()).toEqual([{ id: 'fixture' }]);

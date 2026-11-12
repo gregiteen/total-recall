@@ -1,7 +1,6 @@
 import fs from 'fs';
 import path from 'path';
 import os from 'os';
-import crypto from 'crypto';
 import matter from './frontmatter.mjs';
 import { writeNode, walkMd } from './vault.mjs';
 import { updateNodeInPlace } from './validated-write.mjs';
@@ -127,7 +126,7 @@ export function autoPruneStorage(brainDir, vaultDir, conflictsDir) {
   // Retrieve node slugs of active research projects so we never prune their drafts in progress
   const activeResearchSlugs = new Set();
   try {
-    const queue = loadQueue();
+    const queue = loadQueue(brainDir);
     for (const item of queue) {
       if (item.status === 'pending' || item.status === 'in_progress') {
         if (item.node_slug) {
@@ -151,6 +150,13 @@ export function autoPruneStorage(brainDir, vaultDir, conflictsDir) {
           const baseName = path.basename(file, '.md');
           if (activeResearchSlugs.has(baseName)) {
             continue;
+          }
+          // Lesson drafts remain reviewable until promotion or explicit disposition.
+          if (dir.startsWith(inboxDir) && file.endsWith('.md')) {
+            try {
+              const { data } = matter(fs.readFileSync(fullPath, 'utf8'));
+              if (data.x_review_hold || data.tags?.includes('post-mortem') || data.tags?.includes('lesson-review')) continue;
+            } catch { continue; }
           }
           if (now - stat.mtimeMs > maxAge) {
             fs.unlinkSync(fullPath);
@@ -244,21 +250,13 @@ export function autoPruneStorage(brainDir, vaultDir, conflictsDir) {
 
 import { 
   generateMemoryCleanupProposals,
-  generateStaleKnowledgeRefreshProposals,
   evaluateProposalGate,
   dedupeProposals,
+  runSmartDecay,
 } from './optimizer.mjs';
 import { applyAcceptedProposals } from './proposal-applier.mjs';
 
 const DREAM_PROMOTION_THRESHOLD = 0.7;
-
-// Master switch for the stale-knowledge-refresh *ticket generator* (see PHASE 4).
-// Disabled 2026-08-01: it filed one .md per stale node every cycle (16,401
-// unread tickets at its peak). Its successor, which queued "Verify
-// still-current" research every cycle, was removed too (RESEARCH_SYSTEM2):
-// research runs only when a human asks or a project needs it. Stale nodes are
-// listed for a human by `total-recall proposals stale` / GET /api/proposals/stale.
-const ENABLE_STALE_KNOWLEDGE_REFRESH = false;
 
 /**
  * Phase 1: Light Sleep. Scan for modifications.
@@ -298,6 +296,7 @@ export function loadCandidatesFromInbox(brainDirPath) {
         const { data, content } = matter(raw);
         if (!data || (!data.slug && !data.title && !String(content || '').trim())) continue;
         const status = data.status || 'draft';
+        if (data.x_review_hold === true) continue;
         if (status === 'archived' || status === 'active') continue;
         candidates.push({
           ...data,
@@ -319,90 +318,11 @@ export function loadCandidatesFromInbox(brainDirPath) {
   return candidates;
 }
 
-/**
- * Lightweight session → candidate extraction (deterministic heuristics).
- * User lines that signal durable preferences/rules become draft candidates.
- */
-export function loadCandidatesFromSessions(sessionsDir, { maxFiles = 8, maxCandidates = 20 } = {}) {
-  const candidates = [];
-  if (!fs.existsSync(sessionsDir)) return candidates;
-
-  const signal =
-    /\b(always|never|prefer|remember|must not|must|invariant|don't|do not|from now on)\b/i;
-
-  let files = [];
-  try {
-    files = fs
-      .readdirSync(sessionsDir)
-      .filter((f) => f.endsWith('.jsonl'))
-      .map((f) => ({
-        name: f,
-        mtime: fs.statSync(path.join(sessionsDir, f)).mtimeMs,
-      }))
-      .sort((a, b) => b.mtime - a.mtime)
-      .slice(0, maxFiles);
-  } catch {
-    return candidates;
-  }
-
-  for (const file of files) {
-    let lines;
-    try {
-      lines = fs.readFileSync(path.join(sessionsDir, file.name), 'utf8').split('\n').filter(Boolean);
-    } catch {
-      continue;
-    }
-    for (const line of lines) {
-      if (candidates.length >= maxCandidates) return candidates;
-      let entry;
-      try {
-        entry = JSON.parse(line);
-      } catch {
-        continue;
-      }
-      const content = entry.content || entry.text || '';
-      if (!content || content.length < 24 || content.length > 2000) continue;
-      if (entry.type === 'tool_call') continue;
-      const role = entry.role;
-      if (role && role !== 'user' && role !== 'human') continue;
-      if (!signal.test(content)) continue;
-
-      const hash = crypto.createHash('sha256').update(content).digest('hex').slice(0, 10);
-      candidates.push({
-        slug: `session-extract-${hash}`,
-        category: 'preferences',
-        title: content.slice(0, 80).replace(/\s+/g, ' '),
-        status: 'draft',
-        confidence: 0.55,
-        importance: 3,
-        evidence_count: 1,
-        modality: /must not|never|don't|do not/i.test(content) ? 'must_not' : 'should',
-        subject: 'user',
-        predicate: 'prefers',
-        object: 'behavior',
-        tags: ['session-extract', 'dream-rem'],
-        source: {
-          type: 'session',
-          session_id: path.basename(file.name, '.jsonl'),
-          evidence_count: 1,
-        },
-        body: content,
-      });
-    }
-  }
-  return candidates;
-}
-
-/**
- * Collect all REM candidates (inbox + sessions). Dedupe by slug.
- */
+/** Collect reviewed inbox candidates. Session models run through lesson-review. */
 export function collectRemCandidates({ brainDirPath, sessionsDir }) {
   const bySlug = new Map();
   for (const c of loadCandidatesFromInbox(brainDirPath)) {
     bySlug.set(c.slug, c);
-  }
-  for (const c of loadCandidatesFromSessions(sessionsDir)) {
-    if (!bySlug.has(c.slug)) bySlug.set(c.slug, c);
   }
   return [...bySlug.values()];
 }
@@ -444,9 +364,11 @@ export function evaluateCandidates(candidates, existingNodes, conflictsDir) {
  * Main Dream Cycle execution.
  */
 export async function runDreamCycle({
-  vaultDir, skillsDir, derivedDir, conflictsDir, instructionsFile
+  vaultDir, skillsDir, derivedDir, conflictsDir, instructionsFile, runtimeConfig
 }) {
-  const sessionsDir = path.join(brainDir, 'sessions');
+  const cycleBrainDir = path.dirname(vaultDir);
+  const sessionsDir = path.join(cycleBrainDir, 'sessions');
+  const errors = [];
 
   logger.info('dream', 'PHASE 0 — Session Ingestion (IDE Conversation Logs)');
   try {
@@ -462,7 +384,7 @@ export async function runDreamCycle({
   logger.info('dream', `Modified vault files: ${modified.length}`);
 
   const candidates = collectRemCandidates({
-    brainDirPath: brainDir,
+    brainDirPath: cycleBrainDir,
     sessionsDir,
   });
   logger.info('dream', `REM candidates collected: ${candidates.length}`);
@@ -508,6 +430,7 @@ export async function runDreamCycle({
     await compileSurface({ vaultDir, skillsDir, derivedDir, instructionsFile });
     logger.info('dream', 'Surface recompiled successfully');
   } catch (err) {
+    errors.push(`Deep Sleep compile failed: ${err.message}`);
     logger.error('dream', `Deep Sleep compile failed: ${err.message}`);
   }
 
@@ -516,14 +439,16 @@ export async function runDreamCycle({
   try {
     const cleanupProposals = await generateMemoryCleanupProposals(vaultDir);
 
-    // Stale-knowledge-refresh generation is DISABLED. It filed one ticket per
-    // high-importance node untouched for 30 days — ~600 of them — and nothing
-    // in this system ever reads or applies a proposal, so every one was write-
-    // only noise. Flip to true to re-enable; the dedupe gate below keeps it
-    // bounded at one open ticket per target if you do.
-    const staleProposals = ENABLE_STALE_KNOWLEDGE_REFRESH
-      ? await generateStaleKnowledgeRefreshProposals(vaultDir)
-      : [];
+    // DECAY-01: memories the access ledger shows unused for the decay age are judged by the
+    // local reasoning runtime; the gate and applier below verify each one before it applies.
+    let decayProposals = [];
+    try {
+      decayProposals = await runSmartDecay(vaultDir, runtimeConfig, undefined, { derivedDir });
+      logger.info('dream', `Smart decay: ${decayProposals.length} proposal(s).`);
+    } catch (err) {
+      errors.push(`Smart decay failed: ${err.message}`);
+      logger.error('dream', `Smart decay failed: ${err.message}`);
+    }
 
     // The generators are pure functions of vault state, so every cycle produces
     // the SAME proposals as the last one — a node stale on Monday is still stale
@@ -531,7 +456,7 @@ export async function runDreamCycle({
     // random slugs; the global vault accumulated 16,401 proposals for 594 real
     // targets (~28 copies each, ~5k/day) until proposals were 95% of the vault.
     const { kept: allProposals, suppressed } = dedupeProposals(
-      [...cleanupProposals, ...staleProposals],
+      [...cleanupProposals, ...decayProposals],
       vaultDir,
     );
     if (suppressed > 0) {
@@ -560,6 +485,7 @@ export async function runDreamCycle({
       logger.info('dream', `Applied ${applied.applied} proposals (${applied.superseded} superseded, ${applied.failed} failed).`);
     }
   } catch (err) {
+    errors.push(`Optimizer failed: ${err.message}`);
     logger.error('dream', `Optimizer failed: ${err.message}`);
   }
 
@@ -573,18 +499,20 @@ export async function runDreamCycle({
       `Proposals accepted: ${proposalCount}`,
     ]);
   } catch (err) {
+    errors.push(`Daily note write failed: ${err.message}`);
     logger.error('dream', `Daily note write failed: ${err.message}`);
   }
 
   logger.info('dream', 'PHASE 5 — Automatic Storage & Memory Pruning');
   try {
-    autoPruneStorage(brainDir, vaultDir, conflictsDir);
+    autoPruneStorage(cycleBrainDir, vaultDir, conflictsDir);
     logger.info('dream', 'Automated VFS storage pruning completed successfully');
   } catch (err) {
+    errors.push(`Storage pruning failed: ${err.message}`);
     logger.error('dream', `Storage pruning failed: ${err.message}`);
   }
 
-  return { status: 'success' };
+  return errors.length ? { status: 'failed', errors } : { status: 'success' };
 }
 
 // ─── Standalone Daemon Execution ────────────────────────────────────────────────

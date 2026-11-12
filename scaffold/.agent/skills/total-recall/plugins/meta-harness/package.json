@@ -1,7 +1,7 @@
 {
   "name": "tr-plugin-meta-harness",
-  "version": "0.3.11",
-  "description": "Total Recall Meta Harness plugin",
+  "version": "0.3.13",
+  "description": "Total Recall Metaharness plugin",
   "type": "module",
   "scripts": {
     "test": "node --import ./test/isolate.mjs --test test/*.test.mjs",
@@ -12,7 +12,6 @@
     "cli.mjs",
     "plugin.json",
     "README.md",
-    "DESIGN.md",
     "src/",
     "!src/**/*.spec.mjs",
     "ui/",

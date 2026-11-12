@@ -59,13 +59,6 @@ describe('Dream Cycle Phase 2 (REM)', () => {
 describe('Phase 4 proposal wiring', () => {
   const src = () => fs.readFileSync(path.join(process.cwd(), 'src/core/dream.mjs'), 'utf8');
 
-  it('keeps the stale-knowledge ticket generator disabled', () => {
-    // The old generator wrote one .md per stale node per cycle — 16,401 unread
-    // tickets at its peak. Nothing should turn it back on.
-    expect(src()).toMatch(/const ENABLE_STALE_KNOWLEDGE_REFRESH = false;/);
-    expect(src()).toMatch(/ENABLE_STALE_KNOWLEDGE_REFRESH\s*\?\s*await generateStaleKnowledgeRefreshProposals/);
-  });
-
   it('consumes accepted proposals instead of only writing them', () => {
     // The defining bug of this feature was that nothing ever read a proposal.
     // If this call disappears, the phase silently reverts to write-only.

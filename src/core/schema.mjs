@@ -41,8 +41,7 @@ export const TaskSchema = z.object({
     'system2-deliberation',
     'skill-engineering',
     'proactive-research',
-    'self-evaluation',
-    'exploration'
+    'self-evaluation'
   ]),
   status: z.enum(['pending', 'in_progress', 'done', 'failed']),
   target: z.string().optional(),

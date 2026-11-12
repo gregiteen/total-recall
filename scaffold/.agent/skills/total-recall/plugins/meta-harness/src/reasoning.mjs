@@ -1,4 +1,4 @@
-/** Headless reasoning belongs to Meta Harness, including config, readiness and receipts. */
+/** Headless reasoning belongs to Metaharness, including config, readiness and receipts. */
 import fs from 'node:fs';
 import path from 'node:path';
 import { brainDir } from './paths.mjs';

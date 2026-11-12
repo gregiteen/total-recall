@@ -11,7 +11,7 @@ let configOwner, configError;
 try { configOwner = await loadPluginModule('meta-harness', 'reasoning-runtime'); }
 catch (error) { configError = error; }
 function reasoningConfigOwner() {
-  if (!configOwner) throw new Error(`Meta Harness reasoning is unavailable: ${configError?.message || 'install the plugin'}`);
+  if (!configOwner) throw new Error(`Metaharness reasoning is unavailable: ${configError?.message || 'install the plugin'}`);
   return configOwner;
 }
 

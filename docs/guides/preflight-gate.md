@@ -12,14 +12,39 @@ total-recall tr-preflight --ack --task "<task>" --action read,edit,test
 
 Without this receipt, working tools are denied. There is no setting to turn this off, and the commands that satisfy it are always allowed, so the gate cannot lock out its own repair.
 
-Each session has to do this for itself. Where the harness sends a session id, another agent's receipt in the same repository does not count. Subagents and runs started by Meta Harness are treated as delegated and are not stopped. In a harness that gives a subagent its own unlinked session, a new session counts as delegated for one receipt window after an acknowledged session starts a subagent, so an unrelated agent starting in that repository during the window also passes.
+For an `edit` or `test` action, acknowledgement also restores missing or stale dependencies at the resolved project root. It checks on every acknowledgement, including an unchanged capsule. It skips a repository without a supported lockfile. Read-only actions do not install. Text output reports the dependency status. JSON output includes a `dependencies` result, or `null` when no check ran. An install failure exits nonzero. The instruction receipt remains available so the agent can repair the install.
+
+### Shared installer for plugins
+
+The host supplies `TR_PACKAGE_ROOT` to plugin CLI handlers and runtime modules. Plugins resolve the shared installer from that host:
+
+```js
+import path from 'node:path';
+import { pathToFileURL } from 'node:url';
+
+const { ensureDependencies } = await import(pathToFileURL(
+  path.join(process.env.TR_PACKAGE_ROOT, 'src/core/ensure-dependencies.mjs')
+).href);
+const result = await ensureDependencies(projectRoot, { reason: 'test-gate' });
+if (!result.ok) throw new Error(result.error);
+```
+
+The package also exports `total-recall-brain/src/core/ensure-dependencies.mjs` for consumers with an explicit host package dependency. Pass an absolute repository root. The function does not search parent directories. Metaharness and code-quality can use this same function; their migrations are separate from this core change.
+
+`ensureDependencies(root, { reason, timeoutMs })` returns a promise. It does not print. The default timeout is 300,000 ms; accepted values are 1 through 600,000 ms. It returns `ok`, `status`, `root`, `reason`, `manager`, `lockfile`, `command`, and `durationMs`. Status is `installed`, `current`, `skipped`, or `failed`. A skip includes `trigger: 'no-lockfile'`. An install includes a `missing` or `stale` trigger. Failure includes `error` and, when available, the exit code, signal, timeout flag and bounded child output. Callers must inspect `ok` before starting a gate.
+
+Supported lockfiles are `npm-shrinkwrap.json`, `package-lock.json`, `pnpm-lock.yaml`, `yarn.lock`, `bun.lock`, and `bun.lockb`. The installer uses the matching manager. If several managers have lockfiles, `package.json` must declare `packageManager`. npm shrinkwrap takes priority over package-lock. A Yarn declaration or lockfile metadata selects modern Yarn. Frozen commands follow the official [npm](https://docs.npmjs.com/cli/v11/commands/npm-ci/), [pnpm](https://pnpm.io/cli/install), [Yarn](https://yarnpkg.com/cli/install), [Yarn Classic](https://classic.yarnpkg.com/lang/en/docs/cli/install/) and [Bun](https://bun.sh/docs/pm/cli/install) references.
+
+The install marker is `node_modules/.total-recall-install.json`. Modern Yarn PnP uses `.yarn/.total-recall-install.json` while `.pnp.cjs` exists. The marker records the lockfile name, SHA-256 hash and modification time. An absent or invalid marker requires an install. A changed hash or modification time requires an install. A failed install clears the old marker. A successful install gets a marker only if the lockfile did not change while it ran. Concurrent callers in one host process share the same install. The installer runs without a shell and kills its process group on timeout on POSIX hosts.
+
+Each session has to do this for itself. Where the harness sends a session id, another agent's receipt in the same repository does not count. Subagents and runs started by Metaharness are treated as delegated and are not stopped. In a harness that gives a subagent its own unlinked session, a new session counts as delegated for one receipt window after an acknowledged session starts a subagent, so an unrelated agent starting in that repository during the window also passes.
 
 ## When work goes around a plugin
 
 Two more checks steer work toward the plugin that owns it:
 
 - **Owned commands.** A plugin can declare raw commands it owns. For example, `git-sentinel` owns `git status`.
-- **Routing.** A plugin can declare itself the router for tasks. Meta Harness does.
+- **Routing.** A plugin can declare itself the router for tasks. Metaharness does.
 
 Each one has a mode:
 
@@ -51,7 +76,7 @@ total-recall preflight mode off --router --repo
 
 ## Harness support
 
-`total-recall init` and `total-recall update --all-brains --apply` install the hook for each harness present on the machine, and Meta Harness maintenance keeps it installed. `total-recall preflight mode` shows whether a warning can reach the agent:
+`total-recall init` and `total-recall update --all-brains --apply` install the hook for each harness present on the machine, and Metaharness maintenance keeps it installed. `total-recall preflight mode` shows whether a warning can reach the agent:
 
 | Harness | Hook location | Warning reaches the agent through |
 | --- | --- | --- |

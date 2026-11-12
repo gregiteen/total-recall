@@ -22,6 +22,21 @@ import { logger } from './logger.mjs';
 import { atomicWrite } from './vault.mjs';
 import { globalAgentDir } from './local-config.mjs';
 
+/** Usage text for declared plugin arguments: positional as <label>, flags as [--flag <label>] or [--flag]. */
+export function formatSubcommandArgs(args) {
+  if (typeof args === 'string') return args ? ` ${args}` : '';
+  if (!Array.isArray(args)) return '';
+  const parts = [];
+  for (const arg of args) {
+    if (!arg || typeof arg !== 'object') continue;
+    const label = String(arg.name || arg.label || 'value').replace(/\s+/g, '-');
+    if (arg.positional || !arg.flag) parts.push(arg.required ? `<${label}>` : `[${label}]`);
+    else if (arg.type === 'boolean') parts.push(arg.required ? arg.flag : `[${arg.flag}]`);
+    else parts.push(arg.required ? `${arg.flag} <${label}>` : `[${arg.flag} <${label}>]`);
+  }
+  return parts.length ? ` ${parts.join(' ')}` : '';
+}
+
 /** Canonical descriptions and usage signatures for built-in core commands. */
 const CORE_METADATA = {
   app: {
@@ -49,6 +64,11 @@ const CORE_METADATA = {
     usage: 'total-recall startup [check|ensure]',
     effect: 'write'
   },
+  server: {
+    description: 'Repair and verify the macOS server LaunchAgent for this package.',
+    usage: 'total-recall server ensure [--dry-run]',
+    effect: 'write'
+  },
   deploy: {
     description: 'Deploy host runtime layers, daemon services, or launch browser setup.',
     usage: 'total-recall deploy [--ui]',
@@ -66,7 +86,7 @@ const CORE_METADATA = {
   },
   dream: {
     description: 'Trigger memory consolidation sleep cycle.',
-    usage: 'total-recall dream',
+    usage: 'total-recall dream [--all-brains] [--dry-run] [--json]',
     effect: 'write'
   },
   lint: {
@@ -320,7 +340,7 @@ const CORE_METADATA = {
     effect: 'read'
   },
   harness: {
-    description: 'Meta-harness orchestration, task dispatch, and council consensus.',
+    description: 'Metaharness orchestration, task dispatch, and council consensus.',
     usage: 'total-recall harness [dispatch|council|usage]',
     effect: 'write'
   },
@@ -431,7 +451,7 @@ export function harvestAllCliVerbs({ projectRoot = process.cwd(), skillsDir = nu
         if (seenIds.has(subId)) continue;
         seenIds.add(subId);
 
-        const argsStr = sub.args ? ` ${sub.args}` : '';
+        const argsStr = formatSubcommandArgs(sub.args);
         verbs.push({
           id: subId,
           name: sub.name,

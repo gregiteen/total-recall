@@ -19,10 +19,14 @@ it('supplies host context through the real installed-plugin CLI dispatch', () =>
       cli: { command: 'host-probe', handler: './cli.mjs' },
       ui: { home: 'home', design_tokens: 'DESIGN.md', elements: [{ id: 'home', kind: 'panel', tag: 'tr-fixture-home', module: 'ui/home.js' }] },
     }));
-    fs.writeFileSync(path.join(plugin, 'cli.mjs'), `export function run(argv) {
+    fs.writeFileSync(path.join(plugin, 'cli.mjs'), `import path from 'node:path';
+    import { pathToFileURL } from 'node:url';
+    export async function run(argv) {
+      const { ensureDependencies } = await import(pathToFileURL(path.join(process.env.TR_PACKAGE_ROOT, 'src/core/ensure-dependencies.mjs')).href);
+      const dependencies = await ensureDependencies(process.cwd(), { reason: 'host-probe' });
       console.log(JSON.stringify({ packageRoot: process.env.TR_PACKAGE_ROOT,
         pluginId: process.env.TR_PLUGIN_ID, pluginDir: process.env.TR_PLUGIN_DIR,
-        args: argv.slice(2) }));
+        args: argv.slice(2), dependencies }));
     }`);
     const result = spawnSync(process.execPath, [path.join(packageRoot, 'bin/total-recall.mjs'), 'host-probe', 'status'], {
       cwd: root, encoding: 'utf8', timeout: 10000,
@@ -30,6 +34,6 @@ it('supplies host context through the real installed-plugin CLI dispatch', () =>
     });
     expect(result.status, result.stderr).toBe(0);
     const output = result.stdout.trim().split('\n').map(line => { try { return JSON.parse(line); } catch { return null; } }).find(value => value?.pluginId);
-    expect(output).toEqual({ packageRoot: path.resolve(packageRoot), pluginId: 'host-probe', pluginDir: plugin, args: ['host-probe', 'status'] });
+    expect(output).toEqual({ packageRoot: path.resolve(packageRoot), pluginId: 'host-probe', pluginDir: plugin, args: ['host-probe', 'status'], dependencies: expect.objectContaining({ ok: true, status: 'skipped', trigger: 'no-lockfile', reason: 'host-probe' }) });
   } finally { fs.rmSync(root, { recursive: true, force: true }); }
 });

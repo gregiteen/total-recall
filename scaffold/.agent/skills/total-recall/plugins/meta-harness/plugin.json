@@ -1,7 +1,7 @@
 {
   "id": "meta-harness",
   "name": "Metaharness",
-  "version": "0.3.11",
+  "version": "0.3.13",
   "description": "Discover, configure, document, track, and run coding agent harnesses through Total Recall across mesh nodes.",
   "gate": {
     "tasks": ["Run work in another agent harness", "Choose which harness takes a task", "Check harness versions, sign-in and quota", "Read a harness's official documentation"],
@@ -44,41 +44,6 @@
         "effect": "read",
         "output": "json",
         "args": []
-      },
-      {
-        "name": "chat-target",
-        "description": "Resolve the default Chat harness and prepare a draft for the selected brains",
-        "effect": "read",
-        "output": "json",
-        "args": [
-          {
-            "name": "brains",
-            "flag": "--brains",
-            "type": "string",
-            "label": "Selected brain IDs, comma separated"
-          }
-        ]
-      },
-      {
-        "name": "chat-default",
-        "description": "Save the default Chat harness for every brain selection",
-        "effect": "write",
-        "output": "json",
-        "args": [
-          {
-            "name": "adapter",
-            "type": "string",
-            "label": "Metaharness adapter ID",
-            "required": true,
-            "positional": true
-          },
-          {
-            "name": "url",
-            "flag": "--url",
-            "type": "string",
-            "label": "Optional Chat launch URL"
-          }
-        ]
       },
       {
         "name": "nodes",
@@ -159,8 +124,118 @@
         "description": "Run a task from stdin after automatic Total Recall bootstrap",
         "effect": "write",
         "output": "json",
-        "args": [],
+        "args": [
+          { "name": "background", "flag": "--background", "type": "boolean", "label": "Return the job ID and log" },
+          { "name": "goal", "flag": "--goal", "type": "string", "label": "Goal checked at completion" },
+          { "name": "maxTurns", "flag": "--max-turns", "type": "number", "label": "Job turn limit" },
+          { "name": "maxBudgetUsd", "flag": "--max-budget-usd", "type": "number", "label": "Job cost limit in USD" },
+          { "name": "maxTokens", "flag": "--max-tokens", "type": "number", "label": "Job token limit" },
+          { "name": "resultSchema", "flag": "--result-schema", "type": "string", "label": "JSON Schema file" },
+          { "name": "approvals", "flag": "--approvals", "type": "string", "label": "auto, operator, or rules" },
+          { "name": "questionTimeoutMs", "flag": "--question-timeout-ms", "type": "number", "label": "Question timeout in milliseconds" }
+        ],
         "timeout_ms": 600000
+      },
+      {
+        "name": "fork",
+        "description": "Start a new job from a saved session and branch",
+        "effect": "write",
+        "output": "json",
+        "args": [
+          { "name": "job", "type": "string", "positional": true, "required": true, "label": "Job ID prefix" },
+          { "name": "at", "flag": "--at", "type": "string", "label": "Last turn to copy when supported" },
+          { "name": "background", "flag": "--background", "type": "boolean", "label": "Return the job ID and log" }
+        ],
+        "timeout_ms": 600000
+      },
+      {
+        "name": "resume",
+        "description": "Continue a finished job session on its saved branch",
+        "effect": "write",
+        "output": "json",
+        "args": [
+          { "name": "job", "type": "string", "positional": true, "required": true, "label": "Job ID prefix" },
+          { "name": "text", "type": "string", "positional": true, "required": true, "label": "Continuation message" },
+          { "name": "background", "flag": "--background", "type": "boolean", "label": "Return the job ID and log" }
+        ],
+        "timeout_ms": 600000
+      },
+      {
+        "name": "cancel",
+        "description": "Stop a running job and wait up to 60 seconds for its cancelled result",
+        "effect": "write",
+        "output": "json",
+        "args": [
+          { "name": "job", "type": "string", "label": "Job ID prefix or log path", "positional": true, "required": true }
+        ],
+        "timeout_ms": 65000
+      },
+      {
+        "name": "reply",
+        "description": "Send a reply to a running job or answer its oldest waiting question",
+        "effect": "write",
+        "output": "json",
+        "args": [
+          { "name": "job", "type": "string", "label": "Job ID prefix or log path", "positional": true, "required": true },
+          { "name": "text", "type": "string", "label": "Reply text", "positional": true, "required": true },
+          { "name": "localDelivery", "flag": "--local-delivery", "type": "boolean", "label": "Deliver on this node" }
+        ],
+        "timeout_ms": 65000
+      },
+      {
+        "name": "approve",
+        "description": "Allow or deny a waiting job approval",
+        "effect": "write",
+        "output": "json",
+        "args": [
+          { "name": "job", "type": "string", "label": "Job ID prefix or log path", "positional": true, "required": true },
+          { "name": "requestId", "type": "string", "label": "Approval request ID", "positional": true, "required": true },
+          { "name": "value", "type": "string", "label": "allow or deny", "positional": true, "required": true },
+          { "name": "localDelivery", "flag": "--local-delivery", "type": "boolean", "label": "Deliver on this node" }
+        ],
+        "timeout_ms": 65000
+      },
+      {
+        "name": "interrupt",
+        "description": "Stop the current job turn and keep its session resumable",
+        "effect": "write",
+        "output": "json",
+        "args": [
+          { "name": "job", "type": "string", "label": "Job ID prefix or log path", "positional": true, "required": true },
+          { "name": "localDelivery", "flag": "--local-delivery", "type": "boolean", "label": "Deliver on this node" }
+        ],
+        "timeout_ms": 65000
+      },
+      {
+        "name": "goal",
+        "description": "Set the goal of a running job",
+        "effect": "write",
+        "output": "json",
+        "args": [
+          { "name": "job", "type": "string", "label": "Job ID prefix or log path", "positional": true, "required": true },
+          { "name": "text", "type": "string", "label": "Goal text", "positional": true, "required": true },
+          { "name": "localDelivery", "flag": "--local-delivery", "type": "boolean", "label": "Deliver on this node" }
+        ],
+        "timeout_ms": 65000
+      },
+      {
+        "name": "mcp",
+        "description": "Serve the Metaharness ask and approve tools over MCP stdio",
+        "effect": "write",
+        "args": [
+          { "name": "approvals", "flag": "--approvals", "type": "string", "label": "Approval policy: auto, operator, or rules" },
+          { "name": "questionTimeoutMs", "flag": "--question-timeout-ms", "type": "number", "label": "Question timeout in milliseconds" }
+        ]
+      },
+      {
+        "name": "watch",
+        "description": "Show job status, recent events, waiting questions and approvals",
+        "effect": "read",
+        "output": "json",
+        "args": [
+          { "name": "job", "type": "string", "label": "Job id prefix or event log path", "positional": true },
+          { "name": "tail", "flag": "--tail", "type": "string", "label": "Events to show" }
+        ]
       },
       {
         "name": "included-status",
@@ -418,6 +493,13 @@
         "output": "json",
         "timeout_ms": 600000,
         "args": [
+          { "name": "goal", "flag": "--goal", "type": "string", "label": "Goal checked at completion" },
+          { "name": "maxTurns", "flag": "--max-turns", "type": "number", "label": "Job turn limit" },
+          { "name": "maxBudgetUsd", "flag": "--max-budget-usd", "type": "number", "label": "Job cost limit in USD" },
+          { "name": "maxTokens", "flag": "--max-tokens", "type": "number", "label": "Job token limit" },
+          { "name": "resultSchema", "flag": "--result-schema", "type": "string", "label": "JSON Schema file" },
+          { "name": "approvals", "flag": "--approvals", "type": "string", "label": "auto, operator, or rules" },
+          { "name": "questionTimeoutMs", "flag": "--question-timeout-ms", "type": "number", "label": "Question timeout in milliseconds" },
           {
             "name": "task",
             "type": "string",
@@ -462,6 +544,13 @@
         "effect": "write",
         "output": "json",
         "args": [
+          { "name": "goal", "flag": "--goal", "type": "string", "label": "Goal checked at completion" },
+          { "name": "maxTurns", "flag": "--max-turns", "type": "number", "label": "Job turn limit" },
+          { "name": "maxBudgetUsd", "flag": "--max-budget-usd", "type": "number", "label": "Job cost limit in USD" },
+          { "name": "maxTokens", "flag": "--max-tokens", "type": "number", "label": "Job token limit" },
+          { "name": "resultSchema", "flag": "--result-schema", "type": "string", "label": "JSON Schema file" },
+          { "name": "approvals", "flag": "--approvals", "type": "string", "label": "auto, operator, or rules" },
+          { "name": "questionTimeoutMs", "flag": "--question-timeout-ms", "type": "number", "label": "Question timeout in milliseconds" },
           {
             "name": "task",
             "type": "string",
@@ -509,16 +598,10 @@
       },
       {
         "name": "learn",
-        "description": "Summarize run receipts into scorecards and quota walls; --emit writes proposals to memory",
+        "description": "Summarize run receipts into scorecards, quota walls and proposals",
         "effect": "write",
         "output": "json",
         "args": [
-          {
-            "name": "emit",
-            "flag": "--emit",
-            "type": "boolean",
-            "label": "Write proposals through the memory owner"
-          },
           { "name": "void", "flag": "--void", "type": "string", "label": "Comma-separated receipt ids to void" },
           { "name": "reason", "flag": "--reason", "type": "string", "label": "Why the receipts are void" }
         ]
@@ -619,7 +702,7 @@
           {
             "name": "action",
             "type": "string",
-            "label": "list | show | create | update | close | delete",
+            "label": "list | show | create | update | close | delete | cleanup-fixtures",
             "required": true,
             "positional": true
           },
@@ -633,7 +716,8 @@
           { "name": "summary", "flag": "--summary", "type": "string", "label": "Thread summary" },
           { "name": "status", "flag": "--status", "type": "string", "label": "Lifecycle status or list filter" },
           { "name": "platform", "flag": "--platform", "type": "string", "label": "Harness platform or list filter" },
-          { "name": "branch", "flag": "--branch", "type": "string", "label": "Deliverable branch" }
+          { "name": "branch", "flag": "--branch", "type": "string", "label": "Deliverable branch" },
+          { "name": "dryRun", "flag": "--dry-run", "type": "boolean", "label": "Preview fixture cleanup" }
         ]
       },
       {
@@ -657,6 +741,13 @@
           { "name": "noDetach", "type": "boolean", "flag": "--no-detach", "label": "Await the managed process result" },
           { "name": "allowUnknownAuth", "type": "boolean", "flag": "--allow-unknown-auth", "label": "Explicitly allow an unknown login state" }
         ]
+      },
+      {
+        "name": "reviews",
+        "description": "Read durable review results, including disposition and selected diff",
+        "effect": "read",
+        "output": "json",
+        "args": []
       },
       {
         "name": "review",
@@ -724,15 +815,29 @@
     "font": "system"
   },
   "ui": {
-    "home": "home",
-    "design_tokens": "DESIGN.md",
     "elements": [
       {
-        "id": "home",
-        "kind": "panel",
-        "tag": "tr-metaharness-home",
-        "module": "ui/home.js",
-        "description": "Default Chat harness and launch destination"
+        "id": "meta-harness-card",
+        "kind": "card",
+        "tag": "meta-harness-card",
+        "module": "ui/card.js",
+        "description": "Metaharness multi-agent coordination matrix"
+      }
+    ]
+  },
+  "card_face": {
+    "quick_actions": [
+      {
+        "subcommand": "status",
+        "label": "Local agents"
+      },
+      {
+        "subcommand": "nodes",
+        "label": "Mesh nodes"
+      },
+      {
+        "subcommand": "catalog",
+        "label": "Adapters"
       }
     ]
   },
@@ -762,6 +867,13 @@
       "command": "maintenance --models",
       "placement": "selected-node",
       "timeout_ms": 300000
+    },
+    {
+      "intent": "Report quota walls and measured usage to the operator",
+      "schedule": "*/15 * * * *",
+      "command": "alerts check",
+      "placement": "selected-node",
+      "timeout_ms": 60000
     }
   ]
 }

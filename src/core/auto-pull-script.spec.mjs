@@ -85,3 +85,46 @@ describe('auto-pull.sh clean-checkout check', () => {
     expect(code).toBe(0);
   });
 });
+
+// deps_current decides between a restart and a full `npm ci`, which deletes node_modules
+// (every total-recall command fails meanwhile, and under a Time Machine snapshot every
+// rewrite stays on disk). Run the script's own function against a fixture tree.
+describe('auto-pull.sh deps_current', () => {
+  let repo;
+  const body = fs.readFileSync(SCRIPT, 'utf8');
+  const fn = name => body.match(new RegExp(`^${name}\\(\\) \\{[\\s\\S]*?^\\}`, 'm'))[0];
+  const lock = { lockfileVersion: 3, packages: { '': { name: 'fixture' }, 'node_modules/a': { version: '1.0.0' }, 'node_modules/b-darwin': { version: '2.0.0', optional: true } } };
+  const write = (file, data) => fs.writeFileSync(path.join(repo, file), typeof data === 'string' ? data : JSON.stringify(data));
+  const current = () => execFileSync('bash', ['-c', `${fn('lock_hash')}\n${fn('deps_current')}\ndeps_current && echo current || echo stale`], {
+    encoding: 'utf8', env: { ...process.env, REPO_DIR: repo, NODE_BIN: process.execPath, LOCK_STAMP: path.join(repo, 'node_modules', '.stamp') },
+  }).trim();
+
+  beforeEach(() => {
+    repo = fs.mkdtempSync(path.join(os.tmpdir(), 'tr-autopull-deps-'));
+    fs.mkdirSync(path.join(repo, 'node_modules'));
+    write('package-lock.json', lock);
+  });
+  afterEach(() => fs.rmSync(repo, { recursive: true, force: true }));
+
+  it('trusts a complete tree another installer left without a stamp, and stamps it', () => {
+    write('node_modules/.package-lock.json', { packages: { 'node_modules/a': { version: '1.0.0' } } });
+    expect(current()).toBe('current');
+    expect(fs.existsSync(path.join(repo, 'node_modules', '.stamp'))).toBe(true);
+    expect(current()).toBe('current');
+  });
+
+  it('reinstalls when an installed version differs from the lockfile', () => {
+    write('node_modules/.package-lock.json', { packages: { 'node_modules/a': { version: '0.9.0' } } });
+    expect(current()).toBe('stale');
+  });
+
+  it('reinstalls when there is no record of the installed tree', () => {
+    expect(current()).toBe('stale');
+  });
+
+  it('reinstalls when the stamp names another lockfile', () => {
+    write('node_modules/.package-lock.json', { packages: { 'node_modules/a': { version: '1.0.0' } } });
+    write('node_modules/.stamp', 'other');
+    expect(current()).toBe('stale');
+  });
+});

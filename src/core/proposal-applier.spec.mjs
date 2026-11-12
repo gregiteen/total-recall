@@ -19,7 +19,9 @@ import {
   PROPOSAL_STATUSES,
   AUTO_APPLICABLE_TOPICS,
 } from './proposal-applier.mjs';
-import { evaluateProposalGate, createProposal } from './optimizer.mjs';
+import { evaluateProposalGate, createProposal, runSmartDecay, decayCandidates } from './optimizer.mjs';
+import { recordAccess, readAccess } from './access-ledger.mjs';
+import { loadNodes } from './vault.mjs';
 import { pruneResolvedProposals } from './dream.mjs';
 
 let vaultDir;
@@ -244,11 +246,87 @@ describe('daemon auto-apply', () => {
     expect(getProposal(vaultDir, 'prop_draft').status).toBe('draft');
   });
 
-  it('is EMPTY for this release — the daemon does not write to memory unattended', () => {
-    // Within minutes of first running against a real vault, auto-apply merged
-    // nodes grouped by an over-broad key. The guards are fixed but unproven on
-    // live data. Re-enabling is a one-line change; do it deliberately.
-    expect([...AUTO_APPLICABLE_TOPICS]).toEqual([]);
+  it('auto-applies only verified decay; merges stay manual (DECAY-01)', () => {
+    // Merges once auto-applied over-broad groups; re-enabling them is Greg's decision.
+    // Decay is re-verified against live state and the access ledger, and is reversible.
+    expect([...AUTO_APPLICABLE_TOPICS]).toEqual(['smart-decay']);
+    expect(AUTO_APPLICABLE_TOPICS.has('memory-cleanup')).toBe(false);
+  });
+
+  describe('smart decay (DECAY-01)', () => {
+    const old = new Date(Date.now() - 120 * 24 * 60 * 60 * 1000).toISOString();
+    const derived = () => path.join(path.dirname(vaultDir), 'memory-derived');
+    // The brain was used on `count` recent days (after `old`), with none of the memories under test.
+    const activeFor = count => {
+      const file = path.join(derived(), 'access-ledger.json');
+      fs.mkdirSync(derived(), { recursive: true });
+      const ledger = fs.existsSync(file) ? JSON.parse(fs.readFileSync(file, 'utf8')) : {};
+      ledger._active_days = Array.from({ length: count }, (_, i) => new Date(Date.now() - (count - i) * 24 * 60 * 60 * 1000).toISOString().slice(0, 10));
+      fs.writeFileSync(file, JSON.stringify(ledger));
+    };
+
+    it('deprecates an unused memory with an undo snapshot, and never touches rules or used memories', async () => {
+      writeMemory({ slug: 'stale-fact', created: old, updated: old, last_accessed: old });
+      writeMemory({ slug: 'used-fact', created: old, updated: old, last_accessed: old });
+      writeMemory({ slug: 'old-rule', category: 'invariants', created: old, updated: old, last_accessed: old });
+      activeFor(61);
+      recordAccess(derived(), ['used-fact']);
+
+      expect(decayCandidates(loadNodes(vaultDir), readAccess(derived())).map(n => n.slug)).toEqual(['stale-fact']);
+
+      const proposals = await runSmartDecay(vaultDir, null, undefined, { derivedDir: derived(),
+        call: async () => '{"verdict":"DECAYED","reasoning":"unused"}' });
+      expect(proposals.map(p => p.target_path)).toEqual(['stale-fact']);
+      expect(await evaluateProposalGate(proposals[0], null, vaultDir)).toBe(true);
+
+      writeProposalFile({ id: 'prop_decay', topic: 'smart-decay', target: 'stale-fact', status: 'accepted' });
+      const res = await applyAcceptedProposals(vaultDir);
+      expect(res.applied).toBe(1);
+      const decayed = matter(fs.readFileSync(path.join(vaultDir, 'facts', 'stale-fact.md'), 'utf8')).data;
+      expect(decayed.status).toBe('deprecated');
+      expect(decayed.x_decayed_by_proposal).toBe('prop_decay');
+      expect(getProposal(vaultDir, 'prop_decay').status).toBe('applied');
+      expect(fs.readdirSync(path.join(path.dirname(vaultDir)), { recursive: true }).some(f => String(f).includes('prop_decay'))).toBe(true);
+      expect(matter(fs.readFileSync(path.join(vaultDir, 'invariants', 'old-rule.md'), 'utf8')).data.status).toBe('active');
+
+      await revertProposal(vaultDir, 'prop_decay');
+      expect(matter(fs.readFileSync(path.join(vaultDir, 'facts', 'stale-fact.md'), 'utf8')).data.status).toBe('active');
+    });
+
+    it('rejects decay for a memory used since it was judged, and supersedes it at apply time', async () => {
+      writeMemory({ slug: 'revived', created: old, updated: old, last_accessed: old });
+      activeFor(61);
+      const [proposal] = await runSmartDecay(vaultDir, null, undefined, { derivedDir: derived(),
+        call: async () => '{"verdict":"ARCHIVED"}' });
+      recordAccess(derived(), ['revived']);
+      expect(await evaluateProposalGate(proposal, null, vaultDir)).toBe(false);
+      expect(proposal.rejection_reason).toMatch(/used/);
+
+      writeProposalFile({ id: 'prop_revived', topic: 'smart-decay', target: 'revived', status: 'accepted' });
+      await applyAcceptedProposals(vaultDir);
+      expect(getProposal(vaultDir, 'prop_revived').status).toBe('superseded');
+      expect(matter(fs.readFileSync(path.join(vaultDir, 'facts', 'revived.md'), 'utf8')).data.status).toBe('active');
+    });
+
+    it('counts active days, not calendar days: an idle brain decays nothing', async () => {
+      writeMemory({ slug: 'idle-fact', created: old, updated: old, last_accessed: old });
+      // 120 calendar days old, but the brain was used on only 10 days since.
+      activeFor(10);
+      expect(decayCandidates(loadNodes(vaultDir), readAccess(derived()))).toEqual([]);
+      const call = vi.fn();
+      expect(await runSmartDecay(vaultDir, null, undefined, { derivedDir: derived(), call })).toEqual([]);
+      expect(call).not.toHaveBeenCalled();
+      // After 60 active days without a use, it becomes a candidate.
+      activeFor(60);
+      expect(decayCandidates(loadNodes(vaultDir), readAccess(derived())).map(n => n.slug)).toEqual(['idle-fact']);
+    });
+
+    it('keeps a retained memory and logs a model failure instead of hiding it', async () => {
+      writeMemory({ slug: 'kept', created: old, updated: old, last_accessed: old });
+      activeFor(61);
+      expect(await runSmartDecay(vaultDir, null, undefined, { derivedDir: derived(), call: async () => '{"verdict":"RETAINED"}' })).toEqual([]);
+      expect(await runSmartDecay(vaultDir, null, undefined, { derivedDir: derived(), call: async () => { throw new Error('runtime down'); } })).toEqual([]);
+    });
   });
 
   it('never auto-applies a topic outside the allowlist', async () => {

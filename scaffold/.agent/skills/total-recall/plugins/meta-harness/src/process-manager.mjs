@@ -161,7 +161,7 @@ export async function executeProcessTask(job, dependencies = {}) {
       tools: job.options.tools, settingSources: job.options.settingSources, model: job.options.model,
       allowUnknownAuth: job.options.allowUnknownAuth === true, timeoutMs: job.options.timeoutMs,
     }, { role: 'Process', node: 'local' });
-    if (result.ok && worktree) commit = commitAll(worktree, 'Meta Harness managed agent work');
+    if (result.ok && worktree) commit = commitAll(worktree, 'Metaharness managed agent work');
   } catch (error) {
     result = { ok: false, error: error.message };
   }

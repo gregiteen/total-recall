@@ -17,12 +17,11 @@
  *   report.mjs --review-diagnostics [--json]  cached gate and finding details
  */
 
-import { readFileSync, existsSync, statSync } from 'node:fs';
-import { execFileSync } from 'node:child_process';
+import { readFileSync, existsSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { stateDir } from './state.mjs';
-import { printCachedReport, wantsStructuredReport } from './report-data.mjs';
+import { buildReportView, printCachedReport, wantsStructuredReport } from './report-data.mjs';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -39,39 +38,15 @@ if (wantsStructuredReport(process.argv.slice(2))) {
   process.exit(await printCachedReport(process.argv.slice(2), REPORT_JSON));
 }
 
-if (!existsSync(REPORT_JSON)) {
-  console.log(' No report yet.\n');
-  console.log('Run a check as a BACKGROUND job, then come back:');
-  console.log(`   ${CHECK_CMD}`);
-  process.exit(0);
+const view = buildReportView(REPORT_JSON);
+if (['missing', 'unreadable', 'foreign'].includes(view.status)) {
+  console.error(`Code Quality report: ${view.status}\n${view.reasons.join('\n')}`);
+  process.exit(1);
 }
+process.exitCode = view.clean ? 0 : 1;
 
 const report = JSON.parse(readFileSync(REPORT_JSON, 'utf8'));
-const startedMs = Date.parse(report.startedAt);
-
-// ─── Staleness: which files changed after the run started? ────────────────────
-
-function changedSinceRun() {
-  let files = [];
-  try {
-    const out = execFileSync('git', ['ls-files', '-z'], {
-      cwd: report.repoRoot, encoding: 'utf8', maxBuffer: 64 * 1024 * 1024, timeout: 20_000
-    });
-    const exts = new Set(['.ts', '.tsx', '.js', '.jsx', '.mjs', '.cjs', '.py', '.vue', '.svelte']);
-    files = out.split('\0').filter((f) => f && exts.has(path.extname(f)));
-  } catch {
-    return null; // cannot determine — say so rather than implying freshness
-  }
-  const changed = [];
-  for (const rel of files) {
-    try {
-      if (statSync(path.join(report.repoRoot, rel)).mtimeMs > startedMs) changed.push(rel);
-    } catch { /* deleted since */ }
-  }
-  return changed;
-}
-
-const changed = changedSinceRun();
+const changed = view.changedSinceRun;
 const ageMin = Math.round((Date.now() - Date.parse(report.finishedAt)) / 60000);
 
 // ─── Header ───────────────────────────────────────────────────────────────────
@@ -114,11 +89,11 @@ if (opaque.length) {
   }
 }
 
-if (changed === null) {
-  console.log(`    Could not read git — cannot tell whether this report matches your tree.`);
-} else if (changed.length === 0) {
+console.log(`    Report status: ${view.status}`);
+for (const reason of view.reasons) console.log(`    ${reason}`);
+if (changed !== null && changed.length === 0 && view.currentHead === view.gitHead) {
   console.log(`    FRESH — no tracked source file has changed since this run started.`);
-} else {
+} else if (changed?.length) {
   console.log(`    STALE for ${changed.length} file(s) edited after the run started:`);
   for (const f of changed.slice(0, 8)) console.log(`      ${f}`);
   if (changed.length > 8) console.log(`      … and ${changed.length - 8} more`);
@@ -146,15 +121,15 @@ const staleMark = (file) => (changed?.includes(file) ? ' ' : '');
 if (mode === 'raw') {
   if (!existsSync(REPORT_TXT)) { console.error('No raw output stored.'); process.exit(1); }
   const raw = readFileSync(REPORT_TXT, 'utf8');
-  if (!arg) { console.log(raw.slice(0, 20000)); process.exit(0); }
+  if (!arg) { console.log(raw.slice(0, 20000)); process.exit(view.clean ? 0 : 1); }
   const section = raw.split(/^# /m).find((s) => s.startsWith(arg));
   console.log(section ? `# ${section}`.slice(0, 40000) : `No raw section for check "${arg}".`);
-  process.exit(section ? 0 : 1);
+  process.exit(section && view.clean ? 0 : 1);
 }
 
 if (findings.length === 0) {
   console.log(' No findings.');
-  process.exit(0);
+  process.exit(view.clean ? 0 : 1);
 }
 
 switch (mode) {

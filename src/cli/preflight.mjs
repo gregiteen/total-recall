@@ -1,16 +1,18 @@
 import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
+import { ensureDependencies } from '../core/ensure-dependencies.mjs';
 import { detectProjectBrain } from '../core/brain-locate.mjs';
 import { globalBrainDirFor, isBrainEnabled } from '../core/brain-registry.mjs';
 import { GATE_MODES, gateConfigPath, projectBrainDir, readGateLayers, resolveGateMode, writeGateMode } from '../core/gate-mode.mjs';
 import { installHarnessHooks, loadGateAdapters } from '../core/harness-hooks.mjs';
-import { ackDirectory, capsuleVerb, decide, isAckCommand, isCheckCommand, isRouteCommand, isSubagentPayload, nativeToolOf, sessionOf, SWEEP_CONSULT_MS, whenGateFails } from '../core/preflight-gate.mjs';
+import { ackDirectory, capsuleVerb, decide, gatePackageBroken, isAckCommand, isCheckCommand, isRouteCommand, isSubagentPayload, nativeToolOf, sessionOf, SWEEP_CONSULT_MS, whenGateFails } from '../core/preflight-gate.mjs';
 import { ACK_COMMAND, acknowledge, checkAgentReceipt, checkAnyReceipt, findRoot, forgetCapsuleDeliveries, lastArrivalMs, lastCapsuleDelivery, lastConsultMs, lastRoutedMs, lastRouteWarnedMs, lastSessionAck, markArrival, markDelegated, markRouted, markRouteWarned, markSessionAck, noteCaller, recordDecision, sessionHasStanding, sessionKey, readDecisions, takeCaller } from '../core/preflight-receipt.mjs';
 
 const USAGE = `Usage: total-recall preflight <command>
   ack --task "<task>" [--action read,edit,test] [--json]   Record a receipt after context ready:true and rules verify, and print the capsule.
                                                             Prints one line instead when this session received the same rules and skills within 2 hours
+                                                            Restores missing or stale locked dependencies for edit/test actions
   check [--json]                                            Exit 1 unless a fresh receipt covers this agent, wherever it acknowledged.
                                                             Run by hand, it reports this directory's receipt
   gate [--harness <id>]                                     Hook entry: read a call on stdin, answer allow or deny (exit 2 on deny)
@@ -81,12 +83,23 @@ async function ack(args) {
   const task = flag(args, '--task') || '';
   const actions = flag(args, '--action') || 'read,edit,test';
   const result = acknowledge({ root, task, actions, maxAgeMs: await configuredMaxAgeMs(), session: takeCaller(root, 'ack', { task }) });
+  const needsDependencies = actions.split(',').some(action => ['edit', 'test'].includes(action.trim()));
+  const dependencies = result.ok && needsDependencies ? await ensureDependencies(root, { reason: `preflight:${actions}` }) : null;
+  const ok = result.ok && dependencies?.ok !== false;
   if (args.includes('--json')) {
-    console.log(JSON.stringify({ ok: result.ok, problems: result.problems, receipt: result.file || null, capsule: result.capsule ?? null, unchanged: Boolean(result.unchanged) }));
-    if (!result.ok) process.exitCode = 1;
+    console.log(JSON.stringify({ ok, problems: [...result.problems, ...(dependencies?.ok === false ? [`dependencies: ${dependencies.error}`] : [])], receipt: result.file || null, capsule: result.capsule ?? null, unchanged: Boolean(result.unchanged), dependencies }));
+    if (!ok) process.exitCode = 1;
     return;
   }
   if (!result.ok) return printFailure(result.problems);
+  if (dependencies) {
+    const detail = dependencies.ok ? (dependencies.command?.join(' ') || dependencies.trigger) : dependencies.error;
+    console.log(`  dependencies: ${dependencies.status} — ${detail}`);
+    if (!dependencies.ok) {
+      console.error('✖ Dependency install failed. Repair dependencies before edit or test work. The instruction receipt is recorded.');
+      process.exitCode = 1;
+    }
+  }
   if (result.unchanged) {
     const age = result.unchanged.ageMs < 60000 ? 'less than a minute ago' : `${Math.round(result.unchanged.ageMs / 60000)} minutes ago`;
     console.log(`✔ tr-preflight recorded: rules and skills are unchanged since this session received the capsule ${age}, so there is nothing new to read. If your task is new, or you no longer have the capsule, run: total-recall context "<task>" --action ${actions}`);
@@ -398,6 +411,8 @@ function evaluate(call, options = {}) {
 }
 
 function judge(call, { harness, readablePaths, session = null, subagent = false, nativeTool = null } = {}) {
+  const broken = gatePackageBroken();
+  if (broken) return whenGateFails(call, new Error(broken));
   const root = findRoot(call.cwd || process.cwd());
   const limit = envMaxAgeMs();
   const declared = readGateDeclarations();
@@ -584,12 +599,10 @@ async function mode(args) {
 
 export default async function preflight(args = []) {
   const [first = '--help'] = args;
-  if (first === '--help' || first === '-h' || first === 'help') return console.log(USAGE);
+  if (first === '--help' || first === '-h' || first === 'help' || args.includes('--help') || args.includes('-h')) return console.log(USAGE);
   // Original `tr-preflight` forms.
   if (first === '--ack' || first === 'ack') return ack(args);
   if (first === '--check' || first === 'check') return check(args);
-  // Help never performs the subcommand: `install --help` once rewrote the harness settings (C-019).
-  if (args.includes('--help') || args.includes('-h')) return console.log(USAGE);
   if (first === 'gate') return gate(args.slice(1));
   if (first === 'remind') return remind(args);
   if (first === 'session-start') return sessionStart();

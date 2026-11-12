@@ -12,7 +12,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import matter from './frontmatter.mjs';
-import { createEngine } from '@ssss/cli/engine';
+import { AsyncLocalStorage } from 'node:async_hooks';
+import { createEngine, resolveContainedPath } from '@ssss/cli/engine';
 import { createValidator } from '@ssss/cli/validator';
 import {
   composeRegistryLayers,
@@ -20,6 +21,7 @@ import {
   resolvePrimitiveDefinition,
 } from '@ssss/cli/registry';
 import { detectDirectWrites } from '@ssss/cli/guard';
+import { checkRuleLength } from './rule-length.mjs';
 import { validateMemoryNode } from './total-recall-memory-validator.mjs';
 import {
   TOTAL_RECALL_HOST_EXTENSION,
@@ -66,6 +68,7 @@ const DIRECT_WRITE_APPROVED = [
 
 let cachedEngine = null;
 let cachedRegistryKey = '';
+const writePolicy = new AsyncLocalStorage();
 
 export function getKernelMode() {
   // Default to package-kernel cutover for core types (memory/workflow/low-risk).
@@ -187,7 +190,27 @@ export function getTotalRecallEngine(options = {}) {
   const registrySet = createTotalRecallRegistrySet(options);
   const key = `${[...registrySet.types.keys()].sort().join(',')}|${options.leaseStore || ''}`;
   if (!cachedEngine || cachedRegistryKey !== key || options.forceNew) {
-    const validator = createValidator({ registrySet });
+    const baseValidator = createValidator({ registrySet });
+    const validator = {
+      ...baseValidator,
+      validateData(data, callOptions) {
+        const result = baseValidator.validateData(data, callOptions);
+        const context = writePolicy.getStore();
+        if (context?.envelope.type !== 'patch') return result;
+        // The kernel calls validateData with the merged frontmatter. Check the
+        // replacement body against that category and those exception tags.
+        // A metadata-only patch keeps the current document body.
+        const { envelope, vaultRoot, options } = context;
+        const body = envelope.patches.__body__ === undefined
+          ? matter(fs.readFileSync(resolveContainedPath(vaultRoot, envelope.path), 'utf8')).content
+          : String(envelope.patches.__body__);
+        const policy = checkRuleLength(data, body, options);
+        context.warnings.push(...policy.warnings);
+        return { ...result, valid: result.valid && !policy.errors.length,
+          errors: [...result.errors, ...policy.errors],
+          field_errors: [...result.field_errors, ...policy.errors.map(issue => ({ field: '__body__', issue }))] };
+      },
+    };
     cachedEngine = createEngine({
       registrySet,
       validator,
@@ -277,6 +300,9 @@ export function prepareEnvelopeForKernel(envelope, options = {}) {
       return { envelope: env, warnings, errors: [`Content parsing error: ${error.message}`] };
     }
     const data = { ...parsed.data };
+    const length = checkRuleLength(data, parsed.content, options);
+    errors.push(...length.errors);
+    warnings.push(...length.warnings);
 
     // Package 0.9 universal frontmatter.
     if (!data.title && data.name) data.title = data.name;
@@ -392,11 +418,13 @@ export async function processViaPackageKernel(envelope, vaultRoot, options = {})
 
   const eventsDir = path.join(vaultRoot, '.events');
   if (!env.dry_run && !fs.existsSync(eventsDir)) fs.mkdirSync(eventsDir, { recursive: true });
-  const response = await engine.processOperation(env, vaultRoot, {
+  const context = { envelope: env, vaultRoot, options, warnings: [] };
+  const response = await writePolicy.run(context, () => engine.processOperation(env, vaultRoot, {
     ...options,
     vaultRoot,
     principal: options.principal || mapTrPrincipal(env, options, vaultRoot),
-  });
+  }));
+  prepared.warnings.push(...context.warnings);
 
   if (prepared.warnings.length && response?.validation) {
     response.validation.warnings = [

@@ -69,7 +69,7 @@ describe('autoCompileSurfaces writes the surface where the harness reads it', ()
     // separate concern with its own tests.
     const atRoot = path.join(root, 'INSTRUCTIONS.md');
     expect(fs.existsSync(atRoot), 'project surface should be at the repo root').toBe(true);
-    expect(fs.readFileSync(atRoot, 'utf8')).toContain('TOTAL RECALL');
+    expect(fs.readFileSync(atRoot, 'utf8')).toContain('Total Recall: start here');
 
     // The bug wrote it here instead. It must never return.
     expect(

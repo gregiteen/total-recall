@@ -12,6 +12,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { installLessonHooks } from './lesson-hooks.mjs';
 
 const PACKAGE_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
 export const GATE_TEMPLATE = path.join(PACKAGE_ROOT, 'templates', 'claude-hooks', 'total-recall-gate.mjs');
@@ -104,5 +105,6 @@ export function installClaudeCodeHooks(opts = {}) {
     if (fs.existsSync(settingsPath)) fs.copyFileSync(settingsPath, `${settingsPath}.bak-total-recall`);
     fs.writeFileSync(settingsPath, `${JSON.stringify(settings, null, 2)}\n`);
   }
-  return { gate: hookPath, settings: settingsPath, added, removed };
+  const lessons = installLessonHooks({ harness: 'claude', settings: settingsPath, status: 'installed' }, { dryRun: opts.dryRun });
+  return { gate: hookPath, settings: settingsPath, added, removed, lessons };
 }
