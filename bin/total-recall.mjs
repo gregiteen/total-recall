@@ -275,6 +275,9 @@ async function main() {
       console.error(`Expected handler at: ${handlerPath}`);
       process.exit(1);
     }
+    // A new plugin contract refuses the previous release's defaults, `update` included; refresh them and rerun once.
+    const rerun = await import('../src/core/default-plugin-refresh.mjs').then(m => m.rerunAfterDefaultRefresh(err), () => null);
+    if (rerun !== null) process.exit(rerun);
     console.error(`Error executing '${command}':`, err.message);
     process.exit(1);
   }

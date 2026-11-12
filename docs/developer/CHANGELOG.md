@@ -1,3 +1,11 @@
+## 3.46.1 — 2026-11-12
+
+- Fix machines being unable to update themselves to 3.46. The new plugin contract refuses the
+  default plugins 3.45 installed, and with them every command that loads one, `update` included,
+  so `update --automatic` (and the mesh dispatch that runs it on each peer) failed with "Required
+  plugin auth is missing or invalid". A command that fails that way now refreshes the shared
+  defaults from the package's bundled copies (a linked checkout is left alone) and runs once more.
+
 ## 3.46.0 — 2026-11-12
 
 - The dashboard opens to brain-first workspace drawers: one shared left navigation drawer, a right
