@@ -1,3 +1,10 @@
+## 3.46.2 — 2026-11-12
+
+- Fix every npm-installed brain reporting its dashboard as stale ("the build tools are not
+  installed") in `/health` and `startup check`. npm does not keep the tarball's file times on every
+  install, so sources written after the bundle looked newer. An installed package now serves the
+  bundle its release built, which the publish gate checked, and never compares times or builds.
+
 ## 3.46.1 — 2026-11-12
 
 - Fix machines being unable to update themselves to 3.46. The new plugin contract refuses the

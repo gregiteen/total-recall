@@ -14,8 +14,10 @@
  * background with the frontend's own build script, and keeps serving the
  * current bundle until the new one is complete. It never installs
  * dependencies: missing build tools are reported, not repaired behind the
- * operator's back. An npm tarball gives every file the same mtime, so an
- * installed package is never stale and never builds.
+ * operator's back. An installed package (a root inside node_modules) serves
+ * the bundle its release built, which the publish gate checked, and is never
+ * stale and never builds: npm does not keep the tarball's file times on every
+ * install, so comparing times there reports a stale bundle that is not.
  */
 import { spawn } from 'node:child_process';
 import fs from 'node:fs';
@@ -60,9 +62,10 @@ export async function newestUnder(target) {
  * Returns { ok, reason, bundle, source }; never throws, never prints, so the
  * decision can be tested apart from how it is reported.
  */
-export async function checkDistFreshness({ distDir, sourcePaths }) {
+export async function checkDistFreshness({ distDir, sourcePaths, packaged = false }) {
   const bundle = await newestUnder(distDir);
   if (!bundle) return { ok: false, reason: 'missing-bundle', bundle: null, source: null };
+  if (packaged) return { ok: true, reason: 'packaged', bundle, source: null };
 
   let source = null;
   for (const candidate of sourcePaths) {
@@ -76,6 +79,11 @@ export async function checkDistFreshness({ distDir, sourcePaths }) {
   return { ok: true, reason: 'current', bundle, source };
 }
 
+/** An npm-installed package: its root sits inside a node_modules directory. */
+export function isInstalledPackage(root) {
+  return path.resolve(root).split(path.sep).includes('node_modules');
+}
+
 /** Every input whose change changes the built dashboard. */
 export function dashboardTargets(root) {
   const frontend = path.join(root, 'frontend');
@@ -85,6 +93,7 @@ export function dashboardTargets(root) {
   } catch { /* no frontend directory: nothing to compare */ }
   return {
     distDir: path.join(frontend, 'dist'),
+    packaged: isInstalledPackage(root),
     sourcePaths: [
       path.join(frontend, 'src'),
       path.join(frontend, 'public'),

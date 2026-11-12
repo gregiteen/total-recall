@@ -8,7 +8,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { buildToolsPresent, checkDistFreshness, dashboardTargets, rebuildDashboard, refreshDashboard, watchDashboardBundle } from './dashboard-bundle.mjs';
+import { buildToolsPresent, checkDistFreshness, dashboardTargets, isInstalledPackage, rebuildDashboard, refreshDashboard, watchDashboardBundle } from './dashboard-bundle.mjs';
 
 let root;
 const OLD = new Date('2026-11-09T12:00:00Z');
@@ -44,11 +44,31 @@ describe('dashboardTargets', () => {
     expect(dashboardTargets(root).sourcePaths).toContain(path.join(root, 'frontend', 'tsconfig.app.json'));
   });
 
-  // npm tarballs give every file one mtime: an installed package never rebuilds.
   it('treats equal mtimes as current', async () => {
     writeAt('frontend/dist/index.html', OLD);
     writeAt('frontend/src/main.tsx', OLD);
     expect((await checkDistFreshness(dashboardTargets(root))).ok).toBe(true);
+  });
+
+  // The MacBook's npm install wrote dist at 15:53:48 and src at 15:53:58, so /health
+  // reported the release's own bundle stale with "the build tools are not installed".
+  it('trusts the bundle an installed package shipped, whatever its file times', async () => {
+    const pkg = path.join(root, 'node_modules', 'total-recall-brain');
+    writeAt('node_modules/total-recall-brain/frontend/dist/index.html', OLD);
+    writeAt('node_modules/total-recall-brain/frontend/src/main.tsx', NEW);
+    expect(isInstalledPackage(pkg)).toBe(true);
+    expect(isInstalledPackage(root)).toBe(false);
+    expect(await checkDistFreshness(dashboardTargets(pkg))).toMatchObject({ ok: true, reason: 'packaged' });
+    const rebuild = vi.fn();
+    expect(await refreshDashboard({ root: pkg, rebuild, toolsPresent: () => true, now: () => NEW.getTime() + 120_000 }))
+      .toMatchObject({ status: 'current' });
+    expect(rebuild).not.toHaveBeenCalled();
+  });
+
+  it('still reports an installed package with no bundle as missing', async () => {
+    const pkg = path.join(root, 'node_modules', 'total-recall-brain');
+    writeAt('node_modules/total-recall-brain/frontend/src/main.tsx', NEW);
+    expect(await checkDistFreshness(dashboardTargets(pkg))).toMatchObject({ ok: false, reason: 'missing-bundle' });
   });
 });
 
