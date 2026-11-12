@@ -2,6 +2,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { failure, gitText, output, trJson } from './_support.mjs';
+import { inspectUnmerged } from './unmerged.mjs';
 
 const STALE_MS = 30 * 24 * 60 * 60 * 1000;
 
@@ -23,15 +24,27 @@ export function registeredRepositories(ctx) {
   return fallback;
 }
 
+/**
+ * A registered brain need not be a git repository (personal workspace brains,
+ * plain folders); that is not a failure. A registered path that is gone is.
+ */
+export function registeredPathState(directory, ctx) {
+  if (!existsSync(directory)) return 'missing';
+  const inside = ctx.git(['-C', directory, 'rev-parse', '--is-inside-work-tree']);
+  return inside.status === 0 && String(inside.stdout).trim() === 'true' ? 'repository' : 'not-a-repository';
+}
+
 export function inspectRepository(directory, ctx, now = Date.now()) {
   const local = { ...ctx, git: (args, options) => ctx.git(['-C', directory, ...args], options) };
   const errors = [];
   const report = { path: directory, dirty: null, unpushed: null, behind: null, diverged: null,
-    staleStashes: null, abandonedWorktrees: null, upstream: null, errors };
+    staleStashes: null, abandonedWorktrees: null, unmerged: null, upstream: null, errors };
   const get = args => {
     try { return gitText(local, args); } catch { errors.push(args[0]); return null; }
   };
-  if (get(['rev-parse', '--is-inside-work-tree'])?.trim() !== 'true') return { ...report, error: 'Repository is unavailable' };
+  const state = registeredPathState(directory, ctx);
+  if (state === 'missing') return { ...report, error: 'Registered path does not exist' };
+  if (state === 'not-a-repository') return { ...report, notRepository: true };
   const status = get(['status', '--porcelain=v1', '-z']);
   if (status !== null) report.dirty = status.length > 0;
   const upstream = local.git(['rev-parse', '--abbrev-ref', '--symbolic-full-name', '@{upstream}']);
@@ -63,6 +76,11 @@ export function inspectRepository(directory, ctx, now = Date.now()) {
     return !state.stdout && Number(last.stdout.trim()) * 1000 < now - STALE_MS
       ? [{ path: fields.worktree, reason: 'clean-with-old-head', candidate: true }] : [];
   });
+  // Branches and worktrees holding work the default branch lacks (unmerged.mjs owns the rule).
+  try {
+    const unmerged = inspectUnmerged(directory, ctx);
+    if (unmerged.error) errors.push('unmerged'); else report.unmerged = unmerged.outstanding;
+  } catch { errors.push('unmerged'); }
   return report;
 }
 
@@ -90,7 +108,7 @@ function localReport(ctx, commit) {
       if (commit) {
         const contains = ctx.git(['-C', directory, 'cat-file', '-e', `${commit}^{commit}`]);
         if (contains.status !== 0) {
-          if (ctx.git(['-C', directory, 'rev-parse', '--git-dir']).status !== 0) errors.push({ path: directory, error: 'Repository is unavailable' });
+          if (registeredPathState(directory, ctx) === 'missing') errors.push({ path: directory, error: 'Registered path does not exist' });
           continue;
         }
         repositories.push(containingCheckouts(directory, commit, ctx));
@@ -141,9 +159,9 @@ async function run(args, ctx, where = false) {
     if (args.includes('--all-nodes') || where && !args.includes('--local')) nodes.push(...remoteReports(ctx, commit));
     const ok = nodes.every(node => !node.errors?.length);
     const result = { ok, ...(where ? { commit } : {}), nodes };
-    const lines = nodes.flatMap(node => [node.node, ...node.repositories.map(repo => where
+    const lines = nodes.flatMap(node => [node.node, ...node.repositories.map(repo => repo.notRepository ? `  ${repo.path}: not a git repository` : where
       ? `  ${repo.path}: ${repo.checkouts.length} checkouts; ${repo.refs.length} refs`
-      : `  ${repo.path}: dirty=${repo.dirty ?? 'unknown'} unpushed=${repo.unpushed ?? 'unknown'} behind=${repo.behind ?? 'unknown'} diverged=${repo.diverged ?? 'unknown'} stale-stashes=${repo.staleStashes?.length ?? 'unknown'} abandoned-worktrees=${repo.abandonedWorktrees?.length ?? 'unknown'}`),
+      : `  ${repo.path}: dirty=${repo.dirty ?? 'unknown'} unpushed=${repo.unpushed ?? 'unknown'} behind=${repo.behind ?? 'unknown'} diverged=${repo.diverged ?? 'unknown'} stale-stashes=${repo.staleStashes?.length ?? 'unknown'} abandoned-worktrees=${repo.abandonedWorktrees?.length ?? 'unknown'} unmerged=${repo.unmerged ?? 'unknown'}`),
     ...(node.errors || []).map(e => `  unavailable: ${e.path || node.node}`)]);
     output(ctx, result, lines.join('\n'));
     return ok ? 0 : 1;
@@ -151,6 +169,6 @@ async function run(args, ctx, where = false) {
 }
 
 export const operations = {
-  fleet: { summary: 'Report repository state on this node or every mesh node', usage: 'fleet [--all-nodes] [--json]', run: (args, ctx) => run(args, ctx) },
+  fleet: { summary: 'Report repository state (including unmerged branches and worktrees) on this node or every mesh node', usage: 'fleet [--all-nodes] [--json]', run: (args, ctx) => run(args, ctx) },
   where: { summary: 'Find machines and checkouts that contain a commit', usage: 'where <commit> [--local] [--json]', run: (args, ctx) => run(args, ctx, true) },
 };

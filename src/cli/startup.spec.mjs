@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 vi.mock('../core/startup-health.mjs', () => ({ startupHealth: vi.fn(async () => ({ ready: true, server: {status:'ready'},brain:{status:'ready'},daemon:{status:'running'},ssss:{status:'available'},app:{status:'not-declared'},actions:[] })) }));
-import startup, { inspectStartup } from './startup.mjs';
+import startup, { inspectStartup, startupFindings } from './startup.mjs';
 import { startupHealth } from '../core/startup-health.mjs';
 describe('startup CLI contract', () => {
   let log;
@@ -11,4 +11,25 @@ describe('startup CLI contract', () => {
   it('check is read-only and ensure explicit', async () => { await startup(['check','--json']); expect(startupHealth.mock.calls[0][0].ensure).toBe(false); await startup(['ensure','--app-check','app-health','--app-start','app-launch']); expect(startupHealth.mock.calls[1][0]).toMatchObject({ensure:true,appCheck:'app-health',appStart:'app-launch'}); });
   it('unready JSON fails exit status without leaking raw payload', async () => { startupHealth.mockResolvedValueOnce({ready:false}); await startup(['check','--json']); expect(process.exitCode).toBe(1); expect(JSON.parse(log.mock.calls[0][0])).toEqual({ready:false}); });
   it('configured override options are passed to core', async () => { await inspectStartup({brainUrl:null,token:null}); expect(startupHealth.mock.calls[0][0]).toMatchObject({brainUrl:null,token:null}); });
+});
+describe('startup findings', () => {
+  it('names a stale dashboard and each plugin check that needs attention or could not run', () => {
+    const lines = startupFindings({
+      dashboard: { status: 'stale', newer_source: 'frontend/src/App.tsx' },
+      plugin_checks: [
+        { command: 'git unmerged', status: 'attention', outstanding: 2, summary: '2 branches hold work not in main: codex/plugin-workspaces (+4)' },
+        { command: 'git unmerged', status: 'ok', outstanding: 0, summary: 'nothing outstanding' },
+        { command: 'mesh drift', status: 'unavailable', reason: 'timed out after 15000 ms' },
+        { command: 'auth due', status: 'inactive' },
+      ],
+    });
+    expect(lines).toEqual([
+      'Dashboard: bundle stale (frontend/src/App.tsx is newer); the server rebuilds it, see /health dashboard.',
+      'git unmerged: 2 branches hold work not in main: codex/plugin-workspaces (+4)',
+      'mesh drift: unavailable (timed out after 15000 ms)',
+    ]);
+  });
+  it('is silent when everything is current', () => {
+    expect(startupFindings({ dashboard: { status: 'current' }, plugin_checks: [{ command: 'git unmerged', status: 'ok', outstanding: 0, summary: 'none' }] })).toEqual([]);
+  });
 });

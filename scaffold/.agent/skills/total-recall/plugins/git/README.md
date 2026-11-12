@@ -65,9 +65,27 @@ The task `cli update --scheduled` runs daily on every node.
 ## Across the mesh
 
 ```bash
-total-recall git fleet --all-nodes    # dirty, unpushed, behind, diverged, stale stashes, abandoned worktrees
+total-recall git fleet --all-nodes    # dirty, unpushed, behind, diverged, stale stashes, abandoned worktrees, unmerged
 total-recall git where <commit>       # machines and checkouts that contain a commit
 ```
+
+## Unmerged work
+
+```bash
+total-recall git unmerged [--json]    # this repository
+total-recall git unmerged --registered   # every registered repository
+```
+
+Lists local branches with commits the default branch lacks, linked worktrees with uncommitted
+changes, and detached worktrees holding commits that no branch contains (removing such a worktree
+loses them). A commit counts as landed when the default branch, local or origin, reaches it or holds
+an equivalent patch, so rebased and cherry-picked work is not listed; a squash merge is a different
+patch, so delete the branch once it has landed. Stale worktree records and branches kept on purpose
+(`git config --add totalrecall.keepBranch <name>`) are shown but not counted. Registered brains
+that are not git repositories are skipped.
+
+The plugin declares this report as its `startup_check`, so `total-recall startup check` and
+`brief` show the outstanding count and where it is whenever a session starts.
 
 ## Intent
 
@@ -105,8 +123,12 @@ total-recall git add -A
 total-recall git commit -m "<message>"
 total-recall git push
 total-recall git fleet --json
+total-recall git unmerged
 total-recall git undo --list
 ```
+
+Finish what you start: land a branch or worktree once its work is done, then remove it. `unmerged`
+shows what is still outside the default branch.
 
 A refused commit or push names the rule or the auth key that matched; fix the cause, never bypass
 the guard. Raw commands this plugin owns: `git <command>`.

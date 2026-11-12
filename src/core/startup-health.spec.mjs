@@ -1,5 +1,7 @@
 import { describe, it, expect, vi, afterAll } from 'vitest';
 vi.mock('./required-plugins.mjs', () => ({ inspectRequiredPlugins: vi.fn(() => ({ status: 'ready', errors: [] })) }));
+// Plugin startup checks and the dashboard check read this machine's plugins and checkout; keep these specs hermetic.
+vi.mock('./plugin-startup-checks.mjs', () => ({ runPluginStartupChecks: vi.fn(async () => []) }));
 import { inspectRequiredPlugins } from './required-plugins.mjs';
 import fs from 'node:fs';
 import os from 'node:os';
@@ -208,5 +210,13 @@ describe('startup health truth and boundaries', () => {
   it('handles spawn failure and bounds real synthetic child lifetime', async () => {
     expect((await runBounded('definitely-missing-startup-binary', [])).reason).toBe('spawn-failed');
     expect((await runBounded(process.execPath, ['-e', 'setInterval(()=>{},1000)'], { timeoutMs: 20 })).reason).toBe('timeout');
+  });
+  it('reports the dashboard and plugin startup checks without changing readiness', async () => {
+    const pluginChecks = async () => [{ plugin: 'git', command: 'git unmerged', status: 'attention', outstanding: 2, summary: '2 unmerged' }];
+    const dashboardCheck = async () => ({ status: 'stale', newer_source: 'frontend/src/App.tsx' });
+    const report = await startupHealth({ listener: async () => true, brainDir: '/missing', brainUrl: 'https://example.invalid', identity: () => ({ status: 'running' }), fetchImpl: fetchGood, run, pluginChecks, dashboardCheck });
+    expect(report.dashboard).toEqual({ status: 'stale', newer_source: 'frontend/src/App.tsx' });
+    expect(report.plugin_checks).toEqual([{ plugin: 'git', command: 'git unmerged', status: 'attention', outstanding: 2, summary: '2 unmerged' }]);
+    expect(report.ready).toBe(true);
   });
 });

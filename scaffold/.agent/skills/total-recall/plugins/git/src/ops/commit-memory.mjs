@@ -1,4 +1,26 @@
+import { spawn } from 'node:child_process';
 import { git, tr, ledger, intent, session } from '../lib/context.mjs';
+import { defaultBranch } from './unmerged.mjs';
+
+/**
+ * Ask OpenWiki to refresh this repository without waiting for it. A due refresh
+ * regenerates pages with a model for minutes; OpenWiki throttles repeats, keeps
+ * its own 30-minute limit and writes the outcome to openwiki/.refresh-attempt.json.
+ * Waiting here held every commit for 30 s, then killed only the CLI: the
+ * generator finished on its own while the commit reported the refresh as failed.
+ */
+export function requestWikiRefresh(ctx, launch = spawn) {
+  try {
+    const child = launch(ctx.env.GIT_PLUGIN_TR_BIN || 'total-recall', ['openwiki', 'refresh', '--repo', ctx.cwd, '--apply', '--json'], {
+      cwd: ctx.cwd, env: ctx.env, detached: true, stdio: 'ignore', shell: false,
+    });
+    child.on?.('error', () => {});
+    child.unref?.();
+    return child.pid ? { status: 'requested', command: 'openwiki refresh', outcome: 'openwiki/.refresh-attempt.json' } : { status: 'failed', command: 'openwiki refresh', reason: 'could not start' };
+  } catch {
+    return { status: 'failed', command: 'openwiki refresh', reason: 'could not start' };
+  }
+}
 
 export const guards = [{
   name: 'commit-memory',
@@ -15,16 +37,18 @@ export const guards = [{
     // Save the commit before any optional provider call.
     store.append(record, { idempotencyKey: `commit-${sha}` });
     const memory = record.decisions.length ? tr(ctx, ['remember', 'decision', `${record.decisions.join('\n')}\nCommit: ${sha}`, '--project', '--slug', `git-decision-${sha}`]) : null;
-    const available = tr(ctx, ['openwiki', '--help']);
     let wiki;
-    if (available.status !== 0 || available.error) wiki = { status: 'skipped', reason: 'OpenWiki is unavailable' };
+    // The wiki documents the default branch. Regenerating it from a feature branch spends model
+    // calls on pages that only conflict when the branch merges.
+    const branch = ctx.git(['symbolic-ref', '--quiet', '--short', 'HEAD']);
+    const base = defaultBranch(ctx);
+    if (!base || branch.status !== 0 || String(branch.stdout).trim() !== base.name) wiki = { status: 'skipped', reason: 'not on the default branch' };
     else {
-      // The current OpenWiki CLI accepts a refresh request, but has no queue verb.
-      const refresh = tr(ctx, ['openwiki', 'refresh', '--repo', ctx.cwd, '--apply', '--json']);
-      wiki = { status: refresh.status === 0 && !refresh.error ? 'requested' : 'failed', command: 'openwiki refresh' };
+      const available = tr(ctx, ['openwiki', '--help']);
+      wiki = available.status !== 0 || available.error ? { status: 'skipped', reason: 'OpenWiki is unavailable' } : requestWikiRefresh(ctx);
     }
     store.append({ type: 'git.commit_memory', sha, timestamp: new Date().toISOString(), memory: memory === null ? 'skipped: no named decision' : memory.status === 0 && !memory.error ? 'recorded' : 'failed', openwiki: wiki });
     if (memory && (memory.status !== 0 || memory.error)) console.error('Commit saved. Repository decision memory failed.');
-    if (wiki.status === 'failed') console.error('Commit saved. OpenWiki refresh failed.');
+    if (wiki.status === 'failed') console.error('Commit saved. The OpenWiki refresh could not be started.');
   },
 }];

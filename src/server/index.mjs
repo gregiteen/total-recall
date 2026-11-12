@@ -352,6 +352,8 @@ app.get('/health', requireAuthOrLocal, async (req, res) => {
     cloudflare: cloudflareStatus,
     emergency_alerts: emergencyAlerts || null,
     fetch_gate,
+    // Whether the served dashboard is as new as this checkout's frontend sources.
+    dashboard: dashboardBundle.state(),
     vfs: {
       exists: vaultExists,
       skill_exists: skillExists,
@@ -444,24 +446,26 @@ try {
 
 const frontendDist = path.join(ROOT, 'frontend', 'dist');
 
-// Auto-build frontend if dist/ doesn't exist
-if (!fs.existsSync(path.join(frontendDist, 'index.html'))) {
-  const frontendDir = path.join(ROOT, 'frontend');
-  if (fs.existsSync(path.join(frontendDir, 'package.json'))) {
-    logger.info('server', 'Frontend not built. Building automatically...');
-    try {
-      const { execSync } = await import('node:child_process');
-      execSync('npm install --no-audit --no-fund 2>/dev/null && npm run build', {
-        cwd: frontendDir,
-        stdio: 'pipe',
-        timeout: 120_000,
-      });
-      logger.info('server', 'Frontend build complete.');
-    } catch (err) {
-      logger.warn('server', `Frontend auto-build failed: ${err.message?.split('\\n')[0] || 'unknown error'}. Dashboard will show API info instead.`);
+// Keep the served dashboard as new as its sources. A missing or stale bundle is
+// rebuilt in the background while the current one keeps serving; express.static
+// resolves files per request, so the swapped-in build serves without a restart.
+// Building only when index.html was missing left every later frontend commit unserved.
+const { watchDashboardBundle } = await import('../core/dashboard-bundle.mjs');
+const dashboardBundle = watchDashboardBundle({
+  root: ROOT,
+  report: (state) => {
+    if (state.status === 'current' && state.rebuilt) {
+      logger.info('server', `Dashboard bundle rebuilt from newer sources (${Math.round(state.durationMs / 1000)} s); serving it now.`);
+    } else if (state.status === 'current') {
+      logger.info('server', 'Dashboard bundle is current.');
+    } else if (state.retryInMs) {
+      logger.info('server', `Dashboard bundle is ${state.status}; rebuilding once the sources stop changing.`);
+    } else {
+      logger.error('server', `Dashboard bundle is ${state.status} and was not rebuilt: ${state.reason}.${state.build?.output ? ` Build output: ${state.build.output.slice(-1500)}` : ''}`);
     }
-  }
-}
+  },
+});
+dashboardBundle.check();
 
 app.use(express.static(frontendDist));
 
@@ -814,7 +818,7 @@ app.get(/^(.*)$/, (req, res) => {
           memory: 'GET /api/memory',
           sandbox: 'POST /api/sandbox',
           health: 'GET /health',
-          dashboard: 'Build frontend first: cd frontend && npm run build'
+          dashboard: `Dashboard bundle is ${dashboardBundle.state().status}${dashboardBundle.state().reason ? `: ${dashboardBundle.state().reason}` : ''}. The server rebuilds it from frontend/ in the background.`
         }
       });
     }

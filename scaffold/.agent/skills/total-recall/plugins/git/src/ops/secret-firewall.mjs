@@ -9,10 +9,35 @@ export function scanText(ctx, text) {
   const result = spawnSync(ctx.env?.GIT_PLUGIN_TR_BIN || 'total-recall', ['auth', 'secret', 'scan', '--stdin', '--json'], {
     cwd: ctx.cwd, env: ctx.env, input: text, encoding: 'utf8', shell: false, timeout: 120000, maxBuffer: 16 * 1024 * 1024,
   });
-  if (result.error || ![0, 1].includes(result.status)) throw new Error('Auth secret scan failed');
-  const reply = JSON.parse(result.stdout);
-  if (!Array.isArray(reply.keys)) throw new Error('Auth secret scan returned no key list');
+  if (result.error) throw new Error(`auth secret scan could not start (${result.error.code || 'spawn failed'})`);
+  if (result.signal) throw new Error(`auth secret scan was stopped (${result.signal})`);
+  let reply = null;
+  try { reply = JSON.parse(result.stdout); } catch { /* named below; a parse error can quote the output */ }
+  if (![0, 1].includes(result.status) || !reply) throw new Error(scanFailure(result));
+  if (!Array.isArray(reply.keys)) throw new Error('auth secret scan returned no key list');
   return reply.keys;
+}
+
+/**
+ * Name why the scan gave no result without forwarding the child's output,
+ * which can hold credential material. A generic "could not complete" hid that
+ * auth was simply turned off for the repository (2026-11-12).
+ */
+function scanFailure(result) {
+  const stderr = String(result.stderr || '');
+  if (/Plugin auth is inactive/.test(stderr)) return 'the auth plugin is turned off for this repository; run total-recall plugin on auth';
+  if (/Unknown (plugin|command)|not installed/i.test(stderr)) return 'the auth plugin is not installed here or has no secret scan';
+  return `auth secret scan exited ${result.status} without a result`;
+}
+
+/**
+ * The publishable part of a patch: everything except removed lines. A removed line is content the
+ * commit takes out; scanning it blocked the very commit that redacts a secret already in history
+ * (portfolio-site tracker, 2026-11-12). Added lines, headers, binary patches and the commit message
+ * are still scanned, and every staged or outgoing blob is scanned whole.
+ */
+export function publishedPatchText(patch) {
+  return String(patch).split('\n').filter((line) => !(line.startsWith('-') && !line.startsWith('---'))).join('\n');
 }
 
 export function checkSecrets(args, ctx) {
@@ -25,7 +50,7 @@ export function checkSecrets(args, ctx) {
     const chunks = [];
     const add = value => chunks.push(Buffer.isBuffer(value) ? value.toString('utf8') : value);
     if (call.command === 'commit') {
-      add(gitText(call.ctx, ['diff', '--cached', '--no-ext-diff', '--no-textconv', '--binary', '--']));
+      add(publishedPatchText(gitText(call.ctx, ['diff', '--cached', '--no-ext-diff', '--no-textconv', '--binary', '--'])));
       const paths = gitText(call.ctx, ['diff', '--cached', '--name-only', '--diff-filter=ACMRT', '-z', '--']).split('\0').filter(Boolean);
       for (const file of paths) {
         const row = call.ctx.git(['show', `:${file}`], { encoding: null });
@@ -35,7 +60,7 @@ export function checkSecrets(args, ctx) {
     } else {
       const scanned = new Set();
       for (const commit of outgoingCommits(call.ctx, call.args)) {
-        add(gitText(call.ctx, ['show', '--format=fuller', '--root', '--no-ext-diff', '--no-textconv', '--binary', commit, '--']));
+        add(publishedPatchText(gitText(call.ctx, ['show', '--format=fuller', '--root', '--no-ext-diff', '--no-textconv', '--binary', commit, '--'])));
         // Raw blobs of the files this commit changed: a binary patch does not contain the original bytes.
         const changed = gitText(call.ctx, ['diff-tree', '-r', '-z', '--root', '--no-commit-id', commit]).split('\0').filter(Boolean);
         for (const entry of changed) {
@@ -58,8 +83,9 @@ export function checkSecrets(args, ctx) {
     }
     flush();
     if (matches.size) return { refuse: `Auth secret match: ${[...matches].sort().join(', ')}` };
-  } catch {
-    return { refuse: 'Secret firewall could not complete. Check auth store and repository access.' };
+  } catch (error) {
+    // Our own messages only: git failures and scanFailure never carry file or secret content.
+    return { refuse: `Secret firewall could not complete: ${error.message}. Check auth store and repository access.` };
   } finally { prospective?.cleanup(); }
 }
 

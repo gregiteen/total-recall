@@ -2,7 +2,7 @@
   "$schema": "https://github.com/gregiteen/total-recall/blob/main/metadata.plugin.schema.json",
   "id": "git",
   "name": "Git",
-  "version": "2.0.1",
+  "version": "2.1.0",
   "description": "The whole git CLI through Total Recall: sign-in from the auth store, guarded commits and pushes, undo, fleet state, and the intent behind every change.",
   "author": "Total Recall",
   "license": "MIT",
@@ -54,6 +54,9 @@
         { "name": "list", "flag": "--list", "type": "boolean", "label": "List snapshots" }
       ] },
       { "name": "fleet", "description": "Dirty, unpushed, behind, diverged, stale stashes and abandoned worktrees across registered repositories; --all-nodes for the mesh", "effect": "read", "timeout_ms": 600000 },
+      { "name": "unmerged", "description": "Branches with commits not in the default branch, worktrees with uncommitted changes and detached worktrees holding commits on no branch; --registered for every registered repository", "effect": "read", "output": "json", "timeout_ms": 600000, "args": [
+        { "name": "registered", "flag": "--registered", "type": "boolean", "label": "Every registered repository" }
+      ] },
       { "name": "where", "description": "Machines and checkouts that contain a commit", "effect": "read", "args": [
         { "name": "commit", "type": "string", "label": "Commit", "required": true, "positional": true }
       ] },
@@ -150,6 +153,7 @@
     "badge": "Repository Hygiene",
     "font": "space-grotesk"
   },
+  "startup_check": { "command": "unmerged", "args": ["--json"], "timeout_ms": 20000 },
   "status": {
     "command": "audit",
     "refresh_seconds": 60

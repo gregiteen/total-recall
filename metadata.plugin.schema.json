@@ -898,6 +898,31 @@
         }
       }
     },
+    "startup_check": {
+      "type": "object",
+      "description": "A read command contributed to `startup check` and `brief`. It prints one JSON object { ok, outstanding, summary }; outstanding above zero needs attention.",
+      "required": [
+        "command"
+      ],
+      "properties": {
+        "command": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9-]{0,63}$"
+        },
+        "args": {
+          "type": "array",
+          "maxItems": 8,
+          "items": {
+            "type": "string"
+          }
+        },
+        "timeout_ms": {
+          "type": "integer",
+          "minimum": 1000,
+          "maximum": 30000
+        }
+      }
+    },
     "distribution": {
       "type": "object",
       "required": [
