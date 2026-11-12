@@ -1,3 +1,28 @@
+## 3.46.0 — 2026-11-12
+
+- The dashboard opens to brain-first workspace drawers: one shared left navigation drawer, a right
+  Help drawer and a bottom drawer for Chat and shortcuts, on every page. Each plugin opens to its
+  own native Home composed from owner-authored SSSS blocks; saved workspace pages keep a plugin's
+  Home. The card engine, the card contract and every legacy card face are gone.
+- Plugin manifests declare a native `ui.home`; `card`, `card_face` and `card_layout` are refused.
+  The eleven bundled defaults ship their Homes (Auth 1.3.0, Automations 1.2.0, Code Quality 0.3.0,
+  Composable CLI 0.3.0, Embeddings 0.2.0, Git 2.2.0, Mesh 0.3.0, Metaharness 0.4.0, OpenWiki 0.2.0,
+  Security 0.4.0, SSSS 0.2.0). Updating migrates installed defaults from the bundled copies;
+  plugins installed from other sources need their Home release.
+- A server running from a source checkout rebuilds a missing or stale dashboard bundle in the
+  background and keeps serving the current one until the new build is complete. It never installs
+  dependencies; `/health` reports `dashboard` and `startup check` reports a stale bundle. Local
+  merges used to leave the served dashboard on an old build.
+- Plugins can contribute a `startup_check`: a read command whose `{ ok, outstanding, summary }`
+  `startup check` and `brief` show. Git declares `git unmerged`: branches with commits the
+  default branch lacks and worktrees with uncommitted changes or commits on no branch.
+- The memory page's live refresh uses the authenticated `/api/memory-events` stream (only the
+  subsystem of conflict, rebuild and session events); it never connected through `/stream`.
+- A shared plugin switched from the dashboard's global brain no longer reports failure after the
+  change was applied.
+- Dependency trees are judged from each locked package on disk, never npm's tree record, and the
+  updater no longer runs a lockfile-only update over an existing tree.
+
 ## 3.45.0 — 2026-11-09
 
 - Instruction surfaces compile on demand (ODC): a task capsule is compiled when an agent asks for
