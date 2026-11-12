@@ -3,7 +3,7 @@ type: ui-chunk:chunk
 title: Git change comparison
 description: Compare unstaged, staged, or base-relative changes using the owner diff operation.
 timestamp: "2026-11-08T09:20:00Z"
-plugin: git-sentinel
+plugin: git
 id: change-comparison
 intents: [review git diff, check staged files, compare branch to base, read diff stats, show a patch]
 surfaces: [page, right]

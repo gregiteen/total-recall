@@ -3,7 +3,7 @@ type: ui-chunk:chunk
 title: Create a detached worktree
 description: Create a linked Git worktree from an explicit base ref and verify its resulting revision.
 timestamp: "2026-11-08T09:20:00Z"
-plugin: git-sentinel
+plugin: git
 id: create-worktree
 intents: [create git worktree, isolate git checkout, add detached worktree, choose worktree base]
 surfaces: [page]

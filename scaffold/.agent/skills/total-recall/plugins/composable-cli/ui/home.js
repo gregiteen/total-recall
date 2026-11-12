@@ -99,6 +99,7 @@ export class ComposableCliHome extends HTMLElement {
 
   connectedCallback() {
     if (!this.shadowRoot) this.attachShadow({ mode: 'open' });
+    this.setAttribute('data-loaded', '');
     this.load();
   }
 
@@ -110,8 +111,11 @@ export class ComposableCliHome extends HTMLElement {
       return normalize(await this._host.run(operation, args));
     } catch (error) {
       // A non-zero exit can still carry the operation's JSON result.
-      const text = error && (typeof error.stdout === 'string' ? error.stdout : typeof error.output === 'string' ? error.output : null);
-      if (text && /^[\s]*[{[]/.test(text)) return parseJsonText(text);
+      const text = error && (typeof error.stdout === 'string' ? error.stdout :
+        typeof error.output === 'string' ? error.output : error.message);
+      if (typeof text === 'string' && /^\s*[\[{]/.test(text)) {
+        try { return parseJsonText(text); } catch { /* keep the original operation error */ }
+      }
       throw error;
     }
   }

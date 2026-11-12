@@ -15,13 +15,15 @@ export function findSkillDir(start = process.cwd()) {
   return stateDir(start);
 }
 
-export function runCore(script, args) {
+export function runCore(script, args, { quiet = false } = {}) {
   if (!fs.existsSync(stateDir())) {
     const error = new Error('No code-quality state in this repository (.agent/skills/code-quality). Create configuration: total-recall code-quality detect --apply');
     error.exitCode = 2;
     throw error;
   }
-  const result = spawnSync(process.execPath, [path.join(CORE_DIR, script), ...args], { stdio: 'inherit' });
+  const result = spawnSync(process.execPath, [path.join(CORE_DIR, script), ...args], {
+    stdio: quiet ? ['ignore', 'ignore', 'inherit'] : 'inherit',
+  });
   if (result.error) throw result.error;
   return { exitCode: result.status ?? 1, data: { state_dir: stateDir(), script } };
 }

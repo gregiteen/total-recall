@@ -204,12 +204,14 @@ function acquireLock(lockPath, label) {
   const ageMs = held?.startedAt ? Date.now() - Date.parse(held.startedAt) : Infinity;
   const expired = Number.isFinite(ageMs) && ageMs > STALE_AFTER_MS;
 
-  if (STEAL_LOCK && state === 'alive') {
+  const protectedHolder = state === 'alive' || state === 'alive-foreign' ||
+    (state === 'unverifiable' && !expired);
+  if (STEAL_LOCK && protectedHolder) {
     // The machine-wide lock is shared by every repo on this host. A verified
     // live holder is another repo's (or this repo's) real run: stealing its
     // lock, or killing it, silently destroys that run's result.
     fail(
-      `--steal-lock refused: the ${label} lock is held by a verified running check ` +
+      `--steal-lock refused: the ${label} lock has a protected holder (state=${state}) ` +
       `(pid ${held.pid}, ${held.repoRoot ?? 'unknown repo'}, started ${held.startedAt ?? 'unknown'}).\n` +
       `   Wait for it to finish, or stop that process yourself if you own it.`,
       3

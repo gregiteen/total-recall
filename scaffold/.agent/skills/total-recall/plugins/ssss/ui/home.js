@@ -99,7 +99,7 @@ const page = `
         <form id="validate">
           <label>Document path <input type="text" name="file" required autocomplete="off"></label>
           <label>Extension registry path <input type="text" name="extension" autocomplete="off"></label>
-          <button>Validate document</button>
+          <button type="button">Validate document</button>
         </form>
         <div class="outcome" id="validate-outcome" aria-live="polite"></div>
       </section>
@@ -108,7 +108,7 @@ const page = `
         <form id="registry">
           <label>Lock file path <input type="text" name="lock" required autocomplete="off"></label>
           <label>Extension registry path <input type="text" name="extension" autocomplete="off"></label>
-          <button>Verify registry</button>
+          <button type="button">Verify registry</button>
         </form>
         <div class="outcome" id="registry-outcome" aria-live="polite"></div>
       </section>
@@ -118,14 +118,14 @@ const page = `
           <label>New directory <input type="text" name="directory" required autocomplete="off"></label>
           <label>Extension name <input type="text" name="extension" autocomplete="off"></label>
           <label class="choice"><input type="checkbox" name="with-total-recall"> Include Total Recall wiring</label>
-          <button>Create project</button>
+          <button type="button">Create project</button>
         </form>
         <div class="outcome" id="scaffold-outcome" aria-live="polite"></div>
       </section>
       <section class="group" aria-labelledby="conformance-title">
         <h3 id="conformance-title">Engine conformance</h3>
         <p class="quiet">Runs the canonical reference suite. Allow up to two minutes.</p>
-        <form id="conformance"><button>Run engine conformance</button></form>
+        <form id="conformance"><button type="button">Run engine conformance</button></form>
         <div class="outcome" id="conformance-outcome" aria-live="polite"></div>
       </section>
     </div>
@@ -181,8 +181,9 @@ export class SsssHome extends HTMLElement {
 
   bindForm(id, operation, show) {
     const form = this.find(id);
-    form.onsubmit = event => {
-      event.preventDefault();
+    // The dashboard frame intentionally disables native form submission.
+    const run = () => {
+      if (!form.reportValidity()) return;
       const args = [];
       for (const [name, value] of new FormData(form)) {
         if (name === 'with-total-recall') args.push('--with-total-recall');
@@ -190,12 +191,31 @@ export class SsssHome extends HTMLElement {
       }
       this.perform(operation, args, this.find(operation === 'scaffold' ? 'scaffold-outcome' : id + '-outcome'), show);
     };
+    form.querySelector('button').onclick = run;
+    form.onkeydown = event => {
+      if (event.key !== 'Enter' || event.isComposing || !event.target.matches('input[type="text"]')) return;
+      event.preventDefault();
+      run();
+    };
   }
 
   // Runs one operation through the authenticated bridge and returns its parsed verdict.
   async run(operation, args) {
     if (!this.host?.run) throw new Error('Command bridge unavailable. Open this Home from the Total Recall dashboard.');
-    const reply = await this.host.run(operation, [...args, '--json']);
+    let reply;
+    try {
+      reply = await this.host.run(operation, [...args, '--json']);
+    } catch (error) {
+      // A failed check emits one JSON verdict followed by human-readable stderr.
+      for (const line of String(error?.message || '').split('\n')) {
+        if (!line.startsWith('{')) continue;
+        try {
+          const verdict = JSON.parse(line);
+          if (verdict?.ok === false) return verdict;
+        } catch { /* A bridge error may carry no owner verdict. */ }
+      }
+      throw error;
+    }
     const result = typeof reply === 'string' ? JSON.parse(reply) : reply;
     if (typeof result?.ok !== 'boolean') throw new Error('SSSS returned no verdict.');
     return result;
@@ -306,6 +326,7 @@ export class SsssHome extends HTMLElement {
         ? (operation === 'repair' ? 'Repaired and verified' : 'Installation complete and current')
         : 'Installation needs attention';
       const notes = [];
+      if (result.error) notes.push(result.error);
       if (result.recoveredFrom) notes.push('Previous scaffold kept at ' + result.recoveredFrom);
       if (result.replacedLink) notes.push('Replaced link ' + result.replacedLink.path + ' → ' + result.replacedLink.target);
       if (notes.length) this.find('engine-note').textContent = notes.join('. ');

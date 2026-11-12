@@ -2,7 +2,7 @@
   "$schema": "https://github.com/gregiteen/total-recall/blob/main/metadata.plugin.schema.json",
   "id": "git",
   "name": "Git",
-  "version": "2.1.0",
+  "version": "2.2.0",
   "description": "The whole git CLI through Total Recall: sign-in from the auth store, guarded commits and pushes, undo, fleet state, and the intent behind every change.",
   "author": "Total Recall",
   "license": "MIT",
@@ -91,35 +91,21 @@
       }
     ]
   },
-  "card_face": {
-    "skin": "copper-obsidian",
-    "theme": "copper",
-    "headline": "Worktree Hygiene & Repository Watch",
-    "primary_color": "#b45309",
-    "secondary_color": "#0c0a09",
-    "accent_color": "#f59e0b",
-    "touch_layout": "comfortable",
-    "interactive": true,
-    "quick_actions": [
-      {
-        "subcommand": "audit",
-        "label": "AUDIT"
-      },
-      {
-        "subcommand": "diff",
-        "label": "DIFFSTAT"
-      }
-    ]
-  },
   "ui": {
-    "design_tokens": "ui/DESIGN.md",
+    "design_tokens": "DESIGN.md",
+    "home": "repository",
     "elements": [
       {
-        "id": "card",
-        "kind": "card",
-        "tag": "tr-git-card",
-        "module": "ui/card.js",
-        "description": "Git Hygiene Repository Hygiene Card Face"
+        "id": "repository",
+        "kind": "panel",
+        "tag": "tr-git-home",
+        "module": "ui/home.js",
+        "description": "Repository audit, diff stats, and linked worktrees",
+        "tokens": ["color-text", "color-surface", "color-border", "spacing-md", "radius-md"],
+        "optional_tokens": [
+          "color-background", "color-accent", "color-muted", "color-danger",
+          "typography-body-font-family", "typography-heading-font-family", "typography-mono-font-family"
+        ]
       }
     ]
   },

@@ -3,7 +3,7 @@ type: ui-chunk:chunk
 title: Git Sentinel repository ledger
 description: Read the active checkout, local upstream comparison, dirty files, conflicts, and stashes.
 timestamp: "2026-11-08T09:20:00Z"
-plugin: git-sentinel
+plugin: git
 id: repository-ledger
 intents: [audit git repository, check working tree, git branch and upstream, count unpushed commits, show conflicts and stashes]
 surfaces: [page, right]

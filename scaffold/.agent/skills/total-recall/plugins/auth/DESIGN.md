@@ -1,7 +1,7 @@
 ---
 version: "1.0"
 name: Auth & Secrets
-description: A pine-green access console for sign-in readiness and credential maintenance.
+description: A pine-green operator console for credentials, registered brains, and Mesh machines.
 colors:
   primary: "#64e3a4"
   background: "#101e19"
@@ -45,7 +45,7 @@ components:
 
 ## Overview
 
-Auth Home is a dashboard access console. Put sign-in readiness first and the baseline audit immediately after it. Keep workflow blocks independent so the operator can place a passkey or credential maintenance reference near the task at hand.
+Auth Home is an operator inventory. Start with credential names, providers, repository bindings, storage and rotation. Give registered brains, Mesh machines, and sign-in checks their own views.
 
 ## Colors
 
@@ -57,7 +57,7 @@ Use Outfit for headings and body text. Use JetBrains Mono for workflow labels an
 
 ## Layout
 
-Use a compact vertical list for the sign-in methods and a short checklist for command workflows. Allow labels and status text to stack at narrow widths. Keep credential values out of every surface.
+Use a compact heading and section navigation above a searchable table. Keep table headings visible during scrolling. Let the table scroll horizontally at narrow widths. Keep credential values inside the owner’s secure workflows.
 
 ## Elevation & Depth
 

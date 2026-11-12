@@ -29,7 +29,9 @@ import { appendCommand, waitingRequests } from './src/control.mjs';
 import { sessionOptions } from './src/session/run.mjs';
 import { continueJob } from './src/session-jobs.mjs';
 
-const VALUE_FLAGS = ['--result-schema-json', '--goal', '--max-turns', '--max-budget-usd', '--max-tokens', '--result-schema', '--at', '--node', '--mode', '--orchestrator', '--branch', '--reviewer', '--thread', '--status', '--platform', '--agent', '--url', '--query', '--tier', '--threshold', '--author', '--explorer', '--architect', '--implementer', '--verifier', '--title', '--summary', '--cwd', '--tools', '--setting-sources', '--model', '--name', '--tail', '--timeout-ms', '--void', '--reason', '--approvals', '--question-timeout-ms'];
+import { chatTarget, setChatDefault } from './src/chat.mjs';
+
+const VALUE_FLAGS = ['--result-schema-json', '--goal', '--max-turns', '--max-budget-usd', '--max-tokens', '--result-schema', '--at', '--node', '--mode', '--orchestrator', '--branch', '--reviewer', '--thread', '--status', '--platform', '--agent', '--url', '--query', '--tier', '--threshold', '--author', '--explorer', '--architect', '--implementer', '--verifier', '--title', '--summary', '--cwd', '--tools', '--setting-sources', '--model', '--name', '--tail', '--timeout-ms', '--void', '--reason', '--approvals', '--question-timeout-ms', '--brains'];
 export function parseArguments(args) {
   const positional = [];
   for (let index = 1; index < args.length; index += 1) {
@@ -135,6 +137,8 @@ async function runOperation(argv) {
   let result;
   if (operation === 'status') result = {...await inspectNode(value('--node') || 'local'),documentation:documentationStatus()};
   else if (operation === 'catalog') result = { adapters: getActiveAdapters(), permissions: ['read', 'write', 'send', 'destructive'] };
+  else if (operation === 'chat-target') result = chatTarget(value('--brains'));
+  else if (operation === 'chat-default') result = setChatDefault(positional[0], value('--url'));
   else if (operation === 'nodes') result = await listTargets();
   else if (operation === 'adoption') {
     const node = value('--node');

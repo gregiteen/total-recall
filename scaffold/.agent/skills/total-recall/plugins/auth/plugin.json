@@ -2,8 +2,8 @@
   "$schema": "https://github.com/gregiteen/total-recall/blob/main/metadata.plugin.schema.json",
   "id": "auth",
   "name": "Auth & Secrets",
-  "version": "1.2.10",
-  "description": "Hardware WebAuthn biometric FIDO2 passkeys, OAuth session security, and access control.",
+  "version": "1.3.0",
+  "description": "Encrypted credentials, repository bindings, dashboard sign-in and access across brains and machines.",
   "author": "Total Recall contributors",
   "license": "MIT",
   "use_cases": [
@@ -128,14 +128,8 @@
         "kind": "panel",
         "tag": "tr-auth-home",
         "module": "ui/home.js",
-        "description": "Dashboard access and security baseline"
-      },
-      {
-        "id": "panel",
-        "kind": "panel",
-        "tag": "tr-auth-panel",
-        "module": "ui/panel.js",
-        "description": "Gatepass Auth & Credentials Management Panel"
+        "description": "Credential inventory, brains, machines and sign-in checks",
+        "events": ["auth-inventory", "auth-credential-mutate"]
       }
     ]
   },

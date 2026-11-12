@@ -23,7 +23,7 @@ export function decodeInventory(result) {
   return data;
 }
 
-export class AutomationsCard extends HTMLElement {
+export class AutomationsElement extends HTMLElement {
   constructor() {
     super();
     this.attachShadow({ mode: 'open' });
@@ -37,6 +37,8 @@ export class AutomationsCard extends HTMLElement {
     this.request = 0;
     this.attemptedAt = null;
     this.pendingControl = null;
+    this.localOnly = true;
+    this.showInventoryJson = false;
     this.boundClick = (event) => this.click(event);
     this.boundChange = (event) => this.change(event);
     this.boundKey = (event) => this.key(event);
@@ -58,7 +60,7 @@ export class AutomationsCard extends HTMLElement {
     this.shadowRoot.addEventListener('keydown', this.boundKey);
     window.addEventListener('plugin-show-screen', this.boundScreen);
     this.render();
-    void this.refresh();
+    if (this.host?.run) void this.refresh();
   }
 
   disconnectedCallback() {
@@ -71,14 +73,8 @@ export class AutomationsCard extends HTMLElement {
   }
 
   async invoke(command, args = []) {
-    if (this.host?.run) return this.host.run(command, args);
-    const response = await fetch('/api/plugins/automations/run', {
-      method: 'POST', credentials: 'same-origin', signal: this.controller?.signal,
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ subcommand: command, args }),
-    });
-    if (!response.ok) throw new Error(`Automation request failed (${response.status})`);
-    return response.json();
+    if (!this.host?.run) throw new Error('Authenticated automation bridge unavailable');
+    return this.host.run(command, args);
   }
 
   async refresh() {
@@ -86,10 +82,11 @@ export class AutomationsCard extends HTMLElement {
     this.controller?.abort();
     this.controller = new AbortController();
     this.phase = 'loading'; this.inventory = null; this.error = ''; this.feedback = ''; this.pendingControl = null;
+    this.showInventoryJson = false;
     this.attemptedAt = new Date().toISOString();
     this.render();
     try {
-      const data = decodeInventory(await this.invoke('list'));
+      const data = decodeInventory(await this.invoke('list', this.localOnly ? ['--local'] : []));
       if (request !== this.request || !this.isConnected) return;
       this.inventory = data; this.phase = 'ready';
     } catch (error) {
@@ -148,20 +145,24 @@ export class AutomationsCard extends HTMLElement {
       const selected = [...this.shadowRoot.querySelectorAll('[data-record]')].find((item) => item.dataset.record === this.selected);
       selected?.focus();
     } else if (button.dataset.action === 'refresh') void this.refresh();
-    else if (button.dataset.action === 'copy') void this.copyOutput();
+    else if (button.dataset.action === 'scope') { this.localOnly = !this.localOnly; void this.refresh(); }
+    else if (button.dataset.action === 'inventory-json') this.toggleInventoryJson();
     else if (button.dataset.action === 'confirm-control') void this.executeControl(this.pendingControl?.index, true);
     else if (button.dataset.action === 'dismiss-control') { this.pendingControl = null; this.render(); }
     else if (button.dataset.control) void this.executeControl(Number(button.dataset.control));
   }
 
-  async copyOutput() {
+  toggleInventoryJson() {
     if (!this.inventory) return;
-    try {
-      if (!navigator.clipboard?.writeText) throw new Error('Clipboard is unavailable');
-      await navigator.clipboard.writeText(JSON.stringify(this.inventory, null, 2));
-      if (this.isConnected) this.feedback = 'Inventory copied';
-    } catch (error) { if (this.isConnected) this.feedback = `Copy failed: ${error.message}`; }
-    if (this.isConnected) this.render();
+    this.showInventoryJson = !this.showInventoryJson;
+    this.render();
+    if (this.showInventoryJson) {
+      const field = this.shadowRoot.querySelector('#inventory-json-value');
+      field.focus();
+      field.select();
+    } else {
+      this.shadowRoot.querySelector('[data-action="inventory-json"]').focus();
+    }
   }
 
   async executeControl(index, confirmed = false) {
@@ -251,23 +252,27 @@ export class AutomationsCard extends HTMLElement {
       : this.phase === 'ready' ? (this.inventory.complete === true ? 'Discovery complete' : 'Partial discovery — inspect source coverage') : 'Not checked';
     const content = this.phase !== 'ready' ? `<div class="empty"><h3>${escape(status)}</h3><p>${escape(this.phase === 'error' ? this.error : this.phase === 'loading' ? 'Reading automation sources and node availability…' : 'Refresh to inspect automation sources.')}</p></div>`
       : this.screen === 'nodes' ? this.renderNodes() : this.screen === 'audit' ? this.renderAudit() : this.screen === 'run' ? this.renderRun() : this.renderScheduled();
+    const inventoryJson = this.showInventoryJson ? `
+      <label for="inventory-json-value">Inventory JSON</label>
+      <p id="inventory-json-help" class="note">Copy the selection with your browser’s Copy command or Ctrl+C / ⌘C.</p>
+      <textarea id="inventory-json-value" aria-describedby="inventory-json-help" rows="8" readonly>${escape(JSON.stringify(this.inventory, null, 2))}</textarea>` : '';
     this.shadowRoot.innerHTML = `
       <style>
-      :host { --face-bg:#181713; --face-surface:#24221c; --face-text:#f4efe5; --face-muted:#c5bca9; --face-border:#726652; --face-accent:#f2bd63; --face-error:#ffb5a9; --face-focus:#b8d9ff; --automation-bg:var(--bg-card,var(--face-bg)); --automation-surface:var(--bg-elevated,var(--face-surface)); --automation-text:var(--text-primary,var(--face-text)); --automation-muted:var(--text-secondary,var(--face-muted)); --automation-border:var(--border,var(--face-border)); --automation-accent:var(--accent,var(--face-accent)); --automation-error:var(--face-error); --automation-focus:var(--face-focus); display:block; color:var(--automation-text); font:14px/1.45 system-ui,sans-serif; min-width:0; color-scheme:dark; }
+      .inventory-json { padding:0 16px 16px; }
+      .inventory-json .note { margin:4px 0 8px; }
+      .inventory-json textarea { width:100%; resize:vertical; padding:8px; border:1px solid var(--automation-border); border-radius:5px; background:var(--automation-surface); color:var(--automation-text); font:12px/1.5 ui-monospace,monospace; }
+      .inventory-json textarea:focus-visible { outline:3px solid var(--automation-focus); outline-offset:3px; }
+      :host { --automation-bg:var(--color-background,#181713); --automation-surface:var(--color-surface,#24221c); --automation-text:var(--color-text,#f4efe5); --automation-muted:var(--color-muted,#c5bca9); --automation-border:var(--color-border,#726652); --automation-accent:var(--color-primary,#f2bd63); --automation-error:var(--color-error,#ffb5a9); --automation-focus:var(--color-focus,#b8d9ff); display:block; color:var(--automation-text); font:var(--typography-body-font-size,14px)/1.45 var(--typography-body-font-family,system-ui,sans-serif); min-width:0; color-scheme:dark; }
       *,*::before,*::after { box-sizing:border-box; } button,select { font:inherit; color:inherit; min-height:44px; min-width:44px; } button { cursor:pointer; } button:disabled { cursor:wait; opacity:.6; } button:focus-visible,select:focus-visible { outline:3px solid var(--automation-focus); outline-offset:3px; } .workspace { border:1px solid var(--automation-border); border-radius:12px; background:var(--automation-bg); overflow:hidden; } .masthead { padding:20px; display:flex; gap:16px; align-items:center; flex-wrap:wrap; } .brand { display:flex; gap:12px; align-items:center; flex:1; min-width:0; } svg { width:40px; height:40px; color:var(--automation-accent); flex:none; } h2,h3,p { margin:0; } h2 { font-size:20px; letter-spacing:-.03em; } h3 { font-size:15px; } .eyebrow { text-transform:uppercase; letter-spacing:.11em; font-size:10px; color:var(--automation-muted); margin-bottom:4px; } .subtle,small,.note { color:var(--automation-muted); } small { display:block; font-size:11px; margin-top:3px; overflow-wrap:anywhere; } .refresh { border:1px solid var(--automation-accent); background:var(--automation-accent); color:var(--automation-bg); border-radius:7px; padding:8px 14px; font-weight:700; } .status-line { padding:12px 20px; background:var(--automation-surface); border-block:1px solid var(--automation-border); display:flex; justify-content:space-between; gap:12px; flex-wrap:wrap; } .status-line strong { font-size:12px; font-weight:600; } .tabs { display:flex; padding:8px 12px 0; gap:4px; border-bottom:1px solid var(--automation-border); } .tabs button { flex:1; background:transparent; border:0; border-bottom:3px solid transparent; padding:10px 4px; color:var(--automation-muted); } .tabs button[aria-selected=true] { border-color:var(--automation-accent); color:var(--automation-text); font-weight:700; } .body { padding:16px; min-height:200px; animation:reveal .16s ease-out; } .filters { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:10px; margin-bottom:16px; } label { font-size:11px; color:var(--automation-muted); display:grid; gap:4px; } select { width:100%; max-width:100%; background:var(--automation-surface); border:1px solid var(--automation-border); border-radius:5px; padding:6px; } .ledger { display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr); gap:16px; } .index,.detail,.node { min-width:0; } .index h3 { margin-bottom:8px; } ul { list-style:none; padding:0; margin:0; } .index ul { max-height:380px; overflow:auto; } .index li+li { margin-top:6px; } .index button { width:100%; display:flex; justify-content:space-between; gap:12px; align-items:center; text-align:left; padding:12px; background:transparent; border:1px solid var(--automation-border); border-radius:7px; } .index button[aria-pressed=true] { border-color:var(--automation-accent); background:var(--automation-surface); } strong { overflow-wrap:anywhere; } .state { display:inline-block; text-transform:none; font:11px/1.4 ui-monospace,monospace; border:1px solid var(--automation-border); border-radius:4px; padding:3px 6px; overflow-wrap:anywhere; } .bad { color:var(--automation-error); } .detail { border-left:2px solid var(--automation-accent); padding:0 0 0 16px; } .detail h3 { font-size:19px; margin-bottom:12px; overflow-wrap:anywhere; } dl { display:grid; grid-template-columns:minmax(80px,.7fr) minmax(0,1fr); gap:9px 12px; margin:0; } dt { color:var(--automation-muted); font-size:11px; } dd { margin:0; overflow-wrap:anywhere; font-size:12px; } .mono { font-family:ui-monospace,monospace; overflow-wrap:anywhere; font-size:11px; } .note { font-size:11px; margin-top:16px; } .count { font:11px ui-monospace,monospace; margin-left:4px; color:var(--automation-muted); } .node-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(min(260px,100%),1fr)); gap:16px; } .node { border:1px solid var(--automation-border); border-radius:8px; padding:14px; } .node header { display:flex; justify-content:space-between; align-items:start; gap:12px; margin-bottom:4px; } .coverage { margin-top:12px; } .coverage li { border-top:1px solid var(--automation-border); padding:10px 0; } .coverage li>div { display:flex; justify-content:space-between; align-items:center; gap:12px; } .coverage strong { font-size:12px; } .coverage p { font-size:12px; margin-top:6px; } .audit li { display:flex; justify-content:space-between; gap:16px; padding:12px 0; border-bottom:1px solid var(--automation-border); } .audit li>div { min-width:0; } .audit li>div:last-child { text-align:right; } .audit { margin-top:12px; } .source-actions { display:flex; flex-wrap:wrap; gap:8px; margin-top:16px; } .source-actions button { border:1px solid var(--automation-accent); border-radius:5px; background:var(--automation-surface); padding:8px 12px; } .effect { display:block; font:10px ui-monospace,monospace; color:var(--automation-muted); } .footer { display:flex; align-items:center; justify-content:space-between; padding:8px 16px; gap:12px; border-top:1px solid var(--automation-border); } .footer button { background:transparent; border:0; color:var(--automation-muted); padding:8px; font-size:12px; } .feedback { font-size:12px; overflow-wrap:anywhere; } .empty { padding:26px 12px; } .empty p { color:var(--automation-muted); margin-top:8px; } @keyframes reveal { from { opacity:.65; } to { opacity:1; } } @media(max-width:600px) { .masthead { padding:16px; gap:10px; } .filters { grid-template-columns:repeat(2,minmax(0,1fr)); } .ledger { grid-template-columns:minmax(0,1fr); } .detail { border-left:0; border-top:2px solid var(--automation-accent); padding:16px 0 0; } .index ul { max-height:260px; } .status-line { padding:10px 16px; } .body { padding:12px; } h2 { font-size:18px; } } @media(prefers-reduced-motion:reduce) { .body { animation:none; } }
       </style>
       <div class="workspace"><header class="masthead"><div class="brand"><svg viewBox="0 0 40 40" fill="none" aria-hidden="true"><path d="M4 20h9m0 0 7-11h12m-19 11 7 11h12M13 20h19" stroke="currentColor" stroke-width="2"/><circle cx="5" cy="20" r="3" fill="currentColor"/><path d="M30 6h6v6h-6zM30 17h6v6h-6zM30 28h6v6h-6z" stroke="currentColor" stroke-width="2"/></svg><div><p class="eyebrow">Triggers · sources · outcomes</p><h2>Automations</h2></div></div><button class="refresh" data-action="refresh" ${this.phase === 'loading' ? 'disabled' : ''}>Refresh</button></header>
-      <div class="status-line" role="status" aria-live="polite"><strong class="${this.phase === 'error' ? 'bad' : ''}">${escape(status)}</strong><small>${this.phase === 'ready' ? 'Checked' : 'Last attempt'} ${escape(date(this.phase === 'ready' ? this.inventory.checked_at : this.attemptedAt))}</small></div>
+      <div class="status-line"><div role="status" aria-live="polite"><strong class="${this.phase === 'error' ? 'bad' : ''}">${escape(status)} · ${this.localOnly ? 'This node' : 'Mesh'}</strong><small>${this.phase === 'ready' ? 'Checked' : 'Last attempt'} ${escape(date(this.phase === 'ready' ? this.inventory.checked_at : this.attemptedAt))}</small></div><button data-action="scope" ${this.phase === 'loading' ? 'disabled' : ''}>${this.localOnly ? 'Scan mesh' : 'Use this node'}</button></div>
       <nav class="tabs" role="tablist" aria-label="Automation views">${SCREENS.map((screen) => `<button id="tab-${screen.id}" role="tab" aria-controls="panel-${screen.id}" aria-selected="${this.screen === screen.id}" tabindex="${this.screen === screen.id ? '0' : '-1'}" data-screen="${screen.id}">${screen.label}</button>`).join('')}</nav>
       <div class="body" id="panel-${this.screen}" role="tabpanel" aria-labelledby="tab-${this.screen}" tabindex="0" aria-busy="${this.phase === 'loading'}">${content}</div>
-      <footer class="footer"><span class="feedback" role="status">${escape(this.feedback || (this.phase === 'ready' ? 'Coverage determines completeness.' : 'No current inventory.'))}</span><button data-action="copy" ${this.inventory ? '' : 'disabled'}>Copy inventory</button></footer></div>`;
+      <footer class="footer"><span class="feedback" role="status">${escape(this.feedback || (this.phase === 'ready' ? 'Coverage determines completeness.' : 'No current inventory.'))}</span><button type="button" data-action="inventory-json" aria-expanded="${this.showInventoryJson}" aria-controls="inventory-json" ${this.inventory ? '' : 'disabled'}>${this.showInventoryJson ? 'Hide inventory JSON' : 'Select inventory JSON'}</button></footer>
+      <div class="inventory-json" id="inventory-json" ${this.showInventoryJson ? '' : 'hidden'}>${inventoryJson}</div></div>`;
     if (focusedAction) this.shadowRoot.querySelector(`[data-action="${focusedAction}"]`)?.focus();
   }
 }
 
-// Card and panel share the same inventory contract.
-export const ChronosAutomationsCard = AutomationsCard;
-export class AutomationsElement extends AutomationsCard {}
-if (!customElements.get('tr-automations-card')) customElements.define('tr-automations-card', AutomationsCard);
-if (!customElements.get('automations-card')) customElements.define('automations-card', class extends AutomationsCard {});
 if (!customElements.get('tr-automations')) customElements.define('tr-automations', AutomationsElement);

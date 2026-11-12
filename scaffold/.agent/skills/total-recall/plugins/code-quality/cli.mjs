@@ -2,6 +2,7 @@
  * `total-recall code-quality <verb>` for the repository you run it from.
  *
  *   report [view] [arg]      read the latest gate report; never starts a check
+ *   run --tier fast|full    run the configured gates once
  *   snapshot --node <name>   put the exact source under test on the test node (git file list only)
  *   gate list|add|remove     edit the repo's gate list
  *   config get|set|…, detect [--apply], init
@@ -71,6 +72,28 @@ export async function run(argv = []) {
     } catch (err) {
       fail(err.message, err.exitCode || 1);
     }
+    return;
+  }
+
+  if (verb === 'run') {
+    const usage = 'Usage: total-recall code-quality run [--tier fast|full] [--json]';
+    if (rest.includes('--help') || rest.includes('-h')) { console.log(usage); return; }
+    const json = rest.includes('--json');
+    const options = rest.filter((arg) => arg !== '--json');
+    const tier = options.length ? options[1] : 'fast';
+    const emitFailure = (exitCode, error) => {
+      if (json) console.log(JSON.stringify({ ok: false, exitCode, error }));
+      else console.error(error);
+      process.exitCode = exitCode;
+    };
+    if ((options.length && (options.length !== 2 || options[0] !== '--tier')) || !['fast', 'full'].includes(tier)) {
+      return emitFailure(2, usage);
+    }
+    try {
+      const { exitCode } = runCore('check.mjs', ['--tier', tier], { quiet: json });
+      if (json) console.log(JSON.stringify({ ok: exitCode === 0, exitCode, tier }));
+      if (exitCode) process.exitCode = exitCode;
+    } catch (error) { emitFailure(error.exitCode || 1, error.message); }
     return;
   }
 

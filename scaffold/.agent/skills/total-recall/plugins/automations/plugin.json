@@ -2,10 +2,14 @@
   "$schema": "https://github.com/gregiteen/total-recall/blob/main/metadata.plugin.schema.json",
   "id": "automations",
   "name": "Automations",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": "Run scheduled plugin tasks and inspect automation sources, triggers, observed outcomes and coverage across the mesh.",
   "author": "Total Recall",
   "license": "MIT",
+  "reuse": {
+    "commands": ["total-recall mesh nodes"],
+    "owned": "Collects automation sources, triggers, outcomes and node coverage, and delegates confirmed local task cancellation to its owner."
+  },
   "use_cases": [
     "automation",
     "monitoring"
@@ -43,7 +47,9 @@
         "timeout_ms": 25000,
         "effect": "read",
         "output": "json",
-        "args": []
+        "args": [
+          { "name": "receipt", "flag": "--receipt", "type": "boolean", "label": "Local terminal failure receipt" }
+        ]
       },
       {
         "name": "dream",
@@ -77,13 +83,14 @@
     "daemon": ["scheduler"]
   },
   "ui": {
-    "design_tokens": "ui/DESIGN.md",
+    "design_tokens": "DESIGN.md",
+    "home": "automations",
     "elements": [
       {
         "id": "automations",
         "kind": "panel",
         "tag": "tr-automations",
-        "module": "ui/card.js",
+        "module": "ui/home.js",
         "description": "Live automation inventory with per-source node coverage",
         "events": [],
         "tokens": [
@@ -97,29 +104,6 @@
           "radius-md"
         ],
         "optional_tokens": []
-      },
-      {
-        "id": "card",
-        "kind": "card",
-        "tag": "tr-automations-card",
-        "module": "ui/card.js",
-        "description": "Automations workspace"
-      }
-    ]
-  },
-  "card_face": {
-    "skin": "standard",
-    "theme": "precision-chronometer",
-    "headline": "Automation sources, triggers and outcomes",
-    "primary_color": "#f2bd63",
-    "secondary_color": "#24221c",
-    "accent_color": "#f2bd63",
-    "touch_layout": "comfortable",
-    "interactive": true,
-    "quick_actions": [
-      {
-        "subcommand": "list",
-        "label": "Inspect automations"
       }
     ]
   },

@@ -299,9 +299,12 @@ function finishRefresh(project, { before, result, git, key, mode, startedAt, via
   const completedAt = new Date(clock()).toISOString();
   const stdout = redact(result.stdout, key), stderr = redact(result.stderr, key);
   const error = redact(result.error?.message, key);
-  const lines = `${stderr}\n${stdout}`.replace(/\x1b\[[0-9;]*m/g, '').split('\n').map(line => line.trim()).filter(Boolean);
-  const diagnostic = lines.find(line => /context_length_exceeded|Provider returned error|exited without|Could not restore|interrupted OpenWiki|fetch failed/.test(line));
-  const reason = error || (result.signal ? `terminated by ${result.signal}` : diagnostic || lines.filter(line => !/^(\[ERR\]\s*)?Error Diagnostics$/.test(line)).at(-1) || `exit ${exitCode}`);
+  const clean = text => String(text || '').replace(/\x1b\[[0-9;]*m/g, '').split(/\r?\n/)
+    .map(line => line.trim().replace(/^\[ERR\]\s*/, '')).filter(line => line && line !== 'Error Diagnostics');
+  const errLines = clean(stderr), outLines = clean(stdout);
+  const diagnostic = [...errLines, ...outLines].find(line => /context_length_exceeded|Provider returned error|exited without|Could not restore|interrupted OpenWiki|fetch failed/.test(line));
+  // The generator's own first error line names the cause; a trailing "Status: 400" does not.
+  const reason = error || (result.signal ? `generator stopped by ${result.signal}` : diagnostic || errLines[0] || outLines.at(-1) || `exit ${exitCode}`);
   const wrote = pagesWritten(before, after) || (!before.files && hasWiki(project.root) ? 1 : 0);
   const advanced = after.generatedAt !== before.generatedAt;
   let action, failureReason;

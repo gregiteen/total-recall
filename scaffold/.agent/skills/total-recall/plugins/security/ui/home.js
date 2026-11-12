@@ -46,13 +46,13 @@ const MARKUP = [
   '<div class="workbench"><section aria-label="Start an assessment">',
   '<h3>Assess a target</h3><p>Use the machine, network and mesh controls for targets you administer.</p>',
   '<div class="buttons"><button type="button" data-action="machine">This machine</button><button type="button" data-action="network">Network posture</button><button type="button" data-action="fleet">Mesh fleet</button></div>',
-  '<details><summary>Mesh target</summary><form id="mesh-form"><label>Discovered machine<input id="target" maxlength="128" required></label><button>Inspect target</button></form></details>',
-  '<details><summary>Source and plugin review</summary><div class="buttons"><button type="button" data-action="plugins">Installed plugins</button><button type="button" data-action="audit">Baseline audit</button></div><form id="scan-form"><label>Source directory<input id="source" maxlength="512" required></label><button>Review source</button></form></details>',
-  '<details><summary>Website headers</summary><p>Check a single HTTPS URL you are authorized to test.</p><form id="web-form"><label>HTTPS URL<input id="website" type="url" maxlength="512" required placeholder="https://example.org"></label><button>Check response</button></form></details>',
+  '<details><summary>Mesh target</summary><form id="mesh-form"><label>Discovered machine<input id="target" maxlength="128" required></label><button type="button">Inspect target</button></form></details>',
+  '<details><summary>Source and plugin review</summary><div class="buttons"><button type="button" data-action="plugins">Installed plugins</button><button type="button" data-action="audit">Baseline audit</button></div><form id="scan-form"><label>Source directory<input id="source" maxlength="512" required></label><button type="button">Review source</button></form></details>',
+  '<details><summary>Website headers</summary><p>Check a single HTTPS URL you are authorized to test.</p><form id="web-form"><label>HTTPS URL<input id="website" type="url" maxlength="512" required placeholder="https://example.org"></label><button type="button">Check response</button></form></details>',
   '<details><summary>Device evidence</summary><p>Guided answers are your observations. Enter only a label and the outcome of each check.</p>',
-  '<form id="device-form"><label>Platform<select id="device-platform"><option value="ios">iPhone</option><option value="ipados">iPad</option><option value="android">Android</option><option value="chromeos">ChromeOS</option><option value="chromeos-flex">ChromeOS Flex</option><option value="windows">Windows</option></select></label><label>Device label<input id="device-label" maxlength="80" required></label><button>Load review</button></form>',
+  '<form id="device-form"><label>Platform<select id="device-platform"><option value="ios">iPhone</option><option value="ipados">iPad</option><option value="android">Android</option><option value="chromeos">ChromeOS</option><option value="chromeos-flex">ChromeOS Flex</option><option value="windows">Windows</option></select></label><label>Device label<input id="device-label" maxlength="80" required></label><button type="button">Load review</button></form>',
   '<section id="device-review" hidden><div id="device-checks"></div><button type="button" id="evaluate-device">Evaluate review</button></section>',
-  '<form id="android-form"><label>Already authorized Android serial<input id="android-serial" maxlength="128" required></label><button>Read Android properties</button></form></details>',
+  '<form id="android-form"><label>Already authorized Android serial<input id="android-serial" maxlength="128" required></label><button type="button">Read Android properties</button></form></details>',
   '<details><summary>SSH permission repair</summary><p>Preview the local plan. Repair changes recognized SSH file modes on this machine and rechecks them.</p><div class="buttons"><button type="button" data-action="harden">Preview plan</button></div>',
   '<label class="confirm"><input type="checkbox" id="repair-confirm"> Apply local SSH permission repair</label><div class="buttons"><button type="button" id="repair" disabled>Repair and verify</button></div></details>',
   '</section><article aria-label="Assessment report"><h3>Observed evidence</h3><p id="report-state" role="status">No assessment requested</p><dl id="facts" hidden></dl><ul id="checks"></ul></article></div>',
@@ -92,16 +92,23 @@ export class SecurityHome extends HTMLElement {
       button.addEventListener('click', () => void this.assess(button.dataset.action));
     });
     const field = id => root.getElementById(id);
-    const submit = (id, callback) => field(id).addEventListener('submit', event => {
-      event.preventDefault();
-      callback();
-    });
+    // Dashboard panels run in a sandbox without form submission.
+    const bindAssessment = (id, callback) => {
+      const form = field(id);
+      const run = () => { if (form.reportValidity()) callback(); };
+      form.querySelector('button').addEventListener('click', run);
+      form.addEventListener('keydown', event => {
+        if (event.key !== 'Enter' || event.isComposing || !event.target.matches('input')) return;
+        event.preventDefault();
+        run();
+      });
+    };
     const identity = () => ['--platform', field('device-platform').value, '--device', field('device-label').value.trim()];
-    submit('mesh-form', () => void this.assess('fleet', ['--target', field('target').value.trim()]));
-    submit('scan-form', () => void this.assess('scan', [field('source').value.trim()]));
-    submit('android-form', () => void this.assess('android', ['--serial', field('android-serial').value.trim()]));
-    submit('device-form', () => void this.assess('device', identity()));
-    submit('web-form', () => {
+    bindAssessment('mesh-form', () => void this.assess('fleet', ['--target', field('target').value.trim()]));
+    bindAssessment('scan-form', () => void this.assess('scan', [field('source').value.trim()]));
+    bindAssessment('android-form', () => void this.assess('android', ['--serial', field('android-serial').value.trim()]));
+    bindAssessment('device-form', () => void this.assess('device', identity()));
+    bindAssessment('web-form', () => {
       try {
         const url = new URL(field('website').value);
         if (url.protocol !== 'https:' || url.username || url.password || url.search || url.hash) throw new Error();

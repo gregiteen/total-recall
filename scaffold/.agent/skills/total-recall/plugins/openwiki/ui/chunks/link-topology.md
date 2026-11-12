@@ -8,11 +8,12 @@ timestamp: "2026-11-08T09:14:38Z"
 intents: [show wiki graph, trace page links, find unlinked documentation]
 surfaces: [page, right]
 operations: [graph]
-data: ["graph:/counts/nodes", "graph:/counts/edges", "graph:/counts/orphans"]
+data: ["graph:/counts/nodes", "graph:/counts/edges", "graph:/counts/orphans", "graph:/scope"]
+panel: panel
 ---
 
 <section style="border-block-start:1px solid var(--color-outline,#cbb497)">
   <h2>Trace documentation links</h2>
-  <p>Select <strong>Inspect links</strong> in the atlas to see the sources and destinations of resolved Markdown links and wikilinks.</p>
+  <p>Set the evidence scope and select <strong>Inspect links</strong> to see the sources and destinations of resolved Markdown links and wikilinks.</p>
   <p>Export topology through <code>total-recall openwiki graph --format mermaid</code> or <code>--format dot</code>.</p>
 </section>

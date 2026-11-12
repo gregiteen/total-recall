@@ -3,7 +3,7 @@ type: ui-chunk:chunk
 title: Remove a linked worktree
 description: Review a registered linked worktree, confirm its target, and read the removal result.
 timestamp: "2026-11-08T09:20:00Z"
-plugin: git-sentinel
+plugin: git
 id: remove-worktree
 intents: [remove linked git worktree, clean up isolated checkout, review worktree removal, dirty worktree refused]
 surfaces: [page]

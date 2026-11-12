@@ -1,23 +1,34 @@
-# Automations — Control ledger
+---
+version: alpha
+name: Automation Control Ledger
+description: A dark operations ledger that keeps scheduling, source coverage and observed runs visually separate.
+colors:
+  primary: "#f2bd63"
+  background: "#181713"
+  surface: "#24221c"
+  text: "#f4efe5"
+  muted: "#c5bca9"
+  border: "#726652"
+  success: "#a8d5b0"
+  error: "#ffb5a9"
+  focus: "#b8d9ff"
+typography:
+  body: { fontFamily: "system-ui, sans-serif", fontSize: 14px, lineHeight: 1.45 }
+  label: { fontFamily: "ui-monospace, monospace", fontSize: 12px, fontWeight: 700 }
+spacing: { sm: 8px, md: 16px, touch: 44px }
+rounded: { md: 8px }
+components:
+  ledger-note:
+    backgroundColor: "{colors.surface}"
+    textColor: "{colors.text}"
+    padding: "{spacing.md}"
+    rounded: "{rounded.md}"
+  ledger-label:
+    textColor: "{colors.primary}"
+    typography: "{typography.label}"
+---
 
-```yaml
-tokens:
-  brand-name: "Automations"
-  wordmark: "AUTOMATIONS"
-  color-primary: "#f2bd63"
-  color-background: "#181713"
-  color-surface: "#24221c"
-  color-text: "#f4efe5"
-  color-muted: "#c5bca9"
-  color-border: "#726652"
-  color-success: "#a8d5b0"
-  color-error: "#ffb5a9"
-  color-focus: "#b8d9ff"
-  font-family: "system-ui, sans-serif"
-  font-mono: "ui-monospace, monospace"
-  border-radius: "12px"
-  spacing-unit: "8px"
-```
+# Automations Control Ledger
 
 ## Purpose and first-principles decision
 Greg checks which work is automated, where its source is available, and whether an observed run failed. He needs automation origins and coverage before interpreting counts. Replace the old chronometer card, fixed schedule chips and terminal output: they obscure these tasks and invent healthy state. Retain external element names and host.run because these are useful host contracts.
@@ -30,7 +41,7 @@ The first visible line states whether inventory is unchecked, loading, complete,
 The selected record shows trigger, enabled state, runner availability, source, placement and origin independently. Unknown values include a reason. Failed reads clear current inventory. Unsupported sources and unavailable nodes remain visible. Counts derive only from returned records and cannot imply coverage completeness.
 
 ## Interaction and safety
-Read through host.run('list', []) inside the sandbox. The full panel may use the authenticated generic plugin route when no host channel is available. Reject failed wrappers and malformed inventory; do not create successful fallback output. A latest-request counter prevents stale refreshes overwriting newer results. Disconnect invalidates pending work; reconnect reuses its shadow root and selected tab.
+Read through the authenticated host bridge inside the sandbox. Load this node first and switch to mesh inventory through an explicit scope control. Reject failed wrappers and malformed inventory. A latest-request counter prevents stale refreshes overwriting newer results. Disconnect invalidates pending work; reconnect reuses its shadow root and selected tab.
 
 Every control is at least 44px, with visible focus. Tabs support arrow/Home/End navigation and maintain selected-screen state. Filters have labels; loading/errors use a live region. Layout becomes one column under 600px; text wraps safely. State change motion is a short content reveal; reduced motion removes it. Copy feedback follows actual clipboard completion. Source-advertised write controls state their target and require confirmation; arbitrary commands and credential inputs are absent.
 

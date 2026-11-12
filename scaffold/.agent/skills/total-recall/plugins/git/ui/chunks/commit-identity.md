@@ -3,7 +3,7 @@ type: ui-chunk:chunk
 title: Commit identity audit
 description: Check whether a commit identity is configured and count machine addresses recorded in local history.
 timestamp: "2026-11-08T09:20:00Z"
-plugin: git-sentinel
+plugin: git
 id: commit-identity
 intents: [check git author identity, verify commit email, audit machine addresses, git author history]
 surfaces: [page]

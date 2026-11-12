@@ -21,7 +21,7 @@ function commandError(error) {
   return error?.message || 'The owner command failed.';
 }
 
-class GitSentinelHome extends HTMLElement {
+class GitHome extends HTMLElement {
   connectedCallback() {
     if (this.shadowRoot) return;
     const root = this.attachShadow({ mode: 'open' });
@@ -270,4 +270,4 @@ class GitSentinelHome extends HTMLElement {
   }
 }
 
-customElements.define('git-sentinel-home', GitSentinelHome);
+if (!customElements.get('tr-git-home')) customElements.define('tr-git-home', GitHome);

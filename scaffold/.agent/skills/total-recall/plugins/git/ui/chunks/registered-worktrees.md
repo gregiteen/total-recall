@@ -3,7 +3,7 @@ type: ui-chunk:chunk
 title: Registered Git worktrees
 description: List the repository's main and linked worktrees and inspect their checked-out revisions.
 timestamp: "2026-11-08T09:20:00Z"
-plugin: git-sentinel
+plugin: git
 id: registered-worktrees
 intents: [list git worktrees, inspect linked worktrees, find detached worktree, show active checkouts]
 surfaces: [page, right]

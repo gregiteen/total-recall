@@ -32,6 +32,7 @@ const TONE = {
 // The declared subcommands, as plugin.json names them.
 const OPERATIONS = [
   { name: 'report', effect: 'read', command: 'total-recall code-quality report --json', what: 'Read the latest gate report. Never starts a check.' },
+  { name: 'run', effect: 'write', command: 'total-recall code-quality run --tier fast', what: 'Run the configured gates and persist a new report.' },
   { name: 'snapshot', effect: 'write', command: 'total-recall code-quality snapshot --node <name>', what: 'Copy the exact source under test to the test node.' },
   { name: 'gate', effect: 'write', command: 'total-recall code-quality gate list|add|remove', what: "Edit this repository's gate list." },
   { name: 'config', effect: 'write', command: 'total-recall code-quality config get|set|validate|check', what: 'Read or change the repo-layer config.' },

@@ -30,7 +30,7 @@ template.innerHTML = `
     p { margin: 0.35rem 0; }
     .state, small { color: var(--color-muted, #6d5741); }
     [data-error] { color: var(--color-error, #9b2a20); }
-    input, button {
+    input, select, button {
       background: var(--color-surface, #fff9ee);
       border: 1px solid var(--color-outline, #cbb497);
       border-radius: var(--radius-control, 0.3rem);
@@ -83,6 +83,11 @@ template.innerHTML = `
         <input id="query" type="search" maxlength="220">
         <button type="button" id="search">Search</button>
       </div>
+      <label for="scope">Evidence scope</label>
+      <select id="scope">
+        <option value="workspace">Selected workspace</option>
+        <option value="all-vaults">All registered wikis</option>
+      </select>
       <p id="search-state" class="state" role="status">Search headings and passages in this workspace.</p>
       <ul id="results" class="results" aria-label="Evidence results"></ul>
     </section>
@@ -120,6 +125,13 @@ class OpenWikiPanel extends HTMLElement {
     this.#field('reload').addEventListener('click', () => void this.load());
     this.#field('graph').addEventListener('click', () => void this.#graph());
     this.#field('search').addEventListener('click', () => void this.#search());
+    this.#field('scope').addEventListener('change', () => {
+      this.#field('results').replaceChildren();
+      this.#field('links').replaceChildren();
+      const label = this.#scope() === 'all-vaults' ? 'registered wikis' : 'this workspace';
+      this.#state('search-state', `Search headings and passages in ${label}.`);
+      this.#state('graph-state', `Trace links between pages in ${label}.`);
+    });
     this.#field('query').addEventListener('keydown', event => {
       if (event.key !== 'Enter' || event.isComposing) return;
       event.preventDefault();
@@ -129,6 +141,10 @@ class OpenWikiPanel extends HTMLElement {
 
   #field(id) {
     return this.shadowRoot.getElementById(id);
+  }
+
+  #scope() {
+    return this.#field('scope').value === 'all-vaults' ? 'all-vaults' : 'workspace';
   }
 
   #state(id, text, error = false) {
@@ -200,24 +216,29 @@ class OpenWikiPanel extends HTMLElement {
       return;
     }
     button.disabled = true;
-    this.#state('search-state', 'Searching workspace evidence…');
+    const scope = this.#scope();
+    const label = scope === 'all-vaults' ? 'registered wikis' : 'this workspace';
+    this.#state('search-state', `Searching ${label}…`);
     const list = this.#field('results');
     list.replaceChildren();
     try {
-      const result = await this.host.run('search', [query, '--limit', '8']);
-      if (!result?.ok || result.scope !== 'workspace' || !Array.isArray(result.results) || !number(result.totalHits)) throw new Error('Invalid search results');
+      const result = await this.host.run('search', [query, '--limit', '8', ...(scope === 'all-vaults' ? ['--all-vaults'] : [])]);
+      if (scope !== this.#scope()) return;
+      if (!result?.ok || result.scope !== scope || !Array.isArray(result.results) || !number(result.totalHits)) throw new Error('Invalid search results');
       for (const match of result.results) {
         const item = element('li', '');
         const section = match.section ? ` · ${match.section}` : '';
-        const reference = `${match.fileName}:${match.line}${section}`;
+        const repository = scope === 'all-vaults' && match.repoName ? `${match.repoName} · ` : '';
+        const reference = `${repository}${match.fileName}:${match.line}${section}`;
         item.append(element('strong', match.title), element('p', match.snippet), element('small', reference));
         list.append(item);
       }
       const total = result.totalHits;
       const noun = total === 1 ? 'passage' : 'passages';
       const clipped = total > result.results.length ? ` Showing ${result.results.length}.` : '';
-      this.#state('search-state', total === 0 ? 'No matching passages in this workspace.' : `${total} matching ${noun}.${clipped}`);
+      this.#state('search-state', total === 0 ? `No matching passages in ${label}.` : `${total} matching ${noun} in ${label}.${clipped}`);
     } catch {
+      if (scope !== this.#scope()) return;
       list.replaceChildren();
       this.#state('search-state', 'Evidence search unavailable. Try again.', true);
     } finally {
@@ -229,12 +250,15 @@ class OpenWikiPanel extends HTMLElement {
     const button = this.#field('graph');
     if (button.disabled) return;
     button.disabled = true;
+    const scope = this.#scope();
+    const label = scope === 'all-vaults' ? 'registered wikis' : 'this workspace';
     this.#state('graph-state', 'Tracing links between wiki pages…');
     const list = this.#field('links');
     list.replaceChildren();
     try {
-      const result = await this.host.run('graph', ['--format', 'json']);
-      if (!result?.ok || result.scope !== 'workspace' || !Array.isArray(result.nodes) || !Array.isArray(result.edges) ||
+      const result = await this.host.run('graph', ['--format', 'json', ...(scope === 'all-vaults' ? ['--all-vaults'] : [])]);
+      if (scope !== this.#scope()) return;
+      if (!result?.ok || result.scope !== scope || !Array.isArray(result.nodes) || !Array.isArray(result.edges) ||
           !number(result.counts?.nodes) || !number(result.counts.edges) || !number(result.counts.orphans)) throw new Error('Invalid wiki topology');
       const labels = new Map(result.nodes.map(node => [node.id, node.label]));
       const edges = result.edges.slice(0, 12);
@@ -248,9 +272,10 @@ class OpenWikiPanel extends HTMLElement {
       const shown = total > edges.length ? ` Showing ${edges.length}.` : '';
       const pages = nodes === 1 ? '1 page' : `${nodes} pages`;
       const links = total === 1 ? '1 link' : `${total} links`;
-      this.#state('graph-state', nodes === 0 ? 'No pages to map in this workspace.' :
-        `${pages}, ${links}, ${orphans} unlinked.${shown}`);
+      this.#state('graph-state', nodes === 0 ? `No pages to map in ${label}.` :
+        `${pages}, ${links}, ${orphans} unlinked in ${label}.${shown}`);
     } catch {
+      if (scope !== this.#scope()) return;
       list.replaceChildren();
       this.#state('graph-state', 'Link topology unavailable. Try again.', true);
     } finally {
