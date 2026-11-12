@@ -1,10 +1,17 @@
-import { expect, it } from 'vitest';
+import { expect, it, vi, afterEach } from 'vitest';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { chooseUiChunk, chooseUiComposition } from '../../core/ui-chunk-choice.mjs';
 import { addWorkspaceUiChunk, compilePluginDesign, getUiChunk, readPluginDesign, searchUiChunks } from '../../core/ui-chunks.mjs';
-import { getPluginById, projectPluginsDir } from '../../core/plugin-loader.mjs';
+import { getPluginById, globalPluginsDir, projectPluginsDir } from '../../core/plugin-loader.mjs';
+
+// Plugins install only in the shared folder (main 3.45); each test gets its own.
+function isolatedSharedFolder(root) {
+  vi.stubEnv('AGENT_DIR', path.join(root, 'agent'));
+  return globalPluginsDir();
+}
+afterEach(() => vi.unstubAllEnvs());
 import { patchPluginRecord } from '../../core/plugin-store.mjs';
 import { publishWorkspaceComposition, readWorkspaceComposition } from '../../core/workspace-compositions.mjs';
 
@@ -16,7 +23,7 @@ const candidates = [
 it('recompiles tokens and component rules after an owner saves DESIGN.md', () => {
   const projectRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'plugin-design-'));
   const plugin = 'test-live-design';
-  const directory = path.join(projectPluginsDir(projectRoot), plugin);
+  const directory = path.join(isolatedSharedFolder(projectRoot), plugin);
   try {
     fs.mkdirSync(directory, { recursive: true });
     fs.writeFileSync(path.join(directory, 'plugin.json'), JSON.stringify({
@@ -48,9 +55,8 @@ it('rejects unsafe legacy and composite values before they enter a style element
 it('validates agent additions and removes disabled owners from the workspace pool', async () => {
   const projectRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'workspace-blocks-'));
   const plugin = 'workspace-pool-owner';
-  const plugins = projectPluginsDir(projectRoot);
-  const brainDir = path.dirname(plugins);
-  const directory = path.join(plugins, plugin);
+  const brainDir = path.dirname(projectPluginsDir(projectRoot));
+  const directory = path.join(isolatedSharedFolder(projectRoot), plugin);
   const id = 'owner-workflow';
   const markdown = `---
 type: ui-chunk:chunk
@@ -102,17 +108,16 @@ it('keeps workspace-authored blocks and publication versions inside the selected
   const plugin = 'scoped-home';
   const id = 'overview';
   const key = plugin + ':' + id;
+  const directory = path.join(isolatedSharedFolder(root), plugin);
+  fs.mkdirSync(directory, { recursive: true });
+  fs.writeFileSync(path.join(directory, 'plugin.json'), JSON.stringify({
+    id: plugin, name: 'Scoped Home', version: '1.0.0', description: 'Scoped fixture.',
+    cli: { command: plugin, handler: 'cli.mjs', subcommands: [{ name: 'status', effect: 'read' }] },
+    ui: { home: 'home', design_tokens: 'DESIGN.md', elements: [{ id: 'home', kind: 'panel', tag: 'scoped-home-panel', module: 'ui.js' }] },
+  }));
   const projects = ['a', 'b'].map(name => {
     const projectRoot = path.join(root, name);
-    const plugins = projectPluginsDir(projectRoot);
-    const directory = path.join(plugins, plugin);
-    fs.mkdirSync(directory, { recursive: true });
-    fs.writeFileSync(path.join(directory, 'plugin.json'), JSON.stringify({
-      id: plugin, name: 'Scoped Home', version: '1.0.0', description: 'Scoped fixture.',
-      cli: { command: plugin, handler: 'cli.mjs', subcommands: [{ name: 'status', effect: 'read' }] },
-      ui: { home: 'home', design_tokens: 'DESIGN.md', elements: [{ id: 'home', kind: 'panel', tag: 'scoped-home-panel', module: 'ui.js' }] },
-    }));
-    return { projectRoot, brainDir: path.dirname(plugins) };
+    return { projectRoot, brainDir: path.dirname(projectPluginsDir(projectRoot)) };
   });
   const [a, b] = projects;
   try {

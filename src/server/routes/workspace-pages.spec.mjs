@@ -6,7 +6,7 @@ import os from 'node:os';
 import path from 'node:path';
 import request from 'supertest';
 import { ensureProjectId } from '../../core/project-id.mjs';
-import { getPluginById, projectPluginsDir } from '../../core/plugin-loader.mjs';
+import { getPluginById, globalPluginsDir, projectPluginsDir } from '../../core/plugin-loader.mjs';
 import { patchPluginRecord } from '../../core/plugin-store.mjs';
 import { addWorkspaceUiChunk } from '../../core/ui-chunks.mjs';
 import { publishWorkspaceComposition, readWorkspaceComposition } from '../../core/workspace-compositions.mjs';
@@ -36,7 +36,8 @@ const pageId = 'plugin-verification';
 let fixture, projectRoot, brainDir, brainId, initial;
 
 async function installBlock(plugin, id = 'overview') {
-  const directory = path.join(projectPluginsDir(projectRoot), plugin);
+  // Plugins install only in the shared folder; AGENT_DIR isolates it per test.
+  const directory = path.join(globalPluginsDir(), plugin);
   fs.mkdirSync(directory, { recursive: true });
   fs.writeFileSync(path.join(directory, 'plugin.json'), JSON.stringify({
     id: plugin,

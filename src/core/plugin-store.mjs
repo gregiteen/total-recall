@@ -362,7 +362,8 @@ export async function recompileAfterPluginMutation(projectRoot = process.cwd(), 
     // read on demand at preflight, so a shared plugin change compiles no other repository
     // (ON-DEMAND-CONTEXT-01; one install used to rebuild all registered brains).
     await compileLayer(compileSurface, projectRoot, isGlobal);
-    if (isGlobal) {
+    // A shared change made from the dashboard's global brain has no repository to refresh.
+    if (isGlobal && projectRoot) {
       // The repository the command ran in refreshes its own catalog now, so its plugin library
       // never lags the change. That compile is cheap: entry files and vault indexes keep their
       // own triggers, so only the catalog and CLI index move.

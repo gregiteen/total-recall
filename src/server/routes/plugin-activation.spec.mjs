@@ -108,18 +108,15 @@ describe('registered brain plugin activation', () => {
     expect(shared.body.plugins.some(p => p.id === 'career-only')).toBe(false);
   });
 
-  it('reports availability and results separately when a plugin is installed in one selected project', async () => {
+  // Plugins install only in the shared folder; a copy left in a repository folder is never read.
+  it('never lists or switches a plugin left in a repository folder', async () => {
     const listed = await request(app).get('/api/plugins').query({ brain: 'project:career,project:music' });
-    const plugin = listed.body.plugins.find(p => p.id === 'career-only');
-    expect(plugin.activationByBrain.map(item => item.state)).toEqual(['active', 'unavailable']);
-    expect(plugin.servingAvailable).toBe(false);
+    expect(listed.status, JSON.stringify(listed.body)).toBe(200);
+    expect(listed.body.plugins.some(p => p.id === 'career-only')).toBe(false);
     const changed = await request(app).put('/api/plugins/career-only/activation')
       .send({ enabled: false, brainIds: ['project:career', 'project:music'] });
-    expect(changed.status).toBe(200);
-    expect(changed.body.success).toBe(false);
-    expect(changed.body.results.map(({ brainId, success }) => [brainId, success])).toEqual([
-      ['project:career', true], ['project:music', false],
-    ]);
+    expect(changed.body.success).not.toBe(true);
+    expect(readProjectActivationRecord('career-only', career.path)).toBeNull();
   });
 
   it('arms a project only, preserves dormancy on inventory reads, and requires a deliberate open', async () => {
