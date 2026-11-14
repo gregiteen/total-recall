@@ -809,3 +809,56 @@ describe('preflight coverage', () => {
     expect(JSON.parse(covered().stdout).plugins.map((row) => row.plugin)).not.toContain('broken');
   });
 });
+
+describe('a route selection binds writes from other harnesses (real process)', () => {
+  let home;
+  let repo;
+  let tmp;
+  const pluginDir = () => path.join(home, '.agent', 'skills', 'total-recall', 'plugins', 'fx');
+  const env = (extra = {}) => ({ ...process.env, HOME: home, AGENT_DIR: path.join(home, '.agent'), _TR_TEST_AGENT_DIR: '', TR_PREFLIGHT_MAX_AGE_MIN: '', TMPDIR: tmp, TR_META_HARNESS_RUN: '', ...extra });
+  const route = (pick) => spawnSync(process.execPath, [BIN, 'fx', 'route', 'x', '--json'], { cwd: repo, encoding: 'utf8', env: env({ FX_PICK: pick }) });
+  const gate = (call, harness, extra) => {
+    const r = spawnSync(process.execPath, [BIN, 'preflight', 'gate', '--harness', harness], { cwd: repo, input: JSON.stringify({ cwd: repo, ...call }), encoding: 'utf8', env: env(extra) });
+    return { code: r.status, out: r.stdout, err: r.stderr };
+  };
+  const EDIT = { tool_name: 'Edit', tool_input: { file_path: 'a.txt' } };
+
+  beforeAll(() => {
+    home = fs.mkdtempSync(path.join(os.tmpdir(), 'tr-pf-sel-home-'));
+    tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'tr-pf-sel-tmp-'));
+    repo = fs.mkdtempSync(path.join(os.tmpdir(), 'tr-pf-sel-repo-'));
+    for (const rel of SKILLS) { const f = path.join(repo, rel); fs.mkdirSync(path.dirname(f), { recursive: true }); fs.writeFileSync(f, rel); }
+    repo = findRoot(repo);
+    acknowledge({ root: repo, task: 'spec', home, run: (a) => (a[0] === 'context' ? { ok: true, out: 'ready:true tokens:1 version:aa', err: '', code: 0 } : { ok: true, out: '', err: '', code: 0 }) });
+    fs.mkdirSync(path.join(pluginDir(), 'ui'), { recursive: true });
+    fs.writeFileSync(path.join(pluginDir(), 'plugin.json'), JSON.stringify({
+      id: 'fx', name: 'Fixture', version: '1.0.0', description: 'A plugin that routes.',
+      cli: { command: 'fx', handler: './cli.mjs', answers_help: true, subcommands: [{ name: 'route', description: 'Route.' }] },
+      ui: { home: 'home', design_tokens: 'DESIGN.md', elements: [{ id: 'home', kind: 'panel', tag: 'fx-home', module: 'ui/home.js' }] },
+      gate: { router: { pattern: 'fx\\s+route', use: 'total-recall fx route "<task>"' } },
+    }));
+    fs.writeFileSync(path.join(pluginDir(), 'cli.mjs'), 'export async function run() { console.log(JSON.stringify({ ok: true, selected: process.env.FX_PICK || null })); }\n');
+    fs.writeFileSync(path.join(pluginDir(), 'ui', 'home.js'), '');
+  });
+  afterAll(() => { for (const d of [home, repo, tmp]) fs.rmSync(d, { recursive: true, force: true }); });
+
+  it('allows any harness to write before a route has selected one', () => {
+    expect(gate(EDIT, 'claude').code).toBe(0);
+  });
+  it('denies the harness the route did not select, and allows the selected one and the router\'s own runs', () => {
+    expect(route('codex').status).toBe(0);
+    const denied = gate(EDIT, 'claude');
+    expect(denied.code).not.toBe(0);
+    expect(`${denied.out}${denied.err}`).toContain('selected codex');
+    expect(gate(EDIT, 'codex').code).toBe(0);
+    expect(gate(EDIT, 'claude', { TR_META_HARNESS_RUN: '1' }).code).toBe(0);
+    expect(gate({ tool_name: 'Read', tool_input: { file_path: 'a.txt' } }, 'claude').code).toBe(0);
+  });
+  it('lets the next route replace the selection, and a route that chose none clear it', () => {
+    expect(route('claude').status).toBe(0);
+    expect(gate(EDIT, 'claude').code).toBe(0);
+    expect(gate(EDIT, 'codex').code).not.toBe(0);
+    route('');
+    expect(gate(EDIT, 'codex').code).toBe(0);
+  });
+});

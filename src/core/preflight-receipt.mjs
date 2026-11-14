@@ -339,6 +339,17 @@ export function lastRouteWarnedMs(root, { home = os.homedir(), session = null } 
   return readStamp(routeWarnedPath(root, home, session));
 }
 
+const selectionPath = (root, home) => path.join(stateDir(home), scoped('route-selected', root));
+
+/** The harness the router chose for work in this repository, or null when it chose none. */
+export function markRouteSelection(root, harness, { home = os.homedir(), now = Date.now() } = {}) {
+  writeBookkeeping(selectionPath(root, home), (target) => fs.writeFileSync(target, JSON.stringify({ at: now, harness: harness || null, root }), { mode: 0o600 }));
+}
+
+export function lastRouteSelection(root, { home = os.homedir() } = {}) {
+  return newestRecord(selectionPath(root, home));
+}
+
 const sessionAckPath = (session, home) => path.join(stateDir(home), `session-ack-${sessionKey(session)}.stamp`);
 const delegatedPath = (root, home) => path.join(stateDir(home), scoped('delegated', root));
 

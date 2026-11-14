@@ -166,6 +166,11 @@ async function main() {
             const { runPluginCommand } = await import('../src/core/plugin-runner.mjs');
             const pluginArgs = args.slice(1);
             const result = await runPluginCommand(p, { args: pluginArgs, stdin: 'inherit', projectRoot, activateOnUse: true });
+            // A router's choice binds the gate: other harnesses may not write until it is replaced.
+            if (p.manifest.gate?.router) {
+              const { noteRouteSelection } = await import('../src/cli/preflight.mjs');
+              noteRouteSelection({ manifest: p.manifest, args: pluginArgs, stdout: result.stdout ?? result.output });
+            }
             if (result.stdout !== undefined) {
               if(result.stdout)process.stdout.write(result.stdout);
               if(result.stderr)process.stderr.write(result.stderr);

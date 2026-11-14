@@ -332,6 +332,44 @@ describe('decide: every task goes through the declared router', () => {
   });
 });
 
+describe('decide: once the router selects a harness, only that harness writes', () => {
+  const router = { plugin: 'meta-harness', pattern: 'meta-harness\\s+route', use: 'total-recall meta-harness route "<task>" --json' };
+  const chose = (harness) => fresh({ router: () => router, routed: () => true, mode: () => 'warn', selection: () => ({ harness, at: Date.now() }) });
+
+  it('denies a write from a harness the router did not select, whatever the mode', () => {
+    for (const mode of ['off', 'warn', 'enforce']) {
+      const answer = decide({ tool: 'write', path: 'a' }, { ...chose('codex'), mode: () => mode, harness: 'claude' });
+      expect(answer, mode).toMatchObject({ decision: 'deny', rule: 'route:selected', fix: router.use });
+      expect(answer.reason).toContain('selected codex');
+      expect(answer.reason).toContain('claude may not write');
+    }
+  });
+  it('lets the selected harness write', () => {
+    expect(decide({ tool: 'write', path: 'a' }, { ...chose('codex'), harness: 'codex' })).toMatchObject({ decision: 'allow' });
+  });
+  it('lets a run the router started write, whichever harness it runs in', () => {
+    expect(decide({ tool: 'write', path: 'a' }, { ...chose('codex'), harness: 'claude', routerRun: true, dispatched: true }).decision).toBe('allow');
+  });
+  it('blocks only writes: reading, searching, shell and subagents stay as before', () => {
+    for (const call of [{ tool: 'read', path: 'a' }, { tool: 'search' }, { tool: 'shell', command: 'npm test' }, { tool: 'agent' }]) {
+      expect(decide(call, { ...chose('codex'), harness: 'claude' }).decision, call.tool).toBe('allow');
+    }
+  });
+  it('applies nothing before a selection, after a route that chose none, or for a call with no named harness', () => {
+    expect(decide({ tool: 'write', path: 'a' }, { ...chose('codex'), selection: () => null, harness: 'claude' }).decision).toBe('allow');
+    expect(decide({ tool: 'write', path: 'a' }, { ...chose(null), harness: 'claude' }).decision).toBe('allow');
+    expect(decide({ tool: 'write', path: 'a' }, { ...chose('codex'), harness: null }).decision).toBe('allow');
+  });
+  it('still asks for the receipt first', () => {
+    expect(decide({ tool: 'write', path: 'a' }, { ...noReceipt, router: () => router, selection: () => ({ harness: 'codex', at: Date.now() }), harness: 'claude' }).rule).toBe('receipt');
+  });
+  it('passes the receipt to the selection, so its age can be judged against the receipt window', () => {
+    let seen;
+    decide({ tool: 'write', path: 'a' }, { check: () => ({ ok: true, problems: [], limitMs: 1234 }), harness: 'claude', selection: (receipt) => { seen = receipt; return null; } });
+    expect(seen.limitMs).toBe(1234);
+  });
+});
+
 describe('decide: modes for the rules that steer work toward a plugin', () => {
   const owned = [{ plugin: 'git-sentinel', pattern: 'git\\s+status\\b', use: 'total-recall git-sentinel audit' }];
   const router = { plugin: 'meta-harness', pattern: 'meta-harness\\s+route', use: 'total-recall meta-harness route "<task>" --json' };

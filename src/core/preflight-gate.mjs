@@ -29,6 +29,10 @@
  *      (`gate.router`). Reading, searching and native subagents stay open, as does any
  *      plain Total Recall command, so routing can always run. A process the router
  *      started has already been routed. It warns once per receipt, not on every call.
+ *   8. With a receipt, once the router has selected a harness for this repository, a write from
+ *      any other harness is denied, whatever the mode. Only a run the router started may write
+ *      for it. A selection lasts as long as a receipt, and routing again replaces it. A call with
+ *      no named harness is not judged by this rule, because it cannot be told apart.
  * Rules 6 and 7 follow a mode (see gate-mode.mjs): `off`, `warn` (the default) or `enforce`.
  * `enforce` blocks only while the owner passes its health check, so a broken plugin can
  * never trap an agent. Warnings are statements of fact, because harnesses treat
@@ -291,7 +295,7 @@ export function whenGateFails(call, err) {
 
 /**
  * @param {{ tool: string, command?: string, path?: string, cwd?: string }} call
- * @param {{ check: () => { ok: boolean, problems: string[], ageMs?: number|null, limitMs?: number }, recentConsult?: () => boolean, readablePaths?: RegExp[], ownedCommands?: () => { plugin: string, pattern: string, use: string }[], router?: () => ({ plugin: string, pattern: string, use: string } | null), routed?: (receipt: object) => boolean, routeWarned?: (receipt: object) => boolean, sessionAcknowledged?: (receipt: object) => boolean, sessionLapsed?: () => boolean, arrival?: () => (string | null), dispatched?: boolean, mode?: (kind: 'router'|'owned', plugin: string) => string, ownerHealthy?: (plugin: string, use: string) => boolean }} deps
+ * @param {{ check: () => { ok: boolean, problems: string[], ageMs?: number|null, limitMs?: number }, recentConsult?: () => boolean, readablePaths?: RegExp[], ownedCommands?: () => { plugin: string, pattern: string, use: string }[], router?: () => ({ plugin: string, pattern: string, use: string } | null), routed?: (receipt: object) => boolean, routeWarned?: (receipt: object) => boolean, sessionAcknowledged?: (receipt: object) => boolean, sessionLapsed?: () => boolean, arrival?: () => (string | null), dispatched?: boolean, harness?: string|null, routerRun?: boolean, selection?: (receipt: object) => ({ harness: string|null, at: number } | null), mode?: (kind: 'router'|'owned', plugin: string) => string, ownerHealthy?: (plugin: string, use: string) => boolean }} deps
  */
 export function decide(call, deps) {
   try {
@@ -325,10 +329,18 @@ export function decide(call, deps) {
       return deny('sweep', 'TR-PREFLIGHT gate: do not sweep or search the repository before consulting Total Recall / OpenWiki. Run `total-recall openwiki hubs --json`, `total-recall recall "<topic>" --local`, or `total-recall help "<task>"` first.',
         'total-recall help "<task>"');
     }
+    const router = deps.router ? deps.router() : null;
+    if (tool === 'write' && deps.harness && !deps.routerRun) {
+      const chosen = deps.selection ? deps.selection(receipt) : null;
+      if (chosen?.harness && chosen.harness !== deps.harness) {
+        const by = router?.plugin || 'the router';
+        return deny('route:selected', `TR-PREFLIGHT gate: ${by} selected ${chosen.harness} for this task, so ${deps.harness} may not write here. Only a run ${by} started may write: hand the task over with its --execute form, or route it again.`,
+          router?.use || 'route the task again');
+      }
+    }
     const notes = [];
     const arrival = deps.arrival ? deps.arrival() : null;
     if (arrival) notes.push({ name: 'arrival', warning: arrival });
-    const router = deps.router ? deps.router() : null;
     if (router && !deps.dispatched) {
       const open = ['read', 'search', 'web', 'agent'].includes(tool) || (tool === 'shell' && isPlainTotalRecall(call.command));
       if (!open && !(deps.routed ? deps.routed(receipt.receipt) : false)) {

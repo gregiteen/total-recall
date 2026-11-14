@@ -7,7 +7,7 @@ import { globalBrainDirFor, isBrainEnabled } from '../core/brain-registry.mjs';
 import { GATE_MODES, gateConfigPath, projectBrainDir, readGateLayers, resolveGateMode, writeGateMode } from '../core/gate-mode.mjs';
 import { installHarnessHooks, loadGateAdapters } from '../core/harness-hooks.mjs';
 import { ackDirectory, capsuleVerb, decide, gatePackageBroken, isAckCommand, isCheckCommand, isRouteCommand, isSubagentPayload, nativeToolOf, sessionOf, SWEEP_CONSULT_MS, whenGateFails } from '../core/preflight-gate.mjs';
-import { ACK_COMMAND, acknowledge, checkAgentReceipt, checkAnyReceipt, findRoot, forgetCapsuleDeliveries, lastArrivalMs, lastCapsuleDelivery, lastConsultMs, lastRoutedMs, lastRouteWarnedMs, lastSessionAck, markArrival, markDelegated, markRouted, markRouteWarned, markSessionAck, noteCaller, recordDecision, sessionHasStanding, sessionKey, readDecisions, takeCaller } from '../core/preflight-receipt.mjs';
+import { ACK_COMMAND, acknowledge, checkAgentReceipt, checkAnyReceipt, findRoot, forgetCapsuleDeliveries, lastArrivalMs, lastCapsuleDelivery, lastConsultMs, lastRoutedMs, lastRouteSelection, lastRouteWarnedMs, lastSessionAck, markArrival, markDelegated, markRouted, markRouteSelection, markRouteWarned, markSessionAck, noteCaller, recordDecision, sessionHasStanding, sessionKey, readDecisions, takeCaller } from '../core/preflight-receipt.mjs';
 
 const USAGE = `Usage: total-recall preflight <command>
   ack --task "<task>" [--action read,edit,test] [--json]   Record a receipt after context ready:true and rules verify, and print the capsule.
@@ -397,6 +397,31 @@ function projectBrainRoot(dir) {
   return brain && isBrainEnabled(brain.brainDir) ? brain.projectRoot : null;
 }
 
+/** How long a route's selection binds when the receipt names no window: the default receipt lifetime. */
+const ROUTE_SELECTION_MS = 30 * 60000;
+
+/**
+ * Records which harness a router command selected, so the gate can deny writes from the others.
+ * Called after the router plugin's own command runs, with what it printed. Output that is not a
+ * route result records nothing. Bookkeeping only: it never throws.
+ * @returns {string|null|undefined} the selected harness, null when the route chose none, undefined when nothing was recorded
+ */
+export function noteRouteSelection({ manifest, args = [], stdout = '', cwd = process.cwd() } = {}) {
+  try {
+    const router = manifest?.gate?.router;
+    if (!router?.pattern) return undefined;
+    const command = `${manifest.cli?.command || manifest.id} ${args.map(String).join(' ')}`;
+    if (!new RegExp(`(?:^|\\s)(?:${router.pattern})(\\s|$)`).test(command)) return undefined;
+    const text = String(stdout || '').trim();
+    let result;
+    try { result = JSON.parse(text); } catch { result = JSON.parse(text.split('\n').pop()); }
+    if (!result || typeof result !== 'object' || !('selected' in result)) return undefined;
+    const selected = typeof result.selected === 'string' && result.selected ? result.selected : null;
+    markRouteSelection(findRoot(cwd), selected);
+    return selected;
+  } catch { return undefined; }
+}
+
 /** The gate's answer to a call. Nothing here may throw, because an answer is all that keeps its repair reachable. */
 function evaluate(call, options = {}) {
   try {
@@ -450,6 +475,13 @@ function judge(call, { harness, readablePaths, session = null, subagent = false,
     ownerHealthy: (plugin, use) => ownerRuns(plugin, use, root),
     // A subagent or a run the router started reports to whoever routed the work.
     dispatched: runByRouter || subagent || Boolean(session && !ownAck),
+    // Only a named harness can be told apart from the one the router chose.
+    harness: harness && harness !== 'generic' ? harness : null,
+    routerRun: runByRouter,
+    selection: (receipt) => {
+      const chosen = lastRouteSelection(root);
+      return chosen && Date.now() - chosen.at < (limit ?? receipt?.limitMs ?? ROUTE_SELECTION_MS) ? chosen : null;
+    },
     check,
     recentConsult: () => {
       const now = Date.now();
