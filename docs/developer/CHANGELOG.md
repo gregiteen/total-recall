@@ -1,3 +1,13 @@
+## 3.47.3 — 2026-11-14
+
+- Bundle Metaharness 0.4.3. When the router is about to choose Codex, it first asks Codex
+  for its remaining allowance, which uses no turn. In 3.47.2, a node skipped Codex only after
+  one of its own launches had been refused, so a node where nothing had tried Codex yet kept
+  choosing it. A quota answer is now recorded as the same wall a refused launch records, so
+  later routes skip Codex without asking until it resets.
+- Metaharness: an error reply from an older AI Models plugin (one without `validate`) no
+  longer counts as rejecting the requested model.
+
 ## 3.47.2 — 2026-11-14
 
 - Bundle Metaharness 0.4.2: routing no longer selects an included harness that is out of
