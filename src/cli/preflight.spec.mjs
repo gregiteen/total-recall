@@ -843,6 +843,7 @@ describe('a route selection binds writes from other harnesses (real process)', (
   afterAll(() => { for (const d of [home, repo, tmp]) fs.rmSync(d, { recursive: true, force: true }); });
 
   it('allows any harness to write before a route has selected one', () => {
+    expect(route('').status).toBe(0);
     expect(gate(EDIT, 'claude').code).toBe(0);
   });
   it('denies the harness the route did not select, and allows the selected one and the router\'s own runs', () => {

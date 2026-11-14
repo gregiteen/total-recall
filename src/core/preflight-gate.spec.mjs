@@ -334,7 +334,7 @@ describe('decide: every task goes through the declared router', () => {
 
 describe('decide: once the router selects a harness, only that harness writes', () => {
   const router = { plugin: 'meta-harness', pattern: 'meta-harness\\s+route', use: 'total-recall meta-harness route "<task>" --json' };
-  const chose = (harness) => fresh({ router: () => router, routed: () => true, mode: () => 'warn', selection: () => ({ harness, at: Date.now() }) });
+  const chose = (harness) => fresh({ router: () => router, routed: () => true, recentConsult: () => true, mode: () => 'warn', selection: () => ({ harness, at: Date.now() }) });
 
   it('denies a write from a harness the router did not select, whatever the mode', () => {
     for (const mode of ['off', 'warn', 'enforce']) {

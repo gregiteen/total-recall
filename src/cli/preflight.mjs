@@ -417,7 +417,9 @@ export function noteRouteSelection({ manifest, args = [], stdout = '', cwd = pro
     try { result = JSON.parse(text); } catch { result = JSON.parse(text.split('\n').pop()); }
     if (!result || typeof result !== 'object' || !('selected' in result)) return undefined;
     const selected = typeof result.selected === 'string' && result.selected ? result.selected : null;
-    markRouteSelection(findRoot(cwd), selected);
+    const root = findRoot(cwd);
+    markRouted(root);
+    markRouteSelection(root, selected);
     return selected;
   } catch { return undefined; }
 }
