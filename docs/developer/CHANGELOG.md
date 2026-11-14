@@ -1,3 +1,18 @@
+## 3.47.2 — 2026-11-14
+
+- Bundle Metaharness 0.4.2: routing no longer selects an included harness that is out of
+  quota. A launch refused for quota was recorded without its billing mode. The router, pool
+  and admission count only included-billing receipts, so they dropped that record, and an
+  out-of-quota Codex stayed "ready". Under the 3.47.1 write gate, that left only Codex
+  allowed to write, so every other harness was blocked. The refusal now records its billing
+  mode, and quota refusals recorded without one still count until their reset.
+- `update --automatic` delivers a release's bundled default plugins in the same pass. The
+  defaults used to be refreshed only by the code that was running, which is the release being
+  replaced, so they arrived an hour later on the next pass. When maintenance installs a newer
+  release, that release now refreshes them with its own code, through the new
+  `update --defaults [--json]`. The report has a `defaults` row, and a failed refresh counts
+  as this machine's own failure. This takes effect from the update after 3.47.2.
+
 ## 3.47.0 — 2026-11-14
 
 - Bundle OpenWiki 0.3.0. Wikis now refresh once a night (`20 1-5 * * *`) instead of every
