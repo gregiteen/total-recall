@@ -60,6 +60,13 @@ export async function recordRunReceipt(receipt = {}) {
   return entry;
 }
 
+/**
+ * Receipts that count under the included usage policy: included runs, plus quota refusals recorded before
+ * refusals carried a billingMode. Those legacy walls expire at their reset, so nothing stale lingers.
+ */
+export const includedBillingReceipts = (entries = []) =>
+  entries.filter(run => run.billingMode === 'included' || (!run.billingMode && run.failureKind === 'quota'));
+
 /** A harness is walled from its last quota failure until the reported reset, or until a later success proves it clear. */
 export function activeQuotaWalls(entries = [], now = Date.now(), unknownResetMs = 60 * 60 * 1000) {
   const latest = new Map();

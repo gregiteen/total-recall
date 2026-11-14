@@ -1,7 +1,7 @@
 /** The harnesses that can actually take work right now, and why the others cannot. */
 import { ADAPTER_CATALOG } from '../capability/index.mjs';
 import { inspectAgents, getActiveAdapters } from './worker.mjs';
-import { readReceipts, activeQuotaWalls, activeCredentialBlocks } from './learner.mjs';
+import { readReceipts, activeQuotaWalls, activeCredentialBlocks, includedBillingReceipts } from './learner.mjs';
 import { measuredWalls } from './telemetry.mjs';
 import { claudeProofCurrent, INCLUDED_AGENTS, readIncludedPolicy } from './included-usage.mjs';
 import os from 'node:os';
@@ -29,7 +29,7 @@ export async function resolvePool({ availableHarnesses, inspect = inspectAgents,
   if (!policy.enabled && Array.isArray(availableHarnesses) && availableHarnesses.length) return { ready: availableHarnesses.map(id => describe(id)), excluded: [], walls: {} };
   const claudePlan = policy.enabled ? policy.claudePlan?.organization : undefined;
   const [{ agents = [] }, entries] = await Promise.all([inspect({ env: process.env, claudePlan }), receipts()]);
-  const billingEntries = policy.enabled ? entries.filter(run => run.billingMode === 'included') : entries;
+  const billingEntries = policy.enabled ? includedBillingReceipts(entries) : entries;
   const walls = { ...activeQuotaWalls(billingEntries), ...(!policy.enabled ? measuredWalls() : {}) };
   const blocks = activeCredentialBlocks(billingEntries);
   const ready = [], excluded = [];

@@ -7,7 +7,7 @@ import { createInterface } from 'node:readline';
 import { pathToFileURL } from 'node:url';
 import { configDir } from './paths.mjs';
 import { agentEnvironment, CODEX_PLAN_ARGS, findBinary, OPENROUTER_AGENTS, readClaudeMaxOrganization } from './worker.mjs';
-import { activeQuotaWalls, readReceipts } from './learner.mjs';
+import { activeQuotaWalls, includedBillingReceipts, readReceipts } from './learner.mjs';
 
 export const INCLUDED_AGENTS = ['claude', 'codex'];
 const VERSION = 1;
@@ -235,7 +235,7 @@ export async function includedAdmission(agent, cwd, policy, { readKey = authKey,
   if (agent === 'claude' && !policy.claudePlan && !claudeProofCurrent(policy)) {
     return { ok: false, failureKind: 'billing-policy', error: 'Verify the native Claude Max login with Usage credits off, or bind a verified included grant.' };
   }
-  const wall = activeQuotaWalls((await receipts()).filter(run => run.billingMode === 'included'))[agent];
+  const wall = activeQuotaWalls(includedBillingReceipts(await receipts()))[agent];
   if (wall) return { ok: false, failureKind: 'quota', error: 'This harness is waiting for included usage.', resetsAt: wall.resetReported ? wall.until : null };
   if (agent === 'codex') return codex(cwd);
   if (policy.claudePlan) return { ok: true, claudePlan: policy.claudePlan.organization };

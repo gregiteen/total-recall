@@ -18,7 +18,7 @@ import { classifyTaskComplexity, selectOptimalHarness, computeEmpiricalScorecard
 import { inspectAgents } from './worker.mjs';
 import { inspectNode } from './executor.mjs';
 import { getModelCatalog, joinHarnessModels } from './model-catalog.mjs';
-import { readReceipts, activeQuotaWalls, activeCredentialBlocks } from './learner.mjs';
+import { readReceipts, activeQuotaWalls, activeCredentialBlocks, includedBillingReceipts } from './learner.mjs';
 import { resolvePool, exclusionReason, isLocalExecutionNode } from './pool.mjs';
 import { readCodexRateLimits, measuredWalls } from './telemetry.mjs';
 import { claudeProofCurrent, INCLUDED_AGENTS, readIncludedPolicy } from './included-usage.mjs';
@@ -169,7 +169,7 @@ export async function inspectQuotas(options = {}) {
   const inspected = remote ? await (options.inspectNodeFn || inspectNode)(options.node) :
     await (options.inspect || inspectAgents)({ env: process.env, cwd: options.cwd, claudePlan });
   const codexLimits = remote ? null : readCodexRateLimits();
-  const receipts = remote ? [] : (await readReceipts()).filter(run => !policy.enabled || run.billingMode === 'included');
+  const receipts = remote ? [] : (policy.enabled ? includedBillingReceipts : runs => runs)(await (options.receipts || readReceipts)());
   const walls = remote ? {} : { ...activeQuotaWalls(receipts), ...(!policy.enabled ? measuredWalls(codexLimits) : {}) };
   const metered = METERED_HARNESSES;
 
