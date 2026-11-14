@@ -486,3 +486,79 @@ describe('readContextBudget', () => {
   });
 });
 
+describe('compileSurface silent no-op surface write', () => {
+  it('fails loudly when a surface write silently leaves the file stale', async () => {
+    const { compileSurface } = await import('./surface.mjs');
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'tr-surface-noop-'));
+    const vaultDir = path.join(root, '.agent', 'skills', 'total-recall', 'memory-vault');
+    const skillsDir = path.join(root, '.agent', 'skills');
+    const derivedDir = path.join(root, '.agent', 'skills', 'total-recall', 'memory-derived');
+    const instructionsFile = path.join(root, 'INSTRUCTIONS.md');
+    fs.mkdirSync(path.join(skillsDir, 'total-recall', 'config'), { recursive: true });
+    fs.mkdirSync(vaultDir, { recursive: true });
+    fs.writeFileSync(path.join(skillsDir, 'total-recall', 'config', 'clients.json'), JSON.stringify({ clients: { claude: {} } }));
+    fs.writeFileSync(instructionsFile, 'STALE_BEFORE_COMPILE\n');
+    const origWriteFileSync = fs.writeFileSync.bind(fs);
+    const writeSpy = vi.spyOn(fs, 'writeFileSync').mockImplementation((target, data, ...rest) => {
+      if (String(target).includes('INSTRUCTIONS.md')) return undefined;
+      return origWriteFileSync(target, data, ...rest);
+    });
+    try {
+      await expect(
+        compileSurface({ vaultDir, skillsDir, derivedDir, instructionsFile, force: true, semantic: false }),
+      ).rejects.toThrow(/Instruction read-back verification failed|Cannot update instruction surface/);
+    } finally {
+      writeSpy.mockRestore();
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
+});
+
+describe('compileSurface both-layer harness readback (R13)', () => {
+  it('writes verifiable global and project instruction surfaces and client shims that harnesses read on disk', async () => {
+    const { compileSurface } = await import('./surface.mjs');
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'tr-surface-r13-'));
+    try {
+      const layers = [
+        { name: 'global', base: path.join(root, 'home'), slug: 'r13-global-invariant', body: 'Always verify global layer readback.' },
+        { name: 'project', base: path.join(root, 'repo'), slug: 'r13-project-invariant', body: 'Always verify project layer readback.' },
+      ];
+      for (const layer of layers) {
+        const skillsDir = path.join(layer.base, '.agent', 'skills');
+        const trDir = path.join(skillsDir, 'total-recall');
+        const vaultDir = path.join(trDir, 'memory-vault');
+        const derivedDir = path.join(trDir, 'memory-derived');
+        const instructionsFile = layer.name === 'global'
+          ? path.join(trDir, 'INSTRUCTIONS.md')
+          : path.join(layer.base, 'INSTRUCTIONS.md');
+        fs.mkdirSync(path.join(trDir, 'config'), { recursive: true });
+        fs.mkdirSync(path.join(vaultDir, 'invariants'), { recursive: true });
+        fs.mkdirSync(path.join(layer.base, '.agents', 'rules'), { recursive: true });
+        fs.writeFileSync(
+          path.join(trDir, 'config', 'clients.json'),
+          JSON.stringify({ clients: { 'claude-code': {}, antigravity: {} } }),
+        );
+        fs.writeFileSync(
+          path.join(vaultDir, 'invariants', `${layer.slug}.md`),
+          `---\nid: ${layer.slug}\ntype: rule\ncategory: invariants\ntitle: ${layer.slug}\nseverity: high\n---\n\n${layer.body}\n`,
+        );
+
+        await compileSurface({ vaultDir, skillsDir, derivedDir, instructionsFile, force: true, semantic: false });
+
+        const compiled = fs.readFileSync(instructionsFile, 'utf8');
+        expect(compiled).toContain('total-recall tr-preflight --ack');
+
+        const shimDir = path.dirname(instructionsFile);
+        const claudeShim = fs.readFileSync(path.join(shimDir, 'CLAUDE.md'), 'utf8');
+        const agyShim = fs.readFileSync(path.join(shimDir, '.agents', 'rules', 'AGENTS.md'), 'utf8');
+        expect(claudeShim).toContain('total-recall tr-preflight --ack');
+        expect(agyShim).toContain('total-recall tr-preflight --ack');
+        expect(claudeShim.trim()).toBe(compiled.trim());
+        expect(agyShim.trim()).toBe(compiled.trim());
+      }
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
+});
+
