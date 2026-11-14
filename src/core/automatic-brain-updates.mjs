@@ -14,6 +14,7 @@ import { updateSourceBrainPackages } from './source-brain-updates.mjs';
 import { updateInstalledPlugins } from './plugin-updates.mjs';
 import { runningServerStatus } from './running-server.mjs';
 import { replaceStaleServer } from './server-restart.mjs';
+import { handOffDefaultsToRelease } from './release-defaults-handoff.mjs';
 
 export function automaticUpdateStatus(brainDir) {
   let last;
@@ -38,7 +39,7 @@ export function startAutomaticBrainUpdates({brainDir,intervalMs=60*60*1000,run=r
   return {tick,stop(){stopped=true;clearInterval(timer);}};
 }
 
-export async function runAutomaticBrainUpdates({brainDir,fleet=false,force=false,skipThrottle=false,intervalMs=60*60*1000,update=updateAllBrains,compile=maintainCliSurfaces,globalUpdate=updateGlobalBrainPackages,meshUpdate=updateMeshBrainPackages,sourceUpdate=updateSourceBrainPackages,pluginUpdate=updateInstalledPlugins,skillMaintenance=maintainPortableSkills,serverCheck=runningServerStatus,replaceServer=replaceStaleServer,now=Date.now}={}) {
+export async function runAutomaticBrainUpdates({brainDir,fleet=false,force=false,skipThrottle=false,intervalMs=60*60*1000,update=updateAllBrains,compile=maintainCliSurfaces,globalUpdate=updateGlobalBrainPackages,meshUpdate=updateMeshBrainPackages,sourceUpdate=updateSourceBrainPackages,pluginUpdate=updateInstalledPlugins,defaultsHandoff=handOffDefaultsToRelease,skillMaintenance=maintainPortableSkills,serverCheck=runningServerStatus,replaceServer=replaceStaleServer,now=Date.now}={}) {
   if(!force && !isPackageAutoUpdateEnabled())return {skipped:true,reason:'disabled',results:[]};
   const file=path.join(brainDir,'memory-derived/automatic-brain-updates.json');
   let saved;try{saved=JSON.parse(fs.readFileSync(file,'utf8'));}catch{}
@@ -62,10 +63,13 @@ export async function runAutomaticBrainUpdates({brainDir,fleet=false,force=false
       const summary=await update({brainDir,dryRun:false,ensureDefaults:true});
       const global=summary.versions?await globalUpdate({versions:summary.versions}):{failed:1,results:[],error:'Cannot maintain global packages without verified published versions'};
       const sources=summary.versions?await sourceUpdate({brainDir,versions:summary.versions}):{failed:1,results:[]};
+      // The defaults above came from the running code, which is the release being replaced. A newer
+      // release installed just now refreshes them with its own code and bundled copies, this pass.
+      const defaults=await defaultsHandoff({global,sources});
       // The shared plugin folder follows the source each plugin was installed from (git, mesh peer, directory).
       const plugins=await pluginUpdate({roots:[path.resolve(brainDir,'../../..')]});
       const mesh=fleet && summary.versions?await meshUpdate({versions:summary.versions,version:summary.versions['total-recall-brain']}):{failed:0,results:[],scope:'local-only'};
-      const changed=summary.updated>0 || plugins.updated>0 || global.results.some(row=>row.status==='updated') || sources.results.some(row=>row.status==='updated') || JSON.stringify(saved?.versions)!==JSON.stringify(summary.versions);
+      const changed=summary.updated>0 || plugins.updated>0 || defaults.status==='refreshed' || global.results.some(row=>row.status==='updated') || sources.results.some(row=>row.status==='updated') || JSON.stringify(saved?.versions)!==JSON.stringify(summary.versions);
       const skills=await skillMaintenance({brainDir});
       const surfaces=await compile({brainDir,force:changed || skills.updated > 0});
       // Last, so a replaced server starts on everything this run moved. Where maintenance cannot
@@ -79,8 +83,8 @@ export async function runAutomaticBrainUpdates({brainDir,fleet=false,force=false
       // local_failed is this node's own maintenance. Peers judge a node by it, not by
       // `failed`, which also counts the node's view of its peers: judging by that made
       // every fleet pass mark every peer failed forever, each because the others had.
-      const local_failed=(summary.failed || 0)+global.failed+sources.failed+plugins.failed+(skills.failed || 0)+(surfaces.ok?0:surfaces.results.filter(row=>row.status==='failed').length)+serverFailed;
-      report={...summary,global,sources,plugins,mesh,server,skills,surfaces,local_failed,failed:local_failed+mesh.failed,checkedAt:now()};
+      const local_failed=(summary.failed || 0)+global.failed+sources.failed+(defaults.status==='failed'?1:0)+plugins.failed+(skills.failed || 0)+(surfaces.ok?0:surfaces.results.filter(row=>row.status==='failed').length)+serverFailed;
+      report={...summary,global,sources,defaults,plugins,mesh,server,skills,surfaces,local_failed,failed:local_failed+mesh.failed,checkedAt:now()};
     }catch(error){report={failed:1,error:error.message,checkedAt:now(),results:[]};}
     const temporary=`${file}.${process.pid}.tmp`;fs.writeFileSync(temporary,JSON.stringify(report,null,2));fs.renameSync(temporary,file);
     return report;

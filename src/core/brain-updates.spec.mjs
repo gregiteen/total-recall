@@ -6,7 +6,7 @@ vi.mock('./plugin-loader.mjs', async importOriginal => ({ ...await importOrigina
 vi.mock('./logger.mjs', () => ({ logger: { info() {}, warn() {}, debug() {} } }));
 vi.mock('./config.mjs', () => ({ brainDir: '/tmp/brain-update-test', ROOT: '/tmp/brain-update-test' }));
 vi.mock('./autopull-install.mjs', () => ({ installAutoPull: vi.fn() }));
-import { updateAllBrains, brainInstallOwner, brainUpdateLockPath, acquireBrainUpdateLock, discoverBrainConsumers } from './brain-updates.mjs';
+import { updateAllBrains, brainInstallOwner, brainUpdateLockPath, acquireBrainUpdateLock, discoverBrainConsumers, ensureBrainDefaults } from './brain-updates.mjs';
 import { parseArgs } from '../cli/update.mjs';
 
 describe('uniform brain updates', () => {
@@ -45,6 +45,21 @@ describe('uniform brain updates', () => {
     expect(fs.readFileSync(path.join(root, 'package.json'), 'utf8')).toBe(before);
     expect(exec.mock.calls.every(([, args]) => args[0] === 'view')).toBe(true);
     expect(fs.existsSync(path.join(root, '.total-recall-update.lock'))).toBe(false);
+  });
+
+  it('provisions every registered brain and the selected one, reporting a failure without throwing', () => {
+    const app = path.join(tmp, 'app');
+    fs.mkdirSync(path.join(app, '.agent', 'skills', 'total-recall'), { recursive: true });
+    const bare = path.join(tmp, 'bare');
+    fs.mkdirSync(bare);
+    const selected = path.join(tmp, 'selected');
+    const ensure = vi.fn((brain) => { if (brain === selected) throw new Error('Required bundled auth plugin is missing'); });
+    const report = ensureBrainDefaults({ roots: [app, bare], brainDir: selected }, { ensure });
+    expect(ensure.mock.calls.map(([brain]) => brain)).toEqual([path.join(app, '.agent', 'skills', 'total-recall'), selected]);
+    expect(report).toEqual({ failed: 1, results: [
+      { root: app, status: 'ready' },
+      { root: selected, status: 'failed', error: 'Required bundled auth plugin is missing' },
+    ] });
   });
 
   it('never treats a brain package source checkout as a consumer, but still finds consumers inside it', () => {

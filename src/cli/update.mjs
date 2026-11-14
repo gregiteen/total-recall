@@ -17,7 +17,7 @@ import {
 } from '../core/package-auto-update.mjs';
 import { brainDir } from '../core/config.mjs';
 import { installAutoPull } from '../core/autopull-install.mjs';
-import { updateAllBrains } from '../core/brain-updates.mjs';
+import { updateAllBrains, ensureBrainDefaults } from '../core/brain-updates.mjs';
 import { installHarnessHooks } from '../core/harness-hooks.mjs';
 import { automaticUpdateStatus, runAutomaticBrainUpdates } from '../core/automatic-brain-updates.mjs';
 import { runningServerStatus } from '../core/running-server.mjs';
@@ -38,6 +38,7 @@ export function parseArgs(args) {
     automatic: false,
     status: false,
     localOnly: false,
+    defaults: false,
   };
   for (let i = 0; i < args.length; i++) {
     const a = args[i];
@@ -55,6 +56,7 @@ export function parseArgs(args) {
     else if (a === '--automatic') opts.automatic = true;
     else if (a === '--status') opts.status = true;
     else if (a === '--local-only') opts.localOnly = true;
+    else if (a === '--defaults') opts.defaults = true;
   }
   return opts;
 }
@@ -85,6 +87,12 @@ function printHelp() {
         installed plugin from its recorded source and refresh surfaces. Where a
         per-user service (LaunchAgent, systemd user unit) runs the server from
         the global install, also restart a stale server and verify /health.
+        When this run installed a release newer than the running code, that release
+        refreshes the defaults with its own code (update --defaults) in the same pass.
+    total-recall update --defaults [--repo <path>] [--json]
+        Refresh the shared default plugins from this release's bundled copies (a
+        linked owner checkout is left alone) and provision every registered brain.
+        Exit 1 when any brain fails.
     total-recall update --status [--json]
         Read the actual last automatic maintenance report without starting work.
         Also reports what the server on this host runs against the release.
@@ -120,6 +128,17 @@ export default async function update(args = []) {
     status.server=await runningServerStatus({brainDir,latest:status.last?.versions?.['total-recall-brain']});
     console.log(JSON.stringify(status,null,2));
     return status;
+  }
+  if (opts.defaults) {
+    const report = ensureBrainDefaults({ brainDir, roots: opts.repos });
+    if (opts.json) console.log(JSON.stringify(report, null, 2));
+    else {
+      console.log(`\n  Default plugins: ${report.results.length - report.failed} brain(s) ready, ${report.failed} failed`);
+      for (const row of report.results) console.log(`    ${row.status === 'ready' ? '✓' : '✗'} ${row.root}${row.error ? `: ${row.error}` : ''}`);
+      console.log('');
+    }
+    if (report.failed) process.exitCode = 1;
+    return report;
   }
   if(opts.automatic){
     const report=await runAutomaticBrainUpdates({brainDir,force:opts.force,fleet:!opts.localOnly});

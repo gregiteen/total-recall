@@ -9,6 +9,7 @@ vi.mock('./plugin-updates.mjs',()=>({updateInstalledPlugins:vi.fn().mockResolved
 vi.mock('./global-brain-updates.mjs',()=>({updateGlobalBrainPackages:vi.fn().mockResolvedValue({failed:0,results:[]})}));
 vi.mock('./source-brain-updates.mjs',()=>({updateSourceBrainPackages:vi.fn().mockResolvedValue({failed:0,results:[]})}));
 vi.mock('./portable-skills-maintenance.mjs',()=>({maintainPortableSkills:vi.fn().mockResolvedValue({skipped:true,failed:0,results:[]})}));
+vi.mock('./release-defaults-handoff.mjs',()=>({handOffDefaultsToRelease:vi.fn().mockResolvedValue({status:'current'})}));
 vi.mock('./running-server.mjs', async importOriginal => ({
   ...await importOriginal(),
   runningServerStatus: vi.fn().mockResolvedValue({ status: 'none' }),
@@ -119,6 +120,40 @@ describe('daemon automatic package maintenance',()=>{
     expect(automaticUpdateStatus(brainDir).last.failed).toBe(2);
     expect((await runAutomaticBrainUpdates({brainDir,update,compile,now:()=>10000001})).reason).toBe('throttled');
     expect(update).toHaveBeenCalledTimes(1);
+  });
+  it('hands the default refresh to the release it just installed, before plugin updates',async()=>{
+    const order=[];
+    const update=vi.fn(async()=>{order.push('update');return {versions:{'total-recall-brain':'3.47.2'},failed:0,results:[]};});
+    const globalUpdate=vi.fn(async()=>{order.push('global');return {failed:0,results:[{package:'total-recall-brain',status:'updated'}],root:'/global'};});
+    const sourceUpdate=vi.fn(async()=>{order.push('sources');return {failed:0,results:[]};});
+    const defaultsHandoff=vi.fn(async()=>{order.push('defaults');return {status:'refreshed',version:'3.47.2',from:'3.47.1',results:[]};});
+    const pluginUpdate=vi.fn(async()=>{order.push('plugins');return {updated:0,failed:0,results:[]};});
+    const compile=vi.fn(async()=>{order.push('compile');return {ok:true,results:[]};});
+    const report=await runAutomaticBrainUpdates({brainDir:brain(),update,globalUpdate,sourceUpdate,defaultsHandoff,pluginUpdate,compile,now:()=>10000000});
+    expect(order).toEqual(['update','global','sources','defaults','plugins','compile']);
+    expect(defaultsHandoff).toHaveBeenCalledWith({global:{failed:0,results:[{package:'total-recall-brain',status:'updated'}],root:'/global'},sources:{failed:0,results:[]}});
+    expect(report.defaults).toMatchObject({status:'refreshed',version:'3.47.2'});
+    expect(report.local_failed).toBe(0);
+  });
+  it('compiles surfaces after a refresh even when nothing else moved',async()=>{
+    const brainDir=brain();
+    const update=vi.fn().mockResolvedValue({versions:{'total-recall-brain':'3.47.2'},failed:0,results:[]});
+    const compile=vi.fn().mockResolvedValue({ok:true,results:[]});
+    await runAutomaticBrainUpdates({brainDir,update,compile,defaultsHandoff:async()=>({status:'current'}),force:true});
+    await runAutomaticBrainUpdates({brainDir,update,compile,defaultsHandoff:async()=>({status:'current'}),force:true});
+    expect(compile).toHaveBeenLastCalledWith({brainDir,force:false});
+    await runAutomaticBrainUpdates({brainDir,update,compile,defaultsHandoff:async()=>({status:'refreshed',version:'3.47.2'}),force:true});
+    expect(compile).toHaveBeenLastCalledWith({brainDir,force:true});
+  });
+  it('counts a failed handoff as this machine\'s own failure',async()=>{
+    const brainDir=brain();
+    const update=vi.fn().mockResolvedValue({versions:{'total-recall-brain':'3.47.2'},failed:0,results:[]});
+    const compile=vi.fn().mockResolvedValue({ok:true,results:[]});
+    const defaultsHandoff=async()=>({status:'failed',version:'3.47.2',from:'3.47.1',error:'update --defaults stopped: timeout'});
+    const report=await runAutomaticBrainUpdates({brainDir,update,compile,defaultsHandoff,now:()=>10000000});
+    expect(report.local_failed).toBe(1);
+    expect(report.failed).toBe(1);
+    expect(automaticUpdateStatus(brainDir).last.defaults.error).toBe('update --defaults stopped: timeout');
   });
   it('keeps peer dispatch out of the node\'s own failure count',async()=>{
     const update=vi.fn().mockResolvedValue({versions:{'total-recall-brain':'3.40.2'},failed:0,results:[]});

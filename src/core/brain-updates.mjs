@@ -217,18 +217,37 @@ export function installEnv(env = process.env) {
   return kept;
 }
 
+/** The brains maintenance provisions: each update root that has a brain, plus the selected brain. */
+function maintainedBrains(roots, brainDir) {
+  const brains = roots.map(root => ({ root, brain: path.join(root, '.agent', 'skills', 'total-recall') }))
+    .filter(({ brain }) => fs.existsSync(brain));
+  if (brainDir) brains.push({ root: brainDir, brain: brainDir });
+  return brains;
+}
+
+/**
+ * Refresh the shared default plugins from this package's bundled copies and provision every
+ * registered brain, reporting each brain's outcome instead of throwing. `update --defaults` runs
+ * this, so a release maintenance has just installed can do it with its own code and its own
+ * bundled copies (release-defaults-handoff.mjs).
+ */
+export function ensureBrainDefaults(opts = {}, { ensure = ensureRequiredPlugins } = {}) {
+  const roots = listUpdateRoots(opts).map(row => row.root);
+  const results = maintainedBrains(roots, opts.brainDir).map(({ root, brain }) => {
+    try { ensure(brain); return { root, status: 'ready' }; }
+    catch (error) { return { root, status: 'failed', error: error.message }; }
+  });
+  return { failed: results.filter(row => row.status === 'failed').length, results };
+}
+
 export async function updateAllBrains(opts = {}) {
   const dryRun = opts.dryRun !== false;
   const installMissing = opts.installMissing === true;
   const exec = opts.exec || spawnSync;
   const roots = listUpdateRoots(opts).map(row => row.root);
   const errors = [];
-  const brains = roots.map(root => ({ root, brain: path.join(root, '.agent', 'skills', 'total-recall') }))
-    .filter(({ brain }) => fs.existsSync(brain));
-  if (opts.brainDir) {
-    brains.push({ root: opts.brainDir, brain: opts.brainDir });
-    roots.push(opts.brainDir);
-  }
+  const brains = maintainedBrains(roots, opts.brainDir);
+  if (opts.brainDir) roots.push(opts.brainDir);
   for (const { root, brain } of brains) {
     if (!dryRun && opts.ensureDefaults === true) {
       try { ensureRequiredPlugins(brain); }

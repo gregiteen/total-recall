@@ -17,7 +17,15 @@ describe('update CLI', () => {
       automatic: false,
       status: false,
       localOnly: false,
+      defaults: false,
     });
+  });
+
+  it('parseArgs --defaults asks for the bundled default refresh', () => {
+    const o = parseArgs(['--defaults', '--json', '--repo', '/a']);
+    expect(o.defaults).toBe(true);
+    expect(o.json).toBe(true);
+    expect(o.repos).toEqual(['/a']);
   });
 
   it('parseArgs --install-autopull with port and no-build', () => {
