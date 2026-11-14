@@ -1,3 +1,22 @@
+## 3.47.0 — 2026-11-14
+
+- Bundle OpenWiki 0.3.0. Wikis now refresh once a night (`20 1-5 * * *`) instead of every
+  30 minutes, and only on the node chosen with the new `total-recall openwiki schedule --node
+  <hostname>`. With no node chosen, the refresh stays idle. A failed generation is retried only
+  after 6 hours, and a run never starts work it cannot finish in its time budget. An out-of-credit
+  (402) answer stops the queue. Commits that only move version pins no longer count as changes.
+  The plugin has no built-in model: until one is set with `openwiki config set model <id>`,
+  refreshes stop. A managed block in `.openwikiignore` keeps lockfiles, compiled agent
+  instructions and copied skills out of the wiki.
+- Bundle Git 2.3.0: a commit no longer starts an OpenWiki refresh.
+- The dashboard opens to a status overview: server, daemon, active brain, mesh fleet,
+  memory and rules, and mesh nodes. The account menu keeps Settings and Sign out. A plugin
+  tab offers Settings and Close, with its CLI commands inside Settings. The brand lockup has
+  a transparent background, and 360 px screens no longer scroll sideways.
+- Fix `GET /api/vault/status` answering 500 (a missing `node:path` import).
+- `context` budget overflow names the rules it must hold (`required_ids` in `--json`, a
+  `required_set` preview and `overage` in text).
+
 ## 3.46.2 — 2026-11-12
 
 - Fix every npm-installed brain reporting its dashboard as stale ("the build tools are not
