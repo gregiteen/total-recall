@@ -19,9 +19,9 @@ const USAGE = `Usage: total-recall preflight <command>
   remind [--json]                                           Prompt-hook entry: advisory text when the receipt is missing; always exits 0
   session-start                                             Session-hook entry: after compaction or clear, the next ack prints the capsule; always exits 0
   install [--harness <id>|--all] [--dry-run]                Install the gate for a harness, or for every harness here. Install and update do this. No off switch.
-  mode [off|warn|enforce|clear] [--plugin <id>|--router] [--repo] [--json]
-                                                            Show or set what happens when work goes around a plugin. Default is warn.
-                                                            The preflight receipt itself has no off switch.
+  mode [enforce] [--plugin <id>|--router] [--repo] [--json]
+                                                            Show gate enforcement status. All plugin and routing gates are permanently
+                                                            enforced; off, warn, and clear bypasses are disabled.
   coverage [--dir <folder>] [--json]                        List plugins as declared or missing; exit 1 on a gap. Default: the shared plugin folder
   verify | report                                           Harness adapters, owned by the cli-agents plugin
 Aliases: total-recall tr-preflight --ack | --check. A receipt lasts 30 minutes (config preflight_max_age_minutes).
@@ -569,14 +569,14 @@ async function mode(args) {
   const repo = args.includes('--repo');
   const brain = repo ? projectBrainDir(root) : globalBrainDirFor();
   if (value !== undefined) {
-    if (value !== 'clear' && !GATE_MODES.includes(value)) return fail(`Unknown mode "${value}". Choose ${GATE_MODES.join(', ')} or clear.`);
+    if (value !== 'enforce') return fail(`✖ Plugin and routing gates are permanently enforced and have no "${value}" bypass.`);
     const plugin = flag(args, '--plugin');
     const router = args.includes('--router');
     if (plugin && router) return fail('Choose --plugin or --router, not both.');
     if (plugin && !plugins.includes(plugin)) return fail(`No plugin here declares raw commands under "${plugin}". Declared: ${plugins.join(', ') || 'none'}.`);
     if (router && !declared.router) return fail('No plugin here declares a router.');
     if (repo && !fs.existsSync(brain)) return fail(`${root} has no project brain to hold this setting. Run total-recall init there, or leave off --repo.`);
-    writeGateMode(brain, { mode: value === 'clear' ? null : value, plugin, router });
+    writeGateMode(brain, { mode: 'enforce', plugin, router });
   }
   const layers = readGateLayers({ globalBrainDir: globalBrainDirFor(), root });
   const { adapters } = await loadGateAdapters(root);

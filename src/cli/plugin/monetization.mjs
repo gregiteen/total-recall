@@ -59,43 +59,50 @@ export async function managePluginLicense(args = []) {
     const TR = process.env.TOTAL_RECALL_BIN || 'total-recall';
     const amount = mon.price_cents || 1000;
     const currency = (mon.currency || 'USD').toLowerCase();
-    const successUrl = 'https://total-recall.ai/plugins/success';
-    const cancelUrl = 'https://total-recall.ai/plugins/cancel';
-    try {
-      const script = TR.endsWith('.mjs');
-      const stripeRes = spawnSync(script ? process.execPath : TR, [
-        ...(script ? [TR] : []),
-        'stripe', 'checkout',
-        '--amount', String(amount),
-        '--currency', currency,
-        '--name', `${plugin.manifest.name} License`,
-        '--success-url', successUrl,
-        '--cancel-url', cancelUrl,
-        '--json'
-      ], { encoding: 'utf8', timeout: 15000 });
-      if (stripeRes.status === 0 && stripeRes.stdout) {
-        const parsed = JSON.parse(stripeRes.stdout);
-        const url = parsed.url || parsed.checkout_url || parsed.data?.url;
-        if (url) {
-          if (json) {
-            console.log(JSON.stringify({ plugin: pluginId, checkout_url: url, amount, currency }));
-          } else {
-            console.log(`\n💳 Stripe Checkout Session Created:`);
-            console.log(`   Plugin:       ${plugin.manifest.name}`);
-            console.log(`   Amount:       $${(amount / 100).toFixed(2)} ${currency.toUpperCase()}`);
-            console.log(`   Checkout URL: ${url}\n`);
-          }
-          return;
+    const baseUrl = (process.env.TR_STORE_BASE_URL || 'http://127.0.0.1:3000').replace(/\/+$/, '');
+    const sIdx = args.indexOf('--success-url');
+    const cIdx = args.indexOf('--cancel-url');
+    const successUrl = (sIdx !== -1 && args[sIdx + 1]) || `${baseUrl}/plugins/success?plugin=${encodeURIComponent(pluginId)}`;
+    const cancelUrl = (cIdx !== -1 && args[cIdx + 1]) || `${baseUrl}/plugins/cancel?plugin=${encodeURIComponent(pluginId)}`;
+    const stripeArgs = [
+      'stripe', 'checkout',
+      '--amount', String(amount),
+      '--currency', currency,
+      '--name', `${plugin.manifest.name} License`,
+      '--success-url', successUrl,
+      '--cancel-url', cancelUrl,
+      '--json'
+    ];
+    if (mon.recipient?.account_id) stripeArgs.push('--account', mon.recipient.account_id);
+    const script = TR.endsWith('.mjs');
+    const stripeRes = spawnSync(script ? process.execPath : TR, [
+      ...(script ? [TR] : []),
+      ...stripeArgs
+    ], { encoding: 'utf8', timeout: 15000 });
+    if (stripeRes.status === 0 && stripeRes.stdout) {
+      let parsed = {};
+      try { parsed = JSON.parse(stripeRes.stdout); } catch {}
+      const url = parsed.url || parsed.checkout_url || parsed.data?.url;
+      if (url) {
+        if (json) {
+          console.log(JSON.stringify({ plugin: pluginId, checkout_url: url, session_id: parsed.id || parsed.session_id || null, amount, currency }));
+        } else {
+          console.log(`\n💳 Stripe Checkout Session Created:`);
+          console.log(`   Plugin:       ${plugin.manifest.name}`);
+          console.log(`   Amount:       $${(amount / 100).toFixed(2)} ${currency.toUpperCase()}`);
+          console.log(`   Checkout URL: ${url}\n`);
         }
+        return;
       }
-    } catch {}
-    if (json) {
-      console.log(JSON.stringify({ plugin: pluginId, price_formatted: mon.priceFormatted, requires_purchase: true }));
-    } else {
-      console.log(`\n💳 Commercial License Purchase:`);
-      console.log(`   Plugin: ${plugin.manifest.name} (${mon.priceFormatted})`);
-      console.log(`   Activate license after purchase: total-recall plugin license ${pluginId} activate --stdin\n`);
     }
+    const errDetail = (stripeRes.stderr || stripeRes.stdout || stripeRes.error?.message || 'Stripe checkout failed').trim();
+    if (json) {
+      console.log(JSON.stringify({ ok: false, plugin: pluginId, error: errDetail, price_formatted: mon.priceFormatted, requires_purchase: true }));
+    } else {
+      console.error(`❌ Stripe checkout failed for '${pluginId}': ${errDetail}`);
+      console.error(`   Activate an existing license with: total-recall plugin license ${pluginId} activate --stdin`);
+    }
+    process.exitCode = 1;
     return;
   }
 
@@ -103,6 +110,33 @@ export async function managePluginLicense(args = []) {
     if (!mon.requiresLicense) {
       if (json) console.log(JSON.stringify({ verified: true, free: true, plugin: pluginId }));
       else console.log(`ℹ️ Plugin '${pluginId}' does not require a commercial license (${mon.model}).`);
+      return;
+    }
+    const sessIdx = args.indexOf('--session-id');
+    const sessionId = sessIdx !== -1 ? args[sessIdx + 1] : null;
+    if (sessionId) {
+      const TR = process.env.TOTAL_RECALL_BIN || 'total-recall';
+      const script = TR.endsWith('.mjs');
+      const vRes = spawnSync(script ? process.execPath : TR, [
+        ...(script ? [TR] : []),
+        'stripe', 'verify-entitlement',
+        '--session-id', sessionId,
+        '--consumer', pluginId,
+        '--amount', String(mon.price_cents || 1000),
+        '--currency', (mon.currency || 'USD').toLowerCase(),
+        '--json'
+      ], { encoding: 'utf8', timeout: 15000 });
+      let vParsed = null;
+      try { vParsed = vRes.stdout ? JSON.parse(vRes.stdout) : null; } catch {}
+      if (vRes.status !== 0 || !vParsed?.entitled) {
+        const msg = vParsed?.error || (vRes.stderr || vRes.stdout || 'Stripe entitlement verification failed').trim();
+        if (json) console.log(JSON.stringify({ verified: false, plugin: pluginId, session_id: sessionId, error: msg }));
+        else console.error(`❌ Stripe entitlement check failed for '${pluginId}': ${msg}`);
+        process.exitCode = 1;
+        return;
+      }
+      if (json) console.log(JSON.stringify({ verified: true, plugin: pluginId, session_id: sessionId, status: 'active', entitlement: vParsed }));
+      else console.log(`✅ Stripe entitlement verified active for '${pluginId}' (session ${sessionId}).`);
       return;
     }
     const secretKey = mon.license_key_secret;

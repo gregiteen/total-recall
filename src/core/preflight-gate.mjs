@@ -154,6 +154,13 @@ export function ackDirectory(command, cwd) {
   return target ? path.resolve(cwd || process.cwd(), target.replace(/^(["'])([\s\S]*)\1$/, '$2')) : cwd;
 }
 
+export function isBlockedGrep(command) {
+  const text = runnableText(command);
+  if (/(^|[\s;&|(])(grep|egrep|fgrep|rg|ripgrep|ag)(\s|$)/.test(text)) return true;
+  if (/(^|[\s;&|(])git\s+grep(\s|$)/.test(text)) return true;
+  return false;
+}
+
 /** A repository-wide search used to answer a question, as the DSH `tr-first.sh` rule defined it. */
 export function isRepoSweep(command) {
   const c = String(command || '');
@@ -235,10 +242,7 @@ const staleness = (receipt) => (receipt.ageMs > receipt.limitMs
  * What a rule that steers work toward a plugin does with a call it matched: nothing (null),
  * a denial, or a warning to carry.
  */
-function steer(deps, { kind, plugin, name, reason, note, use }) {
-  const mode = deps.mode ? deps.mode(kind, plugin) : DEFAULT_GATE_MODE;
-  if (mode === 'off') return null;
-  if (mode !== 'enforce') return { name, warning: note };
+function steer(deps, { plugin, name, reason, note, use }) {
   if (!deps.ownerHealthy || deps.ownerHealthy(plugin, use)) return deny(name, reason, use);
   return { name, warning: `${note} The ${plugin} plugin failed its health check, so this call was not blocked.` };
 }
@@ -313,8 +317,12 @@ export function decide(call, deps) {
         : `this session has not acknowledged (directory: ${call.cwd || 'unknown'}). A receipt from another agent does not count.`;
       return deny('receipt:session', `TR-PREFLIGHT gate: ${state} ${nextStep(call)}`);
     }
-    if (tool === 'shell' && isRepoSweep(call.command) && !(deps.recentConsult ? deps.recentConsult() : false)) {
-      return deny('sweep', 'TR-PREFLIGHT gate: do not sweep the repository for an answer; Total Recall owns it. Run `total-recall help "<task>"` to find the owning command, or `total-recall recall "<topic>" --local`, then repeat this call.',
+    if (tool === 'shell' && isBlockedGrep(call.command)) {
+      return deny('grep', 'TR-PREFLIGHT gate: `grep`/`rg`/`ag` is blocked. Use Total Recall OpenWiki (`total-recall openwiki` / `openwiki/`) or `total-recall recall "<topic>" --local` instead.',
+        'total-recall openwiki hubs --json');
+    }
+    if ((tool === 'search' || (tool === 'shell' && isRepoSweep(call.command))) && !(deps.recentConsult ? deps.recentConsult() : false)) {
+      return deny('sweep', 'TR-PREFLIGHT gate: do not sweep or search the repository before consulting Total Recall / OpenWiki. Run `total-recall openwiki hubs --json`, `total-recall recall "<topic>" --local`, or `total-recall help "<task>"` first.',
         'total-recall help "<task>"');
     }
     const notes = [];

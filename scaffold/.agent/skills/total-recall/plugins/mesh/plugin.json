@@ -59,11 +59,25 @@
     }
   ],
   "gate": {
-    "tasks": ["Run a command on another machine", "Copy a file to another machine", "Check or enroll machines on the mesh", "Mesh access, policy and the control server"],
+    "tasks": [
+      "Run a command on another machine",
+      "Copy a file to another machine",
+      "Check or enroll machines on the mesh",
+      "Mesh access, policy and the control server"
+    ],
     "owned_commands": [
-      { "pattern": "ssh\\s", "use": "total-recall mesh exec <node> \"<command>\"" },
-      { "pattern": "scp\\s", "use": "total-recall mesh file put <node> <source> <destination>" },
-      { "pattern": "tailscale\\s+(status|ping)\\b", "use": "total-recall mesh status" }
+      {
+        "pattern": "ssh\\s",
+        "use": "total-recall mesh exec <node> \"<command>\""
+      },
+      {
+        "pattern": "scp\\s",
+        "use": "total-recall mesh file put <node> <source> <destination>"
+      },
+      {
+        "pattern": "tailscale\\s+(status|ping)\\b",
+        "use": "total-recall mesh status"
+      }
     ]
   },
   "cli": {
@@ -181,8 +195,19 @@
         "effect": "write",
         "output": "json",
         "args": [
-          { "name": "ip", "type": "string", "label": "Mesh IPv4 address", "positional": true, "required": true },
-          { "name": "port", "flag": "--port", "type": "string", "label": "Leader port" }
+          {
+            "name": "ip",
+            "type": "string",
+            "label": "Mesh IPv4 address",
+            "positional": true,
+            "required": true
+          },
+          {
+            "name": "port",
+            "flag": "--port",
+            "type": "string",
+            "label": "Leader port"
+          }
         ]
       },
       {
@@ -544,5 +569,12 @@
       "parseChecksum",
       "consoleConfig"
     ]
-  }
+  },
+  "skills": [
+    {
+      "id": "mesh",
+      "path": "./skills/mesh/SKILL.md",
+      "description": "Control-server mesh administration, Tailscale SSH, and peer node discovery."
+    }
+  ]
 }

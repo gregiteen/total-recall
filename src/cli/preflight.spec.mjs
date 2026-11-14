@@ -251,13 +251,12 @@ describe('gate modes through the real command', () => {
   });
   afterAll(() => { for (const d of [modeHome, modeRepo]) fs.rmSync(d, { recursive: true, force: true }); });
 
-  it('warns by default: the command runs and the note names the plugin command', () => {
+  it('enforces by default: blocks raw commands owned by a healthy plugin', () => {
     const { code, answer } = rawCall();
-    expect(code).toBe(0);
-    expect(answer).toMatchObject({ decision: 'allow', rule: 'warn:owned:fx' });
-    expect(answer.warning).toContain('total-recall fx go');
+    expect(code).toBe(2);
+    expect(answer).toMatchObject({ decision: 'deny', rule: 'owned:fx', fix: 'total-recall fx go' });
   });
-  it('blocks once a plugin is set to enforce', () => {
+  it('accepts explicit enforce mode and still blocks', () => {
     expect(cli(['preflight', 'mode', 'enforce', '--plugin', 'fx']).status).toBe(0);
     const { code, answer } = rawCall();
     expect(code).toBe(2);
@@ -273,35 +272,24 @@ describe('gate modes through the real command', () => {
       expect(rawCall().code).toBe(2);
     });
   }
-  it('does nothing in off, and clear follows the next level again', () => {
-    expect(cli(['preflight', 'mode', 'off', '--plugin', 'fx']).status).toBe(0);
-    expect(rawCall().answer).toEqual({ decision: 'allow', rule: 'receipt:fresh' });
-    expect(cli(['preflight', 'mode', 'clear', '--plugin', 'fx']).status).toBe(0);
-    expect(rawCall().answer.rule).toBe('warn:owned:fx');
-  });
-  it('lets a repository override the machine, only where it has a brain', () => {
-    const noBrain = fs.mkdtempSync(path.join(os.tmpdir(), 'tr-pf-mode-nobrain-'));
-    const refused = spawnSync(process.execPath, [BIN, 'preflight', 'mode', 'off', '--repo'], { cwd: noBrain, encoding: 'utf8', env: env() });
-    fs.rmSync(noBrain, { recursive: true, force: true });
-    expect(refused.status).toBe(1);
-    expect(refused.stderr).toContain('no project brain');
-    expect(cli(['preflight', 'mode', 'enforce', '--plugin', 'fx']).status).toBe(0);
-    expect(cli(['preflight', 'mode', 'off', '--repo']).status).toBe(0);
-    expect(rawCall().code).toBe(0);
-    expect(cli(['preflight', 'mode', 'clear', '--repo']).status).toBe(0);
+  it('refuses off, warn, and clear bypasses and keeps enforcing', () => {
+    for (const bypass of ['off', 'warn', 'clear']) {
+      const res = cli(['preflight', 'mode', bypass, '--plugin', 'fx']);
+      expect(res.status).toBe(1);
+      expect(res.stderr).toContain('permanently enforced');
+    }
     expect(rawCall().code).toBe(2);
-    expect(cli(['preflight', 'mode', 'clear', '--plugin', 'fx']).status).toBe(0);
   });
-  it('refuses an unknown mode or plugin and changes nothing', () => {
+  it('refuses an unknown mode or plugin and keeps enforcing', () => {
     expect(cli(['preflight', 'mode', 'block']).status).toBe(1);
-    const unknown = cli(['preflight', 'mode', 'off', '--plugin', 'nope']);
+    const unknown = cli(['preflight', 'mode', 'enforce', '--plugin', 'nope']);
     expect(unknown.status).toBe(1);
     expect(unknown.stderr).toContain('fx');
-    expect(rawCall().answer.rule).toBe('warn:owned:fx');
+    expect(rawCall().code).toBe(2);
   });
-  it('reports modes and warning delivery', () => {
+  it('reports enforce mode and warning delivery', () => {
     const report = JSON.parse(cli(['preflight', 'mode', '--json']).stdout);
-    expect(report.plugins).toEqual([{ plugin: 'fx', mode: 'warn' }]);
+    expect(report.plugins).toEqual([{ plugin: 'fx', mode: 'enforce' }]);
     expect(report.settings.machine).toContain('gate.json');
   });
 });
@@ -419,6 +407,7 @@ describe('receipts count per session', () => {
   });
   it('lets the session pass once it has run the acknowledgement, and no other session', () => {
     expect(gate({ tool: 'shell', command: ACK, session_id: 'A' }).code).toBe(0);
+    expect(gate({ tool: 'shell', command: 'total-recall fx route "x"', session_id: 'A' }).code).toBe(0);
     expect(gate({ ...WORK, session_id: 'A' }).code).toBe(0);
     expect(gate({ ...WORK, session_id: 'B' }).answer.rule).toBe('receipt:session');
   });
@@ -435,6 +424,7 @@ describe('receipts count per session', () => {
     }
   });
   it('keeps the repository rule when a harness sends no session id', () => {
+    expect(gate({ tool: 'shell', command: 'total-recall fx route "x"' }).code).toBe(0);
     expect(gate(WORK).code).toBe(0);
     expect(gate({ ...WORK, session_id: '  ' }).code).toBe(0);
     expect(gate({ ...WORK, session_id: 42 }).code).toBe(0);
@@ -470,17 +460,20 @@ describe('receipts count per session', () => {
       expect(gate({ ...WORK, session_id: 'nowhere-to-write' }).code).toBe(0);
     } finally { fs.chmodSync(state(), 0o700); fs.chmodSync(tmp, 0o700); }
   });
+  const ROUTE = 'total-recall fx route "x"';
   it('keeps the acknowledgement in the temp folder when the state folder refuses writes', () => {
     fs.chmodSync(state(), 0o500);
     try {
       expect(gate({ ...WORK, session_id: 'sandboxed' }).code).toBe(2);
       expect(gate({ tool: 'shell', command: ACK, session_id: 'sandboxed' }).code).toBe(0);
+      expect(gate({ tool: 'shell', command: ROUTE, session_id: 'sandboxed' }).code).toBe(0);
       expect(gate({ ...WORK, session_id: 'sandboxed' }).code).toBe(0);
     } finally { fs.chmodSync(state(), 0o700); }
   });
   it('asks again once the session has passed the receipt window', () => {
     const stamped = gate({ tool: 'shell', command: ACK, session_id: 'old-session' });
     expect(stamped.code).toBe(0);
+    expect(gate({ tool: 'shell', command: ROUTE, session_id: 'old-session' }).code).toBe(0);
     const expired = () => spawnSync(process.execPath, [BIN, 'preflight', 'gate'], { cwd: repo, input: JSON.stringify({ cwd: repo, ...WORK, session_id: 'old-session' }), encoding: 'utf8', env: env({ TR_PREFLIGHT_MAX_AGE_MIN: '60' }) });
     expect(expired().status).toBe(0);
     const stamp = fs.readdirSync(state()).filter((name) => name.startsWith('session-ack-')).map((name) => path.join(state(), name));
@@ -525,6 +518,7 @@ describe('receipts count per session', () => {
   it('leaves no note for a cut command, a subagent or a harness with no session id', () => {
     const task = 'note nothing';
     expect(gate({ tool: 'shell', command: ACK, session_id: 'cut' }).code).toBe(0);
+    expect(gate({ tool: 'shell', command: ROUTE, session_id: 'cut' }).code).toBe(0);
     expect(gate({ tool: 'shell', command: `total-recall context "${task}" | head -80`, session_id: 'cut' }).code).toBe(0);
     expect(gate({ tool: 'shell', command: `total-recall context "${task}"`, session_id: 'parent', agent_id: 'child' }).code).toBe(0);
     expect(gate({ tool: 'shell', command: `total-recall context "${task}"` }).code).toBe(0);
@@ -546,21 +540,20 @@ describe('receipts count per session', () => {
   });
   it('does not let one agent acknowledging void another session route', () => {
     expect(gate({ tool: 'shell', command: ACK, session_id: 'router-a' }).code).toBe(0);
-    expect(spawnSync(process.execPath, [BIN, 'preflight', 'mode', 'enforce', '--router'], { cwd: repo, encoding: 'utf8', env: env() }).status).toBe(0);
     expect(gate({ ...WORK, session_id: 'router-a' }).answer.rule).toBe('route');
     expect(gate({ tool: 'shell', command: 'total-recall fx route "x"', session_id: 'router-a' }).code).toBe(0);
     expect(gate({ ...WORK, session_id: 'router-a' }).code).toBe(0);
     expect(gate({ tool: 'shell', command: ACK, session_id: 'router-b' }).code).toBe(0);
     expect(gate({ ...WORK, session_id: 'router-a' }).code).toBe(0);
     expect(gate({ ...WORK, session_id: 'router-b' }).answer.rule).toBe('route');
-    expect(spawnSync(process.execPath, [BIN, 'preflight', 'mode', 'clear', '--router'], { cwd: repo, encoding: 'utf8', env: env() }).status).toBe(0);
   });
-  it('warns about routing once per session', () => {
+  it('enforces routing per session until routed', () => {
     expect(gate({ tool: 'shell', command: ACK, session_id: 'warn-a' }).code).toBe(0);
     expect(gate({ tool: 'shell', command: ACK, session_id: 'warn-b' }).code).toBe(0);
-    expect(gate({ ...WORK, session_id: 'warn-a' }).answer.warned).toEqual(['route']);
-    expect(gate({ ...WORK, session_id: 'warn-a' }).answer.warned).toBeUndefined();
-    expect(gate({ ...WORK, session_id: 'warn-b' }).answer.warned).toEqual(['route']);
+    expect(gate({ ...WORK, session_id: 'warn-a' }).answer.rule).toBe('route');
+    expect(gate({ tool: 'shell', command: ROUTE, session_id: 'warn-a' }).code).toBe(0);
+    expect(gate({ ...WORK, session_id: 'warn-a' }).code).toBe(0);
+    expect(gate({ ...WORK, session_id: 'warn-b' }).answer.rule).toBe('route');
   });
   it('tells a prompt hook when only this session is missing, and never blocks', () => {
     const r = spawnSync(process.execPath, [BIN, 'preflight', 'remind', '--json'], { cwd: repo, input: JSON.stringify({ cwd: repo, session_id: 'prompt-only' }), encoding: 'utf8', env: env() });

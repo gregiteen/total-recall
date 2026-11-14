@@ -49,9 +49,17 @@
     }
   ],
   "gate": {
-    "tasks": ["Read, store or rotate a credential", "Issue or revoke API keys", "Passkeys, passwords and sign-in sessions", "Audit where secrets are used"],
+    "tasks": [
+      "Read, store or rotate a credential",
+      "Issue or revoke API keys",
+      "Passkeys, passwords and sign-in sessions",
+      "Audit where secrets are used"
+    ],
     "owned_commands": [
-      { "pattern": "security\\s+find-generic-password\\b", "use": "total-recall auth secret get <KEY>" }
+      {
+        "pattern": "security\\s+find-generic-password\\b",
+        "use": "total-recall auth secret get <KEY>"
+      }
     ]
   },
   "cli": {
@@ -129,7 +137,10 @@
         "tag": "tr-auth-home",
         "module": "ui/home.js",
         "description": "Credential inventory, brains, machines and sign-in checks",
-        "events": ["auth-inventory", "auth-credential-mutate"]
+        "events": [
+          "auth-inventory",
+          "auth-credential-mutate"
+        ]
       }
     ]
   },
@@ -237,5 +248,12 @@
   "distribution": {
     "tier": "official",
     "license": "open"
-  }
+  },
+  "skills": [
+    {
+      "id": "auth",
+      "path": "./skills/auth/SKILL.md",
+      "description": "Encrypted credentials, repository bindings, dashboard sign-in and access across brains and machines."
+    }
+  ]
 }

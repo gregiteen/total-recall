@@ -72,7 +72,11 @@
     ]
   },
   "gate": {
-    "tasks": ["Search or read a repository's wiki", "Generate or refresh wiki pages", "Ingest documentation into memory"],
+    "tasks": [
+      "Search or read a repository's wiki",
+      "Generate or refresh wiki pages",
+      "Ingest documentation into memory"
+    ],
     "owned_commands": []
   },
   "cli": {
@@ -85,8 +89,19 @@
         "effect": "read",
         "output": "json",
         "args": [
-          { "name": "task", "label": "Task description", "type": "string", "positional": true, "required": true },
-          { "name": "json", "label": "JSON output", "type": "boolean", "flag": "--json" }
+          {
+            "name": "task",
+            "label": "Task description",
+            "type": "string",
+            "positional": true,
+            "required": true
+          },
+          {
+            "name": "json",
+            "label": "JSON output",
+            "type": "boolean",
+            "flag": "--json"
+          }
         ]
       },
       {
@@ -95,11 +110,37 @@
         "effect": "read",
         "output": "json",
         "args": [
-          { "name": "query", "label": "Search terms", "type": "string", "positional": true, "required": true },
-          { "name": "allVaults", "label": "Search all registered vaults", "type": "boolean", "flag": "--all-vaults" },
-          { "name": "node", "label": "Mesh node", "type": "string", "flag": "--node" },
-          { "name": "limit", "label": "Maximum results", "type": "number", "flag": "--limit" },
-          { "name": "json", "label": "JSON output", "type": "boolean", "flag": "--json" }
+          {
+            "name": "query",
+            "label": "Search terms",
+            "type": "string",
+            "positional": true,
+            "required": true
+          },
+          {
+            "name": "allVaults",
+            "label": "Search all registered vaults",
+            "type": "boolean",
+            "flag": "--all-vaults"
+          },
+          {
+            "name": "node",
+            "label": "Mesh node",
+            "type": "string",
+            "flag": "--node"
+          },
+          {
+            "name": "limit",
+            "label": "Maximum results",
+            "type": "number",
+            "flag": "--limit"
+          },
+          {
+            "name": "json",
+            "label": "JSON output",
+            "type": "boolean",
+            "flag": "--json"
+          }
         ]
       },
       {
@@ -108,10 +149,35 @@
         "effect": "read",
         "output": "json",
         "args": [
-          { "name": "allVaults", "label": "Inspect all registered vaults", "type": "boolean", "flag": "--all-vaults" },
-          { "name": "node", "label": "Mesh node", "type": "string", "flag": "--node" },
-          { "name": "format", "label": "Graph format", "type": "choice", "options": ["json", "mermaid", "dot"], "flag": "--format" },
-          { "name": "json", "label": "JSON output", "type": "boolean", "flag": "--json" }
+          {
+            "name": "allVaults",
+            "label": "Inspect all registered vaults",
+            "type": "boolean",
+            "flag": "--all-vaults"
+          },
+          {
+            "name": "node",
+            "label": "Mesh node",
+            "type": "string",
+            "flag": "--node"
+          },
+          {
+            "name": "format",
+            "label": "Graph format",
+            "type": "choice",
+            "options": [
+              "json",
+              "mermaid",
+              "dot"
+            ],
+            "flag": "--format"
+          },
+          {
+            "name": "json",
+            "label": "JSON output",
+            "type": "boolean",
+            "flag": "--json"
+          }
         ]
       },
       {
@@ -121,11 +187,36 @@
         "output": "json",
         "timeout_ms": 600000,
         "args": [
-          { "name": "repo", "label": "Registered repository", "type": "string", "flag": "--repo" },
-          { "name": "node", "label": "Mesh node", "type": "string", "flag": "--node" },
-          { "name": "force", "label": "Regenerate existing pages", "type": "boolean", "flag": "--force" },
-          { "name": "dryRun", "label": "Describe generation without writing", "type": "boolean", "flag": "--dry-run" },
-          { "name": "json", "label": "JSON output", "type": "boolean", "flag": "--json" }
+          {
+            "name": "repo",
+            "label": "Registered repository",
+            "type": "string",
+            "flag": "--repo"
+          },
+          {
+            "name": "node",
+            "label": "Mesh node",
+            "type": "string",
+            "flag": "--node"
+          },
+          {
+            "name": "force",
+            "label": "Regenerate existing pages",
+            "type": "boolean",
+            "flag": "--force"
+          },
+          {
+            "name": "dryRun",
+            "label": "Describe generation without writing",
+            "type": "boolean",
+            "flag": "--dry-run"
+          },
+          {
+            "name": "json",
+            "label": "JSON output",
+            "type": "boolean",
+            "flag": "--json"
+          }
         ]
       },
       {
@@ -134,11 +225,44 @@
         "effect": "write",
         "output": "json",
         "args": [
-          { "name": "action", "label": "Credential action", "type": "choice", "options": ["status", "set"], "positional": true },
-          { "name": "provider", "label": "Credential provider", "type": "choice", "options": ["openrouter", "google"], "positional": true },
-          { "name": "value", "label": "Secret value through stdin", "type": "string", "secret": true },
-          { "name": "stdin", "label": "Read secret from stdin", "type": "boolean", "flag": "--stdin" },
-          { "name": "json", "label": "JSON output", "type": "boolean", "flag": "--json" }
+          {
+            "name": "action",
+            "label": "Credential action",
+            "type": "choice",
+            "options": [
+              "status",
+              "set"
+            ],
+            "positional": true
+          },
+          {
+            "name": "provider",
+            "label": "Credential provider",
+            "type": "choice",
+            "options": [
+              "openrouter",
+              "google"
+            ],
+            "positional": true
+          },
+          {
+            "name": "value",
+            "label": "Secret value through stdin",
+            "type": "string",
+            "secret": true
+          },
+          {
+            "name": "stdin",
+            "label": "Read secret from stdin",
+            "type": "boolean",
+            "flag": "--stdin"
+          },
+          {
+            "name": "json",
+            "label": "JSON output",
+            "type": "boolean",
+            "flag": "--json"
+          }
         ]
       },
       {
@@ -147,9 +271,24 @@
         "effect": "read",
         "output": "json",
         "args": [
-          { "name": "allVaults", "label": "Inspect all registered vaults", "type": "boolean", "flag": "--all-vaults" },
-          { "name": "node", "label": "Mesh node", "type": "string", "flag": "--node" },
-          { "name": "json", "label": "JSON output", "type": "boolean", "flag": "--json" }
+          {
+            "name": "allVaults",
+            "label": "Inspect all registered vaults",
+            "type": "boolean",
+            "flag": "--all-vaults"
+          },
+          {
+            "name": "node",
+            "label": "Mesh node",
+            "type": "string",
+            "flag": "--node"
+          },
+          {
+            "name": "json",
+            "label": "JSON output",
+            "type": "boolean",
+            "flag": "--json"
+          }
         ]
       },
       {
@@ -493,14 +632,6 @@
       "formatPropagationReceipt"
     ]
   },
-  "auth": {
-    "plugin": "auth",
-    "methods": [
-      "passkey",
-      "google-oauth2"
-    ],
-    "session_verification": true
-  },
   "status": {
     "command": "status",
     "refresh_seconds": 300
@@ -511,5 +642,12 @@
       "total-recall ssss status"
     ],
     "owned": "Documentation hub discovery, wiki page auditing, staleness tracking, and OpenWiki knowledge ingestion."
-  }
+  },
+  "skills": [
+    {
+      "id": "openwiki",
+      "path": "./skills/openwiki/SKILL.md",
+      "description": "Multi-repo knowledge graph and documentation wiki engine for Total Recall."
+    }
+  ]
 }

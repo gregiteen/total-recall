@@ -10,7 +10,11 @@
     "software-development"
   ],
   "gate": {
-    "tasks": ["Run this repository's quality gates", "Read the latest gate report", "Set up or change a repository's gates"],
+    "tasks": [
+      "Run this repository's quality gates",
+      "Read the latest gate report",
+      "Set up or change a repository's gates"
+    ],
     "owned_commands": []
   },
   "cli": {
@@ -28,7 +32,16 @@
         "effect": "write",
         "timeoutMs": 600000,
         "args": [
-          { "name": "tier", "flag": "--tier", "type": "choice", "options": ["fast", "full"], "label": "Gate tier" }
+          {
+            "name": "tier",
+            "flag": "--tier",
+            "type": "choice",
+            "options": [
+              "fast",
+              "full"
+            ],
+            "label": "Gate tier"
+          }
         ]
       },
       {
@@ -165,5 +178,12 @@
   "distribution": {
     "tier": "official",
     "license": "open"
-  }
+  },
+  "skills": [
+    {
+      "id": "code-quality",
+      "path": "./skills/code-quality/SKILL.md",
+      "description": "Fail-closed deterministic code-quality gates, lint rules, and test compliance reporting."
+    }
+  ]
 }

@@ -16,7 +16,10 @@
     "ai"
   ],
   "gate": {
-    "tasks": ["Check embedding models and index coverage", "Pull or benchmark a local embedding model"],
+    "tasks": [
+      "Check embedding models and index coverage",
+      "Pull or benchmark a local embedding model"
+    ],
     "owned_commands": []
   },
   "cli": {
@@ -73,11 +76,21 @@
   },
   "auth": {
     "plugin": "auth",
-    "methods": ["passkey", "google-oauth2"],
+    "methods": [
+      "passkey",
+      "google-oauth2"
+    ],
     "session_verification": true
   },
   "status": {
     "command": "status",
     "refresh_seconds": 60
-  }
+  },
+  "skills": [
+    {
+      "id": "embeddings",
+      "path": "./skills/embeddings/SKILL.md",
+      "description": "Local embedding model management: provider/model status, benchmark, index build and coverage"
+    }
+  ]
 }

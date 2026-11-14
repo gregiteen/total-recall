@@ -10,13 +10,28 @@
     "software-development"
   ],
   "gate": {
-    "tasks": ["Run any git command", "Commit or push with identity, secret and rule checks", "Sign git in through the auth store", "Undo a destructive git command", "Check repository state across the mesh", "Keep the git CLI current on every node"],
+    "tasks": [
+      "Run any git command",
+      "Commit or push with identity, secret and rule checks",
+      "Sign git in through the auth store",
+      "Undo a destructive git command",
+      "Check repository state across the mesh",
+      "Keep the git CLI current on every node"
+    ],
     "owned_commands": [
-      { "pattern": "(^|[;&|(]\\s*)git(\\s+-C\\s+\\S+)?\\s+[a-z]", "use": "total-recall git <same git command and arguments>" }
+      {
+        "pattern": "(^|[;&|(]\\s*)git(\\s+-C\\s+\\S+)?\\s+[a-z]",
+        "use": "total-recall git <same git command and arguments>"
+      }
     ]
   },
   "tasks": [
-    { "intent": "Check and update the git CLI", "schedule": "17 6 * * *", "command": "cli update --scheduled", "placement": "per-node" }
+    {
+      "intent": "Check and update the git CLI",
+      "schedule": "17 6 * * *",
+      "command": "cli update --scheduled",
+      "placement": "per-node"
+    }
   ],
   "cli": {
     "answers_help": true,
@@ -33,57 +48,253 @@
         "description": "Read a stat or patch for unstaged, staged or base-relative changes",
         "effect": "read",
         "args": [
-          { "name": "patch", "flag": "--patch", "type": "boolean", "label": "Show patch" },
-          { "name": "cached", "flag": "--cached", "type": "boolean", "label": "Use staged changes" },
-          { "name": "base", "flag": "--base", "type": "string", "label": "Base ref" }
+          {
+            "name": "patch",
+            "flag": "--patch",
+            "type": "boolean",
+            "label": "Show patch"
+          },
+          {
+            "name": "cached",
+            "flag": "--cached",
+            "type": "boolean",
+            "label": "Use staged changes"
+          },
+          {
+            "name": "base",
+            "flag": "--base",
+            "type": "string",
+            "label": "Base ref"
+          }
         ]
       },
-      { "name": "commit", "description": "Check identity, conflicts, HEAD, secrets and repository rules, then run git's own commit with your arguments", "effect": "write", "timeout_ms": 600000, "args": [
-        { "name": "args", "type": "string", "label": "git commit arguments", "positional": true }
-      ] },
-      { "name": "push", "description": "Check outgoing commits for secrets and rules, turn --force into --force-with-lease, then run git's own push", "effect": "write", "timeout_ms": 600000, "args": [
-        { "name": "args", "type": "string", "label": "git push arguments", "positional": true }
-      ] },
-      { "name": "credential-helper", "description": "Git credential helper: give git the mapped auth-store credential (get); store and erase do nothing", "effect": "read" },
-      { "name": "auth", "description": "Sign-in: status (live check, no secret shown), map <host> <KEY>, setup (helper entries for this machine)", "effect": "write", "args": [
-        { "name": "action", "type": "string", "label": "status | map | setup", "positional": true }
-      ] },
-      { "name": "cli", "description": "Git CLI metadata (version, path, install source, upstream, release notes); --all-nodes for the mesh; cli update updates git through its installer", "effect": "write", "timeout_ms": 600000 },
-      { "name": "undo", "description": "Restore refs, index and files from the snapshot taken before a destructive git command; --list shows snapshots", "effect": "destructive", "args": [
-        { "name": "event", "type": "string", "label": "Snapshot", "positional": true },
-        { "name": "list", "flag": "--list", "type": "boolean", "label": "List snapshots" }
-      ] },
-      { "name": "fleet", "description": "Dirty, unpushed, behind, diverged, stale stashes and abandoned worktrees across registered repositories; --all-nodes for the mesh", "effect": "read", "timeout_ms": 600000 },
-      { "name": "unmerged", "description": "Branches with commits not in the default branch, worktrees with uncommitted changes and detached worktrees holding commits on no branch; --registered for every registered repository", "effect": "read", "output": "json", "timeout_ms": 600000, "args": [
-        { "name": "registered", "flag": "--registered", "type": "boolean", "label": "Every registered repository" }
-      ] },
-      { "name": "where", "description": "Machines and checkouts that contain a commit", "effect": "read", "args": [
-        { "name": "commit", "type": "string", "label": "Commit", "required": true, "positional": true }
-      ] },
-      { "name": "why", "description": "Blame one line plus the session, tracker item, decision and rules recorded when it was committed", "effect": "read", "args": [
-        { "name": "location", "type": "string", "label": "file:line", "required": true, "positional": true }
-      ] },
-      { "name": "group", "description": "Group a dirty tree into commits by the agent session that wrote each change; --apply commits the groups", "effect": "write" },
-      { "name": "message", "description": "Draft a commit message from the staged diff, the active tracker and its action log", "effect": "read" },
-      { "name": "bisect-agent", "description": "Find the first bad commit with the repository's quality gate as the test", "effect": "write", "timeout_ms": 600000, "args": [
-        { "name": "good", "type": "string", "label": "Good commit", "required": true, "positional": true },
-        { "name": "bad", "type": "string", "label": "Bad commit", "required": true, "positional": true }
-      ] },
-      { "name": "resolve", "description": "Propose a resolution for each conflicted file from both sides' recorded intent; --apply writes it", "effect": "write" },
-      { "name": "handoff", "description": "Pack a branch, its tracker and related memory into one SSSS bundle for another agent or machine", "effect": "write", "args": [
-        { "name": "branch", "type": "string", "label": "Branch", "required": true, "positional": true },
-        { "name": "out", "flag": "--out", "type": "string", "label": "Output file" }
-      ] },
-      { "name": "worktree-list", "description": "Read registered worktrees for the current repository", "effect": "read" },
-      { "name": "worktree-create", "description": "Create a detached worktree at a specified path and base ref", "effect": "write", "args": [
-        { "name": "path", "type": "string", "label": "Worktree path", "required": true, "positional": true },
-        { "name": "base", "flag": "--base", "type": "string", "label": "Base ref" }
-      ] },
-      { "name": "worktree-remove", "description": "Remove an owned linked worktree, with explicit force for dirty content", "effect": "destructive", "args": [
-        { "name": "path", "type": "string", "label": "Worktree path", "required": true, "positional": true },
-        { "name": "force", "flag": "--force", "type": "boolean", "label": "Allow removal of dirty content" }
-      ] },
-      { "name": "worktree", "description": "Compatibility form: worktree list, create or remove", "effect": "destructive" },
+      {
+        "name": "commit",
+        "description": "Check identity, conflicts, HEAD, secrets and repository rules, then run git's own commit with your arguments",
+        "effect": "write",
+        "timeout_ms": 600000,
+        "args": [
+          {
+            "name": "args",
+            "type": "string",
+            "label": "git commit arguments",
+            "positional": true
+          }
+        ]
+      },
+      {
+        "name": "push",
+        "description": "Check outgoing commits for secrets and rules, turn --force into --force-with-lease, then run git's own push",
+        "effect": "write",
+        "timeout_ms": 600000,
+        "args": [
+          {
+            "name": "args",
+            "type": "string",
+            "label": "git push arguments",
+            "positional": true
+          }
+        ]
+      },
+      {
+        "name": "credential-helper",
+        "description": "Git credential helper: give git the mapped auth-store credential (get); store and erase do nothing",
+        "effect": "read"
+      },
+      {
+        "name": "auth",
+        "description": "Sign-in: status (live check, no secret shown), map <host> <KEY>, setup (helper entries for this machine)",
+        "effect": "write",
+        "args": [
+          {
+            "name": "action",
+            "type": "string",
+            "label": "status | map | setup",
+            "positional": true
+          }
+        ]
+      },
+      {
+        "name": "cli",
+        "description": "Git CLI metadata (version, path, install source, upstream, release notes); --all-nodes for the mesh; cli update updates git through its installer",
+        "effect": "write",
+        "timeout_ms": 600000
+      },
+      {
+        "name": "undo",
+        "description": "Restore refs, index and files from the snapshot taken before a destructive git command; --list shows snapshots",
+        "effect": "destructive",
+        "args": [
+          {
+            "name": "event",
+            "type": "string",
+            "label": "Snapshot",
+            "positional": true
+          },
+          {
+            "name": "list",
+            "flag": "--list",
+            "type": "boolean",
+            "label": "List snapshots"
+          }
+        ]
+      },
+      {
+        "name": "fleet",
+        "description": "Dirty, unpushed, behind, diverged, stale stashes and abandoned worktrees across registered repositories; --all-nodes for the mesh",
+        "effect": "read",
+        "timeout_ms": 600000
+      },
+      {
+        "name": "unmerged",
+        "description": "Branches with commits not in the default branch, worktrees with uncommitted changes and detached worktrees holding commits on no branch; --registered for every registered repository",
+        "effect": "read",
+        "output": "json",
+        "timeout_ms": 600000,
+        "args": [
+          {
+            "name": "registered",
+            "flag": "--registered",
+            "type": "boolean",
+            "label": "Every registered repository"
+          }
+        ]
+      },
+      {
+        "name": "where",
+        "description": "Machines and checkouts that contain a commit",
+        "effect": "read",
+        "args": [
+          {
+            "name": "commit",
+            "type": "string",
+            "label": "Commit",
+            "required": true,
+            "positional": true
+          }
+        ]
+      },
+      {
+        "name": "why",
+        "description": "Blame one line plus the session, tracker item, decision and rules recorded when it was committed",
+        "effect": "read",
+        "args": [
+          {
+            "name": "location",
+            "type": "string",
+            "label": "file:line",
+            "required": true,
+            "positional": true
+          }
+        ]
+      },
+      {
+        "name": "group",
+        "description": "Group a dirty tree into commits by the agent session that wrote each change; --apply commits the groups",
+        "effect": "write"
+      },
+      {
+        "name": "message",
+        "description": "Draft a commit message from the staged diff, the active tracker and its action log",
+        "effect": "read"
+      },
+      {
+        "name": "bisect-agent",
+        "description": "Find the first bad commit with the repository's quality gate as the test",
+        "effect": "write",
+        "timeout_ms": 600000,
+        "args": [
+          {
+            "name": "good",
+            "type": "string",
+            "label": "Good commit",
+            "required": true,
+            "positional": true
+          },
+          {
+            "name": "bad",
+            "type": "string",
+            "label": "Bad commit",
+            "required": true,
+            "positional": true
+          }
+        ]
+      },
+      {
+        "name": "resolve",
+        "description": "Propose a resolution for each conflicted file from both sides' recorded intent; --apply writes it",
+        "effect": "write"
+      },
+      {
+        "name": "handoff",
+        "description": "Pack a branch, its tracker and related memory into one SSSS bundle for another agent or machine",
+        "effect": "write",
+        "args": [
+          {
+            "name": "branch",
+            "type": "string",
+            "label": "Branch",
+            "required": true,
+            "positional": true
+          },
+          {
+            "name": "out",
+            "flag": "--out",
+            "type": "string",
+            "label": "Output file"
+          }
+        ]
+      },
+      {
+        "name": "worktree-list",
+        "description": "Read registered worktrees for the current repository",
+        "effect": "read"
+      },
+      {
+        "name": "worktree-create",
+        "description": "Create a detached worktree at a specified path and base ref",
+        "effect": "write",
+        "args": [
+          {
+            "name": "path",
+            "type": "string",
+            "label": "Worktree path",
+            "required": true,
+            "positional": true
+          },
+          {
+            "name": "base",
+            "flag": "--base",
+            "type": "string",
+            "label": "Base ref"
+          }
+        ]
+      },
+      {
+        "name": "worktree-remove",
+        "description": "Remove an owned linked worktree, with explicit force for dirty content",
+        "effect": "destructive",
+        "args": [
+          {
+            "name": "path",
+            "type": "string",
+            "label": "Worktree path",
+            "required": true,
+            "positional": true
+          },
+          {
+            "name": "force",
+            "flag": "--force",
+            "type": "boolean",
+            "label": "Allow removal of dirty content"
+          }
+        ]
+      },
+      {
+        "name": "worktree",
+        "description": "Compatibility form: worktree list, create or remove",
+        "effect": "destructive"
+      },
       {
         "name": "identity",
         "description": "Show who commits here and which identities the history publishes; exits 1 on a missing or machine-derived identity (--json for machine output)",
@@ -101,10 +312,21 @@
         "tag": "tr-git-home",
         "module": "ui/home.js",
         "description": "Repository audit, diff stats, and linked worktrees",
-        "tokens": ["color-text", "color-surface", "color-border", "spacing-md", "radius-md"],
+        "tokens": [
+          "color-text",
+          "color-surface",
+          "color-border",
+          "spacing-md",
+          "radius-md"
+        ],
         "optional_tokens": [
-          "color-background", "color-accent", "color-muted", "color-danger",
-          "typography-body-font-family", "typography-heading-font-family", "typography-mono-font-family"
+          "color-background",
+          "color-accent",
+          "color-muted",
+          "color-danger",
+          "typography-body-font-family",
+          "typography-heading-font-family",
+          "typography-mono-font-family"
         ]
       }
     ]
@@ -139,7 +361,13 @@
     "badge": "Repository Hygiene",
     "font": "space-grotesk"
   },
-  "startup_check": { "command": "unmerged", "args": ["--json"], "timeout_ms": 20000 },
+  "startup_check": {
+    "command": "unmerged",
+    "args": [
+      "--json"
+    ],
+    "timeout_ms": 20000
+  },
   "status": {
     "command": "audit",
     "refresh_seconds": 60
@@ -154,5 +382,12 @@
       "total-recall ssss status"
     ],
     "owned": "Secret-firewalled commits and pushes, worktree management, unmerged branch detection, and fleet repository hygiene."
-  }
+  },
+  "skills": [
+    {
+      "id": "git",
+      "path": "./skills/git/SKILL.md",
+      "description": "The whole git CLI through Total Recall: sign-in from the auth store, guarded commits and pushes, undo, fleet state, and the intent behind every change."
+    }
+  ]
 }

@@ -2,17 +2,18 @@ import { listAvailableBundled } from '../../core/plugin-store.mjs';
 
 function parseArgs(args) {
   const isJson = args.includes('--json');
+  const isStore = args.includes('--store');
   let useCase = null;
   const words = [];
   for (let i = 0; i < args.length; i++) {
-    if (args[i] === '--json') continue;
+    if (args[i] === '--json' || args[i] === '--store') continue;
     if (args[i] === '--use-case' && args[i + 1]) {
       useCase = args[++i];
       continue;
     }
     words.push(args[i]);
   }
-  return { isJson, useCase, query: words.join(' ').toLowerCase().trim() };
+  return { isJson, isStore, useCase, query: words.join(' ').toLowerCase().trim() };
 }
 
 /**
@@ -108,7 +109,28 @@ export async function listPeers(args = []) {
 
 /** `plugin search <query>` — bundled plugins plus whatever mesh peers share. */
 export async function searchPlugins(args = []) {
-  const { isJson, useCase, query } = parseArgs(args);
+  const { isJson, isStore, useCase, query } = parseArgs(args);
+  if (isStore) {
+    const base = (process.env.TR_STORE_URL || 'http://127.0.0.1:3000').replace(/\/+$/, '');
+    const params = new URLSearchParams();
+    if (query) params.set('q', query);
+    if (useCase) params.set('use_case', useCase);
+    const res = await fetch(`${base}/api/store/plugins${params.toString() ? `?${params}` : ''}`);
+    if (!res.ok) throw new Error(`Store catalog unavailable (HTTP ${res.status})`);
+    const data = await res.json();
+    const storePlugins = data.plugins || [];
+    if (isJson) {
+      console.log(JSON.stringify({ store: storePlugins }, null, 2));
+      return;
+    }
+    console.log(`\n🛒 Store plugins matching "${query || '*'}"${useCase ? ` (use case: ${useCase})` : ''}\n`);
+    if (storePlugins.length === 0) {
+      console.log('No store plugins found.\n');
+      return;
+    }
+    for (const p of storePlugins) printPlugin(p, `store:${p.id}`);
+    return;
+  }
   const bundled = listAvailableBundled(process.cwd()).filter((p) => matches(p, query, useCase));
   const { listPeerPlugins } = await import('../../core/plugin-peers.mjs');
   const peers = await listPeerPlugins();

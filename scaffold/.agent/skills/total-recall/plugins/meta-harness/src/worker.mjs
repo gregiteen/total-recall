@@ -535,8 +535,13 @@ export async function totalRecallBootstrap(request, { probe = runProcess, env = 
   if (docs.ok !== true) throw notReady('Official agent documentation is unavailable or stale');
   // Node built-ins only here (this file ships to remote nodes): the result is the pretty-printed JSON after any log lines.
   let found = null;
-  try { const out = await invoke(['help', task, '--json']); const at = out.indexOf('{\n'); found = JSON.parse(at >= 0 ? out.slice(at) : out); }
-  catch (error) { if (error.code === 'NOT_READY') throw error; found = null; }
+  try {
+    const helpRes = await probe(binary, ['help', task, '--json'], { cwd, timeoutMs: 30000, maxBytes: 2 * 1024 * 1024, env: agentEnvironment(env) });
+    if (helpRes.exitCode === 0 && helpRes.stdout) {
+      const at = helpRes.stdout.indexOf('{\n');
+      found = JSON.parse(at >= 0 ? helpRes.stdout.slice(at) : helpRes.stdout);
+    }
+  } catch { found = null; }
   const matches = Array.isArray(found?.matches) ? found.matches.slice(0, 12) : [];
   const references = `${matches.length ? `Commands that match this task (Total Recall semantic command search):\n${matches.map(m => `- ${m.verb} — ${m.description}`).join('\n')}\n` : ''}For anything else, run total-recall help "<what you need>" to find the command, then total-recall <namespace> --help for its arguments. Do not load whole command inventories.`;
   const operatingContext = hasEvidence ? capsule.context.slice(0, evidenceStart).trimEnd() : capsule.context;

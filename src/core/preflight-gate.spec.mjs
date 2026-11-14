@@ -220,13 +220,15 @@ describe('decide: a denial says what happened and what to run', () => {
 
 describe('decide: with a fresh receipt', () => {
   it('allows ordinary work', () => {
-    for (const tool of ['write', 'web', 'mcp', 'agent', 'search', 'other']) expect(decide({ tool }, fresh()).decision).toBe('allow');
+    for (const tool of ['write', 'web', 'mcp', 'agent', 'other']) expect(decide({ tool }, fresh()).decision, tool).toBe('allow');
     expect(decide({ tool: 'shell', command: 'npm test' }, fresh()).decision).toBe('allow');
   });
-  it('still blocks a repository sweep without a recent consult, and opens it after one', () => {
-    const sweep = { tool: 'shell', command: 'rg -n "preflight" src' };
+  it('still blocks a repository sweep or search tool without a recent consult, and opens it after one', () => {
+    const sweep = { tool: 'shell', command: 'find . -name "*.mjs"' };
     expect(decide(sweep, fresh({ recentConsult: () => false }))).toMatchObject({ decision: 'deny', rule: 'sweep' });
+    expect(decide({ tool: 'search' }, fresh({ recentConsult: () => false }))).toMatchObject({ decision: 'deny', rule: 'sweep' });
     expect(decide(sweep, fresh({ recentConsult: () => true })).decision).toBe('allow');
+    expect(decide({ tool: 'search' }, fresh({ recentConsult: () => true })).decision).toBe('allow');
     expect(decide(sweep, fresh()).decision).toBe('deny');
   });
   it('uses a 15 minute consult window', () => expect(SWEEP_CONSULT_MS).toBe(15 * 60 * 1000));
@@ -336,18 +338,10 @@ describe('decide: modes for the rules that steer work toward a plugin', () => {
   const raw = { tool: 'shell', command: 'git status' };
   const base = { ownedCommands: () => owned, recentConsult: () => true };
 
-  it('warns by default: the raw command runs and the note names the plugin command', () => {
-    const answer = decide(raw, fresh(base));
-    expect(answer).toMatchObject({ decision: 'allow', rule: 'warn:owned:git-sentinel', warned: ['owned:git-sentinel'] });
-    expect(answer.warning).toContain('total-recall git-sentinel audit');
-  });
-  it('states facts, because harnesses treat commands from a hook as possible injection', () => {
-    const answer = decide({ ...raw }, fresh({ ...base, router: () => router, routed: () => false }));
-    expect(answer.warning).not.toMatch(/\b(run|must|do not)\b/i);
-  });
-  it('does nothing in off', () => {
-    const answer = decide(raw, fresh({ ...base, router: () => router, routed: () => false, mode: () => 'off' }));
-    expect(answer).toEqual({ decision: 'allow', rule: 'receipt:fresh' });
+  it('enforces by default and blocks raw commands owned by a healthy plugin', () => {
+    const answer = decide(raw, fresh({ ...base, ownerHealthy: () => true }));
+    expect(answer).toMatchObject({ decision: 'deny', rule: 'owned:git-sentinel' });
+    expect(answer.fix).toContain('total-recall git-sentinel audit');
   });
   it('blocks in enforce only while the owner runs', () => {
     expect(decide(raw, fresh({ ...base, mode: () => 'enforce', ownerHealthy: () => true })).decision).toBe('deny');
@@ -355,33 +349,23 @@ describe('decide: modes for the rules that steer work toward a plugin', () => {
     expect(broken.decision).toBe('allow');
     expect(broken.warning).toContain('failed its health check');
   });
-  it('asks about the owner only when a call would be denied', () => {
-    const asked = [];
-    const ownerHealthy = (plugin) => { asked.push(plugin); return true; };
-    decide({ tool: 'shell', command: 'ls' }, fresh({ ...base, mode: () => 'enforce', ownerHealthy }));
-    decide(raw, fresh({ ...base, mode: () => 'warn', ownerHealthy }));
-    expect(asked).toEqual([]);
+  it('enforces routing when not yet routed', () => {
+    const first = decide({ tool: 'write', path: 'a' }, fresh({ router: () => router, routed: () => false, ownerHealthy: () => true }));
+    expect(first).toMatchObject({ decision: 'deny', rule: 'route' });
+    expect(first.fix).toContain(router.use);
+    expect(decide({ tool: 'write', path: 'a' }, fresh({ router: () => router, routed: () => true, ownerHealthy: () => true }))).toEqual({ decision: 'allow', rule: 'receipt:fresh' });
   });
-  it('warns about routing once per receipt, not on every call', () => {
-    const first = decide({ tool: 'write', path: 'a' }, fresh({ router: () => router, routed: () => false, routeWarned: () => false }));
-    expect(first).toMatchObject({ decision: 'allow', warned: ['route'] });
-    expect(first.warning).toContain(router.use);
-    expect(decide({ tool: 'write', path: 'a' }, fresh({ router: () => router, routed: () => false, routeWarned: () => true }))).toEqual({ decision: 'allow', rule: 'receipt:fresh' });
-  });
-  it('carries both notes when both rules apply', () => {
-    const answer = decide(raw, fresh({ ...base, router: () => router, routed: () => false }));
-    expect(answer.warned).toEqual(['route', 'owned:git-sentinel']);
-    expect(answer.warning).toContain(router.use);
-    expect(answer.warning).toContain('total-recall git-sentinel audit');
-  });
-  it('asks for the mode by rule and plugin', () => {
-    const asked = [];
-    decide(raw, fresh({ ...base, router: () => router, routed: () => false, mode: (kind, plugin) => { asked.push([kind, plugin]); return 'off'; } }));
-    expect(asked).toEqual([['router', 'meta-harness'], ['owned', 'git-sentinel']]);
-  });
-  it('never turns off the receipt, in any mode', () => {
+  it('never turns off the receipt or plugin gates, even if mode() returns off', () => {
     const noReceipt = { check: () => ({ ok: false, problems: ['no receipt'] }), mode: () => 'off' };
     expect(decide({ tool: 'write', path: 'a' }, noReceipt)).toMatchObject({ decision: 'deny', rule: 'receipt' });
+    expect(decide(raw, fresh({ ...base, mode: () => 'off', ownerHealthy: () => true })).decision).toBe('deny');
+  });
+  it('blocks grep, rg, ag, and git grep unconditionally', () => {
+    const consulted = fresh({ ...base, recentConsult: () => true, ownerHealthy: () => true });
+    for (const command of ['grep -n foo a.js', 'rg pattern src/', 'git grep pattern', 'cat log.txt | grep err']) {
+      expect(decide({ tool: 'shell', command }, consulted), command).toMatchObject({ decision: 'deny', rule: 'grep' });
+    }
+    expect(decide({ tool: 'shell', command: 'total-recall recall "grep"' }, consulted).decision).toBe('allow');
   });
   it('never gates native subagents, in any mode', () => {
     for (const mode of ['off', 'warn', 'enforce']) {

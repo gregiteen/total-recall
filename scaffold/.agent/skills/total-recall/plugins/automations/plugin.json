@@ -7,7 +7,9 @@
   "author": "Total Recall",
   "license": "MIT",
   "reuse": {
-    "commands": ["total-recall mesh nodes"],
+    "commands": [
+      "total-recall mesh nodes"
+    ],
     "owned": "Collects automation sources, triggers, outcomes and node coverage, and delegates confirmed local task cancellation to its owner."
   },
   "use_cases": [
@@ -15,9 +17,16 @@
     "monitoring"
   ],
   "gate": {
-    "tasks": ["List scheduled tasks and automations across the mesh", "Check an automation's real outcome", "Cancel a pending local task"],
+    "tasks": [
+      "List scheduled tasks and automations across the mesh",
+      "Check an automation's real outcome",
+      "Cancel a pending local task"
+    ],
     "owned_commands": [
-      { "pattern": "(crontab\\s+-l\\b|launchctl\\s+list\\b)", "use": "total-recall automations list --json" }
+      {
+        "pattern": "(crontab\\s+-l\\b|launchctl\\s+list\\b)",
+        "use": "total-recall automations list --json"
+      }
     ]
   },
   "cli": {
@@ -48,7 +57,12 @@
         "effect": "read",
         "output": "json",
         "args": [
-          { "name": "receipt", "flag": "--receipt", "type": "boolean", "label": "Local terminal failure receipt" }
+          {
+            "name": "receipt",
+            "flag": "--receipt",
+            "type": "boolean",
+            "label": "Local terminal failure receipt"
+          }
         ]
       },
       {
@@ -80,7 +94,9 @@
     "modules": {
       "scheduler": "scheduler.mjs"
     },
-    "daemon": ["scheduler"]
+    "daemon": [
+      "scheduler"
+    ]
   },
   "ui": {
     "design_tokens": "DESIGN.md",
@@ -142,10 +158,19 @@
   },
   "capability": {
     "entry": "capability/index.mjs",
-    "exports": ["collectSources"]
+    "exports": [
+      "collectSources"
+    ]
   },
   "distribution": {
     "tier": "official",
     "license": "open"
-  }
+  },
+  "skills": [
+    {
+      "id": "automations",
+      "path": "./skills/automations/SKILL.md",
+      "description": "Run scheduled plugin tasks and inspect automation sources, triggers, observed outcomes and coverage across the mesh."
+    }
+  ]
 }

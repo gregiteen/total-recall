@@ -12,7 +12,41 @@ function describePluginWithShare(plugin, projectRoot) {
   return result;
 }
 
-async function resolveBundle(source, { peerDeps, publicDeps } = {}) {
+async function resolveStoreBundle(id, { storeUrl = process.env.TR_STORE_URL || 'http://127.0.0.1:3000', fetchImpl = fetch, licenseKey } = {}) {
+  const base = storeUrl.replace(/\/+$/, '');
+  const headers = {};
+  const resolvedKey = licenseKey || process.env[`${id.toUpperCase().replace(/-/g, '_')}_LICENSE_KEY`] || process.env.TR_LICENSE_KEY;
+  if (resolvedKey) headers['x-license-key'] = resolvedKey;
+  const listRes = await fetchImpl(`${base}/api/store/plugins?q=${encodeURIComponent(id)}`);
+  if (!listRes.ok) throw new Error(`Store catalog unavailable (HTTP ${listRes.status})`);
+  const listData = await listRes.json();
+  const entry = (listData.plugins || []).find((p) => p.id === id);
+  if (!entry) throw new Error(`Plugin '${id}' not found in Store catalog`);
+  const bundleRes = await fetchImpl(`${base}/api/store/plugins/${encodeURIComponent(id)}/bundle`, { headers });
+  if (!bundleRes.ok) {
+    let reason = `HTTP ${bundleRes.status}`;
+    try { const err = await bundleRes.json(); if (err?.error) reason = err.error; } catch {}
+    throw new Error(`Store install denied for '${id}': ${reason}`);
+  }
+  const bundle = Buffer.from(await bundleRes.arrayBuffer());
+  const sha256 = bundleRes.headers?.get?.('x-plugin-sha256') || entry.sha256;
+  return { bundle, sha256, sourceRecord: { kind: 'store', ref: `store:${id}`, store_url: base }, expectedId: id };
+}
+
+async function resolveBundle(source, { peerDeps, publicDeps, storeDeps } = {}) {
+  if (typeof source === 'string' && source.startsWith('store:')) {
+    const id = source.slice('store:'.length).trim();
+    if (!id) throw new Error('Missing plugin id in store:<id>');
+    const { bundle, sha256, sourceRecord, expectedId } = await resolveStoreBundle(id, storeDeps);
+    const decoded = decodeBundle(bundle, sha256 ? { expectedSha256: sha256 } : {});
+    const entry = decoded.entries.find(e => e.path === 'plugin.json');
+    if (!entry) throw new Error('Store plugin bundle has no plugin.json');
+    const manifest = JSON.parse(entry.data.toString('utf8'));
+    const validation = validatePluginManifest(manifest);
+    if (!validation.valid) throw new Error(`Invalid plugin manifest: ${validation.errors.join('; ')}`);
+    if (manifest.id !== expectedId) throw new Error(`Requested '${expectedId}' but bundle contained '${manifest.id}'`);
+    return { manifest, entries: decoded.entries, sha256: decoded.sha256, source: sourceRecord };
+  }
   const peerModule = typeof source === 'string' && source.startsWith('peer:')
     ? await import('./plugin-peers.mjs') : null;
   const peer = peerModule?.parsePeerSource(source);

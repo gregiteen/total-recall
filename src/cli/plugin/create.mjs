@@ -274,7 +274,7 @@ export async function createPlugin(args = []) {
     };
   }
 
-  const withSkill = args.includes("--with-skill") || args.includes("--capability") || Boolean(fromSkillPath);
+  const withSkill = !args.includes("--no-skill");
   const isCapability = args.includes("--capability") || Boolean(fromSkillPath);
 
   if (withCli || isCapability || withTask) {
@@ -386,6 +386,7 @@ export default run;
 name: ${id}
 description: "${pluginDesc}"
 version: 0.1.0
+repo_scoped: false
 ---
 
 # ${pluginName}
