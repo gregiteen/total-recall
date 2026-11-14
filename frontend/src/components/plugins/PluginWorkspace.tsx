@@ -7,7 +7,6 @@ import {
 } from '../../api/plugins'
 import { PluginPanel, pluginElements } from './PluginPanel'
 import { PluginSettings } from './PluginSettings'
-import { PluginChunkLibrary } from '../workspace/PluginChunkLibrary'
 import { PluginHome } from '../workspace/PluginHome'
 import { readSavedPluginCredentials } from '../../api/plugin-credentials'
 import { ScopedPluginCommands } from './ScopedPluginCommands'
@@ -250,73 +249,74 @@ function PluginDetail({ plugin, plugins, brainId, stale, opening, onUse, onChang
     } finally { setChanging(false) }
   }
 
+  const activationList = !!rows.length && <ul className="plugin-folder-list" aria-label="Activation by brain">
+    {rows.map(row => <li className="plugin-drawer-actions" key={row.brainId}>
+      <span>{row.name}{row.brainId === 'global' && <small className="plugin-muted"> · Shared default</small>}</span>
+      {row.state === 'unavailable' || row.state === 'error' ? <span>{row.state === 'error' ? 'Error' : 'Unavailable'}</span> :
+        row.brainId.startsWith('project:') ? <select className="select"
+          style={{ minHeight: 44, width: 'auto' }}
+          aria-label={`${plugin.name} activation for ${row.name}`} aria-busy={busy || undefined}
+          disabled={stale || busy || row.required} value={row.mode || (row.enabled ? 'on' : 'off')}
+          onChange={event => {
+            const mode = event.currentTarget.value
+            void change(row, mode === 'on-use' ? mode : mode === 'on')
+          }}>
+          <option value="off">Off</option>
+          <option value="on-use">On use</option>
+          <option value="on">On</option>
+        </select> :
+        <button type="button" role="switch" aria-checked={row.enabled}
+          aria-label={rows.length === 1 ? `${plugin.name} activation` : `${plugin.name} activation for ${row.name}`}
+          title={row.required ? 'Required plugin' : undefined} className="btn btn-ghost btn-sm"
+          disabled={stale || busy || row.required} onClick={() => void change(row)}>
+          {stale ? 'Unknown' : busy ? 'Updating…' : row.enabled ? 'On' : 'Off'}
+        </button>}
+      {!row.enabled && cleanupRetries.includes(row.brainId) && <button type="button"
+        className="btn btn-ghost btn-sm" disabled={stale || busy}
+        aria-label={`Retry cleanup for ${row.name}`} onClick={() => void change(row, false)}>Retry cleanup</button>}
+    </li>)}
+  </ul>
+
   return <section className="plugin-workspace-page" aria-label={plugin.name}>
     <header className="plugin-drawer-header">
-      <h1>{plugin.name}</h1>
-      <button type="button" className="btn btn-ghost btn-sm" onClick={onClose}>Close</button>
-    </header>
-    <p className="plugin-muted">{plugin.description}</p>
-    <dl className="plugin-detail-status">
-      <div><dt>Brain activation</dt><dd>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap', minWidth: 0 }}>
+        <h1>{plugin.name}</h1>
         <span className={`badge ${error ? 'badge-error' : enabled ? 'badge-success' : ''}`}>
           {stale ? 'Unknown' : activation?.state === 'mixed' ? 'Mixed' : error ? 'Error' : activation?.mode === 'on-use' ? 'On use' : enabled ? 'Active' : activation ? 'Off' : 'Unknown'}
         </span>
-      </dd></div>
-      <div><dt>Authentication</dt><dd>{credentialLabel}</dd></div>
-      <div><dt>Provider connection</dt><dd>Unreported</dd></div>
-      <div><dt>Installed</dt><dd>v{plugin.version} · {pluginOrigin(plugin)} · {plugin.scope}</dd></div>
-    </dl>
-    {!!rows.length && <ul className="plugin-folder-list" aria-label="Activation by brain">
-      {rows.map(row => <li className="plugin-drawer-actions" key={row.brainId}>
-        <span>{row.name}{row.brainId === 'global' && <small className="plugin-muted"> · Shared default</small>}</span>
-        {row.state === 'unavailable' || row.state === 'error' ? <span>{row.state === 'error' ? 'Error' : 'Unavailable'}</span> :
-          row.brainId.startsWith('project:') ? <select className="select"
-            style={{ minHeight: 44, width: 'auto' }}
-            aria-label={`${plugin.name} activation for ${row.name}`} aria-busy={busy || undefined}
-            disabled={stale || busy || row.required} value={row.mode || (row.enabled ? 'on' : 'off')}
-            onChange={event => {
-              const mode = event.currentTarget.value
-              void change(row, mode === 'on-use' ? mode : mode === 'on')
-            }}>
-            <option value="off">Off</option>
-            <option value="on-use">On use</option>
-            <option value="on">On</option>
-          </select> :
-          <button type="button" role="switch" aria-checked={row.enabled}
-            aria-label={rows.length === 1 ? `${plugin.name} activation` : `${plugin.name} activation for ${row.name}`}
-            title={row.required ? 'Required plugin' : undefined} className="btn btn-ghost btn-sm"
-            disabled={stale || busy || row.required} onClick={() => void change(row)}>
-            {stale ? 'Unknown' : busy ? 'Updating…' : row.enabled ? 'On' : 'Off'}
-          </button>}
-        {!row.enabled && cleanupRetries.includes(row.brainId) && <button type="button"
-          className="btn btn-ghost btn-sm" disabled={stale || busy}
-          aria-label={`Retry cleanup for ${row.name}`} onClick={() => void change(row, false)}>Retry cleanup</button>}
-      </li>)}
-    </ul>}
+      </div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0 }}>
+        {brainId && canManage && (
+          <button
+            type="button"
+            className={`btn btn-sm ${tab === 'settings' ? 'btn-primary' : 'btn-ghost'}`}
+            aria-pressed={tab === 'settings'}
+            onClick={() => setTab(tab === 'settings' ? 'home' : 'settings')}
+          >
+            Settings
+          </button>
+        )}
+        {brainId && tab === 'commands' && (
+          <button type="button" className="btn btn-ghost btn-sm" onClick={() => setTab('home')}>
+            Back
+          </button>
+        )}
+        <button type="button" className="btn btn-ghost btn-sm" onClick={onClose}>Close</button>
+      </div>
+    </header>
+    {plugin.description && <p className="plugin-muted" style={{ marginBottom: '12px' }}>{plugin.description}</p>}
     {stale && <p role="alert">The installed state could not be refreshed.</p>}
     {error && <p role="alert">{plugin.errors[0] || 'The activation policy could not be read.'}</p>}
     {opening?.error && !enabled && !notice && <p role="alert">{opening.error}</p>}
     {notice && <p role={notice.error ? 'alert' : 'status'}>{notice.text}</p>}
-    {!brainId ? <p className="plugin-muted">Select one brain to open this plugin’s tools.</p> : <>
-    <nav className="plugin-drawer-actions" aria-label={`${plugin.name} views`}>
-      <button className={`btn ${tab === 'home' ? 'btn-primary' : 'btn-ghost'}`} aria-pressed={tab === 'home'}
-        onClick={() => setTab('home')}>Home</button>
-      {panel && enabled && <button className={`btn ${tab === 'interface' ? 'btn-primary' : 'btn-ghost'}`} aria-pressed={tab === 'interface'}
-        onClick={() => setTab('interface')}>Interface</button>}
-      {enabled && !stale && <button className={`btn ${tab === 'blocks' ? 'btn-primary' : 'btn-ghost'}`} aria-pressed={tab === 'blocks'}
-        onClick={() => setTab('blocks')}>Blocks</button>}
-      {canManage && <button className={`btn ${tab === 'settings' ? 'btn-primary' : 'btn-ghost'}`} aria-pressed={tab === 'settings'}
-        onClick={() => setTab('settings')}>Settings</button>}
-      {plugin.cli && <button className={`btn ${tab === 'commands' ? 'btn-primary' : 'btn-ghost'}`} aria-pressed={tab === 'commands'}
-        onClick={() => setTab('commands')}>Commands</button>}
-    </nav>
+    {!brainId ? <>{activationList}<p className="plugin-muted">Select one brain to open this plugin’s tools.</p></> : <>
     {tab === 'home' && (enabled && !stale
       ? <PluginHome plugin={plugin} plugins={plugins} brainId={brainId} onCommand={openCommand} />
       : armed && !stale ? <div className="plugin-drawer-actions">
         <span className="plugin-muted">This plugin activates when you open it.</span>
         <button type="button" className="btn btn-primary" disabled={busy}
           onClick={onUse}>{busy ? 'Opening…' : 'Open plugin'}</button>
-      </div> : <p className="plugin-muted">An active plugin is needed to open its Home tools.</p>)}
+      </div> : <p className="plugin-muted">An active plugin is needed to open this plugin.</p>)}
     {tab === 'interface' && enabled && panel && <>
       {panels.length > 1 && <label>Panel
         <select className="select" value={panel.id} onChange={event => setPanelId(event.target.value)}>
@@ -326,6 +326,17 @@ function PluginDetail({ plugin, plugins, brainId, stale, opening, onUse, onChang
       <PluginPanel key={panel.id} plugin={plugin} elementId={panel.id} brainId={brainId} readOnly={stale} />
     </>}
     {tab === 'settings' && canManage && <>
+      <dl className="plugin-detail-status">
+        <div><dt>Brain activation</dt><dd>
+          <span className={`badge ${error ? 'badge-error' : enabled ? 'badge-success' : ''}`}>
+            {stale ? 'Unknown' : activation?.state === 'mixed' ? 'Mixed' : error ? 'Error' : activation?.mode === 'on-use' ? 'On use' : enabled ? 'Active' : activation ? 'Off' : 'Unknown'}
+          </span>
+        </dd></div>
+        <div><dt>Authentication</dt><dd>{credentialLabel}</dd></div>
+        <div><dt>Provider connection</dt><dd>Unreported</dd></div>
+        <div><dt>Installed</dt><dd>v{plugin.version} · {pluginOrigin(plugin)} · {plugin.scope}</dd></div>
+      </dl>
+      {activationList}
       {!panel && <p className="plugin-muted">This package has no installed workspace panel.</p>}
       {plugin.valid && <PluginSettings plugin={plugin} />}
       <details>
@@ -341,11 +352,16 @@ function PluginDetail({ plugin, plugins, brainId, stale, opening, onUse, onChang
             </button>}
         </div>
       </details>
+      {plugin.cli && (
+        <details style={{ marginBottom: '12px' }}>
+          <summary>Developer CLI commands</summary>
+          <ScopedPluginCommands key={plugin.sha256} plugin={plugin} brainId={brainId}
+            enabled={enabled && !stale} initialCommand={initialCommand} />
+        </details>
+      )}
     </>}
     {tab === 'commands' && plugin.cli && <ScopedPluginCommands key={plugin.sha256} plugin={plugin} brainId={brainId}
       enabled={enabled && !stale} initialCommand={initialCommand} />}
-    {tab === 'blocks' && enabled && !stale && <PluginChunkLibrary key={`${plugin.id}:${brainId}`}
-      plugin={plugin} brainId={brainId} />}
     </>}
   </section>
 }

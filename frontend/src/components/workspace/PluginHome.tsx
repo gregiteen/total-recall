@@ -18,7 +18,7 @@ export function PluginHome({ plugin, plugins, brainId, onCommand }: {
   const home = (plugin.manifest?.ui as { home?: string } | undefined)?.home || plugin.ui?.home
   const panel = panels.find(element => element.id === home) || panels[0]
   const operations = scopedPluginOperations(plugin)
-  const chunks = published?.chunks.length ? published.chunks : defaults
+  const chunks = published?.chunks.length ? published.chunks : (panel ? [] : defaults)
 
   useEffect(() => {
     const controller = new AbortController()
@@ -62,8 +62,8 @@ export function PluginHome({ plugin, plugins, brainId, onCommand }: {
     )}
     {!loading && !published?.chunks.length && panel && !chunks.some(chunk => chunk.panel === panel.id) &&
       <PluginPanel plugin={plugin} elementId={panel.id} designCss={designCss} brainId={brainId} />}
-    {!published?.chunks.length && !chunks.some(chunk => chunk.operations?.length) && operations.length > 0 && <section aria-label="Plugin operations">
-      <h2>Start a workflow</h2>
+    {!loading && !panel && !chunks.length && operations.length > 0 && <section aria-label="Plugin operations">
+      <h2>Quick actions</h2>
       <ul className="plugin-home-operations">
         {operations.slice(0, 6).map(command => <li key={command.name}>
           <button type="button" className="btn btn-ghost" onClick={() => onCommand(command.name)}>{command.name}</button>

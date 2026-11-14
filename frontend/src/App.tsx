@@ -1,8 +1,9 @@
 import { useState, useEffect, useRef, useCallback, type ReactNode } from 'react'
 import { BrowserRouter, Routes, Route, NavLink, Link, Navigate, useLocation, useSearchParams } from 'react-router-dom'
 import './App.css'
-import { getApiBase, setApiBase, checkSession, logout, registerUnauthedCallback, fetchHealth } from './api'
+import { checkSession, logout, registerUnauthedCallback, fetchHealth } from './api'
 import type { HealthData } from './types'
+import DashboardOverview from './components/DashboardOverview'
 import LoginPage from './pages/LoginPage'
 import MemoryPage from './pages/MemoryPage'
 import SettingsPage from './pages/SettingsPage'
@@ -21,54 +22,6 @@ import { SavedPages, WorkspacePage } from './components/workspace/WorkspacePage'
 
 // ─── Auth state type ──────────────────────────────────────────────────────────
 type AuthState = 'loading' | 'authed' | 'unauthed'
-
-// ─── Sidebar ─────────────────────────────────────────────────────────────────
-
-interface DotProps {
-  ok: boolean
-  label: string
-}
-
-function StatusDot({ ok, label }: DotProps) {
-  return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 5, color: 'var(--text-tertiary)' }}>
-      <span style={{
-        width: 7, height: 7, borderRadius: '50%',
-        background: ok ? '#22c55e' : '#ef4444',
-        boxShadow: ok ? '0 0 6px rgba(34,197,94,0.5)' : '0 0 6px rgba(239,68,68,0.5)',
-        display: 'inline-block',
-        animation: ok ? undefined : 'blink 1s ease-in-out infinite',
-      }} />
-      {label}
-    </div>
-  )
-}
-
-/** Green / amber / red gate health for Network top-bar indicator. */
-function networkGateTone(gate: HealthData['fetch_gate'] | undefined): {
-  color: string
-  label: string
-  title: string
-} {
-  if (!gate) {
-    return { color: '#94a3b8', label: 'Gate n/a', title: 'Fetch gate stats not available' }
-  }
-  const errors = gate.total_errors || 0
-  const blocked = gate.total_blocked || 0
-  const queue = gate.current_queue_depth || 0
-  const inFlight = gate.current_in_flight || 0
-  const title = `dispatched ${gate.total_dispatched ?? 0} · errors ${errors} · blocked ${blocked} · in-flight ${inFlight} · queue ${queue}`
-  if (errors > 0 && (gate.total_completed || 0) === 0 && (gate.total_dispatched || 0) > 0) {
-    return { color: '#ef4444', label: 'Gate errors', title }
-  }
-  if (errors > 5 || queue > 10 || blocked > 20) {
-    return { color: '#ef4444', label: 'Gate hot', title }
-  }
-  if (errors > 0 || queue > 0 || blocked > 0 || inFlight > (gate.max_global_concurrency || 6) * 0.75) {
-    return { color: '#f59e0b', label: 'Gate busy', title }
-  }
-  return { color: '#22c55e', label: 'Gate ok', title }
-}
 
 interface SidebarProps {
   activeBrainId: string
@@ -109,20 +62,12 @@ function Sidebar({ activeBrainId, onBrainChange, open, onClose, onActivity, plug
 }
 
 const ACCOUNT_LINKS = [
-  ['network', 'Network'],
-  ['mesh', 'Mesh'],
-  ['webhooks', 'Webhooks'],
-  ['secrets', 'Secrets & Keys'],
-  ['notifications', 'Notifications'],
   ['settings', 'Settings'],
 ] as const
 
-function AccountMenu({ health, onLogout }: { health: HealthData | null; onLogout: () => void }) {
+function AccountMenu({ onLogout }: { health?: HealthData | null; onLogout: () => void }) {
   const menu = useRef<HTMLDetailsElement>(null)
   const trigger = useRef<HTMLElement>(null)
-  const gate = networkGateTone(health?.fetch_gate)
-  const serverOk = health?.status !== 'unreachable'
-  const daemonOk = health?.daemon === 'running'
 
   function close() {
     if (menu.current) menu.current.open = false
@@ -135,25 +80,6 @@ function AccountMenu({ health, onLogout }: { health: HealthData | null; onLogout
     <nav className="account-menu-body" aria-label="Account">
       {ACCOUNT_LINKS.map(([path, label]) => <NavLink key={path} to={`/${path}`} className={getNavLinkClass}
         id={`nav-${path}`} onClick={close}>{label}</NavLink>)}
-      <NavLink to="/onboarding" className={getNavLinkClass} id="nav-onboarding-replay" onClick={close}>Setup guide</NavLink>
-      <label className="account-menu-host">API host
-        <select className="select" value={getApiBase()} onChange={event => setApiBase(event.target.value)}>
-          <option value="">Local API</option>
-          {import.meta.env.VITE_BRAIN_URL && <option value={import.meta.env.VITE_BRAIN_URL}>
-            {new URL(import.meta.env.VITE_BRAIN_URL).host}
-          </option>}
-        </select>
-      </label>
-      <div className="account-menu-health">
-        {health ? <>
-          {health.version && <span>v{health.version}</span>}
-          <StatusDot ok={serverOk} label={serverOk ? 'Server online' : 'Server offline'} />
-          <StatusDot ok={daemonOk} label={daemonOk ? 'Daemon running' : `Daemon ${health.daemon ?? 'unknown'}`} />
-          <NavLink to="/network" title={gate.title} data-testid="network-gate-indicator" onClick={close}>
-            <span aria-hidden="true" style={{ color: gate.color }}>● </span>{gate.label}
-          </NavLink>
-        </> : <span>Checking status…</span>}
-      </div>
       <button type="button" className="btn btn-ghost btn-sm" id="btn-logout" onClick={onLogout}>Sign out</button>
     </nav>
   </details>
@@ -184,7 +110,9 @@ function MainContent({ activeBrainId }: { activeBrainId: string }) {
       <OnboardingRedirect />
       <div style={{ flex: 1, overflow: 'auto', display: 'flex', flexDirection: 'column', height: '100%' }}>
         <Routes>
-          <Route path="/" element={<Navigate to={isOnboardingComplete() ? '/memory?plugins=open' : '/onboarding'} replace />} />
+          <Route path="/" element={isOnboardingComplete()
+            ? <DashboardOverview activeBrainId={activeBrainId} />
+            : <Navigate to="/onboarding" replace />} />
           <Route path="/chat" element={<Navigate to="/memory" replace />} />
           <Route path="/onboarding" element={<OnboardingPage />} />
           <Route path="/memory" element={<MemoryPage activeBrainId={activeBrainId} />} />
@@ -375,8 +303,10 @@ function Dashboard() {
               </button>
               <div className="workspace-main" inert={edge !== null}>
                 <header className="workspace-toolbar" aria-label="Dashboard">
-                  <BrandMark height={64} className="workspace-logo" />
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <div className="workspace-toolbar-spacer" aria-hidden="true" />
+                  <BrandMark height={46} className="workspace-logo" />
+                  <div className="workspace-toolbar-actions">
+                    <Link to="/" className="btn btn-ghost btn-sm">Dashboard</Link>
                     <Link to="/memory?plugins=open" className="btn btn-ghost btn-sm">Plugins</Link>
                     <AccountMenu health={health} onLogout={handleLogout} />
                   </div>

@@ -4,13 +4,27 @@ import App from './App';
 import * as api from './api';
 import * as onboarding from './utils/onboarding';
 
-vi.mock('./api', () => ({
-  checkSession: vi.fn(),
-  logout: vi.fn(),
-  registerUnauthedCallback: vi.fn(),
-  fetchHealth: vi.fn(),
-  getApiBase: vi.fn(),
-  setApiBase: vi.fn(),
+vi.mock('./api', async importOriginal => {
+  const actual = await importOriginal<typeof import('./api')>();
+  return {
+    ...actual,
+    checkSession: vi.fn(),
+    logout: vi.fn(),
+    registerUnauthedCallback: vi.fn(),
+    fetchHealth: vi.fn().mockResolvedValue({ status: 'ok', daemon: 'running', version: '3.46.2', uptime: 120, authMode: 'session' }),
+    getApiBase: vi.fn(),
+    setApiBase: vi.fn(),
+  };
+});
+
+vi.mock('./api/memory', () => ({
+  fetchVaultStatus: vi.fn().mockResolvedValue({ totalNodes: 42, categories: { knowledge: 30, decision: 12 }, embeddings: 42, lastCompiled: '' }),
+  fetchMemoryStats: vi.fn().mockResolvedValue({ total: 42, byCategory: { knowledge: 30, decision: 12 } }),
+}));
+
+vi.mock('./api/mesh', () => ({
+  fetchNodes: vi.fn().mockResolvedValue([]),
+  fetchLeader: vi.fn().mockResolvedValue(null),
 }));
 
 vi.mock('./api/plugins', async importOriginal => ({
@@ -72,13 +86,20 @@ describe('App', () => {
       expect(screen.queryByText('Skills')).not.toBeInTheDocument();
       expect(screen.queryByText('IDEs')).not.toBeInTheDocument();
       expect(screen.getByText('Vault')).toBeInTheDocument();
-      expect(screen.getByText('Rules')).toBeInTheDocument();
+      expect(within(screen.getByRole('navigation', { name: 'Workspace' })).getByText('Rules')).toBeInTheDocument();
       expect(screen.getByRole('button', { name: 'Plugins' })).toBeInTheDocument();
-      // Default route / redirects to /memory?plugins=open when onboarding is complete
-      expect(screen.getByRole('region', { name: 'Installed plugins overview' })).toBeInTheDocument();
+      // Default route / renders the Main Dashboard status overview when onboarding is complete
+      expect(screen.getByRole('region', { name: 'Main dashboard' })).toBeInTheDocument();
     });
     fireEvent.click(screen.getByText('Account', { selector: 'summary' }));
-    expect(screen.getByRole('link', { name: 'Secrets & Keys' })).toBeInTheDocument();
+    const accountNav = screen.getByRole('navigation', { name: 'Account' });
+    expect(within(accountNav).getByRole('link', { name: 'Settings' })).toBeInTheDocument();
+    expect(within(accountNav).getByRole('button', { name: 'Sign out' })).toBeInTheDocument();
+    expect(within(accountNav).queryByRole('link', { name: 'Setup guide' })).not.toBeInTheDocument();
+    expect(within(accountNav).queryByTestId('network-gate-indicator')).not.toBeInTheDocument();
+    expect(within(accountNav).queryByRole('link', { name: 'Mesh' })).not.toBeInTheDocument();
+    expect(within(accountNav).queryByRole('link', { name: 'Secrets & Keys' })).not.toBeInTheDocument();
+    expect(within(accountNav).queryByRole('link', { name: 'Notifications' })).not.toBeInTheDocument();
   });
 
   it('redirects /chat to /memory', async () => {

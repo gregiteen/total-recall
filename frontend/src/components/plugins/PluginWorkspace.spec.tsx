@@ -4,7 +4,6 @@ import { MemoryRouter } from 'react-router-dom'
 import PluginWorkspace from './PluginWorkspace'
 import type { PluginInfo } from '../../api/plugins'
 
-const ownerCard = { id: 'card', kind: 'card', tag: 'demo-card', module: 'ui/card.js' }
 const ownerPanel = { id: 'inventory', kind: 'panel', tag: 'demo-inventory', module: 'ui/inventory.js' }
 const plugin: PluginInfo = {
   id: 'demo', name: 'Demo plugin', version: '1.0.0', description: 'Inventory owner',
@@ -116,37 +115,41 @@ describe('PluginWorkspace', () => {
     const drawer = await choosePlugin()
     const view = within(drawer)
     expect(view.getByText('Active')).toBeInTheDocument()
+    expect(await view.findByTitle('Demo plugin interface')).toHaveAttribute('sandbox', 'allow-scripts')
+    fireEvent.click(view.getByRole('button', { name: 'Settings' }))
     expect(await view.findByText('Credential required')).toBeInTheDocument()
     expect(view.getByText(/1.0.0 · Core · global/)).toBeInTheDocument()
     expect(view.getByText('Unreported')).toBeInTheDocument()
-    expect(await view.findByTitle('Demo plugin interface')).toHaveAttribute('sandbox', 'allow-scripts')
     expect(requests.some(request => request.path.endsWith('/run'))).toBe(false)
   })
 
   it('opens declared operations from Home without executing or loading a legacy card', async () => {
-    installed = [{ ...plugin, ui: { elements: [ownerCard] } }]
+    installed = [{ ...plugin, ui: undefined }]
     renderWorkspace('/memory?plugin=demo')
     const view = within(await screen.findByRole('region', { name: 'Demo plugin' }))
-    expect(view.getByRole('button', { name: 'Home' })).toHaveAttribute('aria-pressed', 'true')
+    expect(view.queryByRole('button', { name: 'Home' })).not.toBeInTheDocument()
     expect(view.queryByRole('button', { name: 'Interface' })).not.toBeInTheDocument()
-    fireEvent.click(view.getByRole('button', { name: 'inventory' }))
+    expect(view.queryByRole('button', { name: 'Blocks' })).not.toBeInTheDocument()
+    expect(view.queryByRole('button', { name: 'Commands' })).not.toBeInTheDocument()
+    fireEvent.click(await view.findByRole('button', { name: 'inventory' }))
     expect(view.getByRole('option', { name: 'inventory' })).toBeInTheDocument()
     expect(requests.some(request => request.path.endsWith('/ui/card') || request.path.endsWith('/run'))).toBe(false)
   })
 
   it('omits private output operations from Home and the generic command picker', async () => {
-    installed = [{ ...plugin, cli: { command: 'demo', subcommands: [
+    installed = [{ ...plugin, ui: undefined, cli: { command: 'demo', subcommands: [
       { name: 'inventory' }, { name: 'private-token', sensitive_output: true },
     ] } }]
     renderWorkspace()
     const view = within(await choosePlugin())
     expect(view.queryByRole('button', { name: 'private-token' })).not.toBeInTheDocument()
-    fireEvent.click(view.getByRole('button', { name: 'inventory' }))
+    fireEvent.click(await view.findByRole('button', { name: 'inventory' }))
     expect(view.getByRole('option', { name: 'inventory' })).toBeInTheDocument()
     expect(view.queryByRole('option', { name: 'private-token' })).not.toBeInTheDocument()
   })
 
   it('generates new design elements in the open Home when DESIGN.md changes', async () => {
+    installed = [{ ...plugin, ui: undefined }]
     design = { revision: '1'.repeat(64), css: ':root{--color-accent:#123456}', components: ['badge'] }
     renderWorkspace('/memory?plugin=demo')
     const block = await screen.findByTitle('Owner patterns')
@@ -180,7 +183,9 @@ describe('PluginWorkspace', () => {
 
   it('reads the saved activation after switching off', async () => {
     renderWorkspace('/memory?plugin=demo')
-    const toggle = await screen.findByRole('switch', { name: 'Demo plugin activation' })
+    const view = within(await screen.findByRole('region', { name: 'Demo plugin' }))
+    fireEvent.click(view.getByRole('button', { name: 'Settings' }))
+    const toggle = await view.findByRole('switch', { name: 'Demo plugin activation' })
     expect(toggle).toHaveAttribute('aria-checked', 'true')
     fireEvent.click(toggle)
     await waitFor(() => expect(toggle).toHaveAttribute('aria-checked', 'false'))
@@ -211,14 +216,17 @@ describe('PluginWorkspace', () => {
     ] }]
     renderWorkspace('/memory?plugin=demo', 'project:music')
     const view = within(await screen.findByRole('region', { name: 'Demo plugin' }))
+    fireEvent.click(view.getByRole('button', { name: 'Settings' }))
     const policy = view.getByRole('combobox', { name: 'Demo plugin activation for Music' })
     fireEvent.change(policy, { target: { value: 'on-use' } })
+    await waitFor(() => expect(policy).toHaveValue('on-use'))
+    fireEvent.click(view.getByRole('button', { name: 'Settings' }))
     const open = await view.findByRole('button', { name: 'Open plugin' })
-    expect(policy).toHaveValue('on-use')
     expect(requests.some(request => request.path.includes('/ui/inventory') || request.path.endsWith('/run'))).toBe(false)
     fireEvent.click(open)
     expect(await view.findByTitle('Demo plugin interface')).toBeInTheDocument()
-    expect(policy).toHaveValue('on')
+    fireEvent.click(view.getByRole('button', { name: 'Settings' }))
+    expect(view.getByRole('combobox', { name: 'Demo plugin activation for Music' })).toHaveValue('on')
     expect(requests.filter(request => request.path.endsWith('/activation')).map(request => JSON.parse(String(request.init?.body)))).toEqual([
       { mode: 'on-use', brainIds: ['project:music'] }, { mode: 'use', brainIds: ['project:music'] },
     ])
@@ -240,6 +248,7 @@ describe('PluginWorkspace', () => {
     cleanupFailure = true
     renderWorkspace('/memory?plugin=demo', 'project:music')
     const view = within(await screen.findByRole('region', { name: 'Demo plugin' }))
+    fireEvent.click(view.getByRole('button', { name: 'Settings' }))
     const policy = view.getByRole('combobox', { name: 'Demo plugin activation for music' })
     fireEvent.change(policy, { target: { value: 'off' } })
     const retry = await view.findByRole('button', { name: 'Retry cleanup for Music' })
@@ -270,9 +279,11 @@ describe('PluginWorkspace', () => {
   it('surfaces rejected activation without claiming the switch changed', async () => {
     activationFailure = true
     renderWorkspace('/memory?plugin=demo')
-    const toggle = await screen.findByRole('switch', { name: 'Demo plugin activation' })
+    const view = within(await screen.findByRole('region', { name: 'Demo plugin' }))
+    fireEvent.click(view.getByRole('button', { name: 'Settings' }))
+    const toggle = await view.findByRole('switch', { name: 'Demo plugin activation' })
     fireEvent.click(toggle)
-    expect(await screen.findByRole('alert')).toHaveTextContent('Activation rejected')
+    expect(await view.findByRole('alert')).toHaveTextContent('Activation rejected')
     expect(toggle).toHaveAttribute('aria-checked', 'true')
   })
 

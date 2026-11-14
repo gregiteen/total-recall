@@ -3,11 +3,11 @@ import { render, screen } from '@testing-library/react';
 import BrandMark, { BrandChip } from './BrandMark';
 
 describe('BrandMark', () => {
-  it('renders with default lockup variant', () => {
+  it('renders with default transparent glowing lockup variant', () => {
     render(<BrandMark />);
     const img = screen.getByAltText('Total Recall');
     expect(img).toBeInTheDocument();
-    expect(img).toHaveAttribute('src', '/brand/total-recall-lockup.png');
+    expect(img).toHaveAttribute('src', '/brand/total-recall-lockup-transparent.png');
   });
 
   it('renders icon variant with square dimensions', () => {

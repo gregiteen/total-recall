@@ -15,7 +15,7 @@ interface BrandMarkProps {
 }
 
 const SRC: Record<Exclude<BrandVariant, 'animated'>, string> = {
-  lockup: '/brand/total-recall-lockup.png',
+  lockup: '/brand/total-recall-lockup-transparent.png',
   icon: '/brand/total-recall-icon.svg',
   badge: '/brand/total-recall-badge.jpg',
   mark: '/brand/total-recall-mark.svg',
@@ -49,6 +49,9 @@ export default function BrandMark({
         maxWidth: '100%',
         objectFit: 'contain',
         display: 'block',
+        filter: variant === 'lockup'
+          ? 'drop-shadow(0 0 14px rgba(56, 189, 248, 0.52)) drop-shadow(0 0 28px rgba(37, 99, 235, 0.28))'
+          : undefined,
       }}
       draggable={false}
     />
@@ -63,11 +66,10 @@ export default function BrandMark({
         display: 'inline-flex',
         alignItems: 'center',
         justifyContent: 'center',
-        padding: variant === 'lockup' ? '10px 14px' : 8,
-        borderRadius: variant === 'lockup' ? 14 : 16,
-        background: 'linear-gradient(180deg, #f8fafc 0%, #eef2ff 100%)',
-        boxShadow:
-          '0 1px 0 rgba(255,255,255,0.6) inset, 0 12px 32px rgba(15, 23, 42, 0.35), 0 0 0 1px rgba(148,163,184,0.25)',
+        padding: 8,
+        borderRadius: 16,
+        background: 'rgba(15, 23, 42, 0.55)',
+        boxShadow: '0 0 24px rgba(56, 189, 248, 0.22), 0 0 0 1px rgba(56, 189, 248, 0.22)',
       }}
     >
       {img}
