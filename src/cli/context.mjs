@@ -100,9 +100,13 @@ async function printCompacted({ query, actions, budget, format, version, rulesHa
     // Measure the actual floor through the same encoder; leave room for the changed budget digits on retry.
     const floor = await compact(error.requiredBudget);
     const requiredBudget = estimateTokens(`${output(floor)}\n`) + 16;
+    const requiredIds = Array.isArray(error.requiredIds) ? error.requiredIds : [];
+    const requiredPreview = requiredIds.length
+      ? ` required_set:${requiredIds.slice(0, 6).join(',')}${requiredIds.length > 6 ? `,+${requiredIds.length - 6}` : ''}`
+      : '';
     console.log(format === 'json'
-      ? JSON.stringify({ ready: false, reason: 'budget-overflow', context: '', stats: { version, budget, required_budget: requiredBudget, overage: requiredBudget - budget, rules: error.ruleCount, token_measurement: 'estimated_chars_divided_by_four' } })
-      : `ready:false reason:budget-overflow budget:${budget} required_budget:${requiredBudget} overage:${requiredBudget - budget} rules:${error.ruleCount} version:${version}\nThis budget cannot hold all ${error.ruleCount} applicable rules even compacted; \`total-recall rules audit\` lists them by size. Retry with --budget ${requiredBudget}; do not act until ready:true.`);
+      ? JSON.stringify({ ready: false, reason: 'budget-overflow', context: '', stats: { version, budget, required_budget: requiredBudget, overage: requiredBudget - budget, rules: error.ruleCount, required_ids: requiredIds, token_measurement: 'estimated_chars_divided_by_four' } })
+      : `ready:false reason:budget-overflow budget:${budget} required_budget:${requiredBudget} overage:${requiredBudget - budget} rules:${error.ruleCount}${requiredPreview} version:${version}\nThis budget cannot hold all ${error.ruleCount} applicable rules even compacted; \`total-recall rules audit\` lists them by size. Retry with --budget ${requiredBudget}; do not act until ready:true.`);
     process.exitCode = 2;
     return false;
   }

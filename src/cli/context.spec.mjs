@@ -24,6 +24,9 @@ describe('context CLI', () => {
     const failed = JSON.parse(log.mock.calls.at(-1)[0]);
     expect(failed).toMatchObject({ ready: false, reason: 'budget-overflow', context: '' });
     expect(failed.stats.required_budget).toBeGreaterThan(2);
+    expect(failed.stats.overage).toBe(failed.stats.required_budget - 2);
+    expect(Array.isArray(failed.stats.required_ids)).toBe(true);
+    expect(failed.stats.required_ids.length).toBeGreaterThan(0);
     expect(JSON.stringify(failed)).not.toContain('Preserve records.');
     expect(process.exitCode).toBe(2);
     process.exitCode = originalExitCode;
@@ -39,6 +42,8 @@ describe('context CLI', () => {
     const text = log.mock.calls.at(-1)[0];
     expect(text).toMatch(/^ready:false reason:budget-overflow/);
     expect(text).toContain('required_budget:');
+    expect(text).toContain('overage:');
+    expect(text).toContain('required_set:');
     expect(text).not.toContain('Preserve records.');
     expect(text.length).toBeLessThan(512);
   });
