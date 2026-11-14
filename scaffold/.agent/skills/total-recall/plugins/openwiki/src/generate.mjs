@@ -8,7 +8,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
 import { loadOpenWikiConfig } from './config.mjs';
-import { readProjects, resolveGenerator, resolveKey } from './refresh.mjs';
+import { buildGeneratorInvocation, ensureDefaultIgnores, readProjects, redact, resolveGenerator, resolveKey } from './refresh.mjs';
 import { execOnMeshNode, getMeshNodes } from './mesh-vaults.mjs';
 
 export async function generateWiki({
@@ -92,31 +92,30 @@ export async function generateWiki({
   }
 
   const gen = resolveGenerator();
-  const generatorArgs = [...gen.args];
-
-  // Pass --init or update mode
-  const isInit = !fs.existsSync(outPath) || force;
-  if (isInit) {
-    generatorArgs.push('--init');
+  if (!gen.command) {
+    throw new Error('No openwiki generator available (missing bundled generator, local .bin, PATH entry, or npx)');
   }
 
-  const env = {
-    ...process.env,
-    OPENROUTER_API_KEY: config.provider === 'openrouter' ? key : process.env.OPENROUTER_API_KEY,
-    GOOGLE_API_KEY: config.provider === 'google' ? key : process.env.GOOGLE_API_KEY,
-    OPENWIKI_MODEL: config.model,
-    OPENWIKI_TIMEOUT: String(config.timeout_ms || 300000),
-  };
+  const mode = (!fs.existsSync(outPath) || force) ? 'init' : 'update';
+  const timeoutMs = config.timeout_ms || 300000;
+  const { cmdArgs, childEnv } = buildGeneratorInvocation({
+    baseArgs: gen.args,
+    mode,
+    config,
+    key,
+  });
+  ensureDefaultIgnores(resolvedTarget);
 
   const startedAt = Date.now();
   if (typeof onProgress === 'function') {
-    onProgress(`Starting generator for ${repoName} (${gen.via})...`);
+    onProgress(`Starting generator for ${repoName} (${gen.via}, ${mode})...`);
   }
 
   return new Promise((resolve, reject) => {
-    const child = spawn(gen.command, generatorArgs, {
+    const child = spawn(gen.command, cmdArgs, {
       cwd: resolvedTarget,
-      env,
+      env: childEnv,
+      timeout: timeoutMs,
       stdio: ['ignore', 'pipe', 'pipe'],
     });
 
@@ -127,7 +126,7 @@ export async function generateWiki({
       const str = chunk.toString();
       stdout += str;
       if (typeof onProgress === 'function') {
-        onProgress(str.trim());
+        onProgress(redact(str.trim(), key));
       }
     });
 
@@ -135,7 +134,7 @@ export async function generateWiki({
       stderr += chunk.toString();
     });
 
-    child.on('close', (code) => {
+    child.on('close', (code, signal) => {
       const durationMs = Date.now() - startedAt;
       if (code === 0) {
         resolve({
@@ -144,17 +143,19 @@ export async function generateWiki({
           targetPath: resolvedTarget,
           outputDir: outPath,
           generatorVia: gen.via,
+          mode,
           durationMs,
           credential: from,
-          stdout: stdout.trim(),
+          stdout: redact(stdout.trim(), key),
         });
       } else {
-        reject(new Error(`Generator exited with code ${code}: ${stderr || stdout || 'Unknown error'}`));
+        const detail = redact(stderr || stdout || (signal ? `terminated by ${signal}` : 'Unknown error'), key);
+        reject(new Error(`Generator exited with code ${code ?? signal ?? 1}: ${detail}`));
       }
     });
 
     child.on('error', (err) => {
-      reject(new Error(`Failed to spawn generator: ${err.message}`));
+      reject(new Error(`Failed to spawn generator: ${redact(err.message, key)}`));
     });
   });
 }

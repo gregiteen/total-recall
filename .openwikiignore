@@ -6,3 +6,28 @@
 # This checkout's own brain and generated skill copies. The shipped scaffold
 # (scaffold/.agent/) stays in scope: the wiki documents the bundled plugins from it.
 /.agent/
+
+# >>> total-recall openwiki defaults (managed; add your own rules outside this block)
+# Rewritten in every repository by each Total Recall release: lockfiles, compiled agent
+# instructions and copied skills. A path the existing wiki cites is left out of this list.
+package-lock.json
+npm-shrinkwrap.json
+pnpm-lock.yaml
+yarn.lock
+bun.lock
+bun.lockb
+/CLAUDE.md
+/AGENTS.md
+/GEMINI.md
+/INSTRUCTIONS.md
+/.cursorrules
+/.windsurfrules
+/.clinerules
+/.cursor/rules/total-recall.mdc
+/.github/copilot-instructions.md
+/.agents/rules/AGENTS.md
+/.agent/skills/total-recall/
+/.agent/skills/ssss/
+/.claude/skills/total-recall/
+/.claude/skills/ssss/
+# <<< total-recall openwiki defaults

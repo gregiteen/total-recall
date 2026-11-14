@@ -5,8 +5,8 @@
  * across local workspace, all vaults, or remote mesh nodes. Formats to JSON, Mermaid, or DOT.
  */
 import fs from 'node:fs';
-import path from 'node:path';
 import { discoverAllHubs, execOnMeshNode } from './mesh-vaults.mjs';
+import { extractMarkdownLinks, indexHubsForResolution, resolveLinkTarget } from './markdown-links.mjs';
 
 /**
  * Builds knowledge graph from markdown hubs.
@@ -16,6 +16,7 @@ export async function buildKnowledgeGraph({
   node = null,
   format = 'json',
   cwd = process.cwd(),
+  nested = true,
 } = {}) {
   // If remote mesh node specified, dispatch via mesh
   if (node && node !== 'local' && node !== 'self') {
@@ -33,10 +34,11 @@ export async function buildKnowledgeGraph({
     }
   }
 
-  const hubsResult = await discoverAllHubs({ allVaults, cwd });
+  const hubsResult = await discoverAllHubs({ allVaults, cwd, nested });
   const nodes = [];
   const edges = [];
-  const nodeMap = new Map();
+  const nodeById = new Map();
+  const nodeByPath = new Map();
 
   // Create nodes
   for (const hub of hubsResult.hubs) {
@@ -53,12 +55,11 @@ export async function buildKnowledgeGraph({
       outDegree: 0,
     };
     nodes.push(nodeObj);
-    nodeMap.set(nodeId, nodeObj);
-    // Also index by fileName and title for fuzzy link target resolution
-    nodeMap.set(hub.fileName.toLowerCase(), nodeObj);
-    nodeMap.set(hub.fileName.replace(/\.md$/, '').toLowerCase(), nodeObj);
-    nodeMap.set(hub.title.toLowerCase(), nodeObj);
+    nodeById.set(nodeId, nodeObj);
+    nodeByPath.set(hub.path, nodeObj);
   }
+
+  const index = indexHubsForResolution(hubsResult.hubs);
 
   // Extract edges
   for (const hub of hubsResult.hubs) {
@@ -70,27 +71,18 @@ export async function buildKnowledgeGraph({
     }
 
     const sourceId = `${hub.repoName}:${hub.fileName.replace(/\.md$/, '')}`;
-    const sourceNode = nodeMap.get(sourceId);
+    const sourceNode = nodeById.get(sourceId);
+    const { markdownLinks, wikilinks } = extractMarkdownLinks(content);
 
-    // 1. Match Markdown links: [Text](target.md) or [Text](./target.md)
-    const mdLinkRegex = /\[([^\]]+)\]\(([^)]+)\)/g;
-    let match;
-    while ((match = mdLinkRegex.exec(content)) !== null) {
-      const anchorText = match[1].trim();
-      const targetUrl = match[2].trim().split('#')[0]; // strip hash anchor
-      if (!targetUrl || targetUrl.startsWith('http://') || targetUrl.startsWith('https://')) continue;
-
-      const targetFileName = path.basename(targetUrl);
-      if (!targetFileName.endsWith('.md')) continue;
-
-      const targetNode = nodeMap.get(targetFileName.toLowerCase()) ||
-                         nodeMap.get(targetFileName.replace(/\.md$/, '').toLowerCase());
-
+    for (const link of markdownLinks) {
+      if (!link.target.endsWith('.md')) continue;
+      const resolved = resolveLinkTarget(hub, link.target, index, { isWikilink: false });
+      const targetNode = resolved.hub ? nodeByPath.get(resolved.hub.path) : null;
       if (targetNode && targetNode.id !== sourceId) {
         edges.push({
           from: sourceId,
           to: targetNode.id,
-          label: anchorText.length > 30 ? anchorText.slice(0, 27) + '...' : anchorText,
+          label: link.text.length > 30 ? link.text.slice(0, 27) + '...' : link.text,
           type: 'markdown-link',
         });
         if (sourceNode) sourceNode.outDegree++;
@@ -98,19 +90,14 @@ export async function buildKnowledgeGraph({
       }
     }
 
-    // 2. Match Wikilinks: [[Target Page]] or [[Target Page|Anchor]]
-    const wikiLinkRegex = /\[\[([^\]|]+)(?:\|([^\]]+))?\]\]/g;
-    while ((match = wikiLinkRegex.exec(content)) !== null) {
-      const targetName = match[1].trim();
-      const anchor = (match[2] || targetName).trim();
-      const targetNode = nodeMap.get(targetName.toLowerCase()) ||
-                         nodeMap.get(`${targetName}.md`.toLowerCase());
-
+    for (const link of wikilinks) {
+      const resolved = resolveLinkTarget(hub, link.target, index, { isWikilink: true });
+      const targetNode = resolved.hub ? nodeByPath.get(resolved.hub.path) : null;
       if (targetNode && targetNode.id !== sourceId) {
         edges.push({
           from: sourceId,
           to: targetNode.id,
-          label: anchor.length > 30 ? anchor.slice(0, 27) + '...' : anchor,
+          label: link.anchor.length > 30 ? link.anchor.slice(0, 27) + '...' : link.anchor,
           type: 'wikilink',
         });
         if (sourceNode) sourceNode.outDegree++;

@@ -10,7 +10,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { compareSemanticVersions, formatPropagationReceipt } from '../capability/index.mjs';
-import { hasWiki, readProjects, refreshProject, resolveKey } from './refresh.mjs';
+import { CREDIT_REFUSAL, hasWiki, readProjects, refreshProject, resolveKey } from './refresh.mjs';
 
 export const UPSTREAM_NPM_URL = 'https://registry.npmjs.org/openwiki/latest';
 export const UPSTREAM_GITHUB_URL = 'https://api.github.com/repos/langchain-ai/openwiki/releases/latest';
@@ -378,8 +378,19 @@ export async function propagateUpdates({
     return { ok: false, error: error.message, eligibleCount: eligible.length, updatedCount: 0, reports: [] };
   }
   const reports = [];
+  let creditStopReason = null;
 
   for (const project of eligible) {
+    if (creditStopReason) {
+      reports.push({
+        name: project.name,
+        root: project.root,
+        action: 'deferred',
+        reason: creditStopReason,
+        generatorVersion: targetVersion
+      });
+      continue;
+    }
     try {
       const outcome = await refresher(project, {
         key,
@@ -392,6 +403,9 @@ export async function propagateUpdates({
         credential: from,
         generatorVersion: targetVersion
       });
+      if (CREDIT_REFUSAL.test(String(outcome?.reason || ''))) {
+        creditStopReason = `deferred: provider refused ${project.name} for credit; add credit, then propagate again`;
+      }
     } catch (err) {
       reports.push({
         name: project.name,
@@ -400,6 +414,9 @@ export async function propagateUpdates({
         reason: err.message,
         generatorVersion: targetVersion
       });
+      if (CREDIT_REFUSAL.test(String(err?.message || ''))) {
+        creditStopReason = `deferred: provider refused ${project.name} for credit; add credit, then propagate again`;
+      }
     }
   }
 

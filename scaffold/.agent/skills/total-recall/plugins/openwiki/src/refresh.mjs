@@ -36,6 +36,120 @@ function readJson(file) {
   try { return JSON.parse(fs.readFileSync(file, 'utf8')); } catch { return null; }
 }
 
+/**
+ * Paths outside every wiki. Total Recall rewrites them in every repository on each
+ * release (version pins in lockfiles, compiled agent instructions, copied skills), so
+ * counting them as changes paid a model to re-check pages after every release.
+ * `.openwikiignore` syntax: a leading "/" anchors at the repository root, a trailing
+ * "/" names a directory, a bare name matches at any depth.
+ */
+export const DEFAULT_IGNORES = Object.freeze([
+  'package-lock.json', 'npm-shrinkwrap.json', 'pnpm-lock.yaml', 'yarn.lock', 'bun.lock', 'bun.lockb',
+  '/CLAUDE.md', '/AGENTS.md', '/GEMINI.md', '/INSTRUCTIONS.md',
+  '/.cursorrules', '/.windsurfrules', '/.clinerules',
+  '/.cursor/rules/total-recall.mdc', '/.github/copilot-instructions.md', '/.agents/rules/AGENTS.md',
+  '/.agent/skills/total-recall/', '/.agent/skills/ssss/', '/.claude/skills/total-recall/', '/.claude/skills/ssss/',
+]);
+const IGNORE_BLOCK_START = '# >>> total-recall openwiki defaults (managed; add your own rules outside this block)';
+const IGNORE_BLOCK_END = '# <<< total-recall openwiki defaults';
+
+/** Does a DEFAULT_IGNORES pattern cover this repository-relative file path? */
+export function ignoreMatches(pattern, file) {
+  if (pattern.startsWith('/')) {
+    const body = pattern.slice(1);
+    return body.endsWith('/') ? file.startsWith(body) : file === body;
+  }
+  return file === pattern || file.endsWith(`/${pattern}`);
+}
+
+/**
+ * Repository paths the existing wiki cites as evidence (claims and page sources).
+ * OpenWiki refuses a run whose evidence path is ignored ("Evidence path is excluded
+ * by .openwikiignore"), so a cited path is never ignored.
+ */
+export function citedPaths(root) {
+  const cited = new Set();
+  const walk = (dir) => {
+    let entries;
+    try { entries = fs.readdirSync(dir, { withFileTypes: true }); } catch { return; }
+    for (const entry of entries) {
+      const full = path.join(dir, entry.name);
+      if (entry.isDirectory()) walk(full);
+      else if (/\.(json|md)$/.test(entry.name)) {
+        let text;
+        try { text = fs.readFileSync(full, 'utf8'); } catch { continue; }
+        for (const match of text.matchAll(/repo:\/\/([^\s"'#)\]]+)/g)) cited.add(match[1].replace(/^\/+/, ''));
+      }
+    }
+  };
+  walk(path.join(root, 'openwiki'));
+  return cited;
+}
+
+/** The default ignores that apply to this repository: every one no wiki evidence cites. */
+export function effectiveIgnores(root, cited = citedPaths(root)) {
+  return DEFAULT_IGNORES.filter((pattern) => ![...cited].some((file) => ignoreMatches(pattern, file)));
+}
+
+/** Git pathspecs that leave the ignored paths out of a commit count. */
+export function ignorePathspecs(patterns) {
+  return patterns.map((pattern) => (pattern.startsWith('/')
+    ? `:(exclude)${pattern.slice(1).replace(/\/$/, '')}`
+    : `:(exclude,glob)**/${pattern}`));
+}
+
+/**
+ * Keep the managed default block in the repository's `.openwikiignore`, leaving
+ * every other line as the owner wrote it. Writes only when the block changes.
+ */
+export function ensureDefaultIgnores(root, patterns = effectiveIgnores(root)) {
+  const file = path.join(root, '.openwikiignore');
+  const current = fs.existsSync(file) ? fs.readFileSync(file, 'utf8') : '';
+  const start = current.indexOf(IGNORE_BLOCK_START);
+  const end = current.indexOf(IGNORE_BLOCK_END);
+  const outside = start >= 0 && end > start ? current.slice(0, start) + current.slice(end + IGNORE_BLOCK_END.length) : current;
+  const block = [
+    IGNORE_BLOCK_START,
+    '# Rewritten in every repository by each Total Recall release: lockfiles, compiled agent',
+    '# instructions and copied skills. A path the existing wiki cites is left out of this list.',
+    ...patterns,
+    IGNORE_BLOCK_END,
+  ].join('\n');
+  const rest = outside.replace(/^\n+|\n+$/g, '');
+  const next = `${rest ? `${rest}\n\n` : ''}${block}\n`;
+  if (next === current) return { file, written: false, patterns };
+  fs.writeFileSync(file, next);
+  return { file, written: true, patterns };
+}
+
+const VERSION_LINE = /^[+-]\s*"([^"]+)"\s*:\s*"([^"]*)"\s*,?\s*$/;
+const VERSION_SPEC = /^(?:npm:(?:@[^/\s]+\/)?[^@\s]+@)?[~^<>=\s]*v?\d+(?:\.\d+)*(?:[-+][\w.-]+)?$/;
+
+/**
+ * How many commits in `git log -p -U0 --format=%x1eCOMMIT %H` output changed
+ * nothing but version strings in package.json files. A Total Recall release pins
+ * its new version into every repository this way; that is not a change to the code
+ * the wiki documents. Any other edit to package.json (a script, a new dependency)
+ * still counts.
+ */
+export function versionOnlyCommits(logPatch) {
+  let total = 0;
+  for (const chunk of logPatch.split('\x1eCOMMIT ').slice(1)) {
+    const files = [...chunk.matchAll(/^diff --git a\/(\S+) b\/(\S+)$/gm)].map((m) => m[2]);
+    if (!files.length || files.some((file) => path.posix.basename(file) !== 'package.json')) continue;
+    const changed = chunk.split('\n').filter((line) => /^[+-]/.test(line) && !/^(\+\+\+|---) /.test(line));
+    const removed = [], added = [];
+    let versionsOnly = changed.length > 0;
+    for (const line of changed) {
+      const match = VERSION_LINE.exec(line);
+      if (!match || !VERSION_SPEC.test(match[2].trim())) { versionsOnly = false; break; }
+      (line[0] === '-' ? removed : added).push(match[1]);
+    }
+    if (versionsOnly && removed.sort().join('\n') === added.sort().join('\n')) total += 1;
+  }
+  return total;
+}
+
 /** An unfinished init must resume as init, even after it has written pages. */
 export function generationMode(root) {
   const state = readJson(path.join(root, 'openwiki', '.run.json'));
@@ -139,15 +253,22 @@ export function staleness(root, { git = gitRun } = {}) {
     }
   } catch { files = null; }
 
-  const log = git('git', ['-C', root, 'log', '-1', '--format=%cI', '--', '.', ':!openwiki'], { encoding: 'utf8' });
+  // A commit that touches only the ignored paths (a release's version pins and
+  // compiled instructions) is not a change to document.
+  const scope = ['--', '.', ':!openwiki', ...ignorePathspecs(effectiveIgnores(root))];
+  const log = git('git', ['-C', root, 'log', '-1', '--format=%cI', ...scope], { encoding: 'utf8' });
   const lastCodeChange = !log.error && log.status === 0 ? String(log.stdout || '').trim() || null : null;
 
   let commitsSince = null;
   if (generationCommit || generatedAt) {
     const range = generationCommit ? [`${generationCommit}..HEAD`] : [`--since=${generatedAt}`, 'HEAD'];
-    const count = git('git', ['-C', root, 'rev-list', '--count', ...range, '--', '.', ':!openwiki'], { encoding: 'utf8' });
+    const count = git('git', ['-C', root, 'rev-list', '--count', ...range, ...scope], { encoding: 'utf8' });
     const value = String(count.stdout || '').trim();
     if (!count.error && count.status === 0 && /^\d+$/.test(value)) commitsSince = Number(value);
+    if (commitsSince > 0) {
+      const patches = git('git', ['-C', root, 'log', '-p', '-U0', '--no-color', '--no-ext-diff', '--format=%x1eCOMMIT %H', ...range, ...scope], { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 });
+      if (!patches.error && patches.status === 0) commitsSince = Math.max(0, commitsSince - versionOnlyCommits(String(patches.stdout || '')));
+    }
   }
   const incomplete = generatedStatus === 'interrupted' || stillGenerating(root);
   const stale = incomplete || generatedAt === null || commitsSince === null || commitsSince > 0;
@@ -287,10 +408,42 @@ function writeReceipt(root, name, value) {
   }
 }
 
-function redact(value, key) {
+export const CREDIT_REFUSAL = /\b402\b|insufficient credits|requires more credits|credit limit/i;
+
+export function redact(value, key) {
   let text = String(value || '');
   if (key) text = text.split(key).join('[REDACTED]');
   return text.replace(/\bBearer\s+\S+/gi, 'Bearer [REDACTED]').replace(/\bsk-[\w-]+/g, '[REDACTED]');
+}
+
+// The model is the operator's choice; models and prices change too often for a default here.
+export const NO_MODEL = 'No OpenWiki model is configured. Check current OpenRouter models and prices, then run: total-recall openwiki config set model <model-id>';
+
+export function buildGeneratorInvocation({ baseArgs = [], mode = 'update', config = {}, key = '' } = {}) {
+  const selectedModel = String(config.model || '').trim();
+  if (!selectedModel) throw new Error(NO_MODEL);
+  const selectedProvider = config.provider || 'openrouter';
+  const cmdArgs = [...baseArgs, `--${mode}`, '-p', '--modelId', selectedModel];
+  const childEnv = { ...process.env };
+  if (selectedProvider === 'google') {
+    childEnv.GOOGLE_API_KEY = key;
+    childEnv.GEMINI_API_KEY = key;
+    childEnv.OPENWIKI_PROVIDER = 'gemini';
+    delete childEnv.OPENAI_API_KEY;
+    delete childEnv.OPENROUTER_API_KEY;
+  } else {
+    childEnv.OPENROUTER_API_KEY = key;
+    childEnv.OPENWIKI_PROVIDER = 'openrouter';
+    if (config.max_tokens) {
+      childEnv.OPENWIKI_OPENROUTER_MAX_TOKENS = String(config.max_tokens);
+      childEnv.OPENWIKI_MAX_OUTPUT_TOKENS = String(config.max_tokens);
+    }
+    delete childEnv.OPENAI_API_KEY;
+  }
+  if (config.timeout_ms) {
+    childEnv.OPENWIKI_TIMEOUT = String(config.timeout_ms);
+  }
+  return { cmdArgs, childEnv, selectedModel, selectedProvider };
 }
 
 function finishRefresh(project, { before, result, git, key, mode, startedAt, via, clock }) {
@@ -363,34 +516,17 @@ export function refreshProject(project, {
     ({ command, args, via } = resolved);
   }
 
-  const config = typeof loadOpenWikiConfig === 'function' ? loadOpenWikiConfig() : { model: 'deepseek/deepseek-chat', provider: 'openrouter' };
-  const selectedModel = model || config.model;
-  const selectedProvider = provider || config.provider;
+  const config = loadOpenWikiConfig();
+  const { cmdArgs, childEnv } = buildGeneratorInvocation({
+    baseArgs: args,
+    mode,
+    config: { ...config, model: model || config.model, provider: provider || config.provider },
+    key,
+  });
 
-  const modeFlag = `--${mode}`;
-  const cmdArgs = [...args, modeFlag, '-p'];
-  if (selectedModel) {
-    cmdArgs.push('--modelId', selectedModel);
-  }
-
-  const childEnv = { ...process.env };
-  if (selectedProvider === 'google') {
-    childEnv.GOOGLE_API_KEY = key;
-    childEnv.GEMINI_API_KEY = key;
-    childEnv.OPENWIKI_PROVIDER = 'gemini';
-    delete childEnv.OPENAI_API_KEY;
-    delete childEnv.OPENROUTER_API_KEY;
-  } else {
-    childEnv.OPENROUTER_API_KEY = key;
-    childEnv.OPENWIKI_PROVIDER = 'openrouter';
-    if (config.max_tokens) {
-      childEnv.OPENWIKI_OPENROUTER_MAX_TOKENS = String(config.max_tokens);
-      childEnv.OPENWIKI_MAX_OUTPUT_TOKENS = String(config.max_tokens);
-    }
-    delete childEnv.OPENAI_API_KEY;
-  }
-
+  ensureDefaultIgnores(project.root);
   const startedAt = now;
+  writeReceipt(project.root, '.refresh-started.json', { startedAt: new Date(startedAt).toISOString(), sourceCommit: before.head || null });
   const result = run(command, cmdArgs, {
     cwd: project.root,
     env: childEnv,
@@ -421,34 +557,17 @@ export async function refreshProjectAsync(project, {
     ({ command, args, via } = resolved);
   }
 
-  const config = typeof loadOpenWikiConfig === 'function' ? loadOpenWikiConfig() : { model: 'deepseek/deepseek-chat', provider: 'openrouter' };
-  const selectedModel = model || config.model;
-  const selectedProvider = provider || config.provider;
+  const config = loadOpenWikiConfig();
+  const { cmdArgs, childEnv } = buildGeneratorInvocation({
+    baseArgs: args,
+    mode,
+    config: { ...config, model: model || config.model, provider: provider || config.provider },
+    key,
+  });
 
-  const modeFlag = `--${mode}`;
-  const cmdArgs = [...args, modeFlag, '-p'];
-  if (selectedModel) {
-    cmdArgs.push('--modelId', selectedModel);
-  }
-
-  const childEnv = { ...process.env };
-  if (selectedProvider === 'google') {
-    childEnv.GOOGLE_API_KEY = key;
-    childEnv.GEMINI_API_KEY = key;
-    childEnv.OPENWIKI_PROVIDER = 'gemini';
-    delete childEnv.OPENAI_API_KEY;
-    delete childEnv.OPENROUTER_API_KEY;
-  } else {
-    childEnv.OPENROUTER_API_KEY = key;
-    childEnv.OPENWIKI_PROVIDER = 'openrouter';
-    if (config.max_tokens) {
-      childEnv.OPENWIKI_OPENROUTER_MAX_TOKENS = String(config.max_tokens);
-      childEnv.OPENWIKI_MAX_OUTPUT_TOKENS = String(config.max_tokens);
-    }
-    delete childEnv.OPENAI_API_KEY;
-  }
-
+  ensureDefaultIgnores(project.root);
   const startedAt = now;
+  writeReceipt(project.root, '.refresh-started.json', { startedAt: new Date(startedAt).toISOString(), sourceCommit: before.head || null });
   const result = await new Promise((resolve) => {
     const proc = spawnProcess(command, cmdArgs, {
       cwd: project.root,
@@ -465,22 +584,49 @@ export async function refreshProjectAsync(project, {
   return finishRefresh(project, { before, result, git, key, mode, startedAt, via, clock });
 }
 
-/** Is a refresh due for this project under the configured interval? */
+/**
+ * Start time (ms) of the latest generation attempt, or NaN when none is recorded.
+ * `.refresh-started.json` is written before the generator runs, so an attempt
+ * the task runner killed still counts; the other two are written by the
+ * generator when it begins and by the driver when an attempt ends.
+ */
+export function lastAttemptStart(root, generatedAt = null) {
+  const times = [
+    readJson(path.join(root, 'openwiki', '.refresh-started.json'))?.startedAt,
+    readJson(path.join(root, 'openwiki', '.refresh-attempt.json'))?.startedAt,
+    generatedAt,
+  ].map((value) => (typeof value === 'string' ? Date.parse(value) : NaN)).filter(Number.isFinite);
+  return times.length ? Math.max(...times) : NaN;
+}
+
+/**
+ * Is a refresh due for this project under the configured interval?
+ *
+ * Every attempt, including a retry of an interrupted or failed one, waits the
+ * full interval after the previous attempt began. Retrying an interrupted run
+ * on every scheduler slot spent about $10 a day on 2026-11-12/13: the task
+ * runner killed the same generations every 30 minutes and they never finished.
+ */
 export function isDue(project, { lockMs = DEFAULT_LOCK_MS, now = Date.now(), git = gitRun, force = false } = {}) {
   if (!isGitRepo(project.root, { git })) {
     return { due: false, skipped: true, reason: 'not a git repository' };
   }
   const state = staleness(project.root, { git });
   if (force) return { due: true, uninitialized: !hasWiki(project.root), ...state };
+  const last = lastAttemptStart(project.root, state.generatedAt);
+  const retryAt = Number.isFinite(last) && now - last < lockMs ? new Date(last + lockMs).toISOString() : null;
   if (!hasWiki(project.root)) {
+    if (retryAt) return { due: false, held: true, uninitialized: true, reason: `initialization attempted recently; next attempt after ${retryAt}`, ...state };
     return { due: true, uninitialized: true, reason: 'uninitialized (missing openwiki/ pages)', ...state };
   }
   if (!state.stale) return { due: false, ...state };
-  if (state.generatedStatus === 'interrupted' || stillGenerating(project.root)) return { due: true, reason: 'resume incomplete generation', ...state };
-  if (state.generatedAt) {
-    const at = Date.parse(state.generatedAt);
-    if (Number.isFinite(at) && now - at < lockMs) return { due: false, reason: 'refreshed recently', ...state };
+  const incomplete = state.generatedStatus === 'interrupted' || stillGenerating(project.root);
+  if (retryAt) {
+    return incomplete
+      ? { due: false, held: true, reason: `incomplete generation attempted recently; resumes after ${retryAt}`, ...state }
+      : { due: false, reason: 'refreshed recently', ...state };
   }
+  if (incomplete) return { due: true, reason: 'resume incomplete generation', ...state };
   return { due: true, ...state };
 }
 

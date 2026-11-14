@@ -54,7 +54,8 @@ template.innerHTML = `
     .grid { display: grid; gap: var(--spacing-lg, 1.5rem); grid-template-columns: repeat(2, minmax(0, 1fr)); }
     ul { list-style: none; padding: 0; margin: 0; }
     li { overflow-wrap: anywhere; }
-    .index li, .links li { border-bottom: 1px solid var(--color-outline, #cbb497); padding-block: 0.5rem; }
+    .index li, .links li, .issues li { border-bottom: 1px solid var(--color-outline, #cbb497); padding-block: 0.5rem; }
+    .health { margin-block-start: var(--spacing-lg, 1.5rem); }
     .index small { display: block; }
     small, code { font: 0.8rem/1.5 var(--typography-source-font-family, ui-monospace, monospace); }
     .results li {
@@ -106,6 +107,14 @@ template.innerHTML = `
         <ul id="links" class="links" aria-label="Documentation links"></ul>
       </section>
     </div>
+    <section class="health" aria-labelledby="health">
+      <div class="graph-tools">
+        <h3 id="health">Link health</h3>
+        <button type="button" id="lint">Check health</button>
+      </div>
+      <p id="lint-state" class="state" role="status">Audit broken links, missing titles, and orphaned pages.</p>
+      <ul id="issues" class="issues" aria-label="Documentation health issues"></ul>
+    </section>
   </section>
 `;
 
@@ -124,13 +133,16 @@ class OpenWikiPanel extends HTMLElement {
     this.attachShadow({ mode: 'open' }).append(template.content.cloneNode(true));
     this.#field('reload').addEventListener('click', () => void this.load());
     this.#field('graph').addEventListener('click', () => void this.#graph());
+    this.#field('lint').addEventListener('click', () => void this.#lint());
     this.#field('search').addEventListener('click', () => void this.#search());
     this.#field('scope').addEventListener('change', () => {
       this.#field('results').replaceChildren();
       this.#field('links').replaceChildren();
+      this.#field('issues').replaceChildren();
       const label = this.#scope() === 'all-vaults' ? 'registered wikis' : 'this workspace';
       this.#state('search-state', `Search headings and passages in ${label}.`);
       this.#state('graph-state', `Trace links between pages in ${label}.`);
+      this.#state('lint-state', `Audit broken links, missing titles, and orphaned pages in ${label}.`);
     });
     this.#field('query').addEventListener('keydown', event => {
       if (event.key !== 'Enter' || event.isComposing) return;
@@ -269,15 +281,52 @@ class OpenWikiPanel extends HTMLElement {
         list.append(row);
       }
       const { nodes, edges: total, orphans } = result.counts;
+      const orphanNames = Array.isArray(result.orphans) && result.orphans.length > 0
+        ? ` (${result.orphans.slice(0, 4).map(id => labels.get(id) ?? id).join(', ')}${result.orphans.length > 4 ? ', …' : ''})`
+        : '';
       const shown = total > edges.length ? ` Showing ${edges.length}.` : '';
       const pages = nodes === 1 ? '1 page' : `${nodes} pages`;
       const links = total === 1 ? '1 link' : `${total} links`;
       this.#state('graph-state', nodes === 0 ? `No pages to map in ${label}.` :
-        `${pages}, ${links}, ${orphans} unlinked in ${label}.${shown}`);
+        `${pages}, ${links}, ${orphans} unlinked${orphanNames} in ${label}.${shown}`);
     } catch {
       if (scope !== this.#scope()) return;
       list.replaceChildren();
       this.#state('graph-state', 'Link topology unavailable. Try again.', true);
+    } finally {
+      button.disabled = false;
+    }
+  }
+
+  async #lint() {
+    const button = this.#field('lint');
+    if (button.disabled) return;
+    button.disabled = true;
+    const scope = this.#scope();
+    const label = scope === 'all-vaults' ? 'registered wikis' : 'this workspace';
+    this.#state('lint-state', `Auditing link health in ${label}…`);
+    const list = this.#field('issues');
+    list.replaceChildren();
+    try {
+      const result = await this.host.run('lint', scope === 'all-vaults' ? ['--all-vaults'] : []);
+      if (scope !== this.#scope()) return;
+      if (!result || !number(result.healthScore) || !number(result.totalHubs) || !Array.isArray(result.issues)) {
+        throw new Error('Invalid link health report');
+      }
+      const shownIssues = result.issues.slice(0, 12);
+      for (const issue of shownIssues) {
+        const row = element('li', '');
+        const fileName = typeof issue.file === 'string' ? issue.file.split('/').pop() : 'unknown';
+        row.append(element('strong', `[${issue.type}] ${fileName} `), element('span', issue.message || ''));
+        list.append(row);
+      }
+      const clipped = result.issues.length > shownIssues.length ? ` Showing ${shownIssues.length} of ${result.issues.length}.` : '';
+      const summary = `${result.healthScore}% health across ${result.totalHubs} page(s), ${result.brokenLinksCount ?? 0} broken link(s), ${result.orphanCount ?? 0} unlinked.${clipped}`;
+      this.#state('lint-state', summary, result.issues.length > 0);
+    } catch {
+      if (scope !== this.#scope()) return;
+      list.replaceChildren();
+      this.#state('lint-state', 'Link health audit unavailable. Try again.', true);
     } finally {
       button.disabled = false;
     }

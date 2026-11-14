@@ -2,7 +2,7 @@
   "$schema": "https://github.com/gregiteen/total-recall/blob/main/metadata.plugin.schema.json",
   "id": "openwiki",
   "name": "OpenWiki",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Multi-repo knowledge graph and documentation wiki engine for Total Recall.",
   "license": "MIT",
   "runtime": {
@@ -17,10 +17,11 @@
       "command": "watch"
     },
     {
-      "intent": "Auto-refresh OpenWiki documentation for repositories with new commits",
-      "schedule": "*/30 * * * *",
+      "intent": "Refresh OpenWiki documentation nightly for repositories with real code changes, on the selected node",
+      "schedule": "20 1-5 * * *",
       "command": "auto-refresh",
-      "timeout_ms": 600000
+      "timeout_ms": 600000,
+      "placement": "selected-node"
     }
   ],
   "branding": {
@@ -292,6 +293,12 @@
             "type": "boolean"
           },
           {
+            "name": "budgetMs",
+            "flag": "--budget-ms",
+            "label": "Start no generation that cannot finish within this many milliseconds",
+            "type": "number"
+          },
+          {
             "name": "json",
             "flag": "--json",
             "label": "JSON output",
@@ -422,6 +429,32 @@
             "type": "boolean"
           }
         ]
+      },
+      {
+        "name": "schedule",
+        "description": "Show or choose the node that runs the nightly wiki refresh (task auto-refresh)",
+        "effect": "write",
+        "output": "json",
+        "args": [
+          {
+            "name": "node",
+            "flag": "--node",
+            "label": "Mesh hostname, or self for this machine",
+            "type": "string"
+          },
+          {
+            "name": "off",
+            "flag": "--off",
+            "label": "Stop the nightly refresh on every node",
+            "type": "boolean"
+          },
+          {
+            "name": "json",
+            "flag": "--json",
+            "label": "JSON output",
+            "type": "boolean"
+          }
+        ]
       }
     ]
   },
@@ -460,8 +493,23 @@
       "formatPropagationReceipt"
     ]
   },
+  "auth": {
+    "plugin": "auth",
+    "methods": [
+      "passkey",
+      "google-oauth2"
+    ],
+    "session_verification": true
+  },
   "status": {
     "command": "status",
     "refresh_seconds": 300
+  },
+  "reuse": {
+    "commands": [
+      "total-recall auth secret",
+      "total-recall ssss status"
+    ],
+    "owned": "Documentation hub discovery, wiki page auditing, staleness tracking, and OpenWiki knowledge ingestion."
   }
 }

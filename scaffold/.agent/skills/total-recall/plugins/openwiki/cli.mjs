@@ -5,8 +5,11 @@
  */
 import fs from "node:fs";
 import path from "node:path";
+import { pathToFileURL } from "node:url";
 import { runBootstrapCommand } from './src/bootstrap.mjs';
-import { describeRetention, hasWiki, isDue, readProjects, refreshProject, refreshProjectAsync, resolveKey, staleness } from './src/refresh.mjs';
+import { CREDIT_REFUSAL, NO_MODEL, describeRetention, hasWiki, isDue, readProjects, refreshProject, refreshProjectAsync, resolveKey, staleness } from './src/refresh.mjs';
+
+const DEFAULT_REPO_CONCURRENCY = 2;
 import { watchUpstream, propagateUpdates, readUpstreamState, bundledGeneratorVersion } from './src/upstream-watcher.mjs';
 import { loadOpenWikiConfig, setOpenWikiConfigValue, resetOpenWikiConfig, resolveConfigPath, ALLOWED_CONFIG_KEYS, ALLOWED_PROVIDERS } from './src/config.mjs';
 import { discoverAllHubs } from './src/mesh-vaults.mjs';
@@ -26,12 +29,14 @@ import { refreshDiagnostics } from './src/refresh-diagnostics.mjs';
  * Defaults to a report; --apply performs the refreshes, because regenerating a
  * repository's documentation is a write to that repository.
  */
+// OpenRouter answers 402 when the balance cannot cover a request.
+
 export async function refreshCommand(args, {
   read = readProjects, dueFor = isDue, refresh = refreshProjectAsync,
-  getKey = resolveKey, configFor = loadOpenWikiConfig,
+  getKey = resolveKey, configFor = loadOpenWikiConfig, clock = Date.now,
 } = {}) {
   if (args.includes('--help') || args.includes('-h')) {
-    console.log('Usage: total-recall openwiki refresh [--repo <name>] [--apply] [--force] [--diagnostics [--slot <local-minute>]] [--json]');
+    console.log('Usage: total-recall openwiki refresh [--repo <name>] [--apply [--budget-ms <n>]] [--force] [--diagnostics [--slot <local-minute>]] [--json]');
     return;
   }
   const json = args.includes('--json');
@@ -80,6 +85,8 @@ export async function refreshCommand(args, {
     if (!state.due) {
       if (state.skipped) {
         reports.push({ ...project, action: 'skipped', reason: state.reason });
+      } else if (state.held) {
+        reports.push({ ...project, action: 'held', uninitialized: Boolean(state.uninitialized), reason: state.reason, generationCommit: state.generationCommit, generationTime: state.generationTime, generatedAt: state.generatedAt, commitsSince: state.commitsSince });
       } else {
         reports.push({ ...project, action: 'current', reason: state.reason, generationCommit: state.generationCommit, generationTime: state.generationTime, generatedAt: state.generatedAt, commitsSince: state.commitsSince });
       }
@@ -102,6 +109,12 @@ export async function refreshCommand(args, {
   let payloadBudgetNote = null;
   if (apply && due.length) {
     const config = configFor();
+    if (!String(config.model || '').trim()) {
+      if (json) console.log(JSON.stringify({ ok: false, error: NO_MODEL, reports }));
+      else console.error(`OpenWiki refresh: ${NO_MODEL}`);
+      process.exitCode = 1;
+      return;
+    }
     const { key, from } = getKey({ provider: config.provider });
     if (!key) {
       const keyName = config.provider === 'google' ? 'GOOGLE_API_KEY' : 'OPENROUTER_API_KEY';
@@ -111,21 +124,37 @@ export async function refreshCommand(args, {
       process.exitCode = 1;
       return;
     }
+    // Repositories refreshed at once. Each one is a separate paid generator run, so
+    // the default stays low; OpenWiki's own page concurrency is left at its default.
     const concurrencyArg = args.find((a) => a.startsWith('--concurrency='));
     const concurrencyIndex = args.indexOf('--concurrency');
     const concurrency = Math.max(1, parseInt(
-      concurrencyArg ? concurrencyArg.slice('--concurrency='.length) : (concurrencyIndex >= 0 ? args[concurrencyIndex + 1] : '8'),
+      concurrencyArg ? concurrencyArg.slice('--concurrency='.length) : (concurrencyIndex >= 0 ? args[concurrencyIndex + 1] : String(DEFAULT_REPO_CONCURRENCY)),
       10
-    ) || 8);
+    ) || DEFAULT_REPO_CONCURRENCY);
+
+    // A scheduled run passes the time it has left before the task runner kills
+    // it. A generation started without room to finish is killed part-way, marked
+    // interrupted and paid for again on the next attempt, so none is started.
+    const budgetArg = args.find((a) => a.startsWith('--budget-ms='));
+    const budgetIndex = args.indexOf('--budget-ms');
+    const budgetMs = Number(budgetArg ? budgetArg.slice('--budget-ms='.length) : (budgetIndex >= 0 ? args[budgetIndex + 1] : NaN));
+    const generationMs = Number.isInteger(config.timeout_ms) ? config.timeout_ms : 300000;
+    const dispatchStarted = clock();
+    let stopReason = null;
 
     if (!json) {
-      console.log(`OpenWiki refresh (apply): dispatching ${due.length} projects with concurrency ${concurrency}`);
+      console.log(`OpenWiki refresh (apply): dispatching ${due.length} projects with concurrency ${concurrency}${Number.isFinite(budgetMs) ? ` within ${Math.round(budgetMs / 1000)}s` : ''}`);
     }
 
     let queueIndex = 0;
     let completedCount = 0;
     const worker = async () => {
       while (queueIndex < due.length) {
+        if (!stopReason && Number.isFinite(budgetMs) && clock() - dispatchStarted + generationMs > budgetMs) {
+          stopReason = `not started: fewer than ${Math.round(generationMs / 1000)}s left in this run's ${Math.round(budgetMs / 1000)}s budget`;
+        }
+        if (stopReason) break;
         const itemIndex = queueIndex++;
         const entry = due[itemIndex];
         const mode = entry.mode || (entry.uninitialized ? 'init' : 'update');
@@ -142,6 +171,9 @@ export async function refreshCommand(args, {
           result = { action: 'failed', reason: error.message.split(key).join('[REDACTED]') };
         }
         completedCount++;
+        if (!stopReason && CREDIT_REFUSAL.test(String(result.reason || ''))) {
+          stopReason = `not started: the provider refused ${entry.name} for credit; add credit, then refresh again`;
+        }
         const index = reports.findIndex((r) => r.root === entry.root);
         reports[index] = { ...reports[index], ...result, credential: from };
         if (!json) {
@@ -154,6 +186,11 @@ export async function refreshCommand(args, {
 
     const workers = Array.from({ length: Math.min(concurrency, due.length) }, () => worker());
     await Promise.all(workers);
+    for (const entry of due.slice(queueIndex)) {
+      const index = reports.findIndex((r) => r.root === entry.root);
+      reports[index] = { ...reports[index], action: 'deferred', reason: stopReason };
+    }
+    if (stopReason && queueIndex < due.length) payloadBudgetNote = `${due.length - queueIndex} project(s) ${stopReason}.`;
   }
 
   const failed = reports.filter((r) => r.action === 'failed');
@@ -171,6 +208,8 @@ export async function refreshCommand(args, {
       refreshed: reports.filter((r) => r.action === 'refreshed' || r.action === 'initialized').length,
       failed: failed.length,
       partial: partial.length,
+      held: reports.filter((r) => r.action === 'held').length,
+      deferred: reports.filter((r) => r.action === 'deferred').length,
       skipped: reports.filter((r) => r.action === 'skipped').length,
       current: reports.filter((r) => r.action === 'current').length,
     },
@@ -438,6 +477,8 @@ async function generateCommand(args) {
 
     if (json) {
       console.log(JSON.stringify(res, null, 2));
+    } else if (res.dryRun) {
+      console.log(`\n${res.message}\n`);
     } else {
       console.log(`\n✔ Generated documentation for ${res.repoName} (${Math.round((res.durationMs || 0)/1000)}s) via ${res.generatorVia}`);
       console.log(`  Output: ${res.outputDir}\n`);
@@ -572,8 +613,8 @@ async function configCommand(args) {
       else {
         console.log(`\nOpenWiki Configuration (${configPath}):`);
         console.log(`  Provider        : ${config.provider}`);
-        console.log(`  Model           : ${config.model}`);
-        console.log(`  Fallback Model  : ${config.fallback_model}`);
+        console.log(`  Model           : ${config.model || 'not set (refreshes stop until one is chosen)'}`);
+        console.log(`  Fallback Model  : ${config.fallback_model || 'not set'}`);
         console.log(`  Max Tokens      : ${config.max_tokens}`);
         console.log(`  Timeout (ms)    : ${config.timeout_ms}\n`);
       }
@@ -624,9 +665,76 @@ async function configCommand(args) {
   }
 }
 
+/**
+ * The scheduled run. The Automations runner kills it at the task's declared
+ * timeout_ms, so it dispatches only generations that can finish a minute
+ * before that.
+ */
+export function autoRefreshBudgetMs(manifestPath = new URL('./plugin.json', import.meta.url)) {
+  let timeout = null;
+  try {
+    const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
+    timeout = manifest.tasks?.find((task) => task.command === 'auto-refresh')?.timeout_ms ?? null;
+  } catch { /* no readable manifest: use the runner's own limit */ }
+  return Math.max(60000, (Number.isInteger(timeout) ? timeout : 600000) - 60000);
+}
+
+async function loadScheduleCore() {
+  const root = process.env.TR_PACKAGE_ROOT;
+  if (!root) throw new Error('Run through total-recall openwiki schedule');
+  const load = (module) => import(pathToFileURL(path.join(root, 'src', 'core', module)).href);
+  const [loader, store, mesh] = await Promise.all([load('plugin-loader.mjs'), load('plugin-store.mjs'), load('mesh.mjs')]);
+  return { getPlugin: loader.getPlugin, readPluginRecord: store.readPluginRecord, patchPluginRecord: store.patchPluginRecord, getMeshSelf: mesh.getMeshSelf };
+}
+
+/**
+ * Where the nightly refresh runs. Like other selected-node tasks, the placement is
+ * task_nodes['auto-refresh'] in this plugin's record; with none, the task stays idle.
+ * Pick the node that holds the repository checkouts.
+ */
+export async function scheduleCommand(args = [], { core = null, config = loadOpenWikiConfig } = {}) {
+  const json = args.includes('--json');
+  const usage = 'Usage: total-recall openwiki schedule [--node <mesh hostname>|--node self|--off] [--json]';
+  try {
+    if (args.includes('--help') || args.includes('-h')) { console.log(usage); return; }
+    const nodeIndex = args.indexOf('--node');
+    const nodeArg = nodeIndex >= 0 ? args[nodeIndex + 1] : null;
+    if (nodeIndex >= 0 && (!nodeArg || nodeArg.startsWith('--'))) throw new Error(usage);
+    const off = args.includes('--off');
+    if (off && nodeArg) throw new Error(usage);
+    const owner = core || await loadScheduleCore();
+    const plugin = owner.getPlugin('openwiki');
+    if (!plugin?.valid) throw new Error('Install a valid OpenWiki plugin first');
+    const record = owner.readPluginRecord(plugin) || {};
+    const task = plugin.manifest?.tasks?.find((entry) => entry.command === 'auto-refresh') || null;
+    let node = record.task_nodes?.['auto-refresh'] || null;
+    if (off || nodeArg) {
+      node = off ? null : nodeArg === 'self' ? owner.getMeshSelf()?.hostname || null : nodeArg;
+      if (!off && !node) throw new Error('This machine has no mesh hostname; name the node with --node <hostname>');
+      const taskNodes = { ...(record.task_nodes || {}) };
+      if (node) taskNodes['auto-refresh'] = node;
+      else delete taskNodes['auto-refresh'];
+      await owner.patchPluginRecord(plugin, { task_nodes: taskNodes });
+    }
+    const model = config().model || null;
+    const payload = { ok: true, task: 'auto-refresh', schedule: task?.schedule || null, placement: task?.placement || null, node, model, ready: Boolean(node && model) };
+    if (json) console.log(JSON.stringify(payload, null, 2));
+    else {
+      console.log(`OpenWiki nightly refresh: ${node ? `runs on ${node}` : 'idle (no node selected)'} at "${payload.schedule}"`);
+      console.log(`  Model: ${model || `not set — ${NO_MODEL}`}`);
+    }
+  } catch (err) {
+    if (json) console.log(JSON.stringify({ ok: false, error: err.message }));
+    else console.error(`OpenWiki schedule: ${err.message}`);
+    process.exitCode = 1;
+  }
+}
+
 async function autoRefreshCommand(args = []) {
-  const hasApply = args.includes('--apply');
-  const forwardArgs = hasApply ? args : ['--apply', ...args];
+  const forwardArgs = args.includes('--apply') ? [...args] : ['--apply', ...args];
+  if (!forwardArgs.some((a) => a === '--budget-ms' || a.startsWith('--budget-ms='))) {
+    forwardArgs.push(`--budget-ms=${autoRefreshBudgetMs()}`);
+  }
   return refreshCommand(forwardArgs);
 }
 
@@ -651,6 +759,7 @@ IMPLEMENTED.autorefresh = autoRefreshCommand;
 IMPLEMENTED.watch = watchCommand;
 IMPLEMENTED.propagate = propagateCommand;
 IMPLEMENTED.config = configCommand;
+IMPLEMENTED.schedule = scheduleCommand;
 IMPLEMENTED.search = searchCommand;
 IMPLEMENTED.graph = graphCommand;
 IMPLEMENTED.token = tokenCommand;

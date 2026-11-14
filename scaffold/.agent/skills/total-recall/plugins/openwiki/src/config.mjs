@@ -6,10 +6,13 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
+// No model default: models and prices change too often to fix one in code, and a stale
+// default (deepseek/deepseek-chat) cost about 5x a current model of the same family.
+// A refresh with no configured model stops before it calls a provider.
 export const DEFAULT_OPENWIKI_CONFIG = Object.freeze({
   provider: 'openrouter',
-  model: 'deepseek/deepseek-chat',
-  fallback_model: 'deepseek/deepseek-chat',
+  model: null,
+  fallback_model: null,
   max_tokens: 4096,
   timeout_ms: 300000
 });
@@ -69,17 +72,14 @@ export function saveOpenWikiConfig(config, options = {}) {
   const filePath = resolveConfigPath(options);
   const validated = {
     provider: String(config.provider || DEFAULT_OPENWIKI_CONFIG.provider).toLowerCase(),
-    model: String(config.model || DEFAULT_OPENWIKI_CONFIG.model).trim(),
-    fallback_model: String(config.fallback_model || DEFAULT_OPENWIKI_CONFIG.fallback_model).trim(),
+    model: config.model ? String(config.model).trim() || null : null,
+    fallback_model: config.fallback_model ? String(config.fallback_model).trim() || null : null,
     max_tokens: Number.isInteger(Number(config.max_tokens)) ? Math.max(512, Math.min(131072, Number(config.max_tokens))) : DEFAULT_OPENWIKI_CONFIG.max_tokens,
     timeout_ms: Number.isInteger(Number(config.timeout_ms)) ? Math.max(30000, Math.min(1800000, Number(config.timeout_ms))) : DEFAULT_OPENWIKI_CONFIG.timeout_ms
   };
 
   if (!ALLOWED_PROVIDERS.includes(validated.provider)) {
     throw new Error(`Invalid provider: ${validated.provider}. Allowed: ${ALLOWED_PROVIDERS.join(', ')}`);
-  }
-  if (!validated.model) {
-    throw new Error('Model identifier cannot be empty');
   }
 
   const dir = path.dirname(filePath);

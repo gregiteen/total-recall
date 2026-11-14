@@ -257,16 +257,17 @@ export async function discoverAllHubs({
       const projHubs = scanDirectoryHubs(vault.openwikiPath, {
         label: 'project-openwiki',
         repoName: vault.name,
+        nested,
       });
       allHubs.push(...projHubs);
     } else if (vault.type === 'global') {
       const gHubsDir = path.join(vault.root, 'openwiki-hubs');
       const gArticlesDir = path.join(vault.root, 'openwiki-articles');
       if (fs.existsSync(gHubsDir)) {
-        allHubs.push(...scanDirectoryHubs(gHubsDir, { label: 'global-vault-hubs', repoName: 'global-vault' }));
+        allHubs.push(...scanDirectoryHubs(gHubsDir, { label: 'global-vault-hubs', repoName: 'global-vault', nested }));
       }
       if (fs.existsSync(gArticlesDir)) {
-        allHubs.push(...scanDirectoryHubs(gArticlesDir, { label: 'global-vault-articles', repoName: 'global-vault' }));
+        allHubs.push(...scanDirectoryHubs(gArticlesDir, { label: 'global-vault-articles', repoName: 'global-vault', nested }));
       }
     }
   }

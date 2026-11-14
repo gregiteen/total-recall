@@ -29,6 +29,7 @@ export async function searchWikiHubs(query, {
   limit = 20,
   cwd = process.cwd(),
   exactTerms = false,
+  nested = true,
 } = {}) {
   if (!query || typeof query !== 'string' || !query.trim()) {
     throw new Error('Search query must be a non-empty string');
@@ -50,7 +51,7 @@ export async function searchWikiHubs(query, {
     }
   }
 
-  const hubsResult = await discoverAllHubs({ allVaults, cwd, nested: exactTerms });
+  const hubsResult = await discoverAllHubs({ allVaults, cwd, nested });
   const rawTerms = query.toLowerCase().split(/\s+/).filter(Boolean);
   const terms = exactTerms ? wikiTaskTerms(query) : rawTerms.map(term => term.replace(/[^\w-]/g, '')).filter(Boolean);
 

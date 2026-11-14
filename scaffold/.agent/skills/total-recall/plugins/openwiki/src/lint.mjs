@@ -8,23 +8,33 @@
  * - Orphaned hubs with zero inbound or outbound links
  */
 import fs from 'node:fs';
-import path from 'node:path';
-import { discoverAllHubs } from './mesh-vaults.mjs';
+import { discoverAllHubs, execOnMeshNode } from './mesh-vaults.mjs';
+import { extractMarkdownLinks, indexHubsForResolution, resolveLinkTarget } from './markdown-links.mjs';
 
 export async function lintWikiHubs({
   allVaults = false,
   node = null,
   cwd = process.cwd(),
+  nested = true,
 } = {}) {
-  const hubsResult = await discoverAllHubs({ allVaults, node, cwd });
-  const allHubs = hubsResult.hubs;
-
-  const existingFileSet = new Set(allHubs.map((h) => path.resolve(h.path)));
-  const baseNameMap = new Map();
-  for (const h of allHubs) {
-    baseNameMap.set(h.fileName.toLowerCase(), h.path);
-    baseNameMap.set(h.fileName.replace(/\.md$/, '').toLowerCase(), h.path);
+  // Delegate to remote mesh node when requested, matching search and graph.
+  if (node && node !== 'local' && node !== 'self') {
+    const meshRes = execOnMeshNode(node, [
+      'lint', ...(allVaults ? ['--all-vaults'] : []), '--json',
+    ]);
+    if (meshRes.ok) {
+      try {
+        return JSON.parse(meshRes.stdout);
+      } catch {
+        throw new Error(`Invalid JSON from mesh node ${node}: ${meshRes.stdout}`);
+      }
+    }
+    throw new Error(`Mesh lint failed on node ${node}: ${meshRes.stderr || meshRes.error}`);
   }
+
+  const hubsResult = await discoverAllHubs({ allVaults, cwd, nested });
+  const allHubs = hubsResult.hubs;
+  const index = indexHubsForResolution(allHubs);
 
   const issues = [];
   let totalLinks = 0;
@@ -63,61 +73,44 @@ export async function lintWikiHubs({
       });
     }
 
-    const hubDir = path.dirname(hub.path);
+    const { markdownLinks, wikilinks } = extractMarkdownLinks(content);
 
-    // 1. Check relative markdown links: [Text](target.md)
-    const mdLinkRegex = /\[([^\]]+)\]\(([^)]+)\)/g;
-    let match;
-    while ((match = mdLinkRegex.exec(content)) !== null) {
-      const linkText = match[1];
-      const rawUrl = match[2].trim().split('#')[0]; // exclude anchor
-      if (!rawUrl || rawUrl.startsWith('http://') || rawUrl.startsWith('https://') || rawUrl.startsWith('mailto:')) {
-        continue;
-      }
-
+    for (const link of markdownLinks) {
       totalLinks++;
       outboundCount.set(hub.path, (outboundCount.get(hub.path) || 0) + 1);
 
-      // Resolve relative to hub file directory
-      const resolvedTarget = path.resolve(hubDir, rawUrl);
-      if (fs.existsSync(resolvedTarget)) {
-        inboundCount.set(resolvedTarget, (inboundCount.get(resolvedTarget) || 0) + 1);
-      } else {
-        // Fallback: check if matches another hub by basename
-        const targetBase = path.basename(rawUrl).toLowerCase();
-        if (baseNameMap.has(targetBase)) {
-          const alternate = baseNameMap.get(targetBase);
-          inboundCount.set(alternate, (inboundCount.get(alternate) || 0) + 1);
-        } else {
-          brokenLinksCount++;
-          issues.push({
-            type: 'broken_link',
-            file: hub.path,
-            linkText,
-            target: rawUrl,
-            message: `Target file not found: ${rawUrl}`,
-          });
+      const resolved = resolveLinkTarget(hub, link.target, index, { isWikilink: false });
+      if (resolved.existsOnDisk) {
+        const targetPath = resolved.hub?.path || resolved.resolvedPath;
+        if (targetPath) {
+          inboundCount.set(targetPath, (inboundCount.get(targetPath) || 0) + 1);
         }
+      } else {
+        brokenLinksCount++;
+        issues.push({
+          type: 'broken_link',
+          file: hub.path,
+          linkText: link.text,
+          target: link.target,
+          message: `Target file not found: ${link.target}`,
+        });
       }
     }
 
-    // 2. Check wikilinks: [[Target]]
-    const wikiRegex = /\[\[([^\]|]+)(?:\|[^\]]+)?\]\]/g;
-    while ((match = wikiRegex.exec(content)) !== null) {
-      const targetName = match[1].trim().toLowerCase();
+    for (const link of wikilinks) {
       totalLinks++;
       outboundCount.set(hub.path, (outboundCount.get(hub.path) || 0) + 1);
 
-      if (baseNameMap.has(targetName) || baseNameMap.has(`${targetName}.md`)) {
-        const targetPath = baseNameMap.get(targetName) || baseNameMap.get(`${targetName}.md`);
-        inboundCount.set(targetPath, (inboundCount.get(targetPath) || 0) + 1);
+      const resolved = resolveLinkTarget(hub, link.target, index, { isWikilink: true });
+      if (resolved.existsOnDisk && resolved.hub) {
+        inboundCount.set(resolved.hub.path, (inboundCount.get(resolved.hub.path) || 0) + 1);
       } else {
         brokenLinksCount++;
         issues.push({
           type: 'broken_wikilink',
           file: hub.path,
-          target: match[1].trim(),
-          message: `Wikilink target not found: [[${match[1].trim()}]]`,
+          target: link.target,
+          message: `Wikilink target not found: [[${link.target}]]`,
         });
       }
     }
