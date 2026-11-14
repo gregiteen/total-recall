@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback, type ReactNode } from 'react'
-import { BrowserRouter, Routes, Route, NavLink, Navigate, useLocation, useSearchParams } from 'react-router-dom'
+import { BrowserRouter, Routes, Route, NavLink, Link, Navigate, useLocation, useSearchParams } from 'react-router-dom'
 import './App.css'
 import { getApiBase, setApiBase, checkSession, logout, registerUnauthedCallback, fetchHealth } from './api'
 import type { HealthData } from './types'
@@ -184,7 +184,7 @@ function MainContent({ activeBrainId }: { activeBrainId: string }) {
       <OnboardingRedirect />
       <div style={{ flex: 1, overflow: 'auto', display: 'flex', flexDirection: 'column', height: '100%' }}>
         <Routes>
-          <Route path="/" element={<Navigate to={isOnboardingComplete() ? '/memory' : '/onboarding'} replace />} />
+          <Route path="/" element={<Navigate to={isOnboardingComplete() ? '/memory?plugins=open' : '/onboarding'} replace />} />
           <Route path="/chat" element={<Navigate to="/memory" replace />} />
           <Route path="/onboarding" element={<OnboardingPage />} />
           <Route path="/memory" element={<MemoryPage activeBrainId={activeBrainId} />} />
@@ -357,6 +357,7 @@ function Dashboard() {
   // Authed — render full dashboard
   return (
       <PluginWorkspace activeBrainId={activeBrainId} onOpenPlugin={closeSidebar}
+        onStaleBrain={!linkedBrainId && storedBrainId !== 'global' ? () => setStoredBrainId('global') : undefined}
         renderShell={(pluginFolder, pluginPage, plugins) => {
           const page = pageId ? <WorkspacePage id={pageId} brainId={pageBrainId} plugins={plugins} /> : pluginPage
           return <div className="app-layout">
@@ -375,7 +376,10 @@ function Dashboard() {
               <div className="workspace-main" inert={edge !== null}>
                 <header className="workspace-toolbar" aria-label="Dashboard">
                   <BrandMark height={64} className="workspace-logo" />
-                  <AccountMenu health={health} onLogout={handleLogout} />
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <Link to="/memory?plugins=open" className="btn btn-ghost btn-sm">Plugins</Link>
+                    <AccountMenu health={health} onLogout={handleLogout} />
+                  </div>
                 </header>
                 <div className="workspace-body" hidden={!!page}>
                   <MainContent activeBrainId={activeBrainId} />

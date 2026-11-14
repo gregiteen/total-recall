@@ -14,7 +14,7 @@
  *   skip the fetch entirely (handled client-side via the hash endpoint).
  */
 
-const CACHE_NAME = 'total-recall-v1';
+const CACHE_NAME = 'total-recall-v4';
 const API_CACHE = 'total-recall-api-v3';
 
 // Pre-cache app shell

@@ -19,6 +19,7 @@ interface WorkspaceProps {
   activeBrainId: string
   renderShell: (folder: ReactNode, page: ReactNode, plugins: PluginInfo[] | null) => ReactNode
   onOpenPlugin: () => void
+  onStaleBrain?: () => void
 }
 
 function pluginOrigin(plugin: PluginInfo) {
@@ -28,7 +29,7 @@ function pluginOrigin(plugin: PluginInfo) {
   return 'User'
 }
 
-export default function PluginWorkspace({ activeBrainId, renderShell, onOpenPlugin }: WorkspaceProps) {
+export default function PluginWorkspace({ activeBrainId, renderShell, onOpenPlugin, onStaleBrain }: WorkspaceProps) {
   const [params, setParams] = useSearchParams()
   const { pathname } = useLocation()
   const [expanded, setExpanded] = useState<boolean>()
@@ -57,7 +58,12 @@ export default function PluginWorkspace({ activeBrainId, renderShell, onOpenPlug
       setOpenAttempt(attempt => attempt?.error ? undefined : attempt)
     } catch (error) {
       if (request.current !== current) return
-      setFailure({ selection: activeBrainId, message: error instanceof Error ? error.message : 'Could not load plugins.' })
+      const message = error instanceof Error ? error.message : 'Could not load plugins.'
+      if (activeBrainId !== 'global' && onStaleBrain && message.includes('unavailable')) {
+        onStaleBrain()
+        return
+      }
+      setFailure({ selection: activeBrainId, message })
     }
   }, [activeBrainId])
 
@@ -122,6 +128,39 @@ export default function PluginWorkspace({ activeBrainId, renderShell, onOpenPlug
     <p role="alert">{loadError || `No installed plugin matches ${id}.`}</p>
     <button type="button" className="btn btn-ghost" onClick={() => select(null)}>Close</button>
   </section>
+  else if (params.has('plugins') && pathname === '/memory' && !params.get('page')) page = (
+    <section className="plugin-workspace-page" aria-label="Installed plugins overview" style={{ padding: '24px', maxWidth: '1120px', width: '100%', margin: '0 auto' }}>
+      <header style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '12px', marginBottom: '20px' }}>
+        <div>
+          <h1 style={{ margin: 0, fontSize: '1.5rem' }}>Plugins</h1>
+          <p style={{ margin: '4px 0 0', color: 'var(--text-secondary)', fontSize: '0.9rem' }}>
+            {plugins ? `${plugins.length} installed plugins` : 'Loading installed plugins…'}
+          </p>
+        </div>
+        <button type="button" className="btn btn-primary btn-sm" onClick={() => setBrowse(true)}>Browse and install</button>
+      </header>
+      {loadError ? <div className="plugin-folder-message" role="alert">
+        {loadError} <button className="btn btn-ghost btn-sm" onClick={() => void refresh()}>Retry</button>
+      </div> : plugins === null ? <p role="status">Loading plugins…</p> : (
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: '12px' }}>
+          {plugins.map(plugin => (
+            <button key={plugin.id} type="button" onClick={() => { select(plugin.id); void openArmed(plugin) }}
+              style={{
+                textAlign: 'left', padding: '16px', borderRadius: 'var(--radius-md)',
+                background: 'var(--bg-secondary)', border: '1px solid var(--border)',
+                color: 'var(--text-primary)', cursor: 'pointer', display: 'flex', flexDirection: 'column', gap: '6px'
+              }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
+                <strong style={{ fontSize: '1rem' }}>{plugin.name}</strong>
+                <small style={{ color: 'var(--text-secondary)' }}>{pluginOrigin(plugin)}</small>
+              </div>
+              {plugin.description && <span style={{ color: 'var(--text-secondary)', fontSize: '0.85rem', lineHeight: 1.4 }}>{plugin.description}</span>}
+            </button>
+          ))}
+        </div>
+      )}
+    </section>
+  )
 
   return <>
     {renderShell(folder, page, loadError ? null : plugins)}

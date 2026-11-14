@@ -73,9 +73,9 @@ describe('App', () => {
       expect(screen.queryByText('IDEs')).not.toBeInTheDocument();
       expect(screen.getByText('Vault')).toBeInTheDocument();
       expect(screen.getByText('Rules')).toBeInTheDocument();
-      expect(screen.getByText('Plugins')).toBeInTheDocument();
-      // Default route / redirects to /memory when onboarding is complete
-      expect(screen.getByTestId('memory-page')).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Plugins' })).toBeInTheDocument();
+      // Default route / redirects to /memory?plugins=open when onboarding is complete
+      expect(screen.getByRole('region', { name: 'Installed plugins overview' })).toBeInTheDocument();
     });
     fireEvent.click(screen.getByText('Account', { selector: 'summary' }));
     expect(screen.getByRole('link', { name: 'Secrets & Keys' })).toBeInTheDocument();
