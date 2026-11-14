@@ -20,7 +20,11 @@ export function queryAiModels(harness, model, { bin = process.env.TOTAL_RECALL_B
   const line = output.trim().split('\n').filter(Boolean).at(-1);
   try {
     const answer = JSON.parse(line);
-    return answer && typeof answer.ok === 'boolean' ? answer : null;
+    if (!answer || typeof answer.ok !== 'boolean') return null;
+    // An error reply (an older ai-models without `validate` answers invalid_arguments) is the command
+    // failing, not a verdict on the model; reading it as one would refuse every model.
+    if (answer.error != null || answer.code != null) return null;
+    return answer;
   } catch { return null; }
 }
 
@@ -32,7 +36,7 @@ export function createModelValidator({ aiModels = queryAiModels, catalog = getMo
     if (refusal) return { ok: false, harness, model, source: 'policy', reason: refusal };
     if (ownerAnswers) {
       const answer = aiModels(harness, model);
-      if (answer) return { ok: answer.ok, harness, model, source: 'ai-models', ...(answer.ok ? {} : { reason: answer.reason || answer.error || `AI Models does not list ${model} for ${harness}` }) };
+      if (answer) return { ok: answer.ok, harness, model, source: 'ai-models', ...(answer.ok ? {} : { reason: answer.reason || `AI Models does not list ${model} for ${harness}` }) };
       ownerAnswers = false;
     }
     // Another node's catalog is not this one's: its destination validates against its own.

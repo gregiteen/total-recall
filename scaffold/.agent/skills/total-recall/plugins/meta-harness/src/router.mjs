@@ -18,10 +18,10 @@ import { classifyTaskComplexity, selectOptimalHarness, computeEmpiricalScorecard
 import { inspectAgents } from './worker.mjs';
 import { inspectNode } from './executor.mjs';
 import { getModelCatalog, joinHarnessModels } from './model-catalog.mjs';
-import { readReceipts, activeQuotaWalls, activeCredentialBlocks, includedBillingReceipts } from './learner.mjs';
+import { readReceipts, activeQuotaWalls, activeCredentialBlocks, includedBillingReceipts, recordRunReceipt } from './learner.mjs';
 import { resolvePool, exclusionReason, isLocalExecutionNode } from './pool.mjs';
 import { readCodexRateLimits, measuredWalls } from './telemetry.mjs';
-import { claudeProofCurrent, INCLUDED_AGENTS, readIncludedPolicy } from './included-usage.mjs';
+import { claudeProofCurrent, INCLUDED_AGENTS, readIncludedPolicy, readCodexAllowance } from './included-usage.mjs';
 import { derivedDir } from './paths.mjs';
 import { createModelValidator, filterPoolByModel } from './model-selection.mjs';
 
@@ -286,7 +286,26 @@ export async function routeTask(taskDescription, options = {}) {
     ...(remote || lean.fleet ? {} : { fleet: complexity.tier === 'local' ? cachedFleet : () => ({ ok: false, error: 'Not read: this route places no local work', nodes: [] }) }),
   });
   const quotas = quotaReport.quotas;
-  const routing = selectOptimalHarness(taskDescription, pool.ready.map(h => h.id), quotas, { ...options, tierOverride: complexity.tier, empiricalScorecard: computeEmpiricalScorecard(receipts) });
+  const rank = ready => selectOptimalHarness(taskDescription, ready.map(h => h.id), quotas, { ...options, tierOverride: complexity.tier, empiricalScorecard: computeEmpiricalScorecard(receipts) });
+  let excluded = pool.excluded;
+  let routing = rank(pool.ready);
+  // Quota walls come from launches this machine saw refused. With none recorded here, a route kept
+  // choosing a Codex that was out of quota, and the selected-harness write gate then blocked every
+  // other harness. Before choosing Codex, ask it for its allowance (no turn), and record a quota
+  // answer as the wall a refused launch records (A-124), so later routes skip it without asking.
+  if (policy.enabled && !remote && routing.selected === 'codex') {
+    const allowance = await (options.codexAllowance || readCodexAllowance)(options.cwd || process.cwd());
+    if (allowance?.ok === false && allowance.failureKind === 'quota') {
+      const resetsAt = allowance.resetsAt || null;
+      try {
+        await (options.recordReceipt || recordRunReceipt)({ harness: 'codex', role: 'Route', task: String(taskDescription).slice(0, 200),
+          success: false, failureKind: 'quota', billingMode: 'included', error: allowance.error, resetsAt });
+      } catch { /* the route still skips Codex; only the next route asks again */ }
+      excluded = [...excluded, { harness: 'codex', reason: resetsAt ? `out of quota until ${resetsAt}` : 'out of quota', failureKind: 'quota', resetsAt }];
+      quotas.codex = { ...quotas.codex, status: 'exhausted', wallMessage: allowance.error, ...(resetsAt ? { resetsAt } : {}) };
+      routing = rank(pool.ready.filter(h => h.id !== 'codex'));
+    }
+  }
   const selectedQuota = quotas[routing.selected] || {};
   const warnings = [];
   if (policy.enabled && options.jev) warnings.push('Included usage policy uses the local task classifier.');
@@ -298,8 +317,8 @@ export async function routeTask(taskDescription, options = {}) {
   if (selectedModel?.source === 'unverified') warnings.push(selectedModel.note);
   return {
     ok: Boolean(routing.selected), task: taskDescription, classifier, complexity,
-    selected: routing.selected, tier: complexity.tier, model: options.model ?? null, ...(modelSelection ? { modelSelection } : {}), candidates: routing.candidates, excluded: pool.excluded,
-    ...(policy.enabled && !routing.selected ? { deferred: pool.excluded.find(row => row.failureKind === 'quota') || null } : {}),
+    selected: routing.selected, tier: complexity.tier, model: options.model ?? null, ...(modelSelection ? { modelSelection } : {}), candidates: routing.candidates, excluded,
+    ...(policy.enabled && !routing.selected ? { deferred: excluded.find(row => row.failureKind === 'quota') || null } : {}),
     placement: complexity.tier === 'local' ? placeLocalWork(quotaReport.fleet) : null,
     scoring: 'Adapter quality and cost scores are configured priors, adjusted by pass rates measured on this machine.',
     quotaSnapshot: { selectedHarnessStatus: selectedQuota.status || null, selectedHarnessUsage: selectedQuota.usagePercent ?? null, freeMemGB: quotas.system.freeMemGB ?? null },
