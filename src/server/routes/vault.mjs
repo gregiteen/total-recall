@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import fs from 'node:fs';
+import path from 'node:path';
 import { requireAuth, requireScope } from '../auth.mjs';
 import {
   serverError,
