@@ -6,11 +6,17 @@ import { isGitRepo, createWorktree, removeWorktree, commitAll, deleteBranch } fr
 import { randomUUID } from 'node:crypto';
 import { includedAdmission, openRouterAdmission, readIncludedPolicy } from './included-usage.mjs';
 import { queueIncludedJob } from './usage-queue.mjs';
+import { createModelValidator } from './model-selection.mjs';
 
 export async function dispatchWithReceipt(request, { dispatchFn, node = request.node || 'local', role, complexityScore, escalatedFrom,
-  record = recordRunReceipt, replay, retryId, manageWrites = false, usagePolicy = readIncludedPolicy, admit = includedAdmission, admitOpenRouter = openRouterAdmission } = {}) {
+  record = recordRunReceipt, replay, retryId, manageWrites = false, validateModel, usagePolicy = readIncludedPolicy, admit = includedAdmission, admitOpenRouter = openRouterAdmission } = {}) {
   const started = Date.now();
   if (cancellationResult()) return cancellationResult();
+  // A model this harness must not or cannot run is refused before launch; it says nothing about the harness, so no receipt.
+  if (request.model !== undefined) {
+    const check = (validateModel || createModelValidator({ local: node === 'local' }))(request.agent, request.model);
+    if (!check.ok) return { ok: false, agent: request.agent, failureKind: 'model', error: check.reason, modelCheck: check, launchPrevented: true, exitCode: null, durationMs: Date.now() - started };
+  }
   // A harness that cannot be told not to write does read-only work in a checkout that is thrown away.
   const contain = node === 'local' && request.permissions?.write !== true && !READ_ONLY_ADAPTERS.includes(request.agent) && request.isolated !== true && isGitRepo(request.cwd);
   const ownWrites = manageWrites && node === 'local' && request.permissions?.write === true && isGitRepo(request.cwd);

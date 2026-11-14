@@ -10,11 +10,11 @@ const BOOLEAN_FLAGS = {
 const VALUE_FLAGS = {
   mode: '--mode', orchestrator: '--orchestrator', explorer: '--explorer', architect: '--architect', implementer: '--implementer',
   goal: '--goal', maxTurns: '--max-turns', maxBudgetUsd: '--max-budget-usd', maxTokens: '--max-tokens', approvalPolicy: '--approvals', questionTimeoutMs: '--question-timeout-ms', resultSchema: '--result-schema',
-  verifier: '--verifier', reviewer: '--reviewer', author: '--author', threadId: '--thread', branch: '--branch',
+  verifier: '--verifier', reviewer: '--reviewer', author: '--author', threadId: '--thread', branch: '--branch', model: '--model',
 };
 const OPERATION_KEYS = {
-  route: ['execute', 'gate', 'jev', 'preferLocal', 'preferFrontier', 'allowUnknownAuth'],
-  coordinate: ['execute', 'gate', 'autoReview', 'allowSameFamily', 'allowUnknownAuth', 'mode', 'orchestrator', 'explorer', 'architect', 'implementer', 'verifier', 'reviewer', 'branch'],
+  route: ['execute', 'gate', 'jev', 'preferLocal', 'preferFrontier', 'allowUnknownAuth', 'model'],
+  coordinate: ['execute', 'gate', 'autoReview', 'allowSameFamily', 'allowUnknownAuth', 'mode', 'orchestrator', 'explorer', 'architect', 'implementer', 'verifier', 'reviewer', 'branch', 'model'],
   review: ['staged', 'allowUnknownAuth', 'reviewer', 'author', 'threadId'],
 };
 

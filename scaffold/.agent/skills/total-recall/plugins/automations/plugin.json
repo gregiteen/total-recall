@@ -2,7 +2,7 @@
   "$schema": "https://github.com/gregiteen/total-recall/blob/main/metadata.plugin.schema.json",
   "id": "automations",
   "name": "Automations",
-  "version": "1.2.0",
+  "version": "1.2.1",
   "description": "Run scheduled plugin tasks and inspect automation sources, triggers, observed outcomes and coverage across the mesh.",
   "author": "Total Recall",
   "license": "MIT",

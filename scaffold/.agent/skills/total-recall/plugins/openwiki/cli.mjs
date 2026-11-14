@@ -11,7 +11,7 @@ import { CREDIT_REFUSAL, NO_MODEL, describeRetention, hasWiki, isDue, readProjec
 
 const DEFAULT_REPO_CONCURRENCY = 2;
 import { watchUpstream, propagateUpdates, readUpstreamState, bundledGeneratorVersion } from './src/upstream-watcher.mjs';
-import { loadOpenWikiConfig, setOpenWikiConfigValue, resetOpenWikiConfig, resolveConfigPath, ALLOWED_CONFIG_KEYS, ALLOWED_PROVIDERS } from './src/config.mjs';
+import { loadOpenWikiConfig, setOpenWikiConfigValue, resetOpenWikiConfig, resolveConfigPath, setExcludedRoots, ALLOWED_CONFIG_KEYS, ALLOWED_PROVIDERS } from './src/config.mjs';
 import { discoverAllHubs } from './src/mesh-vaults.mjs';
 import { searchWikiHubs } from './src/search.mjs';
 import { buildKnowledgeGraph } from './src/graph.mjs';
@@ -83,8 +83,12 @@ export async function refreshCommand(args, {
       continue;
     }
     if (!state.due) {
-      if (state.skipped) {
+      if (state.excluded) {
+        reports.push({ ...project, action: 'excluded', reason: state.reason });
+      } else if (state.skipped) {
         reports.push({ ...project, action: 'skipped', reason: state.reason });
+      } else if (state.uninitialized && !state.held) {
+        reports.push({ ...project, action: 'no-wiki', uninitialized: true, reason: state.reason, generatedAt: state.generatedAt });
       } else if (state.held) {
         reports.push({ ...project, action: 'held', uninitialized: Boolean(state.uninitialized), reason: state.reason, generationCommit: state.generationCommit, generationTime: state.generationTime, generatedAt: state.generatedAt, commitsSince: state.commitsSince });
       } else {
@@ -202,9 +206,10 @@ export async function refreshCommand(args, {
     note: payloadBudgetNote,
     counts: {
       registered: projects.length,
-      withPages: reports.filter((r) => r.action !== 'skipped' && !r.uninitialized).length,
+      withPages: reports.filter((r) => !['skipped', 'excluded'].includes(r.action) && !r.uninitialized).length,
       due: due.length,
       uninitialized: reports.filter((r) => r.uninitialized).length,
+      excluded: reports.filter((r) => r.action === 'excluded').length,
       refreshed: reports.filter((r) => r.action === 'refreshed' || r.action === 'initialized').length,
       failed: failed.length,
       partial: partial.length,
@@ -217,11 +222,11 @@ export async function refreshCommand(args, {
   };
   if (json) console.log(JSON.stringify(payload, null, 2));
   else {
-    console.log(`OpenWiki refresh (${apply ? 'apply' : 'report'}): ${payload.counts.registered} registered, ${payload.counts.due} due (${payload.counts.uninitialized} uninitialized)`);
+    console.log(`OpenWiki refresh (${apply ? 'apply' : 'report'}): ${payload.counts.registered} registered, ${payload.counts.due} due, ${payload.counts.uninitialized} without a finished wiki, ${payload.counts.excluded} excluded`);
     // Put failures last so bounded scheduler tails retain their causes.
     for (const r of [...reports].sort((a, b) => Number(['failed', 'partial'].includes(a.action)) - Number(['failed', 'partial'].includes(b.action)))) {
-      if (r.action === 'current') continue;
-      const age = r.action === 'skipped' ? 'outside repository generation' : r.generationTime ? `generated ${r.generationTime} at ${r.generationCommit}` : r.uninitialized ? 'uninitialized' : (r.generatedAt ? `last attempt ${r.generatedAt}; generation commit unknown` : 'never generated');
+      if (r.action === 'current' || r.action === 'excluded') continue;
+      const age = r.action === 'skipped' ? 'outside repository generation' : r.generationTime ? `generated ${r.generationTime} at ${r.generationCommit}` : r.uninitialized ? 'no finished wiki' : (r.generatedAt ? `last attempt ${r.generatedAt}; generation commit unknown` : 'never generated');
       console.log(`  ${r.action.padEnd(9)} ${r.name.padEnd(28)} ${age}${Number.isFinite(r.commitsSince) && r.commitsSince !== Infinity ? `, ${r.commitsSince} commits since` : ''}${r.reason ? ` — ${r.reason}` : ''}`);
     }
     if (payloadBudgetNote) console.log(payloadBudgetNote);
@@ -730,6 +735,46 @@ export async function scheduleCommand(args = [], { core = null, config = loadOpe
   }
 }
 
+/**
+ * List, add or remove repositories the refresh never touches. Takes registered
+ * project names or absolute paths; with none, lists the current exclusions.
+ */
+export async function excludeCommand(args = [], { read = readProjects, load = loadOpenWikiConfig, save = setExcludedRoots } = {}) {
+  const json = args.includes('--json');
+  const usage = 'Usage: total-recall openwiki exclude [<name|absolute path>...] [--remove] [--json]';
+  if (args.includes('--help') || args.includes('-h')) { console.log(usage); return; }
+  const remove = args.includes('--remove');
+  const targets = args.filter((a) => !a.startsWith('--'));
+  try {
+    if (remove && !targets.length) throw new Error(usage);
+    let roots = load().exclude || [];
+    if (targets.length) {
+      let projects = [];
+      try { projects = read({ exclude: [] }); } catch { projects = []; }
+      const chosen = [];
+      for (const target of targets) {
+        const matches = projects.filter((p) => p.name === target || (path.isAbsolute(target) && path.resolve(p.root) === path.resolve(target)));
+        if (matches.length > 1) throw new Error(`${target} names ${matches.length} registered projects; pass its absolute path`);
+        if (matches.length === 1) chosen.push(path.resolve(matches[0].root));
+        else if (path.isAbsolute(target)) chosen.push(path.resolve(target));
+        else throw new Error(`${target} is not a registered project name or an absolute path`);
+      }
+      roots = save(remove ? roots.filter((root) => !chosen.includes(root)) : [...roots, ...chosen]).exclude;
+    }
+    const payload = { ok: true, changed: targets.length > 0, exclude: roots };
+    if (json) console.log(JSON.stringify(payload, null, 2));
+    else {
+      console.log(`OpenWiki never refreshes ${roots.length} ${roots.length === 1 ? 'repository' : 'repositories'}${roots.length ? ':' : '.'}`);
+      for (const root of roots) console.log(`  ${root}`);
+    }
+    return payload;
+  } catch (err) {
+    if (json) console.log(JSON.stringify({ ok: false, error: err.message }));
+    else console.error(`OpenWiki exclude: ${err.message}`);
+    process.exitCode = 1;
+  }
+}
+
 async function autoRefreshCommand(args = []) {
   const forwardArgs = args.includes('--apply') ? [...args] : ['--apply', ...args];
   if (!forwardArgs.some((a) => a === '--budget-ms' || a.startsWith('--budget-ms='))) {
@@ -760,6 +805,7 @@ IMPLEMENTED.watch = watchCommand;
 IMPLEMENTED.propagate = propagateCommand;
 IMPLEMENTED.config = configCommand;
 IMPLEMENTED.schedule = scheduleCommand;
+IMPLEMENTED.exclude = excludeCommand;
 IMPLEMENTED.search = searchCommand;
 IMPLEMENTED.graph = graphCommand;
 IMPLEMENTED.token = tokenCommand;
@@ -830,7 +876,10 @@ export async function run(argv = process.argv) {
                               Create missing plugin-owned documentation pages
     refresh [--repo <name>] [--apply] [--force] [--json]
                               Report which registered projects' generated pages are stale;
-                              --apply regenerates stale pages (writes openwiki/ only)
+                              --apply regenerates stale pages (writes openwiki/ only).
+                              Never creates a wiki: use generate for that
+    exclude [<name|path>...] [--remove] [--json]
+                              List, add or remove repositories the refresh never touches
     auto-refresh [--repo <name>] [--force] [--json]
                               Automated daemon trigger to regenerate stale pages across repositories
     config [show|get <key>|set <key> <value>|reset] [--json]

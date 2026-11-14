@@ -2,7 +2,7 @@
   "$schema": "https://github.com/gregiteen/total-recall/blob/main/metadata.plugin.schema.json",
   "id": "composable-cli",
   "name": "Composable CLI",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "description": "Dynamic agent command composition engine with pipeline registration, versioning, and execution.",
   "author": "Total Recall contributors",
   "license": "MIT",
@@ -14,7 +14,10 @@
   },
   "secrets": [],
   "gate": {
-    "tasks": ["Turn a repeated sequence into a reusable command", "List, test or roll back a composed command"],
+    "tasks": [
+      "Turn a repeated sequence into a reusable command",
+      "List, test or roll back a composed command"
+    ],
     "owned_commands": []
   },
   "cli": {
@@ -72,7 +75,11 @@
         "effect": "write",
         "timeout_ms": 125000
       },
-      { "name": "test-path", "description": "Locate a test file without running it", "effect": "read" },
+      {
+        "name": "test-path",
+        "description": "Locate a test file without running it",
+        "effect": "read"
+      },
       {
         "name": "promote",
         "description": "Promote a command into a plugin directory",
@@ -202,5 +209,12 @@
   "distribution": {
     "tier": "official",
     "license": "open"
+  },
+  "reuse": {
+    "commands": [
+      "total-recall ssss status",
+      "total-recall auth session"
+    ],
+    "owned": "Dynamic composed CLI commands, versioning, rollback, test execution, and plugin command library discovery."
   }
 }

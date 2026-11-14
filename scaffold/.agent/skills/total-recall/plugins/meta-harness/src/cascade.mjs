@@ -45,7 +45,8 @@ export async function executeRoutedTask(task, options = {}) {
   if (remote) return remote;
   if (options.node) localExecutionNode(options);
   const cwd = options.cwd || process.cwd();
-  const controls = sessionOptions({ ...options, cwd });
+  // The requested model travels with the controls, so every attempt and a queued replay run it.
+  const controls = { ...sessionOptions({ ...options, cwd }), ...(options.model !== undefined ? { model: options.model } : {}) };
   if (!isGitRepo(cwd)) throw new Error('Routed execution writes on its own branch, so it must run inside a git repository');
   const route = options.route || await routeTask(task, options);
   const replay = { kind: 'route', gate: options.gate === true, gateOptions: options.gateOptions, controls };
@@ -160,7 +161,8 @@ export async function executeRoutedTask(task, options = {}) {
     }
     if (stopped) return { ...stopped, route, attempts, alerts };
 
-    const remaining = pool.filter(item => !tried.has(item));
+    // Escalation stays with harnesses that can run the requested model.
+    const remaining = pool.filter(item => !tried.has(item) && (!route.modelSelection || route.modelSelection.compatible.includes(item)));
     const next = remaining.length ? evaluateGateCascade(harness, { testsPassed: false }, remaining) : null;
     diagnostic = attempt.gate?.summary || attempt.error || 'The previous attempt failed.';
     previous = harness;

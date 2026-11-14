@@ -2,7 +2,7 @@
   "$schema": "https://github.com/gregiteen/total-recall/blob/main/metadata.plugin.schema.json",
   "id": "ssss",
   "name": "SSSS",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Canonical SSSS distribution, scaffolding and validation for Total Recall installations.",
   "license": "MIT",
   "use_cases": [
@@ -197,6 +197,13 @@
         "description": "SSSS installation ledger with document, registry, scaffold and conformance checks"
       }
     ]
+  },
+  "reuse": {
+    "commands": [
+      "total-recall auth session",
+      "total-recall decision status"
+    ],
+    "owned": "SSSS canonical toolchain, schema/document validation, registry verification, project scaffolding, and conformance checks."
   },
   "skills": [
     {

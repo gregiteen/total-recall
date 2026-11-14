@@ -10,7 +10,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { compareSemanticVersions, formatPropagationReceipt } from '../capability/index.mjs';
-import { CREDIT_REFUSAL, hasWiki, readProjects, refreshProject, resolveKey } from './refresh.mjs';
+import { CREDIT_REFUSAL, generationMode, readProjects, refreshProject, resolveKey } from './refresh.mjs';
 
 export const UPSTREAM_NPM_URL = 'https://registry.npmjs.org/openwiki/latest';
 export const UPSTREAM_GITHUB_URL = 'https://api.github.com/repos/langchain-ai/openwiki/releases/latest';
@@ -338,8 +338,9 @@ export async function propagateUpdates({
     }
   }
 
-  // Filter to repositories with existing openwiki directories
-  const eligible = projects.filter(p => hasWiki(p.root));
+  // Only finished wikis outside the exclude list: propagation updates pages,
+  // it never creates a wiki or documents an excluded clone, fork or backup.
+  const eligible = projects.filter(p => !p.excluded && generationMode(p.root) === 'update');
   if (eligible.length === 0) {
     return {
       ok: true,

@@ -73,6 +73,43 @@ export const ADAPTERS = [
   { id: 'hermes', name: 'Hermes', binary: 'hermes', args: ['chat', '--oneshot', '--format', 'stream-json', '--query-file', '-'], input: 'stdin', docs: 'https://github.com/NousResearch/hermes-agent/blob/main/website/docs/reference/cli-commands.md' }
 ];
 
+/**
+ * How each harness takes a model for one run, from its official CLI reference (read 2026-11-14 through
+ * `meta-harness docs-search`). A flag goes after the subcommand, before the flag that carries the prompt.
+ * DSH has no per-run model flag: its headless profile owns the model (`total-recall dsh model`).
+ */
+export const MODEL_SELECTION = Object.freeze({
+  claude: { flag: '--model' }, codex: { flag: '--model' }, agy: { flag: '--model' }, cursor: { flag: '--model' },
+  grok: { flag: '--model' }, muse: { flag: '--model' }, pi: { flag: '--model' }, hermes: { flag: '--model' },
+  openclaw: { flag: '--model' }, aider: { flag: '--model' }, cline: { flag: '--model' },
+  goose: { env: 'GOOSE_MODEL' },
+  // OpenHands ignores LLM_MODEL unless the run also passes --override-with-envs; the override is not persisted.
+  openhands: { env: 'LLM_MODEL', args: ['--override-with-envs'] },
+  ollama: { positional: true },
+});
+// Operator policy: Antigravity never runs an Opus model, although `agy models` lists them.
+const MODEL_POLICY = [{ harness: 'agy', test: model => /opus/i.test(model), reason: 'Antigravity (agy) must not run Opus models. Choose a Gemini or Sonnet model, or route Opus work to claude.' }];
+
+/** Why this harness cannot run this model, or null. Shape, operator policy and harness support only; catalogs live elsewhere. */
+export function modelRefusal(harness, model) {
+  if (typeof model !== 'string' || !model.trim() || model.length > 200 || /[\0-\x1f\s]/.test(model) || model.startsWith('-')) return 'Invalid requested model';
+  const policy = MODEL_POLICY.find(rule => rule.harness === harness && rule.test(model));
+  if (policy) return policy.reason;
+  if (!Object.hasOwn(MODEL_SELECTION, harness)) {
+    return harness === 'dsh' ? 'DSH selects its model through its headless profile; set it with `total-recall dsh model`.' : `${harness} does not declare how it selects a model`;
+  }
+  return null;
+}
+
+/** Put the model where the harness reads it. Returns the environment the launch adds. */
+export function applyModel(harness, model, args) {
+  const selection = MODEL_SELECTION[harness];
+  const at = args.length && !args[0].startsWith('-') ? 1 : 0;
+  if (selection.flag) args.splice(at, 0, selection.flag, model);
+  if (selection.args) args.splice(at, 0, ...selection.args);
+  return selection.env ? { [selection.env]: model } : {};
+}
+
 export const EXTENDED_ADAPTERS = [
   { id: 'ollama', name: 'Ollama', binary: 'ollama', args: ['run'], input: 'stdin', docs: 'https://ollama.com/library' },
   { id: 'openclaw', name: 'OpenClaw', binary: 'openclaw', args: ['agent', '--message'], input: 'argument', docs: 'https://openclaw.ai/docs' },
@@ -536,12 +573,12 @@ export async function totalRecallBootstrap(request, { probe = runProcess, env = 
   // Node built-ins only here (this file ships to remote nodes): the result is the pretty-printed JSON after any log lines.
   let found = null;
   try {
-    const helpRes = await probe(binary, ['help', task, '--json'], { cwd, timeoutMs: 30000, maxBytes: 2 * 1024 * 1024, env: agentEnvironment(env) });
-    if (helpRes.exitCode === 0 && helpRes.stdout) {
-      const at = helpRes.stdout.indexOf('{\n');
-      found = JSON.parse(at >= 0 ? helpRes.stdout.slice(at) : helpRes.stdout);
-    }
-  } catch { found = null; }
+    const res = await probe(binary, ['help', task, '--json'], { cwd, timeoutMs: 30000, maxBytes: 1024 * 1024, env: agentEnvironment(env) });
+    const out = String(res.stdout || '');
+    const at = out.indexOf('{\n');
+    if (at >= 0 || out.trim().startsWith('{')) found = JSON.parse(at >= 0 ? out.slice(at) : out);
+  }
+  catch (error) { if (error.code === 'NOT_READY') throw error; found = null; }
   const matches = Array.isArray(found?.matches) ? found.matches.slice(0, 12) : [];
   const references = `${matches.length ? `Commands that match this task (Total Recall semantic command search):\n${matches.map(m => `- ${m.verb} — ${m.description}`).join('\n')}\n` : ''}For anything else, run total-recall help "<what you need>" to find the command, then total-recall <namespace> --help for its arguments. Do not load whole command inventories.`;
   const operatingContext = hasEvidence ? capsule.context.slice(0, evidenceStart).trimEnd() : capsule.context;
@@ -666,6 +703,7 @@ export async function dispatchAgent(request, { probe = runProcess, env = process
     credentials[name] = value;
   }
   const args = [...adapter.args];
+  let modelEnv = {};
   const openClawSession = openRouter && adapter.id === 'openclaw' ? randomUUID() : null;
   if (openRouter) {
     if (adapter.id === 'pi') args.push('--model', openRouter.model);
@@ -673,9 +711,10 @@ export async function dispatchAgent(request, { probe = runProcess, env = process
     if (openClawSession) args.splice(1, 0, '--agent', 'main', '--session-id', openClawSession,
       '--model', `openrouter/${openRouter.model}`, '--json');
   } else if (request.model !== undefined) {
-    if (typeof request.model !== 'string' || !request.model.trim() || /[\0\r\n]/.test(request.model)) throw new Error('Invalid requested model');
-    if (adapter.id === 'ollama') throw new Error('Select the local chat model through its configured runtime');
-    args.push('--model', request.model);
+    const refusal = modelRefusal(adapter.custom ? `custom adapter ${adapter.id}` : adapter.id, request.model);
+    if (refusal) throw notReady(refusal);
+    if (adapter.id === 'ollama' && !state.chatModels.includes(request.model)) throw notReady(`Ollama has no chat model ${request.model} on this node`);
+    modelEnv = applyModel(adapter.id, request.model, args);
   }
   if (request.tools !== undefined || request.settingSources !== undefined || request.allowedTools !== undefined) {
     if (adapter.id !== 'claude') throw notReady(`${adapter.name} cannot enforce the requested tools/settings restriction`);
@@ -710,7 +749,7 @@ export async function dispatchAgent(request, { probe = runProcess, env = process
   if (adapter.id === 'agy') args[args.indexOf('--mode') + 1] = allowWrites ? 'accept-edits' : 'plan';
   if (adapter.id === 'muse' && !allowWrites) args.push('--disable-write');
   if (adapter.id === 'pi') args[args.indexOf('--tools') + 1] = allowWrites ? 'read,bash,edit,write' : 'read';
-  if (adapter.id === 'ollama') args.push(env.TR_OLLAMA_MODEL || state.chatModels[0]);
+  if (adapter.id === 'ollama') args.push(request.model ?? (env.TR_OLLAMA_MODEL || state.chatModels[0]));
   const progressFile = request.progressFile || path.join(
     env.TR_SECRETS_BRAIN || path.join(env.AGENT_DIR || path.join(env.HOME || os.homedir(), '.agent'), 'skills/total-recall'),
     'config/meta-harness/jobs', `${request.jobId || process.env.TR_METAHARNESS_JOB || `session-${randomUUID()}`}.events.jsonl`);
@@ -742,7 +781,7 @@ export async function dispatchAgent(request, { probe = runProcess, env = process
   };
   try {
     parsed = await (sessionRunner || runSession)({ request, adapter, binary, args,
-      env: { ...agentEnvironment(env), ...credentials, TR_META_HARNESS_RUN: '1' }, prompt, progress: liveProgress, onFrame: captureFrame,
+      env: { ...agentEnvironment(env), ...credentials, ...modelEnv, TR_META_HARNESS_RUN: '1' }, prompt, progress: liveProgress, onFrame: captureFrame,
       register: stop => { const id = Symbol('session'); ACTIVE_GROUPS.set(id, stop); return () => ACTIVE_GROUPS.delete(id); } });
     if (cancellationResult()) parsed = { ...parsed, ...cancellationResult() };
     if (frames.length) Object.assign(parsed, toolEvidence(nativeToolResults(adapter.id, frames)));

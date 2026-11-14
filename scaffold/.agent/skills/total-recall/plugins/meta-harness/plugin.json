@@ -1,72 +1,28 @@
 {
   "id": "meta-harness",
   "name": "Metaharness",
-  "version": "0.4.0",
+  "version": "0.4.1",
   "description": "Discover, configure, document, track, and run coding agent harnesses through Total Recall across mesh nodes.",
   "gate": {
-    "tasks": [
-      "Run work in another agent harness",
-      "Choose which harness takes a task",
-      "Check harness versions, sign-in and quota",
-      "Read a harness's official documentation"
-    ],
+    "tasks": ["Run work in another agent harness", "Choose which harness takes a task", "Check harness versions, sign-in and quota", "Read a harness's official documentation"],
     "router": {
       "pattern": "(meta-harness|cli-agents)\\s+(route|coordinate|orchestrate|dispatch)",
       "use": "total-recall meta-harness route \"<task>\" --json"
     },
     "owned_commands": [
-      {
-        "pattern": "claude\\s+[^;&|]*(-p|--print)\\b",
-        "use": "total-recall meta-harness route \"<task>\" --execute --json"
-      },
-      {
-        "pattern": "codex\\s+exec\\b",
-        "use": "total-recall meta-harness route \"<task>\" --execute --json"
-      },
-      {
-        "pattern": "agy\\s+[^;&|]*(-p|--print)\\b",
-        "use": "total-recall meta-harness route \"<task>\" --execute --json"
-      },
-      {
-        "pattern": "cursor-agent\\s",
-        "use": "total-recall meta-harness route \"<task>\" --execute --json"
-      },
-      {
-        "pattern": "dsh\\s+[^;&|]*--profile\\s+headless\\b",
-        "use": "total-recall meta-harness route \"<task>\" --execute --json"
-      },
-      {
-        "pattern": "grok\\s+[^;&|]*-p\\b",
-        "use": "total-recall meta-harness route \"<task>\" --execute --json"
-      },
-      {
-        "pattern": "pi\\s+[^;&|]*--print\\b",
-        "use": "total-recall meta-harness route \"<task>\" --execute --json"
-      },
-      {
-        "pattern": "hermes\\s+chat\\b",
-        "use": "total-recall meta-harness route \"<task>\" --execute --json"
-      },
-      {
-        "pattern": "openclaw\\s+agent\\b",
-        "use": "total-recall meta-harness route \"<task>\" --execute --json"
-      },
-      {
-        "pattern": "aider\\s+[^;&|]*--message\\b",
-        "use": "total-recall meta-harness route \"<task>\" --execute --json"
-      },
-      {
-        "pattern": "goose\\s+run\\b",
-        "use": "total-recall meta-harness route \"<task>\" --execute --json"
-      },
-      {
-        "pattern": "cline\\s+task\\b",
-        "use": "total-recall meta-harness route \"<task>\" --execute --json"
-      },
-      {
-        "pattern": "muse\\s+exec\\b",
-        "use": "total-recall meta-harness route \"<task>\" --execute --json"
-      }
+      { "pattern": "claude\\s+[^;&|]*(-p|--print)\\b", "use": "total-recall meta-harness route \"<task>\" --execute --json" },
+      { "pattern": "codex\\s+exec\\b", "use": "total-recall meta-harness route \"<task>\" --execute --json" },
+      { "pattern": "agy\\s+[^;&|]*(-p|--print)\\b", "use": "total-recall meta-harness route \"<task>\" --execute --json" },
+      { "pattern": "cursor-agent\\s", "use": "total-recall meta-harness route \"<task>\" --execute --json" },
+      { "pattern": "dsh\\s+[^;&|]*--profile\\s+headless\\b", "use": "total-recall meta-harness route \"<task>\" --execute --json" },
+      { "pattern": "grok\\s+[^;&|]*-p\\b", "use": "total-recall meta-harness route \"<task>\" --execute --json" },
+      { "pattern": "pi\\s+[^;&|]*--print\\b", "use": "total-recall meta-harness route \"<task>\" --execute --json" },
+      { "pattern": "hermes\\s+chat\\b", "use": "total-recall meta-harness route \"<task>\" --execute --json" },
+      { "pattern": "openclaw\\s+agent\\b", "use": "total-recall meta-harness route \"<task>\" --execute --json" },
+      { "pattern": "aider\\s+[^;&|]*--message\\b", "use": "total-recall meta-harness route \"<task>\" --execute --json" },
+      { "pattern": "goose\\s+run\\b", "use": "total-recall meta-harness route \"<task>\" --execute --json" },
+      { "pattern": "cline\\s+task\\b", "use": "total-recall meta-harness route \"<task>\" --execute --json" },
+      { "pattern": "muse\\s+exec\\b", "use": "total-recall meta-harness route \"<task>\" --execute --json" }
     ]
   },
   "cli": {
@@ -204,54 +160,15 @@
         "effect": "write",
         "output": "json",
         "args": [
-          {
-            "name": "background",
-            "flag": "--background",
-            "type": "boolean",
-            "label": "Return the job ID and log"
-          },
-          {
-            "name": "goal",
-            "flag": "--goal",
-            "type": "string",
-            "label": "Goal checked at completion"
-          },
-          {
-            "name": "maxTurns",
-            "flag": "--max-turns",
-            "type": "number",
-            "label": "Job turn limit"
-          },
-          {
-            "name": "maxBudgetUsd",
-            "flag": "--max-budget-usd",
-            "type": "number",
-            "label": "Job cost limit in USD"
-          },
-          {
-            "name": "maxTokens",
-            "flag": "--max-tokens",
-            "type": "number",
-            "label": "Job token limit"
-          },
-          {
-            "name": "resultSchema",
-            "flag": "--result-schema",
-            "type": "string",
-            "label": "JSON Schema file"
-          },
-          {
-            "name": "approvals",
-            "flag": "--approvals",
-            "type": "string",
-            "label": "auto, operator, or rules"
-          },
-          {
-            "name": "questionTimeoutMs",
-            "flag": "--question-timeout-ms",
-            "type": "number",
-            "label": "Question timeout in milliseconds"
-          }
+          { "name": "background", "flag": "--background", "type": "boolean", "label": "Return the job ID and log" },
+          { "name": "goal", "flag": "--goal", "type": "string", "label": "Goal checked at completion" },
+          { "name": "maxTurns", "flag": "--max-turns", "type": "number", "label": "Job turn limit" },
+          { "name": "maxBudgetUsd", "flag": "--max-budget-usd", "type": "number", "label": "Job cost limit in USD" },
+          { "name": "maxTokens", "flag": "--max-tokens", "type": "number", "label": "Job token limit" },
+          { "name": "resultSchema", "flag": "--result-schema", "type": "string", "label": "JSON Schema file" },
+          { "name": "approvals", "flag": "--approvals", "type": "string", "label": "auto, operator, or rules" },
+          { "name": "questionTimeoutMs", "flag": "--question-timeout-ms", "type": "number", "label": "Question timeout in milliseconds" },
+          { "name": "model", "flag": "--model", "type": "string", "label": "Model for this run, validated before launch (agy never runs Opus)" }
         ],
         "timeout_ms": 600000
       },
@@ -261,25 +178,9 @@
         "effect": "write",
         "output": "json",
         "args": [
-          {
-            "name": "job",
-            "type": "string",
-            "positional": true,
-            "required": true,
-            "label": "Job ID prefix"
-          },
-          {
-            "name": "at",
-            "flag": "--at",
-            "type": "string",
-            "label": "Last turn to copy when supported"
-          },
-          {
-            "name": "background",
-            "flag": "--background",
-            "type": "boolean",
-            "label": "Return the job ID and log"
-          }
+          { "name": "job", "type": "string", "positional": true, "required": true, "label": "Job ID prefix" },
+          { "name": "at", "flag": "--at", "type": "string", "label": "Last turn to copy when supported" },
+          { "name": "background", "flag": "--background", "type": "boolean", "label": "Return the job ID and log" }
         ],
         "timeout_ms": 600000
       },
@@ -289,26 +190,9 @@
         "effect": "write",
         "output": "json",
         "args": [
-          {
-            "name": "job",
-            "type": "string",
-            "positional": true,
-            "required": true,
-            "label": "Job ID prefix"
-          },
-          {
-            "name": "text",
-            "type": "string",
-            "positional": true,
-            "required": true,
-            "label": "Continuation message"
-          },
-          {
-            "name": "background",
-            "flag": "--background",
-            "type": "boolean",
-            "label": "Return the job ID and log"
-          }
+          { "name": "job", "type": "string", "positional": true, "required": true, "label": "Job ID prefix" },
+          { "name": "text", "type": "string", "positional": true, "required": true, "label": "Continuation message" },
+          { "name": "background", "flag": "--background", "type": "boolean", "label": "Return the job ID and log" }
         ],
         "timeout_ms": 600000
       },
@@ -318,13 +202,7 @@
         "effect": "write",
         "output": "json",
         "args": [
-          {
-            "name": "job",
-            "type": "string",
-            "label": "Job ID prefix or log path",
-            "positional": true,
-            "required": true
-          }
+          { "name": "job", "type": "string", "label": "Job ID prefix or log path", "positional": true, "required": true }
         ],
         "timeout_ms": 65000
       },
@@ -334,26 +212,9 @@
         "effect": "write",
         "output": "json",
         "args": [
-          {
-            "name": "job",
-            "type": "string",
-            "label": "Job ID prefix or log path",
-            "positional": true,
-            "required": true
-          },
-          {
-            "name": "text",
-            "type": "string",
-            "label": "Reply text",
-            "positional": true,
-            "required": true
-          },
-          {
-            "name": "localDelivery",
-            "flag": "--local-delivery",
-            "type": "boolean",
-            "label": "Deliver on this node"
-          }
+          { "name": "job", "type": "string", "label": "Job ID prefix or log path", "positional": true, "required": true },
+          { "name": "text", "type": "string", "label": "Reply text", "positional": true, "required": true },
+          { "name": "localDelivery", "flag": "--local-delivery", "type": "boolean", "label": "Deliver on this node" }
         ],
         "timeout_ms": 65000
       },
@@ -363,33 +224,10 @@
         "effect": "write",
         "output": "json",
         "args": [
-          {
-            "name": "job",
-            "type": "string",
-            "label": "Job ID prefix or log path",
-            "positional": true,
-            "required": true
-          },
-          {
-            "name": "requestId",
-            "type": "string",
-            "label": "Approval request ID",
-            "positional": true,
-            "required": true
-          },
-          {
-            "name": "value",
-            "type": "string",
-            "label": "allow or deny",
-            "positional": true,
-            "required": true
-          },
-          {
-            "name": "localDelivery",
-            "flag": "--local-delivery",
-            "type": "boolean",
-            "label": "Deliver on this node"
-          }
+          { "name": "job", "type": "string", "label": "Job ID prefix or log path", "positional": true, "required": true },
+          { "name": "requestId", "type": "string", "label": "Approval request ID", "positional": true, "required": true },
+          { "name": "value", "type": "string", "label": "allow or deny", "positional": true, "required": true },
+          { "name": "localDelivery", "flag": "--local-delivery", "type": "boolean", "label": "Deliver on this node" }
         ],
         "timeout_ms": 65000
       },
@@ -399,19 +237,8 @@
         "effect": "write",
         "output": "json",
         "args": [
-          {
-            "name": "job",
-            "type": "string",
-            "label": "Job ID prefix or log path",
-            "positional": true,
-            "required": true
-          },
-          {
-            "name": "localDelivery",
-            "flag": "--local-delivery",
-            "type": "boolean",
-            "label": "Deliver on this node"
-          }
+          { "name": "job", "type": "string", "label": "Job ID prefix or log path", "positional": true, "required": true },
+          { "name": "localDelivery", "flag": "--local-delivery", "type": "boolean", "label": "Deliver on this node" }
         ],
         "timeout_ms": 65000
       },
@@ -421,26 +248,9 @@
         "effect": "write",
         "output": "json",
         "args": [
-          {
-            "name": "job",
-            "type": "string",
-            "label": "Job ID prefix or log path",
-            "positional": true,
-            "required": true
-          },
-          {
-            "name": "text",
-            "type": "string",
-            "label": "Goal text",
-            "positional": true,
-            "required": true
-          },
-          {
-            "name": "localDelivery",
-            "flag": "--local-delivery",
-            "type": "boolean",
-            "label": "Deliver on this node"
-          }
+          { "name": "job", "type": "string", "label": "Job ID prefix or log path", "positional": true, "required": true },
+          { "name": "text", "type": "string", "label": "Goal text", "positional": true, "required": true },
+          { "name": "localDelivery", "flag": "--local-delivery", "type": "boolean", "label": "Deliver on this node" }
         ],
         "timeout_ms": 65000
       },
@@ -449,18 +259,8 @@
         "description": "Serve the Metaharness ask and approve tools over MCP stdio",
         "effect": "write",
         "args": [
-          {
-            "name": "approvals",
-            "flag": "--approvals",
-            "type": "string",
-            "label": "Approval policy: auto, operator, or rules"
-          },
-          {
-            "name": "questionTimeoutMs",
-            "flag": "--question-timeout-ms",
-            "type": "number",
-            "label": "Question timeout in milliseconds"
-          }
+          { "name": "approvals", "flag": "--approvals", "type": "string", "label": "Approval policy: auto, operator, or rules" },
+          { "name": "questionTimeoutMs", "flag": "--question-timeout-ms", "type": "number", "label": "Question timeout in milliseconds" }
         ]
       },
       {
@@ -469,18 +269,8 @@
         "effect": "read",
         "output": "json",
         "args": [
-          {
-            "name": "job",
-            "type": "string",
-            "label": "Job id prefix or event log path",
-            "positional": true
-          },
-          {
-            "name": "tail",
-            "flag": "--tail",
-            "type": "string",
-            "label": "Events to show"
-          }
+          { "name": "job", "type": "string", "label": "Job id prefix or event log path", "positional": true },
+          { "name": "tail", "flag": "--tail", "type": "string", "label": "Events to show" }
         ]
       },
       {
@@ -488,14 +278,7 @@
         "description": "Read included usage policy and optionally check Codex allowance without a turn",
         "effect": "read",
         "output": "json",
-        "args": [
-          {
-            "name": "probe",
-            "flag": "--probe",
-            "type": "boolean",
-            "label": "Read live Codex allowance"
-          }
-        ]
+        "args": [{ "name": "probe", "flag": "--probe", "type": "boolean", "label": "Read live Codex allowance" }]
       },
       {
         "name": "included-enforce",
@@ -524,27 +307,9 @@
         "effect": "write",
         "output": "json",
         "args": [
-          {
-            "name": "agent",
-            "type": "string",
-            "label": "Harness",
-            "required": true,
-            "positional": true
-          },
-          {
-            "name": "key",
-            "type": "string",
-            "label": "Auth key name",
-            "required": true,
-            "positional": true
-          },
-          {
-            "name": "model",
-            "flag": "--model",
-            "type": "string",
-            "label": "OpenRouter model ID",
-            "required": true
-          }
+          { "name": "agent", "type": "string", "label": "Harness", "required": true, "positional": true },
+          { "name": "key", "type": "string", "label": "Auth key name", "required": true, "positional": true },
+          { "name": "model", "flag": "--model", "type": "string", "label": "OpenRouter model ID", "required": true }
         ]
       },
       {
@@ -559,15 +324,7 @@
         "description": "Retry a waiting job after checking included usage",
         "effect": "write",
         "output": "json",
-        "args": [
-          {
-            "name": "job",
-            "type": "string",
-            "label": "Queued job ID",
-            "required": true,
-            "positional": true
-          }
-        ],
+        "args": [{ "name": "job", "type": "string", "label": "Queued job ID", "required": true, "positional": true }],
         "timeout_ms": 600000
       },
       {
@@ -575,15 +332,7 @@
         "description": "Cancel a waiting included usage job",
         "effect": "write",
         "output": "json",
-        "args": [
-          {
-            "name": "job",
-            "type": "string",
-            "label": "Queued job ID",
-            "required": true,
-            "positional": true
-          }
-        ]
+        "args": [{ "name": "job", "type": "string", "label": "Queued job ID", "required": true, "positional": true }]
       },
       {
         "name": "docs-status",
@@ -780,48 +529,13 @@
         "output": "json",
         "timeout_ms": 600000,
         "args": [
-          {
-            "name": "goal",
-            "flag": "--goal",
-            "type": "string",
-            "label": "Goal checked at completion"
-          },
-          {
-            "name": "maxTurns",
-            "flag": "--max-turns",
-            "type": "number",
-            "label": "Job turn limit"
-          },
-          {
-            "name": "maxBudgetUsd",
-            "flag": "--max-budget-usd",
-            "type": "number",
-            "label": "Job cost limit in USD"
-          },
-          {
-            "name": "maxTokens",
-            "flag": "--max-tokens",
-            "type": "number",
-            "label": "Job token limit"
-          },
-          {
-            "name": "resultSchema",
-            "flag": "--result-schema",
-            "type": "string",
-            "label": "JSON Schema file"
-          },
-          {
-            "name": "approvals",
-            "flag": "--approvals",
-            "type": "string",
-            "label": "auto, operator, or rules"
-          },
-          {
-            "name": "questionTimeoutMs",
-            "flag": "--question-timeout-ms",
-            "type": "number",
-            "label": "Question timeout in milliseconds"
-          },
+          { "name": "goal", "flag": "--goal", "type": "string", "label": "Goal checked at completion" },
+          { "name": "maxTurns", "flag": "--max-turns", "type": "number", "label": "Job turn limit" },
+          { "name": "maxBudgetUsd", "flag": "--max-budget-usd", "type": "number", "label": "Job cost limit in USD" },
+          { "name": "maxTokens", "flag": "--max-tokens", "type": "number", "label": "Job token limit" },
+          { "name": "resultSchema", "flag": "--result-schema", "type": "string", "label": "JSON Schema file" },
+          { "name": "approvals", "flag": "--approvals", "type": "string", "label": "auto, operator, or rules" },
+          { "name": "questionTimeoutMs", "flag": "--question-timeout-ms", "type": "number", "label": "Question timeout in milliseconds" },
           {
             "name": "task",
             "type": "string",
@@ -853,36 +567,12 @@
             "type": "string",
             "label": "Gate tier: fast | full | remote"
           },
-          {
-            "name": "cwd",
-            "flag": "--cwd",
-            "type": "string",
-            "label": "Explicit workspace on the selected node"
-          },
-          {
-            "name": "node",
-            "flag": "--node",
-            "type": "string",
-            "label": "Selected mesh node"
-          },
-          {
-            "name": "allowUnknownAuth",
-            "flag": "--allow-unknown-auth",
-            "type": "boolean",
-            "label": "Explicitly allow a runner without a login probe"
-          },
-          {
-            "name": "background",
-            "flag": "--background",
-            "type": "boolean",
-            "label": "Return the owned job and log for a long run"
-          },
-          {
-            "name": "timeoutMs",
-            "flag": "--timeout-ms",
-            "type": "number",
-            "label": "Remote wall-clock limit in milliseconds"
-          }
+          { "name": "cwd", "flag": "--cwd", "type": "string", "label": "Explicit workspace on the selected node" },
+          { "name": "node", "flag": "--node", "type": "string", "label": "Selected mesh node" },
+          { "name": "allowUnknownAuth", "flag": "--allow-unknown-auth", "type": "boolean", "label": "Explicitly allow a runner without a login probe" },
+          { "name": "background", "flag": "--background", "type": "boolean", "label": "Return the owned job and log for a long run" },
+          { "name": "model", "flag": "--model", "type": "string", "label": "Model to run; only harnesses that can run it are chosen (agy never runs Opus)" },
+          { "name": "timeoutMs", "flag": "--timeout-ms", "type": "number", "label": "Remote wall-clock limit in milliseconds" }
         ]
       },
       {
@@ -891,48 +581,13 @@
         "effect": "write",
         "output": "json",
         "args": [
-          {
-            "name": "goal",
-            "flag": "--goal",
-            "type": "string",
-            "label": "Goal checked at completion"
-          },
-          {
-            "name": "maxTurns",
-            "flag": "--max-turns",
-            "type": "number",
-            "label": "Job turn limit"
-          },
-          {
-            "name": "maxBudgetUsd",
-            "flag": "--max-budget-usd",
-            "type": "number",
-            "label": "Job cost limit in USD"
-          },
-          {
-            "name": "maxTokens",
-            "flag": "--max-tokens",
-            "type": "number",
-            "label": "Job token limit"
-          },
-          {
-            "name": "resultSchema",
-            "flag": "--result-schema",
-            "type": "string",
-            "label": "JSON Schema file"
-          },
-          {
-            "name": "approvals",
-            "flag": "--approvals",
-            "type": "string",
-            "label": "auto, operator, or rules"
-          },
-          {
-            "name": "questionTimeoutMs",
-            "flag": "--question-timeout-ms",
-            "type": "number",
-            "label": "Question timeout in milliseconds"
-          },
+          { "name": "goal", "flag": "--goal", "type": "string", "label": "Goal checked at completion" },
+          { "name": "maxTurns", "flag": "--max-turns", "type": "number", "label": "Job turn limit" },
+          { "name": "maxBudgetUsd", "flag": "--max-budget-usd", "type": "number", "label": "Job cost limit in USD" },
+          { "name": "maxTokens", "flag": "--max-tokens", "type": "number", "label": "Job token limit" },
+          { "name": "resultSchema", "flag": "--result-schema", "type": "string", "label": "JSON Schema file" },
+          { "name": "approvals", "flag": "--approvals", "type": "string", "label": "auto, operator, or rules" },
+          { "name": "questionTimeoutMs", "flag": "--question-timeout-ms", "type": "number", "label": "Question timeout in milliseconds" },
           {
             "name": "task",
             "type": "string",
@@ -970,36 +625,12 @@
             "type": "boolean",
             "label": "Accept a Verifier from the Implementer's model family"
           },
-          {
-            "name": "cwd",
-            "flag": "--cwd",
-            "type": "string",
-            "label": "Explicit workspace on the selected node"
-          },
-          {
-            "name": "node",
-            "flag": "--node",
-            "type": "string",
-            "label": "Selected mesh node"
-          },
-          {
-            "name": "allowUnknownAuth",
-            "flag": "--allow-unknown-auth",
-            "type": "boolean",
-            "label": "Explicitly allow a runner without a login probe"
-          },
-          {
-            "name": "background",
-            "flag": "--background",
-            "type": "boolean",
-            "label": "Return the owned job and log for a long run"
-          },
-          {
-            "name": "timeoutMs",
-            "flag": "--timeout-ms",
-            "type": "number",
-            "label": "Remote wall-clock limit in milliseconds"
-          }
+          { "name": "cwd", "flag": "--cwd", "type": "string", "label": "Explicit workspace on the selected node" },
+          { "name": "node", "flag": "--node", "type": "string", "label": "Selected mesh node" },
+          { "name": "allowUnknownAuth", "flag": "--allow-unknown-auth", "type": "boolean", "label": "Explicitly allow a runner without a login probe" },
+          { "name": "background", "flag": "--background", "type": "boolean", "label": "Return the owned job and log for a long run" },
+          { "name": "model", "flag": "--model", "type": "string", "label": "Model for the Implementer, or every council and race seat (agy never runs Opus)" },
+          { "name": "timeoutMs", "flag": "--timeout-ms", "type": "number", "label": "Remote wall-clock limit in milliseconds" }
         ],
         "timeout_ms": 600000
       },
@@ -1009,18 +640,8 @@
         "effect": "write",
         "output": "json",
         "args": [
-          {
-            "name": "void",
-            "flag": "--void",
-            "type": "string",
-            "label": "Comma-separated receipt ids to void"
-          },
-          {
-            "name": "reason",
-            "flag": "--reason",
-            "type": "string",
-            "label": "Why the receipts are void"
-          }
+          { "name": "void", "flag": "--void", "type": "string", "label": "Comma-separated receipt ids to void" },
+          { "name": "reason", "flag": "--reason", "type": "string", "label": "Why the receipts are void" }
         ]
       },
       {
@@ -1129,42 +750,12 @@
             "label": "Thread ID or title",
             "positional": true
           },
-          {
-            "name": "title",
-            "flag": "--title",
-            "type": "string",
-            "label": "Thread title"
-          },
-          {
-            "name": "summary",
-            "flag": "--summary",
-            "type": "string",
-            "label": "Thread summary"
-          },
-          {
-            "name": "status",
-            "flag": "--status",
-            "type": "string",
-            "label": "Lifecycle status or list filter"
-          },
-          {
-            "name": "platform",
-            "flag": "--platform",
-            "type": "string",
-            "label": "Harness platform or list filter"
-          },
-          {
-            "name": "branch",
-            "flag": "--branch",
-            "type": "string",
-            "label": "Deliverable branch"
-          },
-          {
-            "name": "dryRun",
-            "flag": "--dry-run",
-            "type": "boolean",
-            "label": "Preview fixture cleanup"
-          }
+          { "name": "title", "flag": "--title", "type": "string", "label": "Thread title" },
+          { "name": "summary", "flag": "--summary", "type": "string", "label": "Thread summary" },
+          { "name": "status", "flag": "--status", "type": "string", "label": "Lifecycle status or list filter" },
+          { "name": "platform", "flag": "--platform", "type": "string", "label": "Harness platform or list filter" },
+          { "name": "branch", "flag": "--branch", "type": "string", "label": "Deliverable branch" },
+          { "name": "dryRun", "flag": "--dry-run", "type": "boolean", "label": "Preview fixture cleanup" }
         ]
       },
       {
@@ -1174,84 +765,19 @@
         "output": "json",
         "timeout_ms": 600000,
         "args": [
-          {
-            "name": "action",
-            "type": "string",
-            "positional": true,
-            "label": "list | status | spawn | kill | logs"
-          },
-          {
-            "name": "target",
-            "type": "string",
-            "positional": true,
-            "label": "Harness to spawn or managed process ID"
-          },
-          {
-            "name": "task",
-            "type": "string",
-            "positional": true,
-            "label": "Task for a spawned agent"
-          },
-          {
-            "name": "node",
-            "type": "string",
-            "flag": "--node",
-            "label": "Recorded mesh node"
-          },
-          {
-            "name": "cwd",
-            "type": "string",
-            "flag": "--cwd",
-            "label": "Explicit workspace on the selected node"
-          },
-          {
-            "name": "name",
-            "type": "string",
-            "flag": "--name",
-            "label": "Managed process label"
-          },
-          {
-            "name": "tools",
-            "type": "string",
-            "flag": "--tools",
-            "label": "Supported tool restriction"
-          },
-          {
-            "name": "settingSources",
-            "type": "string",
-            "flag": "--setting-sources",
-            "label": "Supported instruction setting sources"
-          },
-          {
-            "name": "model",
-            "type": "string",
-            "flag": "--model",
-            "label": "Explicit configured model selection"
-          },
-          {
-            "name": "tail",
-            "type": "number",
-            "flag": "--tail",
-            "label": "Log tail line count"
-          },
-          {
-            "name": "readOnly",
-            "type": "boolean",
-            "flag": "--read-only",
-            "label": "Disable code writes"
-          },
-          {
-            "name": "noDetach",
-            "type": "boolean",
-            "flag": "--no-detach",
-            "label": "Await the managed process result"
-          },
-          {
-            "name": "allowUnknownAuth",
-            "type": "boolean",
-            "flag": "--allow-unknown-auth",
-            "label": "Explicitly allow an unknown login state"
-          }
+          { "name": "action", "type": "string", "positional": true, "label": "list | status | spawn | kill | logs" },
+          { "name": "target", "type": "string", "positional": true, "label": "Harness to spawn or managed process ID" },
+          { "name": "task", "type": "string", "positional": true, "label": "Task for a spawned agent" },
+          { "name": "node", "type": "string", "flag": "--node", "label": "Recorded mesh node" },
+          { "name": "cwd", "type": "string", "flag": "--cwd", "label": "Explicit workspace on the selected node" },
+          { "name": "name", "type": "string", "flag": "--name", "label": "Managed process label" },
+          { "name": "tools", "type": "string", "flag": "--tools", "label": "Supported tool restriction" },
+          { "name": "settingSources", "type": "string", "flag": "--setting-sources", "label": "Supported instruction setting sources" },
+          { "name": "model", "type": "string", "flag": "--model", "label": "Explicit configured model selection" },
+          { "name": "tail", "type": "number", "flag": "--tail", "label": "Log tail line count" },
+          { "name": "readOnly", "type": "boolean", "flag": "--read-only", "label": "Disable code writes" },
+          { "name": "noDetach", "type": "boolean", "flag": "--no-detach", "label": "Await the managed process result" },
+          { "name": "allowUnknownAuth", "type": "boolean", "flag": "--allow-unknown-auth", "label": "Explicitly allow an unknown login state" }
         ]
       },
       {
@@ -1297,30 +823,10 @@
             "type": "string",
             "label": "Thread to attach the review to"
           },
-          {
-            "name": "cwd",
-            "flag": "--cwd",
-            "type": "string",
-            "label": "Explicit workspace on the selected node"
-          },
-          {
-            "name": "node",
-            "flag": "--node",
-            "type": "string",
-            "label": "Selected mesh node"
-          },
-          {
-            "name": "allowUnknownAuth",
-            "flag": "--allow-unknown-auth",
-            "type": "boolean",
-            "label": "Explicitly allow a runner without a login probe"
-          },
-          {
-            "name": "timeoutMs",
-            "flag": "--timeout-ms",
-            "type": "number",
-            "label": "Remote wall-clock limit in milliseconds"
-          }
+          { "name": "cwd", "flag": "--cwd", "type": "string", "label": "Explicit workspace on the selected node" },
+          { "name": "node", "flag": "--node", "type": "string", "label": "Selected mesh node" },
+          { "name": "allowUnknownAuth", "flag": "--allow-unknown-auth", "type": "boolean", "label": "Explicitly allow a runner without a login probe" },
+          { "name": "timeoutMs", "flag": "--timeout-ms", "type": "number", "label": "Remote wall-clock limit in milliseconds" }
         ],
         "timeout_ms": 600000
       }
@@ -1392,13 +898,6 @@
       "command": "alerts check",
       "placement": "selected-node",
       "timeout_ms": 60000
-    }
-  ],
-  "skills": [
-    {
-      "id": "meta-harness",
-      "path": "skills/meta-harness",
-      "description": "Discover, route, coordinate, review and run coding agent harnesses through Total Recall across mesh nodes."
     }
   ]
 }

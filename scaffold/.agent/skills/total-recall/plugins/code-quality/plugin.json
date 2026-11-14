@@ -2,7 +2,7 @@
   "$schema": "https://github.com/gregiteen/total-recall/blob/main/metadata.plugin.schema.json",
   "id": "code-quality",
   "name": "Code Quality Gates",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "description": "Fail-closed deterministic code-quality gates, lint rules, and test compliance reporting.",
   "author": "Total Recall contributors",
   "license": "MIT",
@@ -178,6 +178,13 @@
   "distribution": {
     "tier": "official",
     "license": "open"
+  },
+  "reuse": {
+    "commands": [
+      "total-recall ssss status",
+      "total-recall decision status"
+    ],
+    "owned": "Deterministic repository quality gates, lint/test compliance checks, snapshot manifests, and gate reports."
   },
   "skills": [
     {

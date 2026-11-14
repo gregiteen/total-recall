@@ -2,15 +2,16 @@
   "$schema": "https://github.com/gregiteen/total-recall/blob/main/metadata.plugin.schema.json",
   "id": "mesh",
   "name": "Headscale",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "description": "Control-server mesh administration, Tailscale SSH, and peer node discovery.",
   "license": "MIT",
-  "requires": [
-    {
-      "id": "auth",
-      "range": ">=1.2.1"
-    }
-  ],
+  "reuse": {
+    "commands": [
+      "total-recall auth secret",
+      "total-recall deploy status"
+    ],
+    "owned": "Control-server mesh administration, Headscale server provisioning/updates, Tailscale SSH, and peer node discovery."
+  },
   "branding": {
     "name": "Headscale",
     "color": "#818cf8",

@@ -165,7 +165,7 @@ export function registryPath(home = os.homedir()) {
  * Read the registered projects. The registry is the same source the updater
  * uses to reach every consumer, so fleet scope is defined in exactly one place.
  */
-export function readProjects({ registry = registryPath() } = {}) {
+export function readProjects({ registry = registryPath(), exclude = null } = {}) {
   let raw;
   try {
     raw = fs.readFileSync(registry, 'utf8');
@@ -188,13 +188,17 @@ export function readProjects({ registry = registryPath() } = {}) {
   }
   // One project per root: the registry has historically held duplicates.
   const seen = new Set();
+  const excluded = new Set((exclude ?? loadOpenWikiConfig().exclude ?? []).map((root) => path.resolve(root)));
   return projects.filter((p) => {
     const key = path.resolve(p.root);
     if (seen.has(key)) return false;
     seen.add(key);
     return true;
-  });
+  }).map((p) => ({ ...p, excluded: excluded.has(path.resolve(p.root)) }));
 }
+
+export const EXCLUDED = "excluded from OpenWiki (total-recall openwiki exclude --remove <name> to include it)";
+export const NO_WIKI = "no finished wiki; the nightly refresh only updates existing wikis. Create one with: total-recall openwiki generate --repo <name>";
 
 /** Does this project carry generated Markdown pages? */
 export function hasWiki(root) {
@@ -608,17 +612,21 @@ export function lastAttemptStart(root, generatedAt = null) {
  * runner killed the same generations every 30 minutes and they never finished.
  */
 export function isDue(project, { lockMs = DEFAULT_LOCK_MS, now = Date.now(), git = gitRun, force = false } = {}) {
+  if (project.excluded) return { due: false, excluded: true, reason: EXCLUDED };
   if (!isGitRepo(project.root, { git })) {
     return { due: false, skipped: true, reason: 'not a git repository' };
   }
   const state = staleness(project.root, { git });
-  if (force) return { due: true, uninitialized: !hasWiki(project.root), ...state };
+  // Creating a wiki is the most expensive run there is, and a registered
+  // repository may be someone else's code. Only an explicit `openwiki generate`
+  // creates one or finishes an interrupted creation; refresh, --force included,
+  // only updates finished wikis.
+  if (generationMode(project.root) === 'init') {
+    return { due: false, uninitialized: true, ...state, reason: NO_WIKI };
+  }
+  if (force) return { due: true, uninitialized: false, ...state };
   const last = lastAttemptStart(project.root, state.generatedAt);
   const retryAt = Number.isFinite(last) && now - last < lockMs ? new Date(last + lockMs).toISOString() : null;
-  if (!hasWiki(project.root)) {
-    if (retryAt) return { due: false, held: true, uninitialized: true, reason: `initialization attempted recently; next attempt after ${retryAt}`, ...state };
-    return { due: true, uninitialized: true, reason: 'uninitialized (missing openwiki/ pages)', ...state };
-  }
   if (!state.stale) return { due: false, ...state };
   const incomplete = state.generatedStatus === 'interrupted' || stillGenerating(project.root);
   if (retryAt) {

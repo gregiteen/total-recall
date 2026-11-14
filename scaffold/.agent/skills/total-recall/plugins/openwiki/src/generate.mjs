@@ -70,6 +70,12 @@ export async function generateWiki({
     throw new Error(`Target path does not exist: ${resolvedTarget}`);
   }
 
+  // An excluded repository (an upstream clone, fork, backup or probe) is never
+  // documented, even from inside its own checkout.
+  if ((loadOpenWikiConfig().exclude || []).includes(path.resolve(resolvedTarget))) {
+    throw new Error(`${repoName} is excluded from OpenWiki. To document it, first run: total-recall openwiki exclude --remove ${repoName}`);
+  }
+
   const outPath = outputDir ? path.resolve(resolvedTarget, outputDir) : path.join(resolvedTarget, 'openwiki');
 
   if (dryRun) {

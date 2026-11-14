@@ -1,6 +1,6 @@
 {
   "name": "tr-plugin-ssss",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "private": true,
   "type": "module",
   "description": "Canonical SSSS distribution, scaffolding and validation for Total Recall installations.",
@@ -12,7 +12,8 @@
     "scripts/",
     "cli.mjs",
     "DESIGN.md",
-    "plugin.json"
+    "plugin.json",
+    "skills/"
   ],
   "scripts": {
     "test": "node scripts/refresh-scaffold.mjs --check && node --test test/*.test.mjs",

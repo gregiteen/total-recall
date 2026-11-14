@@ -22,55 +22,43 @@ beforeEach(() => {
 afterEach(() => fs.rmSync(dir, { recursive: true, force: true }));
 
 describe('gate modes', () => {
-  it('warns when nothing is set', () => {
-    expect(DEFAULT_GATE_MODE).toBe('warn');
-    expect(modeOf('router')).toBe('warn');
-    expect(modeOf('owned', 'mesh')).toBe('warn');
-  });
-  it('reads machine settings, with a plugin or router setting over the default', () => {
-    write(globalBrainDir, { default: 'off', router: 'enforce', plugins: { mesh: 'enforce' } });
+  it('enforces by default', () => {
+    expect(DEFAULT_GATE_MODE).toBe('enforce');
     expect(modeOf('router')).toBe('enforce');
     expect(modeOf('owned', 'mesh')).toBe('enforce');
-    expect(modeOf('owned', 'git-sentinel')).toBe('off');
   });
-  it('lets the repository win over the machine', () => {
-    write(globalBrainDir, { default: 'enforce', plugins: { mesh: 'enforce' } });
-    write(projectBrainDir(root), { default: 'off' });
-    expect(modeOf('owned', 'mesh')).toBe('off');
-    expect(modeOf('router')).toBe('off');
-  });
-  it('follows the machine for anything the repository leaves unset', () => {
-    write(globalBrainDir, { plugins: { mesh: 'enforce' } });
-    write(projectBrainDir(root), { plugins: { 'git-sentinel': 'off' } });
+  it('ignores off/warn overrides and stays enforced', () => {
+    write(globalBrainDir, { default: 'off', router: 'warn', plugins: { mesh: 'off', 'git-sentinel': 'warn' } });
+    write(projectBrainDir(root), { default: 'off', plugins: { mesh: 'off' } });
+    expect(modeOf('router')).toBe('enforce');
     expect(modeOf('owned', 'mesh')).toBe('enforce');
-    expect(modeOf('owned', 'git-sentinel')).toBe('off');
+    expect(modeOf('owned', 'git-sentinel')).toBe('enforce');
   });
-  it('treats a bad file or unknown value as unset, so settings can never be what blocks work', () => {
+  it('treats a bad file or unknown value as enforce', () => {
     for (const bad of ['{ not json', '[]', 'null', '{"default":"block","router":7,"plugins":{"mesh":"yes"}}']) {
       write(globalBrainDir, bad);
-      expect(modeOf('router'), bad).toBe('warn');
-      expect(modeOf('owned', 'mesh'), bad).toBe('warn');
+      expect(modeOf('router'), bad).toBe('enforce');
+      expect(modeOf('owned', 'mesh'), bad).toBe('enforce');
     }
   });
 });
 
 describe('writeGateMode', () => {
-  it('changes one setting and leaves the rest', () => {
-    write(globalBrainDir, { default: 'warn', plugins: { mesh: 'off' } });
-    writeGateMode(globalBrainDir, { mode: 'enforce', plugin: 'git-sentinel' });
-    writeGateMode(globalBrainDir, { mode: 'off', router: true });
-    expect(JSON.parse(fs.readFileSync(gateConfigPath(globalBrainDir), 'utf8'))).toEqual({ default: 'warn', router: 'off', plugins: { mesh: 'off', 'git-sentinel': 'enforce' } });
-  });
-  it('removes a setting so that level follows the next layer again', () => {
-    write(globalBrainDir, { default: 'enforce' });
-    writeGateMode(projectBrainDir(root), { mode: 'off', plugin: 'mesh' });
-    expect(modeOf('owned', 'mesh')).toBe('off');
-    writeGateMode(projectBrainDir(root), { mode: null, plugin: 'mesh' });
-    expect(modeOf('owned', 'mesh')).toBe('enforce');
-  });
-  it('creates the config folder when it is missing', () => {
-    const file = writeGateMode(globalBrainDir, { mode: 'off' });
+  it('accepts enforce and leaves other settings intact', () => {
+    write(globalBrainDir, { default: 'enforce', plugins: { mesh: 'enforce' } });
+    const file = writeGateMode(globalBrainDir, { mode: 'enforce', plugin: 'git-sentinel' });
     expect(file).toBe(gateConfigPath(globalBrainDir));
-    expect(modeOf('router')).toBe('off');
+    expect(JSON.parse(fs.readFileSync(file, 'utf8'))).toEqual({ default: 'enforce', plugins: { mesh: 'enforce', 'git-sentinel': 'enforce' } });
+  });
+  it('refuses off, warn, or null overrides', () => {
+    for (const mode of ['off', 'warn', null]) {
+      expect(() => writeGateMode(globalBrainDir, { mode, plugin: 'mesh' })).toThrow(/permanently enforced/);
+      expect(() => writeGateMode(projectBrainDir(root), { mode, router: true })).toThrow(/permanently enforced/);
+    }
+  });
+  it('creates the config folder when writing enforce', () => {
+    const file = writeGateMode(globalBrainDir, { mode: 'enforce' });
+    expect(file).toBe(gateConfigPath(globalBrainDir));
+    expect(modeOf('router')).toBe('enforce');
   });
 });

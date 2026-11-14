@@ -9,13 +9,27 @@ import path from 'node:path';
 // No model default: models and prices change too often to fix one in code, and a stale
 // default (deepseek/deepseek-chat) cost about 5x a current model of the same family.
 // A refresh with no configured model stops before it calls a provider.
+//
+// exclude lists repository roots the refresh never touches: upstream clones,
+// forks, backups and test probes. Registering a repository with Total Recall
+// gives it a brain; it does not make its code something to document.
 export const DEFAULT_OPENWIKI_CONFIG = Object.freeze({
   provider: 'openrouter',
   model: null,
   fallback_model: null,
   max_tokens: 4096,
-  timeout_ms: 300000
+  timeout_ms: 300000,
+  exclude: Object.freeze([])
 });
+
+/** Absolute, de-duplicated, sorted repository roots. */
+export function normalizeExclude(list) {
+  if (!Array.isArray(list)) return [];
+  const roots = list
+    .filter((entry) => typeof entry === 'string' && entry.trim() && path.isAbsolute(entry.trim()))
+    .map((entry) => path.resolve(entry.trim()));
+  return [...new Set(roots)].sort();
+}
 
 export const ALLOWED_CONFIG_KEYS = Object.freeze([
   'provider',
@@ -44,12 +58,12 @@ export function loadOpenWikiConfig(options = {}) {
   const filePath = resolveConfigPath(options);
   try {
     if (!fs.existsSync(filePath)) {
-      return { ...DEFAULT_OPENWIKI_CONFIG };
+      return { ...DEFAULT_OPENWIKI_CONFIG, exclude: [] };
     }
     const raw = fs.readFileSync(filePath, 'utf8');
     const parsed = JSON.parse(raw);
     if (!parsed || typeof parsed !== 'object') {
-      return { ...DEFAULT_OPENWIKI_CONFIG };
+      return { ...DEFAULT_OPENWIKI_CONFIG, exclude: [] };
     }
     return {
       provider: typeof parsed.provider === 'string' && parsed.provider ? parsed.provider : DEFAULT_OPENWIKI_CONFIG.provider,
@@ -60,10 +74,11 @@ export function loadOpenWikiConfig(options = {}) {
         : DEFAULT_OPENWIKI_CONFIG.max_tokens,
       timeout_ms: Number.isInteger(parsed.timeout_ms) && parsed.timeout_ms >= 30000 && parsed.timeout_ms <= 1800000
         ? parsed.timeout_ms
-        : DEFAULT_OPENWIKI_CONFIG.timeout_ms
+        : DEFAULT_OPENWIKI_CONFIG.timeout_ms,
+      exclude: normalizeExclude(parsed.exclude)
     };
   } catch {
-    return { ...DEFAULT_OPENWIKI_CONFIG };
+    return { ...DEFAULT_OPENWIKI_CONFIG, exclude: [] };
   }
 }
 
@@ -75,7 +90,8 @@ export function saveOpenWikiConfig(config, options = {}) {
     model: config.model ? String(config.model).trim() || null : null,
     fallback_model: config.fallback_model ? String(config.fallback_model).trim() || null : null,
     max_tokens: Number.isInteger(Number(config.max_tokens)) ? Math.max(512, Math.min(131072, Number(config.max_tokens))) : DEFAULT_OPENWIKI_CONFIG.max_tokens,
-    timeout_ms: Number.isInteger(Number(config.timeout_ms)) ? Math.max(30000, Math.min(1800000, Number(config.timeout_ms))) : DEFAULT_OPENWIKI_CONFIG.timeout_ms
+    timeout_ms: Number.isInteger(Number(config.timeout_ms)) ? Math.max(30000, Math.min(1800000, Number(config.timeout_ms))) : DEFAULT_OPENWIKI_CONFIG.timeout_ms,
+    exclude: normalizeExclude(config.exclude)
   };
 
   if (!ALLOWED_PROVIDERS.includes(validated.provider)) {
@@ -123,7 +139,17 @@ export function setOpenWikiConfigValue(key, value, options = {}) {
   return saveOpenWikiConfig(current, options);
 }
 
-/** Reset configuration to defaults. */
+/**
+ * Reset the generator settings to defaults. The exclude list is kept: a reset
+ * must not put clones and backups back into a paid refresh.
+ */
 export function resetOpenWikiConfig(options = {}) {
-  return saveOpenWikiConfig(DEFAULT_OPENWIKI_CONFIG, options);
+  const { exclude } = loadOpenWikiConfig(options);
+  return saveOpenWikiConfig({ ...DEFAULT_OPENWIKI_CONFIG, exclude }, options);
+}
+
+/** Replace the list of repository roots the refresh never touches. */
+export function setExcludedRoots(roots, options = {}) {
+  const current = loadOpenWikiConfig(options);
+  return saveOpenWikiConfig({ ...current, exclude: roots }, options);
 }

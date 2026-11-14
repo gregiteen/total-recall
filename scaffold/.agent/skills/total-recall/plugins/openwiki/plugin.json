@@ -2,7 +2,7 @@
   "$schema": "https://github.com/gregiteen/total-recall/blob/main/metadata.plugin.schema.json",
   "id": "openwiki",
   "name": "OpenWiki",
-  "version": "0.3.0",
+  "version": "0.4.1",
   "description": "Multi-repo knowledge graph and documentation wiki engine for Total Recall.",
   "license": "MIT",
   "runtime": {
@@ -408,7 +408,7 @@
       },
       {
         "name": "refresh",
-        "description": "Report which registered projects' generated OpenWiki pages are stale; --apply regenerates them (openwiki/ only)",
+        "description": "Report which registered projects' generated OpenWiki pages are stale; --apply updates existing wikis (openwiki/ only), never creates one, and skips excluded repositories",
         "timeout_ms": 600000,
         "effect": "write",
         "output": "json",
@@ -585,6 +585,31 @@
             "name": "off",
             "flag": "--off",
             "label": "Stop the nightly refresh on every node",
+            "type": "boolean"
+          },
+          {
+            "name": "json",
+            "flag": "--json",
+            "label": "JSON output",
+            "type": "boolean"
+          }
+        ]
+      },
+      {
+        "name": "exclude",
+        "description": "List, add or remove repositories the wiki refresh and generate never touch (clones, forks, backups)",
+        "effect": "write",
+        "args": [
+          {
+            "name": "targets",
+            "type": "string",
+            "label": "Registered project name or absolute path",
+            "positional": true
+          },
+          {
+            "name": "remove",
+            "flag": "--remove",
+            "label": "Take the repositories off the list",
             "type": "boolean"
           },
           {

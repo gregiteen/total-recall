@@ -18,6 +18,7 @@ import { runQualityGate } from './gate.mjs';
 import { forwardRemoteOperation } from './remote-operation.mjs';
 import { cancellationResult } from './worker.mjs';
 import { sessionOptions } from './session/run.mjs';
+import { createModelValidator, filterPoolByModel } from './model-selection.mjs';
 
 const OPEN_THREADS = new Set();
 const MAX_BLUEPRINT = 20000;
@@ -42,7 +43,12 @@ export function assignPipelineRoles(pool = [], options = {}) {
   const byCost = [...pool].sort((a, b) => a.costScore - b.costScore);
   const explorer = options.explorer ? findById(options.explorer) : byCost.find(h => h.id !== orchestrator.id) || orchestrator;
   const architect = options.architect ? findById(options.architect) : orchestrator;
-  const implementer = options.implementer ? findById(options.implementer) : sorted.find(h => h.id !== explorer.id && h.id !== architect.id) || sorted.find(h => h.id !== architect.id) || architect;
+  // A requested model is the Implementer's: only a harness that can run it writes the code.
+  const compatible = options.modelCompatible;
+  const writers = compatible ? sorted.filter(h => compatible.includes(h.id)) : sorted;
+  const implementer = options.implementer ? findById(options.implementer) : writers.find(h => h.id !== explorer.id && h.id !== architect.id) || writers.find(h => h.id !== architect.id) || (compatible ? writers[0] || null : architect);
+  if (compatible && implementer && !compatible.includes(implementer.id)) throw new Error(`Selected implementer ${implementer.id} cannot run model ${options.model}`);
+  if (!implementer) return { orchestrator, explorer, architect, implementer: null, verifier: null, heterogeneousFamilies: false };
   const verifier = options.verifier ? findById(options.verifier) : sorted.find(h => h.family !== implementer.family) || null;
   return { orchestrator, explorer, architect, implementer, verifier, heterogeneousFamilies: Boolean(verifier) && verifier.family !== implementer.family };
 }
@@ -81,15 +87,18 @@ async function runPipeline(task, poolInfo, options) {
   const execute = options.execute === true;
   const withSubagents = options.subagents !== false;
   const stages = roles.orchestrator ? buildStages(roles, withSubagents) : [];
-  const base = { mode: 'pipeline', task, orchestrator: roles.orchestrator?.id || null, executedLive: execute, excluded: poolInfo.excluded, heterogeneousFamiliesVerified: roles.heterogeneousFamilies, stages };
+  if (options.model !== undefined) for (const item of stages) if (item.role === 'Implementer') item.model = options.model;
+  const base = { mode: 'pipeline', task, ...modelFields(options), orchestrator: roles.orchestrator?.id || null, executedLive: execute, excluded: poolInfo.excluded, heterogeneousFamiliesVerified: roles.heterogeneousFamilies, stages };
 
   if (!execute) {
     const blockers = [];
     if (!roles.orchestrator) blockers.push('No harness can take work right now.');
+    else if (!roles.implementer) blockers.push(`No harness that can take work can run model ${options.model}.`);
     else if (!roles.heterogeneousFamilies) blockers.push('Only one model family is available, so no independent Verifier exists.');
     return { ...base, ok: blockers.length === 0, threadId: null, blockers };
   }
   if (!roles.orchestrator) throw new Error(`No harness can take work right now: ${poolInfo.excluded.map(e => `${e.harness} (${e.reason})`).join(', ') || 'none installed'}`);
+  if (!roles.implementer) throw new Error(`No harness that can take work can run model ${options.model}`);
   if (!roles.heterogeneousFamilies && options.allowSameFamily !== true) throw new Error('Refusing to run: only one model family is available, so no independent Verifier exists. Pass --allow-same-family to accept self-review.');
   if (!isGitRepo(cwd)) throw new Error('A pipeline writes on its own branch, so it must run inside a git repository');
 
@@ -105,6 +114,7 @@ async function runPipeline(task, poolInfo, options) {
     stage.status = 'running';
     const result = await dispatchWithReceipt({ agent: harness.id, node: 'local', cwd: workdir, contextCwd: cwd, contextTask: task, prompt,
       ...sessionOptions({ ...options, cwd }), goal: stage.role === 'Implementer' ? options.goal || task : prompt.slice(0, 4000),
+      ...(stage.role === 'Implementer' && options.model !== undefined ? { model: options.model } : {}),
       permissions: permissions || stage.permissions, allowUnknownAuth: options.allowUnknownAuth === true }, { dispatchFn: options.dispatchFn, role, complexityScore: complexity.score });
     stage.status = result.cancelled ? 'cancelled' : result.ok ? 'completed' : result.queued ? 'queued' : 'failed';
     stage.output = result.response || result.error || null;
@@ -193,11 +203,11 @@ async function runCouncil(task, poolInfo, options) {
   // One seat per model family, strongest first, so the seats can actually disagree.
   const families = new Set();
   const seats = options.harnesses || [...poolInfo.ready].sort((a, b) => b.qualityScore - a.qualityScore).filter(h => !families.has(h.family) && families.add(h.family)).slice(0, 3).map(h => h.id);
-  if (options.execute !== true) return { ok: seats.length > 0, mode: 'council', task, executedLive: false, consensus: 'planned', excluded: poolInfo.excluded, votes: seats.map(harness => ({ harness, status: 'planned' })) };
+  if (options.execute !== true) return { ok: seats.length > 0, mode: 'council', task, ...modelFields(options), executedLive: false, consensus: 'planned', excluded: poolInfo.excluded, votes: seats.map(harness => ({ harness, status: 'planned' })) };
   if (!seats.length) throw new Error('No harness can take work right now');
   const cwd = options.cwd || process.cwd();
   const votes = await Promise.all(seats.map(async harness => {
-    const result = await dispatchWithReceipt({ agent: harness, node: 'local', cwd, contextTask: task, ...sessionOptions({ ...options, cwd }), prompt: `[ROLE: COUNCIL MEMBER]\nDo not change any file. Assess this proposal, with its trade-offs and risks:\n${task}\n\nEnd your reply with exactly one JSON object: {"vote":"APPROVE"|"REJECT","reason":"..."}`, permissions: READ, allowUnknownAuth: options.allowUnknownAuth === true }, { dispatchFn: options.dispatchFn, role: 'Council' });
+    const result = await dispatchWithReceipt({ agent: harness, node: 'local', cwd, contextTask: task, ...sessionOptions({ ...options, cwd }), ...(options.model !== undefined ? { model: options.model } : {}), prompt: `[ROLE: COUNCIL MEMBER]\nDo not change any file. Assess this proposal, with its trade-offs and risks:\n${task}\n\nEnd your reply with exactly one JSON object: {"vote":"APPROVE"|"REJECT","reason":"..."}`, permissions: READ, allowUnknownAuth: options.allowUnknownAuth === true }, { dispatchFn: options.dispatchFn, role: 'Council' });
     return { harness, ok: result.ok === true, failureKind: result.failureKind, ...(result.ok ? parseVote(result.response) : { vote: 'ABSTAIN', reason: null, error: result.error }),
       ...(result.queueId ? { queueId: result.queueId } : {}), feedback: result.response || null };
   }));
@@ -205,12 +215,12 @@ async function runCouncil(task, poolInfo, options) {
   const majority = votes.length / 2;
   const consensus = count('APPROVE') > majority ? 'approved' : count('REJECT') > majority ? 'rejected' : 'no-consensus';
   const limited = votes.some(item => item.failureKind === 'limit');
-  return { ok: !limited && votes.some(item => item.ok), ...(limited ? { failureKind: 'limit' } : {}), ...cancellationResult(), mode: 'council', task, executedLive: true, consensus, excluded: poolInfo.excluded, votes };
+  return { ok: !limited && votes.some(item => item.ok), ...(limited ? { failureKind: 'limit' } : {}), ...cancellationResult(), mode: 'council', task, ...modelFields(options), executedLive: true, consensus, excluded: poolInfo.excluded, votes };
 }
 
 async function runRace(task, poolInfo, options) {
   const seats = options.candidates || [...poolInfo.ready].sort((a, b) => b.qualityScore - a.qualityScore).slice(0, 2).map(h => h.id);
-  if (options.execute !== true) return { ok: seats.length > 1, mode: 'race', task, executedLive: false, excluded: poolInfo.excluded, candidates: seats.map(harness => ({ harness, status: 'planned' })) };
+  if (options.execute !== true) return { ok: seats.length > 1, mode: 'race', task, ...modelFields(options), executedLive: false, excluded: poolInfo.excluded, candidates: seats.map(harness => ({ harness, status: 'planned' })) };
   if (seats.length < 2) throw new Error('A race needs at least two harnesses that can take work');
   if (!options.gate) return { ok: false, mode: 'race', task, executedLive: false, verification: 'unverified', gateApplied: false, error: 'A race requires a deterministic quality gate before any candidate can win.' };
   const cwd = options.cwd || process.cwd();
@@ -223,7 +233,7 @@ async function runRace(task, poolInfo, options) {
     try {
       const started = Date.now();
       directory = createWorktree(cwd, { branch });
-      const result = await dispatchWithReceipt({ agent: harness, node: 'local', cwd: directory, contextCwd: cwd, contextTask: task, ...sessionOptions({ ...options, cwd }), goal: options.goal || task, prompt: `[ROLE: IMPLEMENTER]\nWork only in this checkout. Implement the task and its tests. Do not commit.\nTask:\n${task}`, permissions: WRITE, allowUnknownAuth: options.allowUnknownAuth === true }, { dispatchFn: options.dispatchFn, role: 'Race' });
+      const result = await dispatchWithReceipt({ agent: harness, node: 'local', cwd: directory, contextCwd: cwd, contextTask: task, ...sessionOptions({ ...options, cwd }), goal: options.goal || task, ...(options.model !== undefined ? { model: options.model } : {}), prompt: `[ROLE: IMPLEMENTER]\nWork only in this checkout. Implement the task and its tests. Do not commit.\nTask:\n${task}`, permissions: WRITE, allowUnknownAuth: options.allowUnknownAuth === true }, { dispatchFn: options.dispatchFn, role: 'Race' });
       const commit = result.ok || result.cancelled ? commitAll(directory, `meta-harness race: ${task.slice(0, 60)}\n\nAgent: ${harness}`) : null;
       if (result.cancelled) {
         keep = Boolean(commit);
@@ -247,8 +257,10 @@ async function runRace(task, poolInfo, options) {
   }));
   const finishers = entries.filter(entry => entry.ok).sort((a, b) => a.completedAt - b.completedAt);
   const limited = entries.some(item => item.failureKind === 'limit');
-  return { ok: !limited && finishers.length > 0, ...(limited ? { failureKind: 'limit' } : {}), ...cancellationResult(), mode: 'race', task, executedLive: true, gateApplied: true, verification: !limited && finishers.length ? 'passed' : 'failed', winner: limited ? null : finishers[0]?.harness || null, excluded: poolInfo.excluded, candidates: entries };
+  return { ok: !limited && finishers.length > 0, ...(limited ? { failureKind: 'limit' } : {}), ...cancellationResult(), mode: 'race', task, ...modelFields(options), executedLive: true, gateApplied: true, verification: !limited && finishers.length ? 'passed' : 'failed', winner: limited ? null : finishers[0]?.harness || null, excluded: poolInfo.excluded, candidates: entries };
 }
+
+const modelFields = options => options.model !== undefined ? { model: options.model, modelSelection: options.modelSelection } : {};
 
 export async function coordinateTask(taskDescription, options = {}) {
   if (cancellationResult()) return cancellationResult();
@@ -259,7 +271,14 @@ export async function coordinateTask(taskDescription, options = {}) {
   const mode = options.mode || 'pipeline';
   if (!['pipeline', 'orchestrate', 'council', 'race'].includes(mode)) throw new Error(`Unsupported coordination mode: ${mode}`);
   localExecutionNode(options);
-  const poolInfo = await resolvePool(options);
+  let poolInfo = await resolvePool(options);
+  if (options.model !== undefined) {
+    // Council and race seats all run the model, so their pool narrows. A pipeline keeps every harness
+    // for its other roles and gives the Implementer role to one that can run the model.
+    const filtered = filterPoolByModel(poolInfo, options.model, options.modelValidator || createModelValidator());
+    options = { ...options, modelSelection: filtered.selection, modelCompatible: filtered.selection.compatible };
+    if (mode === 'council' || mode === 'race') poolInfo = filtered.pool;
+  }
   const wall = poolInfo.excluded.find(item => item.failureKind === 'quota');
   const minimum = mode === 'race' || ((mode === 'pipeline' || mode === 'orchestrate') && options.allowSameFamily !== true) ? 2 : 1;
   if (options.execute === true && wall && poolInfo.ready.length < minimum) {

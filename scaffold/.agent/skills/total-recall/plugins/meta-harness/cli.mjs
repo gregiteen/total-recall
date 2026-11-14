@@ -134,6 +134,7 @@ async function runOperation(argv) {
     ...Object.fromEntries([['goal', '--goal'], ['maxTurns', '--max-turns'], ['maxBudgetUsd', '--max-budget-usd'], ['maxTokens', '--max-tokens'],
       ['resultSchema', '--result-schema'], ['approvalPolicy', '--approvals'], ['questionTimeoutMs', '--question-timeout-ms']]
       .filter(([, flag]) => value(flag) !== undefined).map(([key, flag]) => [key, ['maxTurns', 'maxBudgetUsd', 'maxTokens', 'questionTimeoutMs'].includes(key) ? Number(value(flag)) : value(flag)])) });
+  const modelOption = () => (value('--model') === undefined ? {} : { model: value('--model') });
   let result;
   if (operation === 'status') result = {...await inspectNode(value('--node') || 'local'),documentation:documentationStatus()};
   else if (operation === 'catalog') result = { adapters: getActiveAdapters(), permissions: ['read', 'write', 'send', 'destructive'] };
@@ -176,7 +177,7 @@ async function runOperation(argv) {
   else if (operation === 'route') {
     const task = positional.join(' ');
     if (!task) throw new Error('route requires a task description');
-    const options = { ...controls(), jev: has('--jev'), preferLocal: has('--prefer-local'), preferFrontier: has('--prefer-frontier'), node: value('--node'), cwd: value('--cwd'), allowUnknownAuth: has('--allow-unknown-auth'), ...remoteTimeout() };
+    const options = { ...controls(), jev: has('--jev'), preferLocal: has('--prefer-local'), preferFrontier: has('--prefer-frontier'), node: value('--node'), cwd: value('--cwd'), allowUnknownAuth: has('--allow-unknown-auth'), ...modelOption(), ...remoteTimeout() };
     result = has('--execute') ? await executeRoutedTask(task, { ...options, gate: has('--gate'), gateOptions: { tier: value('--tier') || 'fast' } }) : await routeTask(task, options);
     if (!result.ok) process.exitCode = 1;
   }
@@ -192,7 +193,7 @@ async function runOperation(argv) {
     result = await coordinateTask(task, {
       ...controls(), mode: value('--mode') || 'pipeline', execute: has('--execute'), orchestrator: value('--orchestrator'), explorer: value('--explorer'), architect: value('--architect'), implementer: value('--implementer'), verifier: value('--verifier'),
       branch: value('--branch'), subagents: !has('--no-subagents'), autoReview: has('--auto-review'), gate: has('--gate'), gateOptions: { tier: value('--tier') || 'fast' }, allowSameFamily: has('--allow-same-family'), reviewer: value('--reviewer'),
-      node: value('--node') || 'local', cwd: value('--cwd'), allowUnknownAuth: has('--allow-unknown-auth'), ...remoteTimeout(),
+      node: value('--node') || 'local', cwd: value('--cwd'), allowUnknownAuth: has('--allow-unknown-auth'), ...modelOption(), ...remoteTimeout(),
     });
     if (!result.ok) process.exitCode = 1;
   }
@@ -399,7 +400,9 @@ async function runOperation(argv) {
   else if(operation==='dispatch') {
     if(!args.includes('--stdin'))throw new Error('Task requests must arrive through stdin: pass --stdin with JSON {agent, cwd, prompt}');
     const input=fs.readFileSync(0,'utf8');if(Buffer.byteLength(input)>65536)throw new Error('Task request too large');
-    const request=validateDispatchRequest({...JSON.parse(input),...controls()});
+    const body=JSON.parse(input);
+    if(value('--model')!==undefined && body?.model!==undefined && body.model!==value('--model'))throw new Error('--model and the request model differ; give the model once');
+    const request=validateDispatchRequest({...body,...controls(),...modelOption()});
     // A-107: a local dispatch streams its agent's events to a live log, announced before it starts.
     const progressFile=(request.node||'local')==='local'?path.join(configDir(),'jobs',`${process.env.TR_METAHARNESS_JOB || `dispatch-${Date.now().toString(36)}-${request.agent}`}.events.jsonl`):undefined;
     if(progressFile)console.error(JSON.stringify({progress:progressFile,agent:request.agent}));

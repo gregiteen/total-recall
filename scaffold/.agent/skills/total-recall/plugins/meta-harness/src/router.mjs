@@ -23,6 +23,7 @@ import { resolvePool, exclusionReason, isLocalExecutionNode } from './pool.mjs';
 import { readCodexRateLimits, measuredWalls } from './telemetry.mjs';
 import { claudeProofCurrent, INCLUDED_AGENTS, readIncludedPolicy } from './included-usage.mjs';
 import { derivedDir } from './paths.mjs';
+import { createModelValidator, filterPoolByModel } from './model-selection.mjs';
 
 /**
  * Helper to safely query host Total Recall CLI without assumptions
@@ -273,7 +274,10 @@ export async function routeTask(taskDescription, options = {}) {
   // fleet telemetry places local work, and the balance matters only to a metered harness.
   const shared = scoped.inspect ? null : inspectAgents({ env: process.env });
   const lean = shared ? { ...scoped, inspect: () => shared } : scoped;
-  const [pool, receipts] = await Promise.all([resolvePool({ ...lean, policy }), readReceipts()]);
+  const [resolved, receipts] = await Promise.all([resolvePool({ ...lean, policy }), readReceipts()]);
+  // A requested model narrows the pool to the harnesses that can run it, and says why the others cannot.
+  const { pool, selection: modelSelection } = options.model === undefined ? { pool: resolved, selection: null }
+    : filterPoolByModel(resolved, options.model, options.modelValidator || createModelValidator({ local: !remote }));
   const quotaReport = await inspectQuotas({
     ...lean,
     policy,
@@ -289,10 +293,12 @@ export async function routeTask(taskDescription, options = {}) {
   if (typeof selectedQuota.usagePercent === 'number' && selectedQuota.usagePercent > 85) warnings.push(`${routing.selected} is at ${selectedQuota.usagePercent}% measured usage.`);
   if (selectedQuota.status === 'unverified') warnings.push(`${routing.selected} has no login probe; only a completed run proves it works.`);
   if (selectedQuota.billingModel === 'metered') warnings.push(`${routing.selected} bills per token.`);
-  if (!routing.selected) warnings.push('No harness can take this task right now.');
+  if (!routing.selected) warnings.push(modelSelection ? `No harness that can run ${options.model} can take this task right now.` : 'No harness can take this task right now.');
+  const selectedModel = modelSelection?.checks.find(check => check.harness === routing.selected);
+  if (selectedModel?.source === 'unverified') warnings.push(selectedModel.note);
   return {
     ok: Boolean(routing.selected), task: taskDescription, classifier, complexity,
-    selected: routing.selected, tier: complexity.tier, candidates: routing.candidates, excluded: pool.excluded,
+    selected: routing.selected, tier: complexity.tier, model: options.model ?? null, ...(modelSelection ? { modelSelection } : {}), candidates: routing.candidates, excluded: pool.excluded,
     ...(policy.enabled && !routing.selected ? { deferred: pool.excluded.find(row => row.failureKind === 'quota') || null } : {}),
     placement: complexity.tier === 'local' ? placeLocalWork(quotaReport.fleet) : null,
     scoring: 'Adapter quality and cost scores are configured priors, adjusted by pass rates measured on this machine.',
