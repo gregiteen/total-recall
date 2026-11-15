@@ -6,6 +6,14 @@ import fs from 'node:fs';
 // ─── Auth mock: requireAuth enforces auth, requireScope is permissive ─────────
 
 let authEnabled = true;
+const authOwner = vi.hoisted(() => ({ listSecretsMeta: vi.fn(), setSecret: vi.fn(), deleteSecret: vi.fn() }));
+
+vi.mock('../../core/plugin-runtime.mjs', async importOriginal => {
+  const actual = await importOriginal();
+  return { ...actual, loadPluginModule: vi.fn(async (id, name, ...args) => {
+    return id === 'auth' && name === 'secrets-store' ? authOwner : actual.loadPluginModule(id, name, ...args);
+  }) };
+});
 
 vi.mock('../auth.mjs', () => ({
   requireAuth: (req, res, next) => {
@@ -43,6 +51,9 @@ describe('Config Router', () => {
   beforeEach(() => {
     authEnabled = true;
     vi.clearAllMocks();
+    authOwner.listSecretsMeta.mockReset().mockResolvedValue([]);
+    authOwner.deleteSecret.mockReset().mockResolvedValue(false);
+    authOwner.setSecret.mockReset().mockResolvedValue(undefined);
   });
 
   it('GET /api/config requires auth', async () => {
@@ -69,6 +80,58 @@ describe('Config Router', () => {
     expect(res.body).toHaveProperty('budget');
     expect(res.body).toHaveProperty('brain');
     expect(res.body).toHaveProperty('secrets');
+  });
+
+  it('reads only allowed credential presence from Auth metadata', async () => {
+    vi.spyOn(fs, 'existsSync').mockReturnValue(false);
+    authOwner.listSecretsMeta.mockResolvedValue([
+      { key: 'openai_api_key', set: true, value: 'fixture-owner-value' },
+      { key: 'google_api_key', set: false },
+      { key: 'unrelated-key', set: true },
+    ]);
+    const res = await request(app).get('/api/config-json');
+    expect(res.status).toBe(200);
+    expect(res.body.secrets).toEqual({ openai_api_key: '••••••••', google_api_key: '' });
+    expect(JSON.stringify(res.body)).not.toContain('fixture-owner-value');
+    expect(authOwner.listSecretsMeta).toHaveBeenCalledWith('/tmp/mock-brain');
+  });
+
+  it('fails without reading a native credential file when Auth is unavailable', async () => {
+    vi.spyOn(fs, 'existsSync').mockReturnValue(false);
+    const read = vi.spyOn(fs, 'readFileSync');
+    authOwner.listSecretsMeta.mockRejectedValue(new Error('fixture-private-diagnostic'));
+    const res = await request(app).get('/api/config-json');
+    expect(res.status).toBe(503);
+    expect(res.body).toEqual({ error: 'Auth credential metadata is unavailable.' });
+    expect(read.mock.calls.some(([file]) => String(file).endsWith('secrets.enc'))).toBe(false);
+    read.mockRestore();
+  });
+
+  it.each([null, {}, [{ key: 'openai_api_key', set: 'unknown' }], [null]])('rejects malformed Auth metadata: %j', async meta => {
+    vi.spyOn(fs, 'existsSync').mockReturnValue(false);
+    authOwner.listSecretsMeta.mockResolvedValue(meta);
+    const res = await request(app).get('/api/config-json');
+    expect(res.status).toBe(503);
+    expect(res.body).toEqual({ error: 'Auth credential metadata is unavailable.' });
+  });
+
+  it('does not advertise success or expose diagnostics when Auth deletion fails', async () => {
+    vi.spyOn(fs, 'existsSync').mockReturnValue(true);
+    authOwner.deleteSecret.mockRejectedValue(new Error('fixture-private-diagnostic'));
+    const res = await request(app).post('/api/config-json').send({ secrets: { openai_api_key: '' } });
+    expect(res.status).toBe(503);
+    expect(res.body).toEqual({ error: 'Auth credential update did not complete; verify the stored state before retrying.' });
+    expect(authOwner.deleteSecret).toHaveBeenCalledWith('/tmp/mock-brain', 'openai_api_key', { action: 'delete', actor: 'settings-config' });
+    expect(authOwner.setSecret).not.toHaveBeenCalled();
+  });
+
+  it('preserves masked values and sends actual changes only to Auth', async () => {
+    vi.spyOn(fs, 'existsSync').mockReturnValue(true);
+    const res = await request(app).post('/api/config-json').send({ secrets: { openai_api_key: '[redacted]', google_api_key: 'fixture-value' } });
+    expect(res.status).toBe(200);
+    expect(authOwner.setSecret).toHaveBeenCalledExactlyOnceWith('/tmp/mock-brain', 'google_api_key', 'fixture-value', { action: 'set', actor: 'settings-config' });
+    expect(authOwner.deleteSecret).not.toHaveBeenCalled();
+    expect(JSON.stringify(res.body)).not.toContain('fixture-value');
   });
 
   it('GET /api/config/:name rejects path traversal attempts', async () => {

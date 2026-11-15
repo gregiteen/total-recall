@@ -14,7 +14,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import yaml from 'yaml';
 import { requireAuth, requireScope, loadSecurityConfig } from '../auth.mjs';
-import { BRAIN_DIR, CONFIG_DIR, AGENT_DIR, serverError, badRequest } from './_shared.mjs';
+import { BRAIN_DIR, CONFIG_DIR, serverError, badRequest } from './_shared.mjs';
 import { loadRuntimeConfig } from '../../core/runtime.mjs';
 import { writeFileSecure } from '../../core/secure-file.mjs';
 
@@ -75,12 +75,10 @@ router.get('/api/config-json', requireAuth, requireScope('config:read'), async (
     const securityPath = path.join(CONFIG_DIR, 'security.yml');
     const budgetPath   = path.join(CONFIG_DIR, 'budget.yml');
     const brainPath    = path.join(CONFIG_DIR, 'brain.json');
-    const secretsPath  = path.join(AGENT_DIR, 'secrets.enc');
 
     let security = {};
     let budget   = {};
     let brain    = {};
-    let secrets  = {};
 
     if (fs.existsSync(securityPath)) {
       try { security = yaml.parse(fs.readFileSync(securityPath, 'utf8')) || {}; } catch {}
@@ -107,24 +105,16 @@ router.get('/api/config-json', requireAuth, requireScope('config:read'), async (
     try {
       const { listSecretsMeta } = await __loadOwnedPlugin('auth', 'secrets-store');
       const meta = await listSecretsMeta(BRAIN_DIR);
+      if (!Array.isArray(meta)) throw new Error('Invalid Auth metadata');
       for (const row of meta) {
+        if (!row || typeof row !== 'object') throw new Error('Invalid Auth metadata');
         if (!allowedKeys.includes(row.key)) continue;
+        if (typeof row.set !== 'boolean') throw new Error('Invalid Auth metadata');
         // Mask only — Settings/Secrets UIs use presence indicators, not values.
         safeSecrets[row.key] = row.set ? '••••••••' : '';
       }
     } catch {
-      if (fs.existsSync(secretsPath)) {
-        try {
-          secrets = JSON.parse(fs.readFileSync(secretsPath, 'utf8')) || {};
-        } catch {
-          /* ignore AES/binary */
-        }
-        for (const key of allowedKeys) {
-          if (secrets[key] !== undefined && secrets[key] !== null && secrets[key] !== '') {
-            safeSecrets[key] = '••••••••';
-          }
-        }
-      }
+      return res.status(503).json({ error: 'Auth credential metadata is unavailable.' });
     }
 
     const safeBrain = { ...brain };
@@ -139,7 +129,7 @@ router.get('/api/config-json', requireAuth, requireScope('config:read'), async (
 
 /**
  * POST /api/config-json
- * Persist config fields: security (YAML), budget (YAML), brain (JSON), secrets (JSON).
+ * Persist config fields; credential mutations belong exclusively to Auth.
  */
 router.post('/api/config-json', requireAuth, requireScope('config:write'), async (req, res) => {
   try {
@@ -147,7 +137,6 @@ router.post('/api/config-json', requireAuth, requireScope('config:write'), async
     const securityPath = path.join(CONFIG_DIR, 'security.yml');
     const budgetPath   = path.join(CONFIG_DIR, 'budget.yml');
     const brainPath    = path.join(CONFIG_DIR, 'brain.json');
-    const secretsPath  = path.join(AGENT_DIR, 'secrets.enc');
 
     if (!fs.existsSync(CONFIG_DIR)) {
       fs.mkdirSync(CONFIG_DIR, { recursive: true });
@@ -184,26 +173,26 @@ router.post('/api/config-json', requireAuth, requireScope('config:write'), async
         'serper_api_key',
         'github_token',
       ];
-      const { setSecret, deleteSecret } = await __loadOwnedPlugin('auth', 'secrets-store');
-      for (const key of allowedKeys) {
-        if (secrets[key] === undefined) continue;
-        const value = secrets[key];
-        if (value === '' || value == null) {
-          try {
+      try {
+        const { setSecret, deleteSecret } = await __loadOwnedPlugin('auth', 'secrets-store');
+        for (const key of allowedKeys) {
+          if (secrets[key] === undefined) continue;
+          const value = secrets[key];
+          if (value === '' || value == null) {
             await deleteSecret(BRAIN_DIR, key, { action: 'delete', actor: 'settings-config' });
-          } catch {
-            /* key may not exist */
+            continue;
           }
-          continue;
+          if (typeof value === 'string' && (value.includes('•') || value === '[redacted]')) {
+            // Masked echo from the UI — do not overwrite the store.
+            continue;
+          }
+          await setSecret(BRAIN_DIR, key, String(value), {
+            action: 'set',
+            actor: 'settings-config',
+          });
         }
-        if (typeof value === 'string' && (value.includes('•') || value === '[redacted]')) {
-          // Masked echo from the UI — do not overwrite the store.
-          continue;
-        }
-        await setSecret(BRAIN_DIR, key, String(value), {
-          action: 'set',
-          actor: 'settings-config',
-        });
+      } catch {
+        return res.status(503).json({ error: 'Auth credential update did not complete; verify the stored state before retrying.' });
       }
     }
 
