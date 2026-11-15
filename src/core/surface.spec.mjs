@@ -28,6 +28,17 @@ describe('instruction artifact integrity', () => {
   }
 
   for (const layer of ['global', 'project']) {
+    it(`${layer}: compiles capability inventory through a relocated brain access alias`, () => withBrain(layer, async ({ root, options }) => {
+      const alias = path.join(root, 'brain-access');
+      fs.symlinkSync(path.dirname(options.vaultDir), alias, 'dir');
+      const linkedOptions = { ...options, vaultDir: path.join(alias, 'memory-vault') };
+      expect((await compileSurface(linkedOptions)).skipped).not.toBe(true);
+      const inventory = fs.readFileSync(path.join(options.vaultDir, 'system/plugin-capabilities/installed-capabilities.md'), 'utf8');
+      expect(inventory).toContain('x_portability: tenant_private');
+      expect(inventory).toContain('x_owner: plugin-capabilities');
+      expect((await compileSurface(linkedOptions)).skipped).toBe(true);
+    }));
+
     it(`${layer}: rejects a silent no-op write even with an existing nonempty surface`, () => withBrain(layer, async ({ options }) => {
       fs.writeFileSync(options.instructionsFile, '# stale authored text\n');
       const rename = fs.renameSync.bind(fs);

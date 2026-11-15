@@ -82,3 +82,6 @@ MCP, routers/modules and composed declarations with sanitized metadata, source
 identity and activation state. Declaration completeness and callable state are
 separate; passive API/MCP/router records do not acquire an execution bridge merely
 by being declared. Discovery does not probe services or establish authentication.
+The installed inventory is tenant-private: backup exports retain it, while template
+and sale exports exclude local paths and activation state. Relocated global brain
+access aliases are resolved before writing; links inside storage remain rejected.

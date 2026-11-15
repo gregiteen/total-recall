@@ -777,7 +777,9 @@ export async function compileSurface({ vaultDir, skillsDir, derivedDir, instruct
   const nodes = getNodes(vaultDir);
   const projectRoot = skillsDir ? path.dirname(path.dirname(skillsDir)) : path.resolve(vaultDir, '..', '..', '..', '..');
   const catalog = buildPluginCatalog(projectRoot);
-  await syncPluginCapabilities(catalog, vaultDir);
+  // A relocated brain has a supported access alias. Resolve the selected root
+  // here; the storage boundary still rejects links inside canonical storage.
+  await syncPluginCapabilities(catalog, fs.realpathSync(vaultDir));
   refreshPluginCatalog(derivedDir, projectRoot, { catalog });
   const globalVault = globalVaultFor(vaultDir);
   const ruleNodes = globalVault && fs.existsSync(globalVault)
