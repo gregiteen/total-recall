@@ -122,10 +122,32 @@ export async function runRemoteTotalRecallDeploy({ target, prefix, wizardOpts = 
   let cmd = `npx --yes total-recall deploy --domain ${quote(wizardOpts.domain || 'localhost')}`;
   if (wizardOpts.dashboardPassword) cmd += ' --dashboard-password-stdin';
   for (const a of extraArgs) cmd += ` ${a}`;
-  const result = runRemoteWithStdin(target, `${prefix} ${cmd}`, { stdin: wizardOpts.dashboardPassword ? `${wizardOpts.dashboardPassword}\n` : '' });
-  if (!result.ok) throw new Error(`Remote Total Recall deployment failed: ${result.message}`);
+  // A remote CLI too old to know the stdin flag would ignore the password. Probe its help in the same
+  // session and stop before the deploy runs; the probe never reads stdin, so the deploy reads it once.
+  const probe = wizardOpts.dashboardPassword
+    ? `if ! npx --yes total-recall deploy --help 2>&1 | grep -q -e '--dashboard-password-stdin'; then echo 'Remote total-recall does not support --dashboard-password-stdin; update it and rerun.' >&2; exit 97; fi && `
+    : '';
+  const result = runRemoteWithStdin(target, `${prefix} ${probe}${cmd}`, { stdin: wizardOpts.dashboardPassword ? `${wizardOpts.dashboardPassword}\n` : '' });
+  if (!result.ok) {
+    const why = result.status === 97 ? 'the remote total-recall does not support --dashboard-password-stdin; update it and rerun' : result.message;
+    throw new Error(`Remote Total Recall deployment failed: ${why}`);
+  }
   return result;
 }
+
+let _stdinPasswordRead = false;
+/** Read the dashboard password from stdin exactly once; fail closed on conflict, TTY, empty input or a second read. */
+export function readDashboardPasswordStdin(opts = {}, readStdin = () => fs.readFileSync(0, 'utf8'), isTTY = Boolean(process.stdin.isTTY)) {
+  if (opts.dashboardPassword) throw new Error('Use either --dashboard-password or --dashboard-password-stdin, not both.');
+  if (_stdinPasswordRead) throw new Error('--dashboard-password-stdin stdin was already consumed.');
+  if (isTTY) throw new Error('--dashboard-password-stdin needs the password piped on stdin, not a terminal.');
+  _stdinPasswordRead = true;
+  const password = readStdin().split(/\r?\n/)[0];
+  if (!password) throw new Error('--dashboard-password-stdin received no password on stdin.');
+  return password;
+}
+
+export function _resetStdinPasswordGuard() { _stdinPasswordRead = false; }
 
 function commandExists(cmd) {
   if (!cmd || !/^[a-zA-Z0-9_-]+$/.test(cmd)) {
@@ -275,6 +297,9 @@ function printHelp() {
                         Installs a daily job (cron/launchd) that rsyncs the
                         memory vault into "<vault>/Total Recall/". Pair with
                         Obsidian Sync or iCloud for off-host backup.
+    --dashboard-password-stdin
+                        Read the dashboard password from one line of stdin
+                        (never argv). The remote deploy uses this.
     --allow-insecure-http
                         Permit a local/test deploy without public HTTPS.
     --ui                Open a real-time install progress page in the browser.
@@ -1031,9 +1056,8 @@ export default async function deploy(args) {
           current['cfg-api-url'] = publicUrl;
           current['cfg-dash-url'] = `${publicUrl}/dashboard`;
           current['cfg-health-url'] = `${publicUrl}/health`;
-          if (wizardOpts.dashboardPassword) {
-            current['cfg-dashboard-password'] = wizardOpts.dashboardPassword;
-          }
+          // The dashboard password is never persisted in wizard-config.json; drop any stale copy.
+          delete current['cfg-dashboard-password'];
           writeFileSecure(configFile, JSON.stringify(current, null, 2), { encoding: 'utf8', mode: 0o600 });
         } catch (e) {
           console.error('Failed to auto-persist cloud install options on disk:', e);
@@ -1221,10 +1245,7 @@ ${fmtLine('Target VFS:   ', '~/.agent/')}
 
   // ── Step 7: Copy default config ──
   copyDefaultConfig(opts.dryRun);
-  if (opts.dashboardPasswordStdin) {
-    opts.dashboardPassword = fs.readFileSync(0, 'utf8').split(/\r?\n/)[0] || null;
-    if (!opts.dashboardPassword) throw new Error('--dashboard-password-stdin received no password on stdin.');
-  }
+  if (opts.dashboardPasswordStdin) opts.dashboardPassword = readDashboardPasswordStdin(opts);
   await hardenSecurityConfig(opts.dryRun, opts.dashboardPassword);
 
   // ── Step 7: Install Reverse Proxy / Tunnel ──

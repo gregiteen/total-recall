@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import fs from 'node:fs';
 import path from 'node:path';
-import { provisionRemoteCustody, runRemoteTotalRecallDeploy, wizardSecretKeys } from './deploy.mjs';
+import { provisionRemoteCustody, runRemoteTotalRecallDeploy, wizardSecretKeys, readDashboardPasswordStdin, _resetStdinPasswordGuard } from './deploy.mjs';
 
 const CANARY = 'CANARY-core-deploy-9d41';
 
@@ -70,5 +70,53 @@ describe('remote custody wiring', () => {
     expect(src).not.toMatch(/secrets\.enc/);
     expect(src.match(/await provisionRemoteCustody\(/g)).toHaveLength(2);
     expect(src.match(/await runRemoteTotalRecallDeploy\(/g)).toHaveLength(2);
+  });
+});
+
+describe('dashboard password stdin', () => {
+  it('reads one line exactly once and never echoes it in errors', () => {
+    _resetStdinPasswordGuard();
+    let reads = 0;
+    const read = () => { reads++; return `${CANARY}\nignored\n`; };
+    expect(readDashboardPasswordStdin({}, read, false)).toBe(CANARY);
+    expect(() => readDashboardPasswordStdin({}, read, false)).toThrow(/already consumed/);
+    expect(reads).toBe(1);
+  });
+
+  it('fails closed on empty input, a terminal and a conflicting argv password', () => {
+    _resetStdinPasswordGuard();
+    expect(() => readDashboardPasswordStdin({}, () => '\n', false)).toThrow(/no password/);
+    _resetStdinPasswordGuard();
+    expect(() => readDashboardPasswordStdin({}, () => CANARY, true)).toThrow(/not a terminal/);
+    let reads = 0;
+    _resetStdinPasswordGuard();
+    try { readDashboardPasswordStdin({ dashboardPassword: CANARY }, () => { reads++; return 'x'; }, false); } catch (e) {
+      expect(e.message).not.toContain(CANARY);
+    }
+    expect(reads).toBe(0);
+  });
+
+  it.each(Object.entries(paths))('%s: probes remote support before the deploy and reports an unsupported CLI', async (_n, p) => {
+    const { load, seen } = fakeOwner();
+    await runRemoteTotalRecallDeploy({ target: p.target, prefix: p.prefix, wizardOpts: { dashboardPassword: CANARY }, extraArgs: p.extra, load });
+    const cmd = seen.run[0].cmd;
+    expect(cmd.indexOf('deploy --help')).toBeGreaterThan(-1);
+    expect(cmd.indexOf('deploy --help')).toBeLessThan(cmd.lastIndexOf('deploy --domain'));
+    expect(cmd).toContain('exit 97');
+    expect(cmd).not.toContain(CANARY);
+    const bad = fakeOwner({ run: { ok: false, status: 97, message: 'Remote command exited with 97.' } });
+    await expect(runRemoteTotalRecallDeploy({ target: p.target, prefix: p.prefix, wizardOpts: { dashboardPassword: CANARY }, load: bad.load })).rejects.toThrow(/does not support --dashboard-password-stdin/);
+  });
+
+  it('no probe is added when no password is sent', async () => {
+    const { load, seen } = fakeOwner();
+    await runRemoteTotalRecallDeploy({ target: paths.vm.target, prefix: paths.vm.prefix, wizardOpts: {}, load });
+    expect(seen.run[0].cmd).not.toContain('--help');
+  });
+
+  it('never persists the dashboard password to wizard-config.json', () => {
+    const src = fs.readFileSync(path.resolve(process.cwd(), 'src/cli/deploy.mjs'), 'utf8');
+    expect(src).not.toMatch(/\['cfg-dashboard-password'\]\s*=/);
+    expect(src).toMatch(/delete current\['cfg-dashboard-password'\]/);
   });
 });
