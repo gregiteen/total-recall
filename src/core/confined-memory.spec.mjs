@@ -26,6 +26,12 @@ describe('confined memory owner', () => {
     const factRename = order.findIndex(([op, from, to]) => op === 'rename' && to.endsWith(`${result.slug}.md`));
     const eventWrite = order.findIndex(([op, file]) => op === 'write' && file.endsWith('confined-memory.jsonl'));
     expect(intentRename).toBeGreaterThan(0);
+    // Newly created storage names must be durable before an intent/document
+    // can become visible, including a first fact in an empty selected brain.
+    expect(order.slice(0, intentRename)).toContainEqual(['sync', brain]);
+    expect(order.slice(0, intentRename)).toContainEqual(['sync', path.join(brain, 'memory-vault')]);
+    expect(order.slice(0, intentRename)).toContainEqual(['sync', path.join(brain, 'memory-vault/facts')]);
+    expect(order.slice(0, intentRename)).toContainEqual(['sync', path.join(brain, 'memory-vault/.events')]);
     expect(order[intentRename - 1]).toEqual(['sync', order[intentRename][1]]);
     expect(factRename).toBeGreaterThan(intentRename);
     expect(order[factRename - 1]).toEqual(['sync', order[factRename][1]]);
@@ -36,7 +42,7 @@ describe('confined memory owner', () => {
   });
   it('fails closed when real fsync fails instead of swallowing it', async () => {
     vi.spyOn(fs, 'fsyncSync').mockImplementation(() => { throw new Error('disk failure'); });
-    await expect(commitConfinedFact(brain, { content: 'must not claim durable' })).rejects.toMatchObject({ result: { committed: 'unknown', indexed: false } });
+    await expect(commitConfinedFact(brain, { content: 'must not claim durable' })).rejects.toMatchObject({ result: { committed: false, indexed: false } });
     expect(fs.existsSync(path.join(brain, 'memory-vault/facts'))).toBe(false);
   });
   it('never reports success when the canonical event fsync fails', async () => {

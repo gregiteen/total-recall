@@ -198,6 +198,13 @@ describe('lifecycle and real restricted read adapter', () => {
     makeApp(['invoke:restricted', '*'], { audit: event => { if (event.outcome !== 'authorized') throw new Error('offline'); } });
     execute.mockImplementation(async options => ({ exit_code: 0, stdout: JSON.stringify(options.entry.endsWith('invoke-durability.mjs') ? committedFact : { indexed: true }) }));
     expect((await post('ssss.write', { content: 'fact' })).body).toMatchObject({ ok: false, error: { code: 'audit-unavailable' }, result: { ...committedFact, indexed: true } });
+    // A failed projection throws before mutationResult is assigned by the
+    // route. The error's known commit must survive a second audit failure.
+    execute.mockImplementation(async options => options.entry.endsWith('invoke-durability.mjs')
+      ? { exit_code: 0, stdout: JSON.stringify(committedFact) }
+      : { exit_code: null, stdout: '', termination_reason: 'timeout' });
+    expect((await post('ssss.write', { content: 'fact' })).body).toMatchObject({ ok: false,
+      error: { code: 'audit-unavailable' }, result: committedFact });
   });
   it('serializes confined writes across keys until the child exits and then releases the brain', async () => {
     makeApp(['invoke:restricted', '*'], { auth: (req, _res, next) => {

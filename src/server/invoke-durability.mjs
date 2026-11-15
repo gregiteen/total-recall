@@ -14,6 +14,7 @@ const root = path.resolve(path.dirname(entry), '../..');
 /** All options are host context; none are taken from request parameters. */
 export async function brokerConfinedFact(params, { req, store, authorityId, target, selectedBrain,
   serverBrain, registryBrain, signal, limits, run }) {
+  const started = Date.now();
   // Re-resolve authority and the selected-brain owner here, independently of
   // route authorization. A caller supplies neither a filesystem root nor code.
   const { invokeAuthority, authorizeInvoke } = await import('./invoke-policy.mjs');
@@ -32,7 +33,7 @@ export async function brokerConfinedFact(params, { req, store, authorityId, targ
   const authority = checkAuthority();
   const fact = { ...params, target: 'server' };
   validateConfinedFact(fact);
-  const deadline = Date.now() + Math.min(params.timeoutMs ?? limits.timeoutMs, limits.timeoutMs);
+  const deadline = started + Math.min(params.timeoutMs ?? limits.timeoutMs, limits.timeoutMs);
   let result = { committed: false, indexed: false };
   const remaining = () => {
     if (Date.now() >= deadline) throw new InvokeError(504, 'timeout', 'Fact execution reached its deadline.', result);

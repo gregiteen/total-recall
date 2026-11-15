@@ -5,6 +5,7 @@ import crypto from 'node:crypto';
 import matter from './frontmatter.mjs';
 import { processOperationAsync } from './operation-validator.mjs';
 import { buildLocalSearchIndex } from './fast-recall.mjs';
+import { VFS_INTENT_DIR } from '@ssss/cli/vfs';
 
 export function validateConfinedFact(params) {
   if (!params || typeof params !== 'object' || Array.isArray(params)) throw new Error('Invalid fact');
@@ -51,6 +52,20 @@ function readMemoryNodes(vault) {
   return nodes;
 }
 
+// Establish durable directory entries before the kernel's first transaction.
+// SSSS flushes its files and their immediate directories; it may create those
+// directories without flushing their parents. This prepares only fixed storage
+// containers. All canonical document/event bytes still belong to the kernel.
+function prepareFactStorage(vault) {
+  for (const dir of [vault, path.join(vault, 'facts'), path.join(vault, '.events'), path.join(vault, VFS_INTENT_DIR)]) {
+    fs.mkdirSync(dir, { recursive: true });
+    for (const target of [dir, path.dirname(dir)]) {
+      const fd = fs.openSync(target, fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW);
+      try { fs.fsyncSync(fd); } finally { fs.closeSync(fd); }
+    }
+  }
+}
+
 /** Fixed create-only SSSS transaction. Run only in the trusted host broker. */
 export async function commitConfinedFact(brain, params, caller = 'local-operator') {
   validateConfinedFact(params);
@@ -73,6 +88,7 @@ export async function commitConfinedFact(brain, params, caller = 'local-operator
     authentication: { provider: 'total-recall-confined-memory', assurance: 'verified' } };
   const result = { category: 'fact', path: `memory-vault/${relative}`, slug, committed: false, indexed: false };
   try {
+    prepareFactStorage(vault);
     result.committed = 'unknown';
     const written = await processOperationAsync({ type: 'operation', idempotency_key: crypto.randomUUID(),
       path: relative, workspace_id: 'confined-memory', content: matter.stringify(params.content, data),

@@ -70,6 +70,18 @@ describe('fixed host durability broker', () => {
     expect(fs.readdirSync(path.join(brain, 'memory-vault/facts'))).toHaveLength(1);
   });
 
+  it('retains the durable commit when the actual projection worker times out', async () => {
+    run.mockImplementation(options => executeInvokeChild({ ...options,
+      ...(options.entry.endsWith('invoke-write-child.mjs') ? { timeoutMs: 1 } : {}),
+      signal: controller.signal, limits: INVOKE_LIMITS }));
+    await expect(brokerConfinedFact({ content: 'commit survives projection timeout' }, context)).rejects.toMatchObject({
+      code: 'timeout', result: { committed: true, indexed: false },
+    });
+    expect(run).toHaveBeenCalledTimes(2);
+    expect(fs.readdirSync(path.join(brain, 'memory-vault/facts'))).toHaveLength(1);
+    expect(fs.existsSync(path.join(brain, 'memory-derived/local-search.json'))).toBe(false);
+  });
+
   it('retains the real commit when authority ends between stages and never starts indexing', async () => {
     run.mockImplementationOnce(async options => { const response = await executeInvokeChild(options); key.revoked = true; return response; });
     await expect(brokerConfinedFact({ content: 'revoked after commit' }, context)).rejects.toMatchObject({ result: { committed: true, indexed: false } });
