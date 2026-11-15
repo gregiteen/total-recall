@@ -409,11 +409,8 @@ try {
   app.use(restRouter);
   logger.info('server', 'REST API mounted (/api/*, /v1/models, /.well-known/total-recall.json)');
 
-  const { collabRouter } = await import('./routes/collab.mjs');
-  app.use(collabRouter);
-  logger.info('server', 'Collaboration API routes mounted (/api/collab/*)');
 } catch (err) {
-  logger.error('server', `REST API or Collab routes failed to load: ${err.message}`);
+  logger.error('server', `REST API routes failed to load: ${err.message}`);
 }
 
 // ─── API Routes (/v1/chat/completions) ──────────────────────────────────────────
@@ -441,6 +438,9 @@ try {
 }
 
 
+
+// API misses must not become a successful dashboard HTML response.
+app.use('/api', (_req, res) => res.status(404).json({ error: 'API route unavailable' }));
 
 // ─── Static Frontend (SPA catch-all) ────────────────────────────────────────────
 
@@ -853,22 +853,10 @@ if (bindResolution.usedLoopbackFallback) {
   logger.warn('server', 'No configured or mesh IP found. Binding to loopback only.');
 }
 
-import { WebSocketServer } from 'ws';
-const collabWss = new WebSocketServer({ noServer: true });
-
+import { createPluginUpgradeHandler } from '../core/plugin-runtime.mjs';
+const pluginUpgradeHandler = createPluginUpgradeHandler();
 function setupUpgradeHandler(srv) {
-  srv.on('upgrade', async (request, socket, head) => {
-    const url = new URL(request.url, `http://${request.headers.host || 'localhost'}`);
-    if (url.pathname === '/collab-ws') {
-      try {
-        const { handleCollabUpgrade } = await import('./routes/collab.mjs');
-        handleCollabUpgrade(request, socket, head, collabWss);
-      } catch (err) {
-        socket.write('HTTP/1.1 500 Internal Server Error\r\n\r\n');
-        socket.destroy();
-      }
-    }
-  });
+  srv.on('upgrade', pluginUpgradeHandler);
 }
 
 const server = app.listen(PORT, HOST, () => {

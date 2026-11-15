@@ -281,6 +281,17 @@ export function validatePluginManifest(manifest) {
         if (!/^[a-z][a-z0-9-]*$/.test(name) || !isSafeRelativePath(file)) errors.push(`Invalid runtime module ${name}`);
       }
       if (runtime.routers !== undefined && (!Array.isArray(runtime.routers) || runtime.routers.some(file => !isSafeRelativePath(file)))) errors.push('runtime.routers must contain safe relative paths');
+      if (runtime.upgrades !== undefined) {
+        if (!Array.isArray(runtime.upgrades)) errors.push('runtime.upgrades must be an array');
+        else {
+          const paths = new Set();
+          for (const entry of runtime.upgrades) {
+            if (!entry || typeof entry.path !== 'string' || !/^\/(?:[A-Za-z0-9_/-]*)$/.test(entry.path) || paths.has(entry.path)) errors.push('runtime.upgrades requires unique absolute URL paths');
+            if (!entry || typeof entry.module !== 'string' || !Object.hasOwn(runtime.modules || {}, entry.module)) errors.push('runtime.upgrades names undeclared module');
+            paths.add(entry?.path);
+          }
+        }
+      }
       // Daemon services name declared runtime modules; the daemon starts each one.
       if (runtime.daemon !== undefined) {
         if (!Array.isArray(runtime.daemon)) errors.push('runtime.daemon must be an array of runtime module names');

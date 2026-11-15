@@ -83,6 +83,39 @@ export async function loadPluginRouters() {
   return routers;
 }
 
+/** Dispatch only manifest-declared upgrade paths on the existing HTTP server.
+ * Resolve current installation/activation for every handshake; never guess an
+ * owner or filesystem path. Unknown paths and ambiguous ownership fail closed.
+ */
+export function createPluginUpgradeHandler({ projectRoot = process.cwd(), discover = discoverPlugins, activation = pluginActivation, load = loadPluginModule } = {}) {
+  const deny = (socket, status) => socket.end(`HTTP/1.1 ${status}\r\nConnection: close\r\n\r\n`);
+  return async (request, socket, head) => {
+    socket.on('error', () => {});
+    try {
+      const pathname = new URL(request.url, 'http://localhost').pathname;
+      const owners = discover(projectRoot).filter(plugin => plugin.valid).flatMap(plugin =>
+        (plugin.manifest.runtime?.upgrades || []).filter(entry => entry.path === pathname).map(entry => ({ plugin, entry })),
+      );
+      if (!owners.length) return deny(socket, '404 Not Found');
+      if (owners.length !== 1) return deny(socket, '503 Service Unavailable');
+      const { plugin, entry } = owners[0];
+      const isActive = () => {
+        const current = discover(projectRoot).find(item => item.id === plugin.id && item.valid && item.dir === plugin.dir);
+        return !!current && activation(current, { projectRoot }).enabled &&
+          current.manifest.runtime?.upgrades?.some(item => item.path === pathname && item.module === entry.module);
+      };
+      if (!isActive()) return deny(socket, '503 Service Unavailable');
+      const module = await load(plugin.id, entry.module, { projectRoot, activeRequired: true });
+      if (!isActive()) return deny(socket, '503 Service Unavailable');
+      if (typeof module.handleUpgrade !== 'function') throw new Error('Upgrade module must export handleUpgrade()');
+      await module.handleUpgrade(request, socket, head, { isActive });
+    } catch (error) {
+      logger.warn('plugin-runtime', 'Plugin upgrade unavailable');
+      if (!socket.destroyed) deny(socket, '503 Service Unavailable');
+    }
+  };
+}
+
 export function unavailablePluginOperation(id, operation) {
   return () => { throw new Error(`Install plugin ${id} to use ${operation}`); };
 }

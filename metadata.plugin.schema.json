@@ -800,6 +800,19 @@
           "items": {
             "type": "string"
           }
+        },
+        "upgrades": {
+          "type": "array",
+          "description": "WebSocket paths dispatched on the existing HTTP server to a declared module's handleUpgrade export.",
+          "items": {
+            "type": "object",
+            "required": ["path", "module"],
+            "properties": {
+              "path": { "type": "string", "pattern": "^/[A-Za-z0-9_/-]*$" },
+              "module": { "type": "string" }
+            },
+            "additionalProperties": false
+          }
         }
       },
       "additionalProperties": false
