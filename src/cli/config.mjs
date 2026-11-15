@@ -3,6 +3,24 @@ import path from 'node:path';
 import yaml from 'yaml';
 import { resolveBrainDir, parseLayerFlag } from './agent-dir.mjs';
 import { writeFileSecure } from '../core/secure-file.mjs';
+import { readRegisteredProjects } from '../core/brain-registry.mjs';
+
+function workspaceProjectRoot(brain) {
+  const canonical = value => fs.existsSync(value) ? fs.realpathSync(value) : path.resolve(value);
+  const globalBrain = resolveBrainDir('global');
+  if (canonical(brain) === canonical(globalBrain)) return null;
+  const matches = readRegisteredProjects(globalBrain).filter(row => typeof row.brainDir === 'string' && canonical(row.brainDir) === canonical(brain));
+  if (matches.length > 1) throw new Error('The selected brain has ambiguous project registrations.');
+  if (matches.length) {
+    if (typeof matches[0].path !== 'string' || !path.isAbsolute(matches[0].path)) throw new Error('Invalid selected brain project path.');
+    return canonical(matches[0].path);
+  }
+  // Unregistered standard project brains still own their local activation
+  // policy. A standalone explicit brain uses the shared policy, never cwd's.
+  const agent = path.resolve(brain, '../..');
+  return path.basename(brain) === 'total-recall' && path.basename(path.dirname(brain)) === 'skills' &&
+    ['.agent', '.agents'].includes(path.basename(agent)) ? path.dirname(agent) : null;
+}
 
 function readWorkspaceFile(filename, limit) {
   const fd = fs.openSync(filename, fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW | fs.constants.O_NONBLOCK);
@@ -244,7 +262,7 @@ export default async function configCommand(args) {
     const file = options['--file'], remove = options['--remove'];
     if (!plugin || options['--history'] || options['--restore'] || (file && remove) || (!file && !remove && options['--version'])) throw new Error('Invalid design options. See config --help.');
     const brain = layer === 'auto' && process.env.TR_BRAIN ? path.resolve(process.env.TR_BRAIN) : resolveBrainDir(layer);
-    const projectRoot = layer === 'global' ? null : process.cwd();
+    const projectRoot = workspaceProjectRoot(brain);
     const result = file || remove
       ? await writePluginDesignChoice(brain, plugin, remove ? null : readWorkspaceFile(file, MAX_USER_DESIGN_BYTES), workspaceVersion(options), projectRoot)
       : readPluginDesignChoice(brain, plugin, projectRoot);

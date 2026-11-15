@@ -39,7 +39,9 @@ beforeEach(() => {
   fs.writeFileSync(path.join(global, 'config/project-registry.json'), JSON.stringify([{ path: projectRoot, brainDir, project_id, name: 'Design test' }]));
   const plugin = path.join(globalPluginsDir(), 'design-test');
   fs.mkdirSync(plugin, { recursive: true });
-  fs.writeFileSync(path.join(plugin, 'plugin.json'), JSON.stringify({ id: 'design-test', name: 'Design test', description: 'Owner design', version: '1.0.0' }));
+  fs.writeFileSync(path.join(plugin, 'plugin.json'), JSON.stringify({ id: 'design-test', name: 'Design test', description: 'Owner design', version: '1.0.0',
+    ui: { home: 'home', design_tokens: 'DESIGN.md', elements: [{ id: 'home', kind: 'panel', tag: 'design-test-home', module: 'home.js' }] } }));
+  fs.writeFileSync(path.join(plugin, 'home.js'), 'export {};\n');
   fs.writeFileSync(path.join(plugin, 'DESIGN.md'), content('#123456'));
 });
 afterEach(() => { vi.unstubAllEnvs(); fs.rmSync(fixture, { recursive: true, force: true }); });

@@ -83,7 +83,7 @@ function readState(brainDir, edge) {
       if (!entry || Object.keys(entry).some(key => !['version', 'savedAt', 'config'].includes(key)) ||
           typeof entry.version !== 'string' || !VERSION.test(entry.version) || seen.has(entry.version) ||
           typeof entry.savedAt !== 'string' || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(entry.savedAt) ||
-          !Number.isFinite(Date.parse(entry.savedAt))) throw new Error();
+          !Number.isFinite(Date.parse(entry.savedAt)) || new Date(entry.savedAt).toISOString() !== entry.savedAt) throw new Error();
       seen.add(entry.version);
       return { ...entry, config: validateDrawerConfig(entry.config) };
     });

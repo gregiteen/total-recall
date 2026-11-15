@@ -105,3 +105,29 @@ it('fails closed on corrupt canonical history and strictly rejects malformed lay
     expect(() => readDrawerHistory(brain, 'right')).toThrow();
   } finally { await fs.rm(brain, { recursive: true, force: true }); }
 });
+
+it('rejects oversized, duplicate, impossible-date and unknown history fields without writing over them', async () => {
+  const brain = await fs.mkdtemp(path.join(os.tmpdir(), 'tr-drawer-history-validation-'));
+  try {
+    const store = new PluginStateStore(path.join(brain, 'config/workspace-drawer-right.json'), 'workspace-ui');
+    const entry = { version: 'a'.repeat(64), savedAt: '2026-11-15T12:00:00.000Z', config: validateDrawerConfig({}) };
+    const invalid = [
+      { schemaVersion: 2, config: {}, history: [] },
+      { schemaVersion: 1, config: {}, history: [], extra: true },
+      { schemaVersion: 1, config: {}, history: [entry, entry] },
+      { schemaVersion: 1, config: {}, history: [{ ...entry, savedAt: '2026-02-30T12:00:00.000Z' }] },
+      { schemaVersion: 1, config: {}, history: [{ ...entry, extra: true }] },
+      { schemaVersion: 1, config: {}, history: Array.from({ length: MAX_DRAWER_HISTORY + 1 }, () => entry) },
+      { schemaVersion: 1, config: {}, history: Array.from({ length: 4 }, (_, index) => ({ ...entry, version: String(index).repeat(64), config: { html: 'x'.repeat(65536) } })) },
+    ];
+    let version = null;
+    for (const value of invalid) {
+      const result = await executePluginState({ file: store.file, plugin: 'workspace-ui', action: 'write', value, expectedVersion: version });
+      version = result.version;
+      const before = await fs.readFile(store.documentPath, 'utf8');
+      expect(() => readDrawerHistory(brain, 'right')).toThrow('Invalid saved drawer history');
+      await expect(restoreDrawerConfig(brain, 'right', entry.version, version)).rejects.toThrow('Invalid saved drawer history');
+      expect(await fs.readFile(store.documentPath, 'utf8')).toBe(before);
+    }
+  } finally { await fs.rm(brain, { recursive: true, force: true }); }
+});

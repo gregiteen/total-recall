@@ -101,6 +101,14 @@
   },
   {
     "method": "GET",
+    "path": "/api/dashboard/drawers/:edge/history"
+  },
+  {
+    "method": "POST",
+    "path": "/api/dashboard/drawers/:edge/restore"
+  },
+  {
+    "method": "GET",
     "path": "/api/dashboard/instructions"
   },
   {
@@ -858,6 +866,14 @@
   {
     "method": "GET",
     "path": "/api/ui-chunks/:plugin/composition/current"
+  },
+  {
+    "method": "GET",
+    "path": "/api/ui-chunks/:plugin/design/choice"
+  },
+  {
+    "method": "PUT",
+    "path": "/api/ui-chunks/:plugin/design/choice"
   },
   {
     "method": "GET",

@@ -5,18 +5,16 @@ import {
   findWorkspaceChunks, readDrawer, readDrawerHistory, restoreDrawer, readWorkspaceChunk, saveDrawer,
   type DrawerConfig, type DrawerHistory, type DrawerRevision, type DrawerSide, type PanelRef, type PluginDesign, type WorkspaceChunk,
 } from '../../api/workspace-drawers'
-import { PluginPanel, pluginElements } from '../plugins/PluginPanel'
+import { PluginPanel } from '../plugins/PluginPanel'
 import { ScopedPluginCommands } from '../plugins/ScopedPluginCommands'
 import { DrawerMarkup } from './DrawerMarkup'
 import { usePluginDesign } from './usePluginDesign'
-
-export function drawerPanels(plugin: PluginInfo) {
-  return pluginElements(plugin).filter(item => item.kind !== 'settings')
-}
+import { drawerPanels } from './drawer-panels'
 
 export function DrawerPanel({ plugins, reference, designCss, brainId }: {
   plugins: PluginInfo[] | null; reference: PanelRef; designCss?: string; brainId?: string
 }) {
+  const liveDesign = usePluginDesign(designCss === undefined ? reference.plugin : undefined, brainId)
   if (!plugins) return <p role="status">Loading installed interfaces…</p>
   const plugin = plugins.find(plugin => plugin.id === reference.plugin)
   const panel = plugin && drawerPanels(plugin).find(item => item.id === reference.element)
@@ -27,7 +25,7 @@ export function DrawerPanel({ plugins, reference, designCss, brainId }: {
   if (plugin.activation?.enabled !== true) return <p className="drawer-note">
     {plugin.name} is off. <Link to={{ search: `?plugin=${encodeURIComponent(plugin.id)}` }}>Open plugin settings</Link>
   </p>
-  return <PluginPanel key={`${plugin.id}:${panel.id}`} plugin={plugin} elementId={panel.id} designCss={designCss} brainId={brainId} />
+  return <PluginPanel key={`${plugin.id}:${panel.id}`} plugin={plugin} elementId={panel.id} designCss={designCss ?? liveDesign?.design?.css} brainId={brainId} />
 }
 
 export function PublishedChunk({ name, side, plugins, design, designOwner, brainId }: {
@@ -173,9 +171,9 @@ function ScopedDrawerLayout({ side, view, plugins, brainId }: {
   }, [refresh, side, brainId])
   return <div className="drawer-stack">
     <div className="drawer-actions">
-      {!draft && <button type="button" className="btn btn-primary btn-sm" disabled={!revision}
+      {!draft && <button type="button" className="btn btn-primary btn-sm" disabled={!revision || busy}
         onClick={() => { setDraft(revision!.config); setError('') }}>{view === 'shortcuts' ? 'Edit shortcuts' : 'Edit drawer'}</button>}
-      {!draft && <button type="button" className="btn btn-ghost btn-sm" onClick={() => setRefresh(refresh + 1)}>Refresh</button>}
+      {!draft && <button type="button" className="btn btn-ghost btn-sm" disabled={busy} onClick={() => setRefresh(refresh + 1)}>Refresh</button>}
       {!draft && <button type="button" className="btn btn-ghost btn-sm" disabled={busy || !revision} onClick={async () => {
         setBusy(true); setError('')
         try { setHistory(await readDrawerHistory(side, undefined, brainId)); setSelected('') }

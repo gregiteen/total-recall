@@ -5,6 +5,7 @@ import path from 'node:path';
 import yaml from 'yaml';
 import configCommand from './config.mjs';
 import { globalPluginsDir } from '../core/plugin-loader.mjs';
+import { patchProjectActivationRecord } from '../core/plugin-store.mjs';
 
 describe('config CLI command', () => {
   let tmpAgentDir;
@@ -171,7 +172,9 @@ describe('config CLI command', () => {
     process.env.TR_BRAIN = path.join(tmpAgentDir, 'selected-brain');
     const owner = path.join(globalPluginsDir(), 'design-cli');
     fs.mkdirSync(owner, { recursive: true });
-    fs.writeFileSync(path.join(owner, 'plugin.json'), JSON.stringify({ id: 'design-cli', name: 'Design CLI', description: 'Owner', version: '1.0.0' }));
+    fs.writeFileSync(path.join(owner, 'plugin.json'), JSON.stringify({ id: 'design-cli', name: 'Design CLI', description: 'Owner', version: '1.0.0',
+      ui: { home: 'home', design_tokens: 'DESIGN.md', elements: [{ id: 'home', kind: 'panel', tag: 'design-cli-home', module: 'home.js' }] } }));
+    fs.writeFileSync(path.join(owner, 'home.js'), 'export {};\n');
     fs.writeFileSync(path.join(owner, 'DESIGN.md'), '# Owner\n');
     const file = path.join(tmpAgentDir, 'DESIGN.md');
     const markdown = '---\ncolors:\n  primary: "#abcdef"\n---\n<script>throw new Error("must not execute")</script>\n';
@@ -195,5 +198,22 @@ describe('config CLI command', () => {
     await expect(configCommand(['design', 'design-cli', '--file', link, '--version', removed.version])).rejects.toThrow();
     await configCommand(['design', 'design-cli']);
     expect(result()).toEqual(removed);
+  });
+
+  it('uses the selected project activation policy for DESIGN.md instead of the invoking directory', async () => {
+    vi.spyOn(console, 'log').mockImplementation(() => {});
+    const owner = path.join(globalPluginsDir(), 'design-scoped');
+    fs.mkdirSync(owner, { recursive: true });
+    fs.writeFileSync(path.join(owner, 'plugin.json'), JSON.stringify({ id: 'design-scoped', name: 'Design scoped', description: 'Selected project design', version: '1.0.0',
+      ui: { home: 'home', design_tokens: 'DESIGN.md', elements: [{ id: 'home', kind: 'panel', tag: 'design-scoped-home', module: 'home.js' }] } }));
+    fs.writeFileSync(path.join(owner, 'DESIGN.md'), '# Owner\n');
+    fs.writeFileSync(path.join(owner, 'home.js'), 'export {};\n');
+    const project = path.join(tmpAgentDir, 'other-project');
+    process.env.TR_BRAIN = path.join(project, '.agent/skills/total-recall');
+    await patchProjectActivationRecord('design-scoped', project, false);
+    await expect(configCommand(['design', 'design-scoped'])).rejects.toThrow('installed and enabled');
+    await configCommand(['design', 'design-scoped', '--global']);
+    await patchProjectActivationRecord('design-scoped', project, true);
+    await configCommand(['design', 'design-scoped']);
   });
 });

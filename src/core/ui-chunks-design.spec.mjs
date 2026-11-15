@@ -19,7 +19,9 @@ beforeEach(() => {
   for (const id of ['design-test', 'design-other']) {
     const directory = path.join(globalPluginsDir(), id);
     fs.mkdirSync(directory, { recursive: true });
-    fs.writeFileSync(path.join(directory, 'plugin.json'), JSON.stringify({ id, name: id, version: '1.0.0', description: 'Design test owner' }));
+    fs.writeFileSync(path.join(directory, 'plugin.json'), JSON.stringify({ id, name: id, version: '1.0.0', description: 'Design test owner',
+      ui: { home: 'home', design_tokens: 'DESIGN.md', elements: [{ id: 'home', kind: 'panel', tag: `${id}-home`, module: 'home.js' }] } }));
+    fs.writeFileSync(path.join(directory, 'home.js'), 'export {};\n');
     fs.writeFileSync(path.join(directory, 'DESIGN.md'), markdown('#123456'));
   }
   owner = path.join(globalPluginsDir(), 'design-test', 'DESIGN.md');
@@ -35,6 +37,7 @@ it('selects safe user Markdown per brain and plugin, retains live revisions, and
   expect(readPluginDesignChoice(brain, 'design-test', fixture)).toEqual({ markdown: null, version: null });
   const first = await choose(markdown('#abcdef'));
   const selected = read();
+  expect(fs.readFileSync(owner, 'utf8')).toBe(before);
   expect(selected.css).toContain('--color-primary:#abcdef;');
   expect(selected.css).not.toContain('script');
   expect(selected.components).toEqual(['button']);
