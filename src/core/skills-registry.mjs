@@ -13,6 +13,7 @@ import YAML from 'yaml';
 import matter from './frontmatter.mjs';
 import { ensureFullProjectBrain } from './project-brain.mjs';
 import { checkSkillLayerContract } from './skill-config.mjs';
+import { BRAIN_STATE } from './brain-state.mjs';
 
 export const REGISTRY_VERSION = 1;
 
@@ -87,34 +88,63 @@ export function saveRegistry(brainDir, registry) {
   return filePath;
 }
 
-/** Files copied as part of a skill package, in stable relative-path order. */
-export function skillPackageFiles(skillDir) {
-  if (!fs.existsSync(path.join(skillDir, 'SKILL.md'))) return [];
-  const files = [];
+/**
+ * Snapshot a skill package: every portable authored regular file, in stable
+ * relative-path order, with its bytes. Enumeration, hashing and copying all go
+ * through this one reader so they can never disagree about what the package is.
+ *
+ * Symlinks inside the tree are not package content (they are a way to point
+ * outside it) and are skipped; the walk never follows one, and each file is
+ * opened O_NOFOLLOW and re-checked against the real root. A symlinked root is
+ * readable (legacy IDE surfaces) only when `allowRootLink` is set.
+ */
+function readSkillPackage(skillDir, { allowRootLink = false, requireSkillMd = true } = {}) {
+  let stat;
+  try { stat = fs.lstatSync(skillDir); } catch { return []; }
+  if (stat.isSymbolicLink()) {
+    if (!allowRootLink) throw new Error(`Skill package root cannot be a symlink: ${skillDir}`);
+  } else if (!stat.isDirectory()) return [];
+  const root = fs.realpathSync(skillDir);
+  if (!fs.statSync(root).isDirectory()) return [];
+  const anchored = fs.existsSync(path.join(root, 'SKILL.md'));
+  if (requireSkillMd && !anchored) return [];
+  const entries = [];
   const visit = (dir, relative = '') => {
     for (const entry of fs.readdirSync(dir, { withFileTypes: true }).sort((a, b) => a.name.localeCompare(b.name))) {
-      if (skillPackageExcluded(entry.name)) continue;
       const next = relative ? `${relative}/${entry.name}` : entry.name;
-      if (entry.isDirectory()) visit(path.join(dir, entry.name), next);
-      else if (entry.isFile() || entry.isSymbolicLink()) files.push(next);
+      if (skillPackageExcludedPath(next, { anchored })) continue;
+      const abs = path.join(dir, entry.name);
+      if (entry.isDirectory()) visit(abs, next);
+      else if (entry.isFile()) {
+        if (path.relative(root, fs.realpathSync(abs)).split(path.sep).join('/') !== next) {
+          throw new Error(`Skill package file escapes its root: ${next}`);
+        }
+        const fd = fs.openSync(abs, fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW);
+        try {
+          const fileStat = fs.fstatSync(fd);
+          if (!fileStat.isFile()) throw new Error(`Skill package entry is not a regular file: ${next}`);
+          entries.push({ path: next, mode: fileStat.mode & 0o777, data: fs.readFileSync(fd) });
+        } finally {
+          fs.closeSync(fd);
+        }
+      }
     }
   };
-  visit(skillDir);
-  return files;
+  visit(root);
+  return entries;
+}
+
+/** Files copied as part of a skill package, in stable relative-path order. */
+export function skillPackageFiles(skillDir) {
+  return readSkillPackage(skillDir, { allowRootLink: true }).map((entry) => entry.path);
 }
 
 /** Hash the complete package, including nested support files. */
 export function hashSkillContent(skillDir) {
-  const files = skillPackageFiles(skillDir);
-  if (!files.length) return null;
+  const entries = readSkillPackage(skillDir, { allowRootLink: true });
+  if (!entries.length) return null;
   const hash = crypto.createHash('sha256');
-  for (const relative of files) {
-    const file = path.join(skillDir, relative);
-    hash.update(relative).update('\0');
-    if (fs.lstatSync(file).isSymbolicLink()) hash.update(fs.readlinkSync(file));
-    else hash.update(fs.readFileSync(file));
-    hash.update('\0');
-  }
+  for (const entry of entries) hash.update(entry.path).update('\0').update(entry.data).update('\0');
   return hash.digest('hex').slice(0, 16);
 }
 
@@ -173,7 +203,7 @@ export function readSkillMeta(skillDir) {
     id: String(id).replace(/[^a-zA-Z0-9._-]/g, '-').toLowerCase(),
     title: data.title || data.name || id,
     description: data.description || content.slice(0, 200).trim(),
-    version: String(data.version || data.schema_version || '0.0.0'),
+    version: String(data.metadata?.version || data.version || data.schema_version || '0.0.0'),
     tags: Array.isArray(data.tags) ? data.tags : [],
     repo_scoped: Boolean(data.repo_scoped),
     content_hash: hashSkillContent(skillDir),
@@ -282,44 +312,98 @@ const SKILL_PACKAGE_EXCLUDED_FILES = [
   /^\.DS_Store$/, /^secrets\.enc(\.|$)/, /^\.env(\.|$)/, /^id_[a-z]+$/, /\.pem$/,
 ];
 
-/** True when a directory entry is private, derived or a nested install. */
+/** True when a single directory entry name is private, derived or a nested install. */
 export function skillPackageExcluded(name) {
   return SKILL_PACKAGE_EXCLUDED_DIRS.has(name) || SKILL_PACKAGE_EXCLUDED_FILES.some((re) => re.test(name));
 }
 
 /**
- * Recursive copy of skill directory, content only.
+ * True when a path relative to the package root is private brain state. Name
+ * rules apply at every depth; the shared brain-state directories (config/,
+ * scheduler/, skills-registry/ ...) apply only at the root of a skill package,
+ * so `references/config/` documentation and `core/config.schema.json` stay,
+ * while state files and extensions (embeddings.db, *.enc, *.log) never ship.
+ */
+export function skillPackageExcludedPath(relative, { anchored = true } = {}) {
+  const parts = String(relative).split(/[\\/]+/).filter(Boolean);
+  if (parts.some(skillPackageExcluded)) return true;
+  if (anchored && BRAIN_STATE.dirs.has(parts[0])) return true;
+  const base = parts[parts.length - 1];
+  return Boolean(base) && (BRAIN_STATE.files.has(base) || BRAIN_STATE.extensions.has(path.extname(base)));
+}
+
+/** Resolve a possibly-missing path through its nearest existing ancestor. */
+function canonicalIfMissing(candidate) {
+  const absolute = path.resolve(candidate);
+  const tail = [];
+  let cursor = absolute;
+  for (;;) {
+    try {
+      return path.join(fs.realpathSync.native(cursor), ...tail);
+    } catch {
+      const parent = path.dirname(cursor);
+      if (parent === cursor) return absolute;
+      tail.unshift(path.basename(cursor));
+      cursor = parent;
+    }
+  }
+}
+
+/**
+ * Copy a skill package's portable authored files into dest, without ever
+ * following a link. The source is fully snapshotted and the destination
+ * validated before the first write, so a rejected source (symlinked root,
+ * destination aliasing the source) leaves dest untouched.
  */
 export function copySkillDir(src, dest) {
   if (!fs.existsSync(src)) throw new Error(`Source missing: ${src}`);
+  const entries = readSkillPackage(src, { requireSkillMd: false });
+  const realSrc = fs.realpathSync(src);
+  const realDest = canonicalIfMissing(dest);
+  if (realDest === realSrc || realDest.startsWith(realSrc + path.sep)) {
+    throw new Error(`Skill destination aliases its source: ${dest}`);
+  }
+  try {
+    if (fs.lstatSync(dest).isSymbolicLink()) throw new Error(`Skill destination cannot be a symlink: ${dest}`);
+  } catch (error) {
+    if (error.code !== 'ENOENT') throw error;
+  }
   fs.mkdirSync(dest, { recursive: true });
-  const entries = fs.readdirSync(src, { withFileTypes: true });
-  for (const ent of entries) {
-    if (skillPackageExcluded(ent.name)) continue;
-    const from = path.join(src, ent.name);
-    const to = path.join(dest, ent.name);
-    if (ent.isDirectory()) {
-      try {
-        const existing = fs.lstatSync(to);
-        if (!existing.isDirectory() || existing.isSymbolicLink()) {
-          fs.rmSync(to, { recursive: true, force: true });
-        }
-      } catch {}
-      copySkillDir(from, to);
-    } else if (ent.isFile()) {
-      try {
-        const existing = fs.lstatSync(to);
-        if (existing.isDirectory() || existing.isSymbolicLink()) {
-          fs.rmSync(to, { recursive: true, force: true });
-        }
-      } catch {}
-      fs.copyFileSync(from, to);
-    } else if (ent.isSymbolicLink()) {
-      try {
-        fs.rmSync(to, { recursive: true, force: true });
-      } catch {}
-      fs.symlinkSync(fs.readlinkSync(from), to);
+  const clear = (target, keepDirectory) => {
+    let existing;
+    try { existing = fs.lstatSync(target); } catch { return; }
+    if (existing.isSymbolicLink() || (keepDirectory ? !existing.isDirectory() : existing.isDirectory())) {
+      fs.rmSync(target, { recursive: true, force: true });
     }
+  };
+  for (const entry of entries) {
+    const parts = entry.path.split('/');
+    let cursor = dest;
+    for (const part of parts.slice(0, -1)) {
+      cursor = path.join(cursor, part);
+      clear(cursor, true);
+      fs.mkdirSync(cursor, { recursive: true });
+    }
+    const target = path.join(dest, ...parts);
+    clear(target, false);
+    fs.writeFileSync(target, entry.data, { mode: entry.mode });
+  }
+}
+
+/**
+ * Verbatim copy used only to carry a destination's own files into a staging
+ * directory. Unlike copySkillDir it applies no package filter: destination-only
+ * private state (a repo's config/, scheduler/) must survive a replacement, and
+ * links are recreated as links rather than followed.
+ */
+function preserveTree(from, to, fsImpl) {
+  fsImpl.mkdirSync(to, { recursive: true });
+  for (const entry of fsImpl.readdirSync(from, { withFileTypes: true })) {
+    const source = path.join(from, entry.name);
+    const target = path.join(to, entry.name);
+    if (entry.isSymbolicLink()) fsImpl.symlinkSync(fsImpl.readlinkSync(source), target);
+    else if (entry.isDirectory()) preserveTree(source, target, fsImpl);
+    else if (entry.isFile()) fsImpl.copyFileSync(source, target);
   }
 }
 
@@ -1085,17 +1169,19 @@ export function discoverAllSkills(
  */
 export function skillMtime(skillDir) {
   if (!fs.existsSync(path.join(skillDir, 'SKILL.md'))) return 0;
+  const root = fs.realpathSync(skillDir);
   let newest = 0;
-  const visit = (dir) => {
+  const visit = (dir, relative = '') => {
     newest = Math.max(newest, fs.lstatSync(dir).mtimeMs);
     for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
-      if (entry.name === '.git' || entry.name === 'node_modules' || entry.name === '.DS_Store') continue;
+      const next = relative ? `${relative}/${entry.name}` : entry.name;
+      if (skillPackageExcludedPath(next)) continue;
       const file = path.join(dir, entry.name);
-      if (entry.isDirectory()) visit(file);
-      else if (entry.isFile() || entry.isSymbolicLink()) newest = Math.max(newest, fs.lstatSync(file).mtimeMs);
+      if (entry.isDirectory()) visit(file, next);
+      else if (entry.isFile()) newest = Math.max(newest, fs.lstatSync(file).mtimeMs);
     }
   };
-  visit(skillDir);
+  visit(root);
   return newest;
 }
 
@@ -1136,7 +1222,7 @@ export function replaceSkillDir(
     // by default so sync/deploy can never erase repository-specific hooks,
     // references, evals, or scripts merely because the source is leaner.
     if (preserveExisting && fsImpl.existsSync(dest)) {
-      copyFn(dest, stage);
+      preserveTree(dest, stage, fsImpl);
     }
     // Remove only paths recorded as package-owned on the previous install.
     // Destination-only repository files have no such record and survive.

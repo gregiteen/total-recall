@@ -17,6 +17,8 @@ import {
   hashSkillContent,
   hashSkillLayer,
   skillMtime,
+  skillPackageFiles,
+  copySkillDir,
   readSkillMeta,
   syncSkillTwoWay,
   syncAllSkillsTwoWay,
@@ -871,6 +873,153 @@ describe('skills-registry', () => {
     expect(wrapper.startsWith(original.trimEnd())).toBe(true);
     expect(wrapper.match(/total-recall:managed-core-route:v1/g)).toHaveLength(1);
     expect(skillStatus(brain, 'portable').verified).toBe(true);
+  });
+
+  describe('package privacy and metadata', () => {
+    function brainShapedSkill(name) {
+      const skill = writeSkill(path.join(workspace, 'catalog'), name);
+      const put = (rel, body) => {
+        fs.mkdirSync(path.dirname(path.join(skill, rel)), { recursive: true });
+        fs.writeFileSync(path.join(skill, rel), body);
+      };
+      put('config/secrets.enc', 'ciphertext');
+      put('config/auth/session.json', '{"token":"private"}');
+      put('scheduler/jobs.json', '[]');
+      put('skills-registry/index.yaml', 'skills: {}');
+      put('memory-vault/note.md', 'private');
+      put('embeddings.db', 'db');
+      put('references/run.log', 'noise');
+      put('references/guide.md', '# Guide');
+      put('references/config/notes.md', '# Authored notes about config');
+      put('scripts/check.mjs', 'export {};');
+      put('core/config.schema.json', '{"type":"object"}');
+      put('config.json', '{"authored":true}');
+      return skill;
+    }
+
+    const AUTHORED = [
+      'config.json', 'core/config.schema.json', 'references/config/notes.md',
+      'references/guide.md', 'scripts/check.mjs', 'SKILL.md',
+    ];
+
+    it('reports metadata.version, ahead of top-level and schema versions', () => {
+      const dir = path.join(workspace, 'meta');
+      fs.mkdirSync(dir);
+      fs.writeFileSync(path.join(dir, 'SKILL.md'),
+        '---\nname: meta\ndescription: "d"\nversion: "1.0.0"\nschema_version: "9"\nmetadata:\n  version: "3.39.1"\n---\nbody\n');
+      expect(readSkillMeta(dir).version).toBe('3.39.1');
+      fs.writeFileSync(path.join(dir, 'SKILL.md'), '---\nname: meta\nversion: "1.0.0"\n---\nbody\n');
+      expect(readSkillMeta(dir).version).toBe('1.0.0');
+      fs.writeFileSync(path.join(dir, 'SKILL.md'), '---\nname: meta\nschema_version: 4\n---\nbody\n');
+      expect(readSkillMeta(dir).version).toBe('4');
+      fs.writeFileSync(path.join(dir, 'SKILL.md'), '---\nname: meta\n---\nbody\n');
+      expect(readSkillMeta(dir).version).toBe('0.0.0');
+    });
+
+    it('enumerates, hashes and copies the same authored files and no private state', () => {
+      const skill = brainShapedSkill('brainy');
+      expect(skillPackageFiles(skill)).toEqual(AUTHORED);
+      const dest = path.join(workspace, 'copy');
+      copySkillDir(skill, dest);
+      expect(skillPackageFiles(dest)).toEqual(AUTHORED);
+      expect(hashSkillContent(dest)).toBe(hashSkillContent(skill));
+      for (const hidden of ['config/secrets.enc', 'scheduler', 'skills-registry', 'memory-vault', 'embeddings.db', 'references/run.log']) {
+        expect(fs.existsSync(path.join(dest, hidden))).toBe(false);
+      }
+      expect(readSkillMeta(skill).managed_files).toEqual(AUTHORED);
+    });
+
+    it('does not let private state change the package hash or newest-copy time', () => {
+      const skill = brainShapedSkill('quiet');
+      const hash = hashSkillContent(skill);
+      const mtime = skillMtime(skill);
+      const future = new Date(Date.now() + 60_000);
+      fs.writeFileSync(path.join(skill, 'config', 'secrets.enc'), 'rotated');
+      fs.utimesSync(path.join(skill, 'config', 'secrets.enc'), future, future);
+      fs.utimesSync(path.join(skill, 'config'), future, future);
+      expect(hashSkillContent(skill)).toBe(hash);
+      expect(skillMtime(skill)).toBe(mtime);
+    });
+
+    it('deploys without private state and leaves destination-only private state in place', () => {
+      const skill = brainShapedSkill('shipper');
+      fs.rmSync(path.join(skill, 'core'), { recursive: true });
+      registerSkill(brain, skill);
+      const repo = path.join(workspace, 'target');
+      const installed = path.join(repo, '.agent', 'skills', 'shipper');
+      fs.mkdirSync(path.join(installed, 'config'), { recursive: true });
+      fs.writeFileSync(path.join(installed, 'SKILL.md'), '---\nname: shipper\n---\nlocal\n');
+      fs.writeFileSync(path.join(installed, 'config', 'own.enc'), 'repo secret');
+      deploySkill(brain, 'shipper', { repo, force: true });
+      expect(fs.readFileSync(path.join(installed, 'config', 'own.enc'), 'utf8')).toBe('repo secret');
+      expect(fs.existsSync(path.join(installed, 'config', 'secrets.enc'))).toBe(false);
+      expect(fs.existsSync(path.join(installed, 'scheduler'))).toBe(false);
+      expect(loadRegistry(brain).installs[0].managed_files).toEqual(AUTHORED.filter((file) => !file.startsWith('core/')));
+    });
+
+    it('syncs through the shared package without carrying private state to a sibling', () => {
+      const skill = brainShapedSkill('syncer');
+      fs.rmSync(path.join(skill, 'core'), { recursive: true });
+      registerSkill(brain, skill);
+      const repo = path.join(workspace, 'sibling');
+      deploySkill(brain, 'syncer', { repo });
+      fs.appendFileSync(path.join(skill, 'references', 'guide.md'), '\nnewer\n');
+      const result = syncSkillTwoWay(brain, 'syncer', { prefer: 'registry' });
+      expect(result.actions).toHaveLength(1);
+      const installed = path.join(repo, '.agent', 'skills', 'syncer');
+      expect(fs.readFileSync(path.join(installed, 'references', 'guide.md'), 'utf8')).toContain('newer');
+      expect(fs.existsSync(path.join(installed, 'config'))).toBe(false);
+      expect(skillStatus(brain, 'syncer').any_drift).toBe(false);
+    });
+
+    it('skips nested symlinks everywhere and never copies or hashes their target', () => {
+      if (process.platform === 'win32') return;
+      const skill = writeSkill(path.join(workspace, 'catalog'), 'linky');
+      const outside = path.join(workspace, 'outside.txt');
+      fs.writeFileSync(outside, 'outside');
+      fs.mkdirSync(path.join(skill, 'references'));
+      fs.symlinkSync(outside, path.join(skill, 'references', 'escape.md'));
+      fs.symlinkSync(workspace, path.join(skill, 'dir-link'));
+      expect(skillPackageFiles(skill)).toEqual(['SKILL.md']);
+      const hash = hashSkillContent(skill);
+      fs.rmSync(path.join(skill, 'dir-link'));
+      expect(hashSkillContent(skill)).toBe(hash);
+      const dest = path.join(workspace, 'linky-copy');
+      copySkillDir(skill, dest);
+      expect(fs.readdirSync(dest)).toEqual(['SKILL.md']);
+    });
+
+    it('refuses a symlinked source root or an aliasing destination before writing anything', () => {
+      if (process.platform === 'win32') return;
+      const skill = brainShapedSkill('aliased');
+      const link = path.join(workspace, 'root-link');
+      fs.symlinkSync(skill, link);
+      const dest = path.join(workspace, 'never-written');
+      expect(() => copySkillDir(link, dest)).toThrow(/symlink/);
+      expect(fs.existsSync(dest)).toBe(false);
+
+      const inside = path.join(skill, 'references', 'nested-copy');
+      expect(() => copySkillDir(skill, inside)).toThrow(/aliases its source/);
+      expect(fs.existsSync(inside)).toBe(false);
+      const aliasToSource = path.join(workspace, 'alias-dest');
+      fs.symlinkSync(path.join(skill, 'references'), aliasToSource);
+      expect(() => copySkillDir(skill, path.join(aliasToSource, 'deeper'))).toThrow(/aliases its source/);
+      expect(fs.existsSync(path.join(skill, 'references', 'deeper'))).toBe(false);
+      expect(() => copySkillDir(skill, aliasToSource)).toThrow(/aliases its source|symlink/);
+    });
+
+    it('keeps an installed skill intact when replacement is refused for an unsafe source', () => {
+      if (process.platform === 'win32') return;
+      const skill = writeSkill(path.join(workspace, 'catalog'), 'atomic');
+      const link = path.join(workspace, 'atomic-link');
+      fs.symlinkSync(skill, link);
+      const installed = writeSkill(path.join(workspace, 'target'), 'atomic');
+      fs.writeFileSync(path.join(installed, 'repo-only.md'), 'keep');
+      const before = hashSkillContent(installed);
+      expect(() => replaceSkillDir(link, installed)).toThrow(/symlink/);
+      expect(hashSkillContent(installed)).toBe(before);
+      expect(fs.readdirSync(path.dirname(installed)).filter((name) => name.startsWith('.'))).toEqual([]);
+    });
   });
 
 });
