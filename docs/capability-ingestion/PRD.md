@@ -1,3 +1,0 @@
-# Requirements
-
-Ingest all installed manifest capability definitions by default without source copying, code loading or service calls. Preserve CLI, app API, runtime routers/modules, MCP servers/tools and composed declarations with stable identity, schema, effect, metadata and provenance. Expose declaration completeness, activation and callable state separately. Use validated SSSS storage, reconcile edits/removals idempotently, fail before writes on collisions or unsafe paths, and propagate failures. Routing must expose these fields and prevent unavailable declarations from becoming actions. Verify live coverage and meaningful failure fixtures; do not claim provider readiness.

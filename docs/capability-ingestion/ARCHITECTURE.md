@@ -1,3 +1,0 @@
-# Architecture
-
-An additive catalog.capabilities projection is shared by semantic harvest and persisted as one core asset containing JSON. The asset is a declaration bundle, not a duplicate composable command primitive. Complete replacement reconciles removals. Fingerprints cover sanitized definitions and activation; owner runners retain execution authority. Only existing CLI/composed bridges can be callable; passive API/MCP/module declarations remain unsupported for direct execution. Normal compile synchronizes the validated asset before publishing derived catalog state. Unknown JSON metadata survives recursive credential redaction. No runtime source is imported or copied.
