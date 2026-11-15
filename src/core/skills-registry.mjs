@@ -98,7 +98,7 @@ export function saveRegistry(brainDir, registry) {
  * opened O_NOFOLLOW and re-checked against the real root. A symlinked root is
  * readable (legacy IDE surfaces) only when `allowRootLink` is set.
  */
-function readSkillPackage(skillDir, { allowRootLink = false, requireSkillMd = true } = {}) {
+export function readSkillPackage(skillDir, { allowRootLink = false, requireSkillMd = true, strictLinks = false } = {}) {
   let stat;
   try { stat = fs.lstatSync(skillDir); } catch { return []; }
   if (stat.isSymbolicLink()) {
@@ -113,6 +113,7 @@ function readSkillPackage(skillDir, { allowRootLink = false, requireSkillMd = tr
       const next = relative ? `${relative}/${entry.name}` : entry.name;
       if (skillPackageExcludedPath(next)) continue;
       const abs = path.join(dir, entry.name);
+      if (strictLinks && entry.isSymbolicLink()) throw new Error(`Skill package contains a symlink: ${next}`);
       if (entry.isDirectory()) visit(abs, next);
       else if (entry.isFile()) {
         if (path.relative(root, fs.realpathSync(abs)).split(path.sep).join('/') !== next) {

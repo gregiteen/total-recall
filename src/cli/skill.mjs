@@ -68,6 +68,9 @@ function printHelp() {
     register <path|name>  Add skill to global skills-registry (from path or local name)
     registry              List catalog entries in skills-registry/index.yaml
     deploy <id>           Copy skill into a repo (.agent/skills/<id>/) and record install map
+    refresh-platform <id> Plan shipped platform skill refresh (--global or --repo <existing-root>).
+                          Apply with --apply --source-hash <plan-hash>; preserves authored wrapper,
+                          records immutable core provenance, rejects drift. Default writes nothing.
     status [id]           Registry + install map + drift (omit id = summary)
     links [--repo <path>] Check skill links. --archive <relative-path> preserves a dangling entry.
                           --use-shared <name> links a portable skill and archives the prior entry.
@@ -215,6 +218,14 @@ ${docsRef}
 }
 
 export default async function skillCli(args) {
+  // This maintenance path needs explicit original scope flags and must not
+  // resolve/init a selected brain or consult a mutable registry.
+  if (args[0] === 'refresh-platform' && !args.includes('--help') && !args.includes('-h')) {
+    try {
+      const { runPlatformRefresh } = await import('./skill-platform.mjs');
+      return runPlatformRefresh(args.slice(1));
+    } catch (error) { console.error(error.message); process.exitCode = 1; return; }
+  }
   const { layer, remainingArgs } = parseLayerFlag(args);
   if (remainingArgs[0] === 'optimize') {
     const { runSkillOptimize } = await import('./skill-optimize.mjs');
