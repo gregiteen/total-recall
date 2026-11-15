@@ -1,3 +1,7 @@
+# Historical release notes
+
+Current release notes are maintained in [docs/developer/CHANGELOG.md](docs/developer/CHANGELOG.md). The entries below are preserved history.
+
 ## 3.40.7 — 2026-10-23
 
 - Keep per-brain state out of git. Twelve repositories tracked
