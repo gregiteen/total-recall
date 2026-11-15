@@ -3,6 +3,7 @@ import path from "node:path";
 import { spawnSync } from "node:child_process";
 import { validatePluginManifest, isCronExpression } from "../../core/plugin-loader.mjs";
 import { installPlugin } from "../../core/plugin-store.mjs";
+import { readPluginEntries } from "../../core/plugin-bundle.mjs";
 
 function toTitleCase(kebab) {
   return kebab
@@ -171,19 +172,28 @@ export async function createPlugin(args = []) {
   }
 
   let skillSourceDir = null;
+  let skillEntries = null;
   let skillFrontmatter = {};
   if (fromSkillPath) {
     if (!fs.existsSync(fromSkillPath)) {
       console.error(`❌ Error: --from-skill path does not exist: ${fromSkillPath}`);
       process.exit(1);
     }
-    skillSourceDir = fs.statSync(fromSkillPath).isDirectory()
+    const sourceStat = fs.lstatSync(fromSkillPath);
+    if (sourceStat.isSymbolicLink()) throw new Error('--from-skill source must not be a symlink');
+    skillSourceDir = sourceStat.isDirectory()
       ? path.resolve(fromSkillPath)
       : path.dirname(path.resolve(fromSkillPath));
+    if (fs.lstatSync(skillSourceDir).isSymbolicLink()) throw new Error('--from-skill source must not be a symlink');
 
-    const skillMdFile = path.join(skillSourceDir, "SKILL.md");
-    if (fs.existsSync(skillMdFile)) {
-      const content = fs.readFileSync(skillMdFile, "utf8");
+    // Preflight and snapshot the entire public source before creating a repo or
+    // installing/publishing it. Never reopen a source link while copying.
+    skillSourceDir = fs.realpathSync(skillSourceDir);
+    skillEntries = readPluginEntries(skillSourceDir);
+    const skillMd = skillEntries.find((entry) => entry.path === 'SKILL.md');
+    if (!skillMd) throw new Error('--from-skill requires a regular public SKILL.md');
+    {
+      const content = skillMd.data.toString('utf8');
       const match = content.match(/^---\n([\s\S]*?)\n---/);
       if (match) {
         for (const line of match[1].split("\n")) {
@@ -230,16 +240,31 @@ export async function createPlugin(args = []) {
   // Every plugin is its own repository (tr-plugin-<id>). The repo root IS the
   // plugin directory (plugin.json at the root); the project/global install is
   // a symlink to it, so edits in the repo are what runs.
-  const pluginDir = path.resolve(repoDirArg || path.join(path.dirname(process.cwd()), `tr-plugin-${id}`));
-  if (fs.existsSync(pluginDir) && fs.readdirSync(pluginDir).length > 0) {
-    console.error(`❌ Error: Plugin repository directory already exists and is not empty: ${pluginDir}`);
+  const repoDir = path.resolve(repoDirArg || path.join(path.dirname(process.cwd()), `tr-plugin-${id}`));
+  if (fs.existsSync(repoDir) && (fs.lstatSync(repoDir).isSymbolicLink() || !fs.lstatSync(repoDir).isDirectory())) {
+    throw new Error(`Plugin repository must be a directory, not a link: ${repoDir}`);
+  }
+  if (fs.existsSync(repoDir) && fs.readdirSync(repoDir).length > 0) {
+    console.error(`❌ Error: Plugin repository directory already exists and is not empty: ${repoDir}`);
     process.exit(1);
   }
 
-  fs.mkdirSync(pluginDir, { recursive: true });
+  if (skillSourceDir) {
+    // Resolve existing parent aliases too, including a not-yet-created destination.
+    let ancestor = repoDir;
+    while (!fs.existsSync(ancestor)) ancestor = path.dirname(ancestor);
+    const target = path.resolve(fs.realpathSync(ancestor), path.relative(ancestor, repoDir));
+    const rel = path.relative(skillSourceDir, target);
+    if (!rel || (!rel.startsWith(`..${path.sep}`) && rel !== '..' && !path.isAbsolute(rel))) {
+      throw new Error('Plugin repository must be outside the source skill');
+    }
+  }
 
+  fs.mkdirSync(path.dirname(repoDir), { recursive: true });
+  let pluginDir = fs.mkdtempSync(path.join(path.dirname(repoDir), `.tr-plugin-${id}-`));
   const pluginName = name || skillFrontmatter.name || toTitleCase(id);
   const pluginDesc = description || skillFrontmatter.description || `${pluginName} extension for Total Recall`;
+  try {
 
   const manifest = {
     $schema: "https://github.com/gregiteen/total-recall/blob/main/metadata.plugin.schema.json",
@@ -363,14 +388,10 @@ export default run;
   if (fromSkillPath && skillSourceDir) {
     const skillDir = path.join(pluginDir, "skills", id);
     fs.mkdirSync(skillDir, { recursive: true });
-    for (const item of fs.readdirSync(skillSourceDir, { withFileTypes: true })) {
-      const srcItem = path.join(skillSourceDir, item.name);
-      const dstItem = path.join(skillDir, item.name);
-      if (item.isDirectory()) {
-        fs.cpSync(srcItem, dstItem, { recursive: true });
-      } else {
-        fs.copyFileSync(srcItem, dstItem);
-      }
+    for (const entry of skillEntries) {
+      const dstItem = path.join(skillDir, ...entry.path.split('/'));
+      fs.mkdirSync(path.dirname(dstItem), { recursive: true });
+      fs.writeFileSync(dstItem, entry.data, { mode: entry.mode });
     }
     manifest.skills = [
       {
@@ -557,6 +578,12 @@ test('every file the manifest references exists', () => {
 
   gitOutput(['init', '-q', '-b', 'main'], pluginDir);
   gitOutput(['remote', 'add', 'origin', `https://github.com/${githubOwner() || 'OWNER'}/tr-plugin-${id}.git`], pluginDir);
+  fs.renameSync(pluginDir, repoDir);
+  } catch (err) {
+    fs.rmSync(pluginDir, { recursive: true, force: true });
+    throw err;
+  }
+  pluginDir = repoDir;
 
   // ── Install: a link to the repo, so the repo is what runs ───────────────
   let installed = false;

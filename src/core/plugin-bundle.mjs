@@ -10,6 +10,7 @@
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
+import { isBrainState } from './brain-state.mjs';
 
 export const BUNDLE_FORMAT = 'tr-plugin-bundle/1';
 export const MAX_BUNDLE_FILES = 200;
@@ -19,7 +20,7 @@ const SKIP_DIRS = new Set(['.git', 'node_modules']);
 
 /**
  * List a plugin's files in canonical order.
- * Dotfiles, `.git/`, `node_modules/` and symlinks are excluded: they are either
+ * Brain-local state, dotfiles, `.git/`, `node_modules/` and symlinks are excluded: they are either
  * local state or a way to smuggle a path outside the plugin.
  * @returns {Array<{ path: string, abs: string, size: number, mode: number }>}
  */
@@ -30,13 +31,16 @@ export function listPluginFiles(pluginDir) {
     for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
       if (entry.name.startsWith('.') || SKIP_DIRS.has(entry.name)) continue;
       const abs = path.join(dir, entry.name);
+      const rel = path.relative(root, abs).split(path.sep).join('/');
+      if (isBrainState(rel)) continue;
       if (entry.isSymbolicLink()) continue;
       if (entry.isDirectory()) {
         walk(abs);
       } else if (entry.isFile()) {
-        const stat = fs.statSync(abs);
+        const stat = fs.lstatSync(abs);
+        if (!stat.isFile()) continue;
         out.push({
-          path: path.relative(root, abs).split(path.sep).join('/'),
+          path: rel,
           abs,
           size: stat.size,
           mode: stat.mode & 0o777
@@ -115,19 +119,42 @@ function hashEntries(entries) {
   return h.digest('hex');
 }
 
+/** Snapshot public source bytes before any recipient directory is written. */
+export function readPluginEntries(pluginDir) {
+  const root = fs.realpathSync(pluginDir);
+  return readEntries(root, listPluginFiles(root));
+}
+
+function readEntries(root, files) {
+  return files.map((f) => {
+    const rel = path.relative(root, fs.realpathSync(f.abs));
+    if (rel.split(path.sep).join('/') !== f.path) {
+      throw new Error(`Plugin source changed or escapes its root: ${f.path}`);
+    }
+    const fd = fs.openSync(f.abs, fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW);
+    try {
+      if (!fs.fstatSync(fd).isFile()) throw new Error(`Plugin source is not a regular file: ${f.path}`);
+      return { path: f.path, mode: f.mode, data: fs.readFileSync(fd) };
+    } finally {
+      fs.closeSync(fd);
+    }
+  });
+}
+
 /** SHA-256 over a plugin directory's canonical file list. */
 export function hashPluginDir(pluginDir) {
-  const files = listPluginFiles(pluginDir);
+  const entries = readPluginEntries(pluginDir);
   return {
-    sha256: hashEntries(files.map((f) => ({ path: f.path, data: fs.readFileSync(f.abs) }))),
-    file_count: files.length,
-    size_bytes: files.reduce((n, f) => n + f.size, 0)
+    sha256: hashEntries(entries),
+    file_count: entries.length,
+    size_bytes: entries.reduce((n, e) => n + e.data.length, 0)
   };
 }
 
 /** Pack a plugin directory into a transferable bundle. */
 export function packPlugin(pluginDir, manifest) {
-  const files = listPluginFiles(pluginDir);
+  const root = fs.realpathSync(pluginDir);
+  const files = listPluginFiles(root);
   if (files.length > MAX_BUNDLE_FILES) {
     throw new Error(`Plugin has ${files.length} files; the limit is ${MAX_BUNDLE_FILES}`);
   }
@@ -135,7 +162,10 @@ export function packPlugin(pluginDir, manifest) {
   if (total > MAX_BUNDLE_BYTES) {
     throw new Error(`Plugin is ${total} bytes; the limit is ${MAX_BUNDLE_BYTES}`);
   }
-  const entries = files.map((f) => ({ path: f.path, mode: f.mode, data: fs.readFileSync(f.abs) }));
+  const entries = readEntries(root, files);
+  if (entries.reduce((n, e) => n + e.data.length, 0) > MAX_BUNDLE_BYTES) {
+    throw new Error('Plugin exceeds the size limit');
+  }
   return {
     format: BUNDLE_FORMAT,
     id: manifest.id,
@@ -196,6 +226,12 @@ export function decodeBundle(bundle, { expectedSha256 } = {}) {
  * dot-prefixed staging dir (invisible to discovery) that is renamed into place.
  */
 export function writeEntriesAtomic(pluginsDir, id, entries) {
+  // This helper is also called directly for local copies, without decodeBundle.
+  if (typeof id !== 'string' || !/^[a-z][a-z0-9-]{1,63}$/.test(id)) throw new Error('Invalid plugin id');
+  for (const e of entries) {
+    assertSafeRelativePath(e.path);
+    if (isBrainState(e.path)) throw new Error(`Bundle contains brain-local state: ${e.path}`);
+  }
   fs.mkdirSync(pluginsDir, { recursive: true });
   const dest = path.join(pluginsDir, id);
   if (fs.existsSync(dest)) throw new Error(`Plugin '${id}' is already installed at ${dest}`);
@@ -216,6 +252,6 @@ export function writeEntriesAtomic(pluginsDir, id, entries) {
 
 /** Copy a local plugin directory into `pluginsDir` atomically (same exclusions as bundles). */
 export function copyPluginAtomic(sourceDir, pluginsDir, id) {
-  const entries = listPluginFiles(sourceDir).map((f) => ({ path: f.path, mode: f.mode, data: fs.readFileSync(f.abs) }));
+  const entries = readPluginEntries(sourceDir);
   return writeEntriesAtomic(pluginsDir, id, entries);
 }

@@ -6,6 +6,7 @@ import { spawnSync } from 'node:child_process';
 import { pathToFileURL } from 'node:url';
 import { createPlugin } from './create.mjs';
 import { generateUiElements } from '../../core/app-deploy/ui-elements.mjs';
+import { packPlugin, decodeBundle, writeEntriesAtomic } from '../../core/plugin-bundle.mjs';
 
 describe('Plugin Creation CLI (cli/plugin/create.mjs)', () => {
   let tmpParent;
@@ -115,6 +116,104 @@ Instructions here.
     expect(fs.existsSync(path.join(dir, 'ui', 'home.js'))).toBe(false);
     expect(manifest.scaffold).toBe(true);
     expect(fs.readFileSync(path.join(dir, 'README.md'), 'utf8')).toContain('total-recall plugin chunks validate <file>');
+  });
+
+  it('converts only public skill bytes and preserves the original and symlink targets', async () => {
+    const privateFiles = ['config/keys.json', 'research-queue.jsonl', 'references/config/nested.json', 'references/research-queue.jsonl', 'memory-vault/note.md', 'references/session.enc', 'references/output.log', '.env'];
+    const publicFiles = ['references/guide.md', 'capability/run.mjs', 'cli/command.mjs', 'unknown/payload.dat'];
+    const original = new Map();
+    for (const rel of [...privateFiles, ...publicFiles, 'SKILL.md', 'helper.sh']) {
+      const abs = path.join(tmpSkillDir, rel);
+      fs.mkdirSync(path.dirname(abs), { recursive: true });
+      if (!fs.existsSync(abs)) fs.writeFileSync(abs, `${rel}: original fixture bytes`);
+      original.set(rel, fs.readFileSync(abs));
+    }
+    fs.chmodSync(path.join(tmpSkillDir, 'helper.sh'), 0o755);
+    const outside = path.join(tmpParent, 'outside');
+    fs.mkdirSync(outside);
+    fs.writeFileSync(path.join(outside, 'private.md'), 'outside-private-canary');
+    fs.symlinkSync(outside, path.join(tmpSkillDir, 'references', 'escape'));
+    fs.symlinkSync(path.join(outside, 'private.md'), path.join(tmpSkillDir, 'leak.md'));
+    fs.symlinkSync(path.join(tmpSkillDir, 'helper.sh'), path.join(tmpSkillDir, 'alias.sh'));
+    const beforePaths = fs.readdirSync(tmpSkillDir, { recursive: true }).sort();
+    const repo = path.join(tmpParent, 'converted');
+    await createPlugin(['private-safe', '--from-skill', tmpSkillDir, '--repo-dir', repo, '--no-install']);
+    const manifest = JSON.parse(fs.readFileSync(path.join(repo, 'plugin.json'), 'utf8'));
+    const bundle = packPlugin(repo, manifest);
+    const decoded = decodeBundle(JSON.parse(JSON.stringify(bundle)));
+    const recipient = writeEntriesAtomic(path.join(tmpParent, 'received'), manifest.id, decoded.entries);
+    const prefix = 'skills/private-safe/';
+    const expected = ['SKILL.md', 'helper.sh', ...publicFiles].sort();
+    expect(bundle.files.filter((f) => f.path.startsWith(prefix)).map((f) => f.path.slice(prefix.length))).toEqual(expected);
+    for (const dest of [repo, recipient]) {
+      const skill = path.join(dest, 'skills', 'private-safe');
+      for (const rel of expected) expect(fs.readFileSync(path.join(skill, rel))).toEqual(original.get(rel));
+      for (const rel of [...privateFiles, 'references/escape', 'leak.md', 'alias.sh']) {
+        expect(fs.existsSync(path.join(skill, rel))).toBe(false);
+      }
+      expect(fs.statSync(path.join(skill, 'helper.sh')).mode & 0o777).toBe(0o755);
+      expect(fs.existsSync(path.join(dest, 'cli.mjs'))).toBe(true);
+    }
+    expect(fs.readdirSync(tmpSkillDir, { recursive: true }).sort()).toEqual(beforePaths);
+    for (const [rel, bytes] of original) expect(fs.readFileSync(path.join(tmpSkillDir, rel))).toEqual(bytes);
+    expect(fs.readlinkSync(path.join(tmpSkillDir, 'leak.md'))).toBe(path.join(outside, 'private.md'));
+    expect(fs.readFileSync(path.join(outside, 'private.md'), 'utf8')).toBe('outside-private-canary');
+  });
+
+  it.each(['root', 'root/SKILL.md', 'SKILL.md'])('rejects a linked %s before creating a repository', async (kind) => {
+    const repo = path.join(tmpParent, 'converted');
+    let source = tmpSkillDir;
+    if (kind.startsWith('root')) {
+      source = path.join(tmpParent, 'source-link');
+      fs.symlinkSync(tmpSkillDir, source);
+      if (kind === 'root/SKILL.md') source = path.join(source, 'SKILL.md');
+    } else {
+      const target = path.join(tmpParent, 'private.md');
+      fs.renameSync(path.join(tmpSkillDir, 'SKILL.md'), target);
+      fs.symlinkSync(target, path.join(tmpSkillDir, 'SKILL.md'));
+    }
+    await expect(createPlugin(['linked-skill', '--from-skill', source, '--repo-dir', repo, '--no-install'])).rejects.toThrow(/symlink|regular public SKILL/);
+    expect(fs.existsSync(repo)).toBe(false);
+    expect(fs.readdirSync(tmpParent).some((p) => p.startsWith('.tr-plugin-'))).toBe(false);
+  });
+
+  it('rejects a destination inside the source even through a parent alias', async () => {
+    const alias = path.join(tmpParent, 'alias');
+    fs.symlinkSync(tmpSkillDir, alias);
+    await expect(createPlugin(['overlap', '--from-skill', tmpSkillDir, '--repo-dir', path.join(alias, 'new', 'repo'), '--no-install'])).rejects.toThrow(/outside the source/);
+    expect(fs.existsSync(path.join(tmpSkillDir, 'new'))).toBe(false);
+  });
+
+  it('preflights all source reads before creating a repository', async () => {
+    const repo = path.join(tmpParent, 'converted');
+    const blockedFile = fs.realpathSync(path.join(tmpSkillDir, 'helper.sh'));
+    const open = fs.openSync;
+    const spy = vi.spyOn(fs, 'openSync').mockImplementation((file, ...args) => {
+      if (file === blockedFile) throw new Error('source-read-failure');
+      return open(file, ...args);
+    });
+    try {
+      await expect(createPlugin(['read-failure', '--from-skill', tmpSkillDir, '--repo-dir', repo, '--no-install'])).rejects.toThrow('source-read-failure');
+      expect(fs.existsSync(repo)).toBe(false);
+      expect(fs.readdirSync(tmpParent).some((p) => p.startsWith('.tr-plugin-'))).toBe(false);
+    } finally { spy.mockRestore(); }
+  });
+
+  it('removes an incomplete conversion without publishing or changing the source', async () => {
+    const repo = path.join(tmpParent, 'converted');
+    const before = fs.readFileSync(path.join(tmpSkillDir, 'helper.sh'));
+    const write = fs.writeFileSync;
+    const spy = vi.spyOn(fs, 'writeFileSync').mockImplementation((file, ...args) => {
+      if (String(file).endsWith('/skills/write-failure/helper.sh')) throw new Error('recipient-write-failure');
+      return write(file, ...args);
+    });
+    try {
+      await expect(createPlugin(['write-failure', '--from-skill', tmpSkillDir, '--repo-dir', repo, '--no-install'])).rejects.toThrow('recipient-write-failure');
+      expect(fs.existsSync(repo)).toBe(false);
+      expect(fs.existsSync(sharedPlugin('write-failure'))).toBe(false);
+      expect(fs.readdirSync(tmpParent).some((p) => p.startsWith('.tr-plugin-'))).toBe(false);
+      expect(fs.readFileSync(path.join(tmpSkillDir, 'helper.sh'))).toEqual(before);
+    } finally { spy.mockRestore(); }
   });
 
   it('--api-key scaffolds a token CLI and a declared secret, but no generated face', async () => {

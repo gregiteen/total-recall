@@ -14,6 +14,22 @@ import {
 
 const manifest = { id: 'demo', name: 'Demo', version: '1.0.0', description: 'Demo plugin' };
 
+function snapshot(dir) {
+  const files = {};
+  const walk = (at, prefix = '') => {
+    for (const name of fs.readdirSync(at).sort()) {
+      const abs = path.join(at, name);
+      const rel = prefix + name;
+      const stat = fs.lstatSync(abs);
+      if (stat.isSymbolicLink()) files[rel] = { link: fs.readlinkSync(abs) };
+      else if (stat.isDirectory()) walk(abs, rel + '/');
+      else files[rel] = { data: fs.readFileSync(abs).toString('base64'), mode: stat.mode & 0o777 };
+    }
+  };
+  walk(dir);
+  return files;
+}
+
 describe('plugin-bundle', () => {
   let root;
   let src;
@@ -43,6 +59,39 @@ describe('plugin-bundle', () => {
     expect(hashPluginDir(src).sha256).toBe(h1);
     fs.writeFileSync(path.join(src, 'lib', 'a.mjs'), 'export const a = 2;\n');
     expect(hashPluginDir(src).sha256).not.toBe(h1);
+  });
+
+  it('ships only public bytes to bundle and copy recipients without changing the source', () => {
+    const publicFiles = ['skills/demo/SKILL.md', 'skills/demo/references/guide.md', 'capability/run.mjs', 'cli.mjs', 'unknown/assets/data.bin'];
+    const privateFiles = ['config/settings.json', 'research-queue.jsonl', 'nested/config/credentials.json', 'nested/research-queue.jsonl', 'nested/memory-vault/note.md', 'nested/session.enc', 'nested/trace.log', 'nested/data.backup'];
+    for (const rel of [...publicFiles, ...privateFiles]) {
+      fs.mkdirSync(path.dirname(path.join(src, rel)), { recursive: true });
+      fs.writeFileSync(path.join(src, rel), `${rel}: fixture bytes`);
+    }
+    const outside = path.join(root, 'outside');
+    fs.mkdirSync(outside);
+    fs.writeFileSync(path.join(outside, 'secret.md'), 'outside-private-canary');
+    fs.symlinkSync(outside, path.join(src, 'nested', 'escape'));
+    fs.symlinkSync(path.join(outside, 'secret.md'), path.join(src, 'nested', 'escape.md'));
+    const before = snapshot(src);
+    const expected = Object.fromEntries(['lib/a.mjs', 'plugin.json', ...publicFiles].map((p) => [p, before[p]]));
+
+    const bundle = packPlugin(src, manifest);
+    expect(bundle.format).toBe('tr-plugin-bundle/1');
+    expect(Object.keys(bundle).sort()).toEqual(['files', 'format', 'id', 'sha256', 'version']);
+    expect(bundle.files.map((f) => f.path)).toEqual(Object.keys(expected).sort());
+    const decoded = decodeBundle(JSON.parse(JSON.stringify(bundle)));
+    const recipient = writeEntriesAtomic(path.join(root, 'received'), 'demo', decoded.entries);
+    const copied = copyPluginAtomic(src, path.join(root, 'copied'), 'demo');
+    expect(snapshot(recipient)).toEqual(expected);
+    expect(snapshot(copied)).toEqual(expected);
+    expect(hashPluginDir(recipient)).toEqual(hashPluginDir(src));
+    expect(snapshot(src)).toEqual(before);
+    expect(fs.readFileSync(path.join(outside, 'secret.md'), 'utf8')).toBe('outside-private-canary');
+
+    const originalHash = hashPluginDir(src);
+    fs.writeFileSync(path.join(src, 'config/settings.json'), 'changed-private-state');
+    expect(hashPluginDir(src)).toEqual(originalHash);
   });
 
   it('round-trips pack → decode → write with an identical hash', () => {
@@ -82,5 +131,26 @@ describe('plugin-bundle', () => {
     copyPluginAtomic(src, plugins, 'demo');
     expect(() => copyPluginAtomic(src, plugins, 'demo')).toThrow(/already installed/);
     expect(fs.readdirSync(plugins)).toEqual(['demo']);
+  });
+
+  it.each([
+    ['../escape', 'public.txt'],
+    ['demo', '../escape'],
+    ['demo', 'nested/config/private.json'],
+    ['demo', 'research-queue.jsonl']
+  ])('preflights unsafe id/path %s %s before writing a recipient', (id, file) => {
+    const plugins = path.join(root, 'received');
+    expect(() => writeEntriesAtomic(plugins, id, [{ path: file, data: Buffer.from('private'), mode: 0o644 }])).toThrow();
+    expect(fs.existsSync(plugins)).toBe(false);
+    expect(fs.existsSync(path.join(root, 'escape'))).toBe(false);
+  });
+
+  it('removes staging after a mid-write failure and publishes no partial copy', () => {
+    const plugins = path.join(root, 'received');
+    expect(() => writeEntriesAtomic(plugins, 'demo', [
+      { path: 'file', data: Buffer.from('first'), mode: 0o644 },
+      { path: 'file/child', data: Buffer.from('second'), mode: 0o644 }
+    ])).toThrow();
+    expect(fs.readdirSync(plugins)).toEqual([]);
   });
 });
