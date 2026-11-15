@@ -94,6 +94,20 @@ function logOk(msg)        { console.error(`  ✅ ${msg}`); _uiEmit?.('ok', msg)
 function logSkip(msg)      { console.error(`  ⏭  ${msg}`); _uiEmit?.('info', msg); }
 function logWarn(msg)      { console.error(`  ⚠️  ${msg}`); _uiEmit?.('warn', msg); }
 
+const REMOTE_PACKAGE = 'total-recall-brain';
+
+/** The version of this installed package; the remote deploy runs the same one. */
+export function localPackageVersion() {
+  const { version } = JSON.parse(fs.readFileSync(path.join(__dirname, '..', '..', 'package.json'), 'utf8'));
+  return version;
+}
+
+/** `npm exec` with the explicit package pinned (the `total-recall` bin lives in total-recall-brain, not the npm package of that name). */
+export function remoteExecPrefix(version) {
+  if (!/^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/.test(String(version))) throw new Error('Cannot pin the remote package: invalid local version.');
+  return `npm exec --yes --package=${REMOTE_PACKAGE}@${version} -- total-recall`;
+}
+
 // ─── Remote credential custody (Auth-owned) ───────────────────────────────────
 // Core never opens, copies or writes a secrets store. The Auth owner projects
 // only explicitly named keys, over SSH stdin; a missing prerequisite or failed
@@ -108,7 +122,10 @@ export function wizardSecretKeys(wizardOpts = {}) {
 export async function provisionRemoteCustody({ target, wizardOpts = {}, load = __loadOwnedPlugin, brainDir, log: say = log, warn = logWarn }) {
   const { provisionDeployTarget } = await load('auth', 'secrets-deploy-custody');
   const { defaultBrainDir } = await load('auth', 'secrets-store');
-  const outcome = await provisionDeployTarget(brainDir || process.env.TR_BRAIN || defaultBrainDir(), target, { keys: wizardSecretKeys(wizardOpts) });
+  // The project path is explicit; the process cwd never decides which repository's keys are eligible.
+  const projectPath = [wizardOpts.projectPath, ...(Array.isArray(wizardOpts.projectPaths) ? wizardOpts.projectPaths : [])]
+    .find((v) => typeof v === 'string' && path.isAbsolute(v));
+  const outcome = await provisionDeployTarget(brainDir || process.env.TR_BRAIN || defaultBrainDir(), target, { keys: wizardSecretKeys(wizardOpts), projectPath });
   if (!outcome.ok) throw new Error(`Credential provisioning stopped (${outcome.code}): ${outcome.message} ${outcome.action}`);
   if (!outcome.provisioned) warn(`${outcome.message} ${outcome.action}`);
   else say(`Provisioned ${outcome.count} credential key(s) to the remote .env: ${outcome.keys.join(', ')}`);
@@ -116,16 +133,17 @@ export async function provisionRemoteCustody({ target, wizardOpts = {}, load = _
 }
 
 /** Run the remote deploy; the dashboard password travels on stdin, never in argv. */
-export async function runRemoteTotalRecallDeploy({ target, prefix, wizardOpts = {}, extraArgs = [], load = __loadOwnedPlugin }) {
+export async function runRemoteTotalRecallDeploy({ target, prefix, wizardOpts = {}, extraArgs = [], load = __loadOwnedPlugin, version = localPackageVersion() }) {
   const { runRemoteWithStdin } = await load('auth', 'secrets-deploy-custody');
   const quote = (v) => `'${String(v).replace(/'/g, `'\\''`)}'`;
-  let cmd = `npx --yes total-recall deploy --domain ${quote(wizardOpts.domain || 'localhost')}`;
+  const exec = remoteExecPrefix(version);
+  let cmd = `${exec} deploy --domain ${quote(wizardOpts.domain || 'localhost')}`;
   if (wizardOpts.dashboardPassword) cmd += ' --dashboard-password-stdin';
   for (const a of extraArgs) cmd += ` ${a}`;
   // A remote CLI too old to know the stdin flag would ignore the password. Probe its help in the same
   // session and stop before the deploy runs; the probe never reads stdin, so the deploy reads it once.
   const probe = wizardOpts.dashboardPassword
-    ? `if ! npx --yes total-recall deploy --help 2>&1 | grep -q -e '--dashboard-password-stdin'; then echo 'Remote total-recall does not support --dashboard-password-stdin; update it and rerun.' >&2; exit 97; fi && `
+    ? `if ! ${exec} deploy --help 2>&1 | grep -q -e '--dashboard-password-stdin'; then echo 'Remote total-recall does not support --dashboard-password-stdin; update it and rerun.' >&2; exit 97; fi && `
     : '';
   const result = runRemoteWithStdin(target, `${prefix} ${probe}${cmd}`, { stdin: wizardOpts.dashboardPassword ? `${wizardOpts.dashboardPassword}\n` : '' });
   if (!result.ok) {
@@ -568,7 +586,7 @@ export default async function deploy(args) {
         const pat = spawnSync('ssh', [
           '-o', 'StrictHostKeyChecking=accept-new',
           `${user}@${ip}`,
-          `${cmdPrefix} npx total-recall generate-pat --quiet`
+          `${cmdPrefix} ${remoteExecPrefix(localPackageVersion())} generate-pat --quiet`
         ], { encoding: 'utf8' }).stdout?.toString().trim();
 
         let publicUrl = `http://${ip}:3000`;
@@ -1017,7 +1035,7 @@ export default async function deploy(args) {
 
         let pat = spawnSync('ssh', [
           ...sshArgs,
-          'export NVM_DIR="$HOME/.nvm" && [ -s "$NVM_DIR/nvm.sh" ] && \\. "$NVM_DIR/nvm.sh" && npx total-recall generate-pat --quiet'
+          `export NVM_DIR="$HOME/.nvm" && [ -s "$NVM_DIR/nvm.sh" ] && \\. "$NVM_DIR/nvm.sh" && ${remoteExecPrefix(localPackageVersion())} generate-pat --quiet`
         ], { encoding: 'utf8' }).stdout?.toString().trim();
 
         let publicUrl = `http://${ip}:3000`;

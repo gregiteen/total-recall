@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import fs from 'node:fs';
 import path from 'node:path';
-import { provisionRemoteCustody, runRemoteTotalRecallDeploy, wizardSecretKeys, readDashboardPasswordStdin, _resetStdinPasswordGuard } from './deploy.mjs';
+import { provisionRemoteCustody, runRemoteTotalRecallDeploy, wizardSecretKeys, remoteExecPrefix, localPackageVersion, readDashboardPasswordStdin, _resetStdinPasswordGuard } from './deploy.mjs';
 
 const CANARY = 'CANARY-core-deploy-9d41';
 
@@ -118,5 +118,41 @@ describe('dashboard password stdin', () => {
     const src = fs.readFileSync(path.resolve(process.cwd(), 'src/cli/deploy.mjs'), 'utf8');
     expect(src).not.toMatch(/\['cfg-dashboard-password'\]\s*=/);
     expect(src).toMatch(/delete current\['cfg-dashboard-password'\]/);
+  });
+});
+
+describe('pinned remote package and explicit project path', () => {
+  const version = '9.8.7';
+  it.each(Object.entries(paths))('%s: probe and deploy use the same pinned total-recall-brain via npm exec', async (_n, p) => {
+    const { load, seen } = fakeOwner();
+    await runRemoteTotalRecallDeploy({ target: p.target, prefix: p.prefix, wizardOpts: { dashboardPassword: CANARY, domain: 'example.test' }, extraArgs: p.extra, load, version });
+    const cmd = seen.run[0].cmd;
+    const spec = 'npm exec --yes --package=total-recall-brain@9.8.7 -- total-recall';
+    expect(cmd.split(spec).length - 1).toBe(2);
+    expect(cmd).toContain(`${spec} deploy --help`);
+    expect(cmd).toContain(`${spec} deploy --domain 'example.test'`);
+    expect(cmd).not.toMatch(/\bnpx\b/);
+    expect(cmd).not.toContain(CANARY);
+  });
+
+  it('pins to this package version and rejects a malformed one', () => {
+    expect(remoteExecPrefix(localPackageVersion())).toMatch(/^npm exec --yes --package=total-recall-brain@\d+\.\d+\.\d+/);
+    expect(() => remoteExecPrefix('1.0.0; id')).toThrow(/invalid local version/);
+    expect(() => remoteExecPrefix('latest')).toThrow(/invalid local version/);
+  });
+
+  it('passes only an explicit absolute project path to the owner, never the cwd', async () => {
+    const a = fakeOwner();
+    await provisionRemoteCustody({ target: paths.vm.target, wizardOpts: { googleApiKey: 'x', projectPaths: ['relative', '/work/repo'] }, load: a.load, log() {}, warn() {} });
+    expect(a.seen.provision[0].opts.projectPath).toBe('/work/repo');
+    const b = fakeOwner();
+    await provisionRemoteCustody({ target: paths.vm.target, wizardOpts: { googleApiKey: 'x' }, load: b.load, log() {}, warn() {} });
+    expect(b.seen.provision[0].opts.projectPath).toBeUndefined();
+  });
+
+  it('keeps generate-pat off the wrong npm package', () => {
+    const src = fs.readFileSync(path.resolve(process.cwd(), 'src/cli/deploy.mjs'), 'utf8');
+    expect(src).not.toMatch(/npx total-recall generate-pat/);
+    expect((src.match(/remoteExecPrefix\(localPackageVersion\(\)\)\} generate-pat/g) || []).length).toBe(2);
   });
 });
