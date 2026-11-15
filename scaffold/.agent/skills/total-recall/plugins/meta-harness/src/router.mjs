@@ -286,7 +286,12 @@ export async function routeTask(taskDescription, options = {}) {
     ...(remote || lean.fleet ? {} : { fleet: complexity.tier === 'local' ? cachedFleet : () => ({ ok: false, error: 'Not read: this route places no local work', nodes: [] }) }),
   });
   const quotas = quotaReport.quotas;
-  const rank = ready => selectOptimalHarness(taskDescription, ready.map(h => h.id), quotas, { ...options, tierOverride: complexity.tier, empiricalScorecard: computeEmpiricalScorecard(receipts) });
+  // No ready harness means none can take the task. The ranking reads an empty list as the whole
+  // catalog, so a node whose only ready harness was walled for quota chose an OpenRouter harness
+  // outside the included policy, with no credit behind it.
+  const rank = ready => (ready.length
+    ? selectOptimalHarness(taskDescription, ready.map(h => h.id), quotas, { ...options, tierOverride: complexity.tier, empiricalScorecard: computeEmpiricalScorecard(receipts) })
+    : { selected: null, candidates: [] });
   let excluded = pool.excluded;
   let routing = rank(pool.ready);
   // Quota walls come from launches this machine saw refused. With none recorded here, a route kept
