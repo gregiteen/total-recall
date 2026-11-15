@@ -18,7 +18,8 @@ import { fileURLToPath } from 'url';
 import { buildLocalSearchIndex } from './fast-recall.mjs';
 import { selectRules, assembleContext, curatedRules } from './context-policy.mjs';
 import { discoverPlugins } from './plugin-loader.mjs';
-import { refreshPluginCatalog } from './plugin-catalog.mjs';
+import { buildPluginCatalog, refreshPluginCatalog } from './plugin-catalog.mjs';
+import { syncPluginCapabilities } from './plugin-capability-store.mjs';
 import { pluginActivation } from './plugin-state.mjs';
 import { CLI_QUICK_REFERENCE } from './cli-quick-reference.mjs';
 
@@ -775,7 +776,9 @@ export async function compileSurface({ vaultDir, skillsDir, derivedDir, instruct
   }
   const nodes = getNodes(vaultDir);
   const projectRoot = skillsDir ? path.dirname(path.dirname(skillsDir)) : path.resolve(vaultDir, '..', '..', '..', '..');
-  const catalog = refreshPluginCatalog(derivedDir, projectRoot);
+  const catalog = buildPluginCatalog(projectRoot);
+  await syncPluginCapabilities(catalog, vaultDir);
+  refreshPluginCatalog(derivedDir, projectRoot, { catalog });
   const globalVault = globalVaultFor(vaultDir);
   const ruleNodes = globalVault && fs.existsSync(globalVault)
     ? mergeGlobalRuleNodes(nodes, getNodes(globalVault))

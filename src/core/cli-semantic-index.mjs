@@ -15,12 +15,10 @@ import path from 'node:path';
 import os from 'node:os';
 import crypto from 'node:crypto';
 import { CLI_COMMANDS } from './cli-commands.mjs';
-import { discoverPlugins } from './plugin-loader.mjs';
-import { listSurfaceCommands, commandScopeDirectories } from './command-surface.mjs';
+import { buildPluginCatalog } from './plugin-catalog.mjs';
 import { getEmbedding, cosineSimilarity } from './embeddings.mjs';
 import { logger } from './logger.mjs';
 import { atomicWrite } from './vault.mjs';
-import { globalAgentDir } from './local-config.mjs';
 
 /** Usage text for declared plugin arguments: positional as <label>, flags as [--flag <label>] or [--flag]. */
 export function formatSubcommandArgs(args) {
@@ -388,7 +386,8 @@ const CORE_METADATA = {
 
 /** Compute a deterministic content hash for a harvested CLI verb. */
 export function hashVerb(verb) {
-  const payload = `${verb.id}|${verb.verb}|${verb.description || ''}|${verb.usage || ''}`;
+  const { embedding, hash, ...metadata } = verb;
+  const payload = JSON.stringify(metadata);
   return crypto.createHash('sha256').update(payload).digest('hex');
 }
 
@@ -411,6 +410,9 @@ export function harvestAllCliVerbs({ projectRoot = process.cwd(), skillsDir = nu
       name,
       verb: `total-recall ${name}`,
       category: 'core',
+      plugin: null, kind: 'core', schema: null, callable: true,
+      activation: { state: 'active', enabled: true }, declarationComplete: true,
+      provenance: { source: 'cli-commands.mjs' }, sourceIdentity: `core:${name}`,
       namespace: null,
       description: meta.description,
       usage: meta.usage,
@@ -418,77 +420,12 @@ export function harvestAllCliVerbs({ projectRoot = process.cwd(), skillsDir = nu
     });
   }
 
-  // 2. Plugin operations
-  try {
-    const plugins = discoverPlugins(projectRoot);
-    for (const plugin of plugins) {
-      const manifest = plugin.manifest || {};
-      const ns = manifest.cli?.command || manifest.id;
-      if (!ns) continue;
-
-      // Root namespace command
-      const rootId = `plugin:${manifest.id}:root`;
-      if (!seenIds.has(rootId)) {
-        seenIds.add(rootId);
-        verbs.push({
-          id: rootId,
-          name: ns,
-          verb: `total-recall ${ns}`,
-          category: 'plugin',
-          namespace: ns,
-          // The work a plugin says belongs to it is what a task description will match.
-          description: [manifest.description || `${manifest.name || ns} plugin gateway.`, ...(Array.isArray(manifest.gate?.tasks) ? manifest.gate.tasks : [])].join(' '),
-          usage: `total-recall ${ns} [command] [options]`,
-          effect: 'read'
-        });
-      }
-
-      // Subcommands
-      const subcommands = manifest.cli?.subcommands || [];
-      for (const sub of subcommands) {
-        if (!sub?.name) continue;
-        const subId = `plugin:${manifest.id}:${sub.name}`;
-        if (seenIds.has(subId)) continue;
-        seenIds.add(subId);
-
-        const argsStr = formatSubcommandArgs(sub.args);
-        verbs.push({
-          id: subId,
-          name: sub.name,
-          verb: `total-recall ${ns} ${sub.name}`,
-          category: 'plugin',
-          namespace: ns,
-          description: sub.description || `${manifest.name || ns} ${sub.name} operation.`,
-          usage: `total-recall ${ns} ${sub.name}${argsStr}`,
-          effect: sub.effect || 'read'
-        });
-      }
-    }
-  } catch (err) {
-    logger.warn('cli-index', `Error discovering plugins during harvest: ${err.message}`);
-  }
-
-  // 3. Composed commands
-  try {
-    const dirs = commandScopeDirectories(projectRoot, globalAgentDir);
-    const composed = listSurfaceCommands(dirs);
-    for (const cmd of composed) {
-      const id = `composed:${cmd.name}`;
-      if (seenIds.has(id)) continue;
-      seenIds.add(id);
-      verbs.push({
-        id,
-        name: cmd.name,
-        verb: `total-recall ${cmd.name}`,
-        category: 'composed',
-        namespace: null,
-        description: cmd.description || `Dynamic composed command ${cmd.name}.`,
-        usage: `total-recall ${cmd.name} [options]`,
-        effect: cmd.risk === 'write' ? 'write' : 'read'
-      });
-    }
-  } catch (err) {
-    logger.warn('cli-index', `Error listing composed commands during harvest: ${err.message}`);
+  // Unified passive declarations, with the same identity and host activation as the catalog.
+  for (const capability of buildPluginCatalog(projectRoot).capabilities) {
+    const category = capability.kind === 'composed' ? 'composed' : 'plugin';
+    const verb = capability.usage || capability.id;
+    const usage = verb + (capability.kind === 'cli' ? formatSubcommandArgs(capability.args) : '');
+    verbs.push({ ...capability, category, verb, usage, namespace: capability.kind === 'cli' ? verb.split(' ')[1] : null });
   }
 
   return verbs.map(v => ({
@@ -639,6 +576,7 @@ export async function queryCliSemanticIndex(query, {
   minScore = 0.2,
   category = null,
   queryEmbedding,
+  actionableOnly = false,
   embed = getEmbedding,
   harvest = harvestAllCliVerbs,
 } = {}) {
@@ -650,12 +588,16 @@ export async function queryCliSemanticIndex(query, {
     return indexed?.hash === verb.hash ? { ...verb, embedding: indexed.embedding } : verb;
   });
 
+  if (actionableOnly) verbs = verbs.filter(v => v.callable !== false);
+
   if (category) {
     verbs = verbs.filter(v => v.category === category);
   }
 
   if (!cleanQuery) {
     return verbs.slice(0, limit).map(v => ({
+      ...v,
+      embedding: undefined,
       id: v.id,
       verb: v.verb,
       name: v.name,
@@ -729,6 +671,8 @@ export async function queryCliSemanticIndex(query, {
 
     if (hybridScore >= minScore) {
       scored.push({
+        ...verb,
+        embedding: undefined,
         id: verb.id,
         verb: verb.verb,
         name: verb.name,

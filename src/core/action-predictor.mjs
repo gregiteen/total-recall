@@ -69,8 +69,9 @@ export function buildActionQuestions(candidates, { intent, allowNone = true } = 
  * Deterministic and local. The decision model never sees the full catalog.
  */
 export async function shortlistActions(intent, { derivedDir = null, projectRoot = process.cwd(), limit = DEFAULT_SHORTLIST } = {}) {
-  const hits = await queryCliSemanticIndex(intent || '', { derivedDir, projectRoot, limit, minScore: 0 });
+  const hits = await queryCliSemanticIndex(intent || '', { derivedDir, projectRoot, limit, minScore: 0, actionableOnly: true });
   return hits.map(h => ({
+    ...h,
     id: h.id,
     verb: h.verb,
     name: h.name,
