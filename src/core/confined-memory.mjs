@@ -51,8 +51,8 @@ function readMemoryNodes(vault) {
   return nodes;
 }
 
-/** Create-only SSSS fact; rebuilding the local projection never runs generators. */
-export async function createConfinedFact(brain, params, caller = 'local-operator') {
+/** Fixed create-only SSSS transaction. Run only in the trusted host broker. */
+export async function commitConfinedFact(brain, params, caller = 'local-operator') {
   validateConfinedFact(params);
   if (typeof caller !== 'string' || !caller || caller.length > 200) throw new Error('Invalid caller');
   const base = fs.realpathSync(brain);
@@ -73,20 +73,45 @@ export async function createConfinedFact(brain, params, caller = 'local-operator
     authentication: { provider: 'total-recall-confined-memory', assurance: 'verified' } };
   const result = { category: 'fact', path: `memory-vault/${relative}`, slug, committed: false, indexed: false };
   try {
+    result.committed = 'unknown';
     const written = await processOperationAsync({ type: 'operation', idempotency_key: crypto.randomUUID(),
       path: relative, workspace_id: 'confined-memory', content: matter.stringify(params.content, data),
       actor: { role: 'confined-memory' } }, vault, { agentRole: 'confined-memory', principal });
-    if (!written.success) throw new Error('Canonical write failed');
+    // Fresh random IDs cannot legitimately replay. SSSS 0.14.5 can return a
+    // replay after event fsync failure and rollback; that is not durability
+    // evidence. Fail closed until the owner fixes that failure response.
+    if (!written.success || written.replay || written.unchanged || !fs.existsSync(path.join(vault, relative))) {
+      throw new Error('Canonical durability unconfirmed');
+    }
     result.committed = true;
     result.operation_id = written.operation_id;
-    buildLocalSearchIndex(readMemoryNodes(vault), { vaultDir: vault, derivedDir: derived });
-    result.indexed = true;
     return result;
   } catch (cause) {
-    // Kernel rolls back failed canonical event commits. A later host-audit or
-    // index error may leave the fact committed; never advertise safe blind retry.
-    result.committed = fs.existsSync(path.join(vault, relative));
-    const err = new Error(result.committed ? 'Fact committed; local indexing incomplete' : 'Fact creation failed', { cause });
+    // Existence (or absence after rollback) cannot establish a durable event
+    // commit point after an I/O error. Never advertise a safe blind retry.
+    const err = new Error('Fact creation did not complete', { cause });
+    err.result = result;
+    throw err;
+  }
+}
+
+/** Disposable projection only; usable with no canonical filesystem write grant. */
+export function indexConfinedFacts(brain) {
+  const base = fs.realpathSync(brain);
+  const vault = path.join(base, 'memory-vault'), derived = path.join(base, 'memory-derived');
+  checkTree(vault); checkTree(derived);
+  buildLocalSearchIndex(readMemoryNodes(vault), { vaultDir: vault, derivedDir: derived });
+  return { indexed: true };
+}
+
+/** Local CLI parity: same fixed transaction and generator-free projection. */
+export async function createConfinedFact(brain, params, caller = 'local-operator') {
+  const result = await commitConfinedFact(brain, params, caller);
+  try {
+    indexConfinedFacts(brain);
+    return { ...result, indexed: true };
+  } catch (cause) {
+    const err = new Error('Fact committed; local indexing incomplete', { cause });
     err.result = result;
     throw err;
   }

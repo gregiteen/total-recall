@@ -15,7 +15,7 @@ import { composedCommandDirectories } from '../../core/composed-command-resoluti
 import { invokeAuthority, authorizeInvoke, operationAllowed } from '../invoke-policy.mjs';
 import { restrictedBrainTargets } from '../invoke-targets.mjs';
 import { INVOKE_LIMITS, InvokeError, executeInvokeChild, requireSuccessfulRun, invokeEnvironment, absoluteTarget } from '../invoke-execution.mjs';
-import { syncChangedFiles } from '../invoke-durability.mjs';
+import { brokerConfinedFact } from '../invoke-durability.mjs';
 import { CORE_OPERATIONS, validateCoreParams } from '../invoke-core-operations.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../..');
@@ -108,7 +108,7 @@ export function createInvokeRouter({ auth = requireAuth, store = { loadKeys, key
       };
       revalidate();
       timer = setInterval(revalidate, 250); timer.unref?.();
-      const context = { authority, target, serverBrain, registryBrain, selectedBrain, signal: controller.signal, limits, commandScopes,
+      const context = { req, store, authority, target, serverBrain, registryBrain, selectedBrain, signal: controller.signal, limits, commandScopes,
         run: options => {
           revalidate();
           return execute({ ...options, signal: controller.signal, limits });
@@ -130,7 +130,8 @@ export function createInvokeRouter({ auth = requireAuth, store = { loadKeys, key
       try { await recordAudit({ caller: authority?.id || req.auth?.id || 'unresolved', operation, target, outcome, latency_ms: Date.now() - started }); }
       catch {
         logger.error('invoke', 'Execution outcome audit unavailable', { operation, caller: authority?.id || 'unresolved' });
-        return fail(res, 503, operation, 'audit-unavailable', 'Execution audit could not be recorded.', mutationResult ? { result: mutationResult } : {});
+        return fail(res, 503, operation, 'audit-unavailable', 'Execution audit could not be recorded.',
+          err.result || mutationResult ? { result: err.result || mutationResult } : {});
       }
       return fail(res, err.status || 400, operation, outcome, err instanceof InvokeError ? err.message : 'Operation failed.',
         { scope: def.scope, latency_ms: Date.now() - started, ...(err.result || mutationResult ? { result: err.result || mutationResult } : {}) });
@@ -239,31 +240,7 @@ const HANDLERS = {
   async 'ssss.write'(params, context) {
     const { category, title, content, tags, scope, timeoutMs } = params;
     if (context.authority.mode === 'restricted') {
-      const brain = context.selectedBrain;
-      const startedAt = Date.now();
-      const run = await context.run({ entry: path.join(root, 'src/server/invoke-write-child.mjs'),
-        cwd: root, env: invokeEnvironment(false), timeoutMs, nodeArgs: ['--max-old-space-size=128', '--permission',
-          `--allow-fs-read=${path.join(root, 'src')}`, `--allow-fs-read=${path.join(root, 'node_modules')}`,
-          `--allow-fs-read=${path.join(root, 'package.json')}`, `--allow-fs-read=${brain}`,
-          `--allow-fs-write=${path.join(brain, 'memory-vault')}`,
-          `--allow-fs-write=${path.join(brain, 'memory-vault', '*')}`,
-          `--allow-fs-write=${path.join(brain, 'memory-derived')}`,
-          `--allow-fs-write=${path.join(brain, 'memory-derived', '*')}`],
-        input: JSON.stringify({ brain, params: { ...params, target: 'server' }, caller: context.authority.id }) });
-      let result;
-      try { result = JSON.parse(run.stdout); } catch { /* interruption may precede output */ }
-      if (run.exit_code !== 0 || run.termination_reason || run.truncated) {
-        throw new InvokeError(run.termination_reason === 'timeout' ? 504 : run.termination_reason === 'authority-ended' ? 403 : 422,
-          run.termination_reason || 'mutation-failed', 'Fact creation did not complete; check committed/indexed status before retry.',
-          result || { committed: 'unknown', indexed: false });
-      }
-      if (!result?.committed || !result?.indexed) throw new InvokeError(502, 'invalid-owner-output', 'Mutation returned invalid output.', { committed: 'unknown', indexed: false });
-      try {
-        syncChangedFiles([path.join(brain, 'memory-vault'), path.join(brain, 'memory-derived')], startedAt);
-      } catch {
-        throw new InvokeError(502, 'durability-unconfirmed', 'Fact was written but could not be flushed to disk; check it before retrying.', result);
-      }
-      return result;
+      return brokerConfinedFact(params, { ...context, authorityId: context.authority.id });
     }
     if (!content || typeof content !== 'string') throw new Error('ssss.write needs content.');
     // Canonical memory is written by its owning CLI, never reimplemented here.

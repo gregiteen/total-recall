@@ -15,6 +15,8 @@ const { commandScopeDirectories } = await import('../../core/command-surface.mjs
 let dir, keys, execute, audits, app, server;
 const full = ['invoke:full', '*'];
 const read = ['invoke:restricted', 'brain:server', 'ssss:read'];
+const committedFact = { committed: true, indexed: false, slug: 'fact-aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+  path: 'memory-vault/facts/fact-aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa.md', operation_id: 'fixture-operation' };
 function makeApp(scopes = full, options = {}) {
   keys = [{ id: 'test-key', scopes, issued_by: 'local-operator' }];
   const store = { loadKeys: () => keys, keyHasScope: (k, s) => !k.revoked && (!k.expires_at || Date.parse(k.expires_at) > Date.now()) &&
@@ -190,13 +192,12 @@ describe('lifecycle and real restricted read adapter', () => {
     expect((await post('ssss.write', { content: 'fact' })).body).toMatchObject({ ok: false, result: { committed: 'unknown' }, error: { code: 'timeout' } });
   });
   it('preserves commit state if authority ends or outcome audit fails after the write', async () => {
-    const result = { committed: true, indexed: true, slug: 'fixture', path: 'memory-vault/facts/fixture.md' };
     makeApp(['invoke:restricted', '*']);
-    execute.mockImplementation(async () => { keys[0].revoked = true; return { exit_code: 0, stdout: JSON.stringify(result) }; });
-    expect((await post('ssss.write', { content: 'fact' })).body).toMatchObject({ ok: false, error: { code: 'authority-ended' }, result });
+    execute.mockImplementation(async () => { keys[0].revoked = true; return { exit_code: 0, stdout: JSON.stringify(committedFact) }; });
+    expect((await post('ssss.write', { content: 'fact' })).body).toMatchObject({ ok: false, error: { code: 'authority-ended' }, result: committedFact });
     makeApp(['invoke:restricted', '*'], { audit: event => { if (event.outcome !== 'authorized') throw new Error('offline'); } });
-    execute.mockResolvedValue({ exit_code: 0, stdout: JSON.stringify(result) });
-    expect((await post('ssss.write', { content: 'fact' })).body).toMatchObject({ ok: false, error: { code: 'audit-unavailable' }, result });
+    execute.mockImplementation(async options => ({ exit_code: 0, stdout: JSON.stringify(options.entry.endsWith('invoke-durability.mjs') ? committedFact : { indexed: true }) }));
+    expect((await post('ssss.write', { content: 'fact' })).body).toMatchObject({ ok: false, error: { code: 'audit-unavailable' }, result: { ...committedFact, indexed: true } });
   });
   it('serializes confined writes across keys until the child exits and then releases the brain', async () => {
     makeApp(['invoke:restricted', '*'], { auth: (req, _res, next) => {
@@ -208,9 +209,10 @@ describe('lifecycle and real restricted read adapter', () => {
     const running = post('ssss.write', { content: 'fact' }).then(r => r);
     await vi.waitFor(() => expect(release).toBeTypeOf('function'));
     expect((await post('ssss.write', { content: 'other fact' }).set('X-Key', 'other-key')).body.error.code).toBe('brain-write-busy');
-    release({ exit_code: 0, stdout: JSON.stringify({ committed: true, indexed: true }) });
+    execute.mockResolvedValue({ exit_code: 0, stdout: JSON.stringify({ indexed: true }) });
+    release({ exit_code: 0, stdout: JSON.stringify(committedFact) });
     expect((await running).body.ok).toBe(true);
-    execute.mockResolvedValue({ exit_code: 0, stdout: JSON.stringify({ committed: true, indexed: true }) });
+    execute.mockImplementation(async options => ({ exit_code: 0, stdout: JSON.stringify(options.entry.endsWith('invoke-durability.mjs') ? committedFact : { indexed: true }) }));
     expect((await post('ssss.write', { content: 'next fact' })).body.ok).toBe(true);
   });
   it('rejects revoked, expired and absent keys', async () => {

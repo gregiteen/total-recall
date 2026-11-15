@@ -1,38 +1,99 @@
-import { describe, it, expect, afterEach, vi } from 'vitest';
+// @vitest-environment node
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { syncChangedFiles } from './invoke-durability.mjs';
+import { brokerConfinedFact } from './invoke-durability.mjs';
+import { executeInvokeChild, INVOKE_LIMITS } from './invoke-execution.mjs';
+import { getTotalRecallEngine } from '../core/ssss-kernel-bridge.mjs';
 
-const roots = [];
-afterEach(() => { vi.restoreAllMocks(); for (const dir of roots.splice(0)) fs.rmSync(dir, { recursive: true, force: true }); });
-const tree = () => {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'invoke-durability-'));
-  roots.push(dir);
-  fs.mkdirSync(path.join(dir, 'facts'));
-  return dir;
-};
+let brain, context, key, controller, run;
+beforeEach(() => {
+  brain = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'invoke-durability-')));
+  key = { id: 'durability-key', scopes: ['invoke:restricted', 'brain:server', 'ssss:write'] };
+  controller = new AbortController();
+  run = vi.fn(options => executeInvokeChild({ ...options, signal: controller.signal, limits: INVOKE_LIMITS }));
+  context = { req: { auth: { type: 'pat', id: key.id } }, authorityId: key.id,
+    store: { loadKeys: () => [key], keyHasScope: (k, s) => !k.revoked && (!s || k.scopes.includes(s)) },
+    target: 'server', selectedBrain: brain, serverBrain: brain, registryBrain: brain,
+    signal: controller.signal, limits: INVOKE_LIMITS, run };
+});
+afterEach(() => { vi.restoreAllMocks(); fs.rmSync(brain, { recursive: true, force: true }); });
 
-describe('syncChangedFiles', () => {
-  it('flushes changed files and their directories, and skips old files', () => {
-    const dir = tree();
-    const old = path.join(dir, 'facts', 'old.md');
-    fs.writeFileSync(old, 'old');
-    const past = new Date(Date.now() - 3600000);
-    fs.utimesSync(old, past, past);
-    fs.writeFileSync(path.join(dir, 'facts', 'new.md'), 'new');
-    const fsync = vi.spyOn(fs, 'fsyncSync');
-    expect(syncChangedFiles([dir], Date.now())).toBe(1);
-    // The new file, its directory and the root.
-    expect(fsync).toHaveBeenCalledTimes(3);
+describe('fixed host durability broker', () => {
+  it('commits via the actual SSSS worker then indexes with no canonical write grant', async () => {
+    const result = await brokerConfinedFact({ content: 'durable broker glacier' }, context);
+    expect(result).toMatchObject({ committed: true, indexed: true });
+    const [commit, projection] = run.mock.calls.map(([options]) => options);
+    expect(commit.entry).toBe(path.resolve('src/server/invoke-durability.mjs'));
+    expect(commit.nodeArgs).toEqual(['--max-old-space-size=128']);
+    expect(commit.env).not.toHaveProperty('HOME');
+    expect(commit.env).not.toHaveProperty('NODE_OPTIONS');
+    expect(JSON.parse(commit.input)).toMatchObject({ brain, caller: key.id, params: { target: 'server' } });
+    expect(projection.nodeArgs).toContain('--permission');
+    expect(projection.nodeArgs.filter(a => a.startsWith('--allow-fs-write='))).toEqual([
+      `--allow-fs-write=${brain}/memory-derived`, `--allow-fs-write=${brain}/memory-derived/*`,
+    ]);
+    expect(JSON.parse(projection.input)).toEqual({ brain });
+    expect(projection.timeoutMs).toBeLessThan(commit.timeoutMs);
+    expect(fs.readFileSync(path.join(brain, result.path), 'utf8')).toContain('durable broker glacier');
+    expect(fs.existsSync(path.join(brain, 'memory-derived/local-search.json'))).toBe(true);
+    const events = fs.readFileSync(path.join(brain, 'memory-vault/.events/confined-memory.jsonl'), 'utf8');
+    expect(JSON.parse(events.trim())).toMatchObject({ action: 'create', principal: { id: key.id, capabilities: ['memory:create', 'ssss:memory:create'] } });
+    // Probe the exact projection grants with real filesystem operations.
+    const probe = await executeInvokeChild({ ...projection, input: '', entry: '',
+      nodeArgs: [...projection.nodeArgs, '--input-type=module', '--eval',
+        `import fs from 'node:fs'; let denied=false; try { fs.writeFileSync(${JSON.stringify(path.join(brain, 'memory-vault/facts/escape.md'))}, 'escape'); } catch(e) { denied=e.code==='ERR_ACCESS_DENIED'; } console.log(JSON.stringify({denied}));`],
+      signal: controller.signal, limits: INVOKE_LIMITS });
+    expect(probe.exit_code).toBe(0);
+    expect(JSON.parse(probe.stdout)).toEqual({ denied: true });
+    const rejected = await executeInvokeChild({ ...projection,
+      input: JSON.stringify({ brain, params: { content: 'must not create' }, caller: key.id }), limits: INVOKE_LIMITS });
+    expect(rejected.exit_code).toBe(1);
+    expect(fs.readdirSync(path.join(brain, 'memory-vault/facts'))).toHaveLength(1);
   });
-  it('tolerates a missing root and reports nothing changed', () => {
-    expect(syncChangedFiles([path.join(os.tmpdir(), 'invoke-durability-missing')], Date.now())).toBe(0);
+
+  it.each(['revoked', 'read-only', 'full', 'foreign', 'identity', 'invalid-params'])('independently denies %s before starting a transaction', async mode => {
+    if (mode === 'revoked') key.revoked = true;
+    if (mode === 'read-only') key.scopes = ['invoke:restricted', 'brain:server'];
+    if (mode === 'full') key.scopes = ['invoke:full', 'brain:server', 'ssss:write'];
+    if (mode === 'foreign') context.selectedBrain = path.join(brain, 'foreign');
+    if (mode === 'identity') context.authorityId = 'another-key';
+    await expect(brokerConfinedFact({ content: 'denied', ...(mode === 'invalid-params' ? { path: 'escape' } : {}) }, context)).rejects.toThrow();
+    expect(run).not.toHaveBeenCalled();
+    expect(fs.existsSync(path.join(brain, 'memory-vault'))).toBe(false);
   });
-  it('surfaces a failed flush instead of reporting success', () => {
-    const dir = tree();
-    fs.writeFileSync(path.join(dir, 'facts', 'new.md'), 'new');
-    vi.spyOn(fs, 'fsyncSync').mockImplementation(() => { throw new Error('disk failed'); });
-    expect(() => syncChangedFiles([dir], Date.now())).toThrow('disk failed');
+
+  it('retains the real commit when indexing fails', async () => {
+    fs.writeFileSync(path.join(brain, 'memory-derived'), 'not a directory');
+    await expect(brokerConfinedFact({ content: 'partial durable commit' }, context)).rejects.toMatchObject({ result: { committed: true, indexed: false } });
+    expect(fs.readdirSync(path.join(brain, 'memory-vault/facts'))).toHaveLength(1);
+  });
+
+  it('retains the real commit when authority ends between stages and never starts indexing', async () => {
+    run.mockImplementationOnce(async options => { const response = await executeInvokeChild(options); key.revoked = true; return response; });
+    await expect(brokerConfinedFact({ content: 'revoked after commit' }, context)).rejects.toMatchObject({ result: { committed: true, indexed: false } });
+    expect(run).toHaveBeenCalledTimes(1);
+    expect(fs.existsSync(path.join(brain, 'memory-derived'))).toBe(false);
+  });
+
+  it.each(['timeout', 'abort'])('kills a transaction waiting on an event lock: %s; recovery rolls it back', async mode => {
+    const events = path.join(brain, 'memory-vault/.events');
+    fs.mkdirSync(events, { recursive: true });
+    const lock = path.join(events, 'confined-memory.jsonl.lock');
+    fs.writeFileSync(lock, JSON.stringify({ pid: process.pid, host: os.hostname(), acquired_at: new Date().toISOString() }));
+    const pending = brokerConfinedFact({ content: 'interrupted before event commit', timeoutMs: mode === 'timeout' ? 1800 : 10000 }, context);
+    // Attach rejection handling immediately while waiting for the real worker.
+    const observed = pending.catch(error => error);
+    await vi.waitFor(() => expect(fs.readdirSync(path.join(brain, 'memory-vault/facts'))).toHaveLength(1), { timeout: 1500 });
+    if (mode === 'abort') controller.abort();
+    const error = await observed;
+    expect(error).toMatchObject({ code: mode === 'timeout' ? 'timeout' : 'authority-ended', result: { committed: 'unknown', indexed: false } });
+    expect(run).toHaveBeenCalledTimes(1);
+    // The child has exited; no owned transaction can continue after this point.
+    fs.unlinkSync(lock);
+    const recovered = await getTotalRecallEngine({ forceNew: true }).recover(path.join(brain, 'memory-vault'));
+    expect(recovered).toContainEqual(expect.objectContaining({ outcome: 'rolled_back' }));
+    expect(fs.readdirSync(path.join(brain, 'memory-vault/facts'))).toEqual([]);
   });
 });

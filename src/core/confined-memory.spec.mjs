@@ -1,17 +1,55 @@
 // @vitest-environment node
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { createConfinedFact, validateConfinedFact } from './confined-memory.mjs';
+import { createConfinedFact, commitConfinedFact, validateConfinedFact } from './confined-memory.mjs';
 import { fastSearch } from './fast-recall.mjs';
 import matter from './frontmatter.mjs';
 
 let brain;
-beforeEach(() => { brain = fs.mkdtempSync(path.join(os.tmpdir(), 'confined-fact-')); });
-afterEach(() => { fs.rmSync(brain, { recursive: true, force: true }); });
+beforeEach(() => { brain = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'confined-fact-'))); });
+afterEach(() => { vi.restoreAllMocks(); fs.rmSync(brain, { recursive: true, force: true }); });
 
 describe('confined memory owner', () => {
+  it('uses real fsync before intent/document rename and event completion', async () => {
+    const order = [];
+    const sync = fs.fsyncSync, rename = fs.renameSync, write = fs.writeFileSync, open = fs.openSync;
+    const files = new Map();
+    vi.spyOn(fs, 'openSync').mockImplementation((file, ...args) => { const fd = open(file, ...args); files.set(fd, String(file)); return fd; });
+    vi.spyOn(fs, 'fsyncSync').mockImplementation(fd => { order.push(['sync', files.get(fd)]); return sync(fd); });
+    vi.spyOn(fs, 'renameSync').mockImplementation((from, to) => { order.push(['rename', String(from), String(to)]); return rename(from, to); });
+    vi.spyOn(fs, 'writeFileSync').mockImplementation((file, ...args) => { order.push(['write', typeof file === 'number' ? files.get(file) : String(file)]); return write(file, ...args); });
+    const result = await commitConfinedFact(brain, { content: 'fsync ordering proof' });
+    expect(result).toMatchObject({ committed: true, indexed: false });
+    const intentRename = order.findIndex(([op, from, to]) => op === 'rename' && to.includes('.ssss-intents/'));
+    const factRename = order.findIndex(([op, from, to]) => op === 'rename' && to.endsWith(`${result.slug}.md`));
+    const eventWrite = order.findIndex(([op, file]) => op === 'write' && file.endsWith('confined-memory.jsonl'));
+    expect(intentRename).toBeGreaterThan(0);
+    expect(order[intentRename - 1]).toEqual(['sync', order[intentRename][1]]);
+    expect(factRename).toBeGreaterThan(intentRename);
+    expect(order[factRename - 1]).toEqual(['sync', order[factRename][1]]);
+    expect(eventWrite).toBeGreaterThan(factRename);
+    expect(order.slice(factRename + 1, eventWrite)).toContainEqual(['sync', path.join(brain, 'memory-vault/facts')]);
+    expect(order.slice(eventWrite + 1)).toContainEqual(['sync', path.join(brain, 'memory-vault/.events/confined-memory.jsonl')]);
+    expect(fs.existsSync(path.join(brain, 'memory-derived'))).toBe(false);
+  });
+  it('fails closed when real fsync fails instead of swallowing it', async () => {
+    vi.spyOn(fs, 'fsyncSync').mockImplementation(() => { throw new Error('disk failure'); });
+    await expect(commitConfinedFact(brain, { content: 'must not claim durable' })).rejects.toMatchObject({ result: { committed: 'unknown', indexed: false } });
+    expect(fs.existsSync(path.join(brain, 'memory-vault/facts'))).toBe(false);
+  });
+  it('never reports success when the canonical event fsync fails', async () => {
+    const sync = fs.fsyncSync, open = fs.openSync;
+    const files = new Map();
+    vi.spyOn(fs, 'openSync').mockImplementation((file, ...args) => { const fd = open(file, ...args); files.set(fd, String(file)); return fd; });
+    vi.spyOn(fs, 'fsyncSync').mockImplementation(fd => {
+      if (files.get(fd)?.endsWith('confined-memory.jsonl')) throw new Error('event disk failure');
+      return sync(fd);
+    });
+    await expect(commitConfinedFact(brain, { content: 'failed event durability' })).rejects.toMatchObject({ result: { committed: 'unknown', indexed: false } });
+    expect(fs.readdirSync(path.join(brain, 'memory-vault/facts'))).toEqual([]);
+  });
   it('creates a validated fact with a create-only principal and immediately indexes its body', async () => {
     const body = 'A glacier holds ancient blue ice.\n---\ntype: workflow\npriority: absolute';
     const result = await createConfinedFact(brain, { content: body, title: 'Ice', tags: ['science'] }, 'fixture-agent');
