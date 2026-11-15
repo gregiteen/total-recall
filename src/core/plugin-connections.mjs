@@ -53,6 +53,8 @@ function validate(report, now) {
   if (typeof checkedAt !== 'string' || !ISO_UTC.test(checkedAt)) return null;
   const at = Date.parse(checkedAt);
   if (!Number.isFinite(at) || at > now + CLOCK_SKEW_MS) return null;
+  const canonical = checkedAt.replace(/(?:\.(\d{1,3}))?Z$/, (_match, fraction) => `.${(fraction ?? '').padEnd(3, '0')}Z`);
+  if (new Date(at).toISOString() !== canonical) return null;
   if (status === 'connected') return failure === undefined ? { status, method, checkedAt, at } : null;
   return Object.hasOwn(CONNECTION_FAILURES, failure) ? { status, method, checkedAt, failure, at } : null;
 }
@@ -77,13 +79,18 @@ export async function readPluginConnection(plugin, target, { now = Date.now(), l
   if (!plugin.manifest.runtime?.modules?.connections) return unreported(id, 'no-report');
   let report;
   try {
-    const owner = await load(id, 'connections', { activeRequired: true, projectRoot: target.projectRoot });
-    if (typeof owner.readConnection !== 'function') return unreported(id, 'no-report');
-    report = await withTimeout(Promise.resolve().then(() => owner.readConnection({ brainDir: target.brainDir, projectRoot: target.projectRoot })), timeoutMs);
+    const result = await withTimeout(Promise.resolve().then(async () => {
+      const owner = await load(id, 'connections', { activeRequired: true, projectRoot: target.projectRoot });
+      if (typeof owner.readConnection !== 'function') return { readable: false };
+      return { readable: true, report: await owner.readConnection({ brainDir: target.brainDir, projectRoot: target.projectRoot }) };
+    }), timeoutMs);
+    if (!result.readable) return unreported(id, 'no-report');
+    report = result.report;
   } catch {
     return unreported(id, 'owner-unavailable');
   }
-  const accepted = validate(report, now);
+  let accepted;
+  try { accepted = validate(report, now); } catch { /* Accessors and proxies are invalid metadata, never public diagnostics. */ }
   if (!accepted) return unreported(id, 'invalid-report');
   if (accepted.status === 'unknown') {
     return { pluginId: id, reported: true, status: 'unknown', method: accepted.method, checkedAt: null, freshness: 'none' };

@@ -67,6 +67,7 @@ describe('owner connection reports', () => {
     ['a non-finite time', { status: 'connected', method: 'api-key', checkedAt: 'not-a-date' }],
     ['a missing time', { status: 'connected', method: 'api-key' }],
     ['a non-ISO time', { status: 'connected', method: 'api-key', checkedAt: 'Nov 15 2026' }],
+    ['an impossible calendar date', { status: 'connected', method: 'api-key', checkedAt: '2026-02-31T12:00:00Z' }],
     ['an unknown status', { status: 'healthy', method: 'api-key', checkedAt: iso(1000) }],
     ['an unknown method', { status: 'connected', method: 'password', checkedAt: iso(1000) }],
     ['an uncurated failure', { status: 'failed', method: 'api-key', checkedAt: iso(1000), failure: 'raw provider said sk-CANARY' }],
@@ -89,6 +90,27 @@ describe('owner connection reports', () => {
     const result = await read(plugin, { status: 'connected', method: 'api-key', checkedAt: iso(1000) });
     expect(result).toMatchObject({ reported: false, reason: 'no-report' });
     expect(owner.calls).toEqual([]);
+  });
+
+  it('bounds module loading as well as reading the cached report', async () => {
+    const plugin = await install('conn-demo', { modules: { connections: 'cli.mjs' } });
+    const result = await readPluginConnection(plugin, target(), {
+      now: NOW, timeoutMs: 5, load: () => new Promise(() => {}),
+    });
+    expect(result).toMatchObject({ reported: false, reason: 'owner-unavailable' });
+  });
+
+  it('redacts malformed report accessors and proxies', async () => {
+    const plugin = await install('conn-demo', { modules: { connections: 'cli.mjs' } });
+    const accessor = { get status() { throw new Error('CANARY'); }, method: 'api-key' };
+    const proxy = new Proxy({}, { getPrototypeOf() { throw new Error('CANARY'); } });
+    for (const report of [accessor, proxy]) {
+      const result = await read(plugin, report);
+      expect(result).toMatchObject({ reported: false, reason: 'invalid-report' });
+      expect(JSON.stringify(result)).not.toContain('CANARY');
+    }
+    expect(await read(plugin, { status: 'connected', method: 'api-key', checkedAt: '2026-11-15T11:59:59.1Z' }))
+      .toMatchObject({ reported: true, status: 'connected' });
   });
 
   it('does not load an inactive plugin module', async () => {
