@@ -27,13 +27,13 @@ export async function syncPluginCapabilities(catalog, vaultRoot, { execute = pro
   const body = JSON.stringify({ schemaVersion: 1, fingerprint: catalog.fingerprint, plugins: catalog.plugins, capabilities: catalog.capabilities }, null, 2);
   const bodyHash = sha256(body);
   // Asset hash covers the persisted JSON body; the catalog fingerprint is separate provenance.
-  if (previous && sha256(previous.body.trim()) === bodyHash) return { changed: false, count: catalog.capabilities.length };
+  if (previous && previous.frontmatter.x_portability === 'tenant_private' && sha256(previous.body.trim()) === bodyHash) return { changed: false, count: catalog.capabilities.length };
   const beforeHash = previous ? bytesHash(fs.readFileSync(onDisk)) : null;
   // Stable per (before, after) so retries replay and concurrent writers conflict instead of overwriting.
   const { timestamp: _timestamp, updated: _updated, hash: _hash, ...kept } = previous?.frontmatter || {};
   const content = matter.stringify(`${body}\n`, { ...kept, type: 'asset', name: 'Installed plugin capabilities', title: 'Installed plugin capabilities',
     description: 'Passive installed capability declarations; activation is host policy and readiness is not probed.',
-    mime_type: 'application/json', encoding: 'utf-8', x_owner: 'plugin-capabilities', x_catalog_fingerprint: catalog.fingerprint ?? null, hash: `sha256:${bodyHash}` });
+    mime_type: 'application/json', encoding: 'utf-8', x_portability: 'tenant_private', x_owner: 'plugin-capabilities', x_catalog_fingerprint: catalog.fingerprint ?? null, hash: `sha256:${bodyHash}` });
   const envelope = { type: 'operation', idempotency_key: `capabilities-${(beforeHash || 'none').slice(-16)}-${bodyHash.slice(0, 32)}`, path: CAPABILITY_PATH, workspace_id: 'default',
     actor: { role: 'system' }, expected_before_hash: beforeHash, content };
   for (const dry_run of [true, false]) {
