@@ -15,7 +15,10 @@ export function safePath(value) {
   return value;
 }
 export function noLinks(target) {
-  const absolute = path.resolve(target);
+  let absolute = path.resolve(target);
+  // macOS exposes its system temporary directory through /var -> /private/var.
+  // Only canonicalize this OS-owned alias, never arbitrary source links.
+  if (process.platform === 'darwin' && absolute.startsWith('/var/') && fs.readlinkSync('/var') === 'private/var') absolute = '/private' + absolute;
   let current = path.parse(absolute).root;
   for (const part of absolute.slice(current.length).split(path.sep).filter(Boolean)) {
     current = path.join(current, part);
@@ -60,7 +63,7 @@ export function rejectCredentials(value, location = '', depth = 0) {
   for (const [key, child] of Object.entries(value)) {
     if (['__proto__', 'constructor', 'prototype'].includes(key)) throw new Error('Unsafe declaration key');
     if (typeof child === 'string' && child && !placeholder(child)
-      && (sensitive.test(key) || /(?:^|\.)env$/.test(location) || /(?:^|\.)headers$/.test(location))) {
+      && sensitive.test(key)) {
       // Schema/type declarations are definitions, not saved credential values.
       if (!['string', 'boolean', 'number', 'object', 'array'].includes(child)) throw new Error('Literal credential detected; use the auth secrets store and placeholders');
     }
@@ -84,7 +87,7 @@ export function collectSource(input) {
     if (!s.isFile()) throw new Error('Source assets must be regular files; links are forbidden');
     total += s.size;
     if (total > MAX_BYTES || entries.length >= MAX_FILES) throw new Error('Plugin source exceeds import size/file limit');
-    if (/^(?:\.env(?:\.(?!example$|sample$).+)?|\.npmrc|\.pypirc|secrets\.enc|id_rsa|id_ed25519)$/i.test(path.basename(relative))) throw new Error('Credential file refused; use the auth secrets store');
+    rejectSecretFile(relative);
     const bytes = fs.readFileSync(file);
     if (bytes.length !== s.size) throw new Error('Source changed while collecting');
     rejectCredentials(bytes.toString('utf8'));
@@ -111,12 +114,18 @@ export function decodeAssets(entries) {
   const seen = new Set(); let total = 0;
   for (const entry of entries) {
     safePath(entry?.path);
+    rejectSecretFile(entry.path);
+    if (!Number.isInteger(entry.mode) || entry.mode < 0 || (entry.mode & ~0o755)) throw new Error('Unsafe source asset mode');
     if (seen.has(entry.path) || typeof entry.data_b64 !== 'string' || !/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(entry.data_b64)) throw new Error('Invalid or duplicate source asset');
     seen.add(entry.path);
     const bytes = Buffer.from(entry.data_b64, 'base64'); total += bytes.length;
     if (total > MAX_BYTES || sha256(bytes) !== entry.sha256) throw new Error('Source asset size/hash mismatch');
     rejectCredentials(bytes.toString('utf8'));
-    if (/\.json$/i.test(entry.path)) rejectCredentials(parseDeclaration(bytes, entry.path));
+    if (/\.(?:json|ya?ml|toml)$/i.test(entry.path)) rejectCredentials(parseDeclaration(bytes, entry.path));
   }
   return entries;
+}
+
+function rejectSecretFile(relative) {
+  if (/^(?:\.env(?:\.(?!example$|sample$).+)?|\.npmrc|\.pypirc|secrets\.enc|id_rsa|id_ed25519)$/i.test(path.basename(relative))) throw new Error('Credential file refused; use the auth secrets store');
 }

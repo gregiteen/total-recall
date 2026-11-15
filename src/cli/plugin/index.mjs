@@ -25,6 +25,9 @@ Usage:
   npx total-recall plugin <command> [options]
 
 Commands:
+  import <source> --output <fresh-vault>
+                            Passively import plugin formats into validated SSSS. Use
+                            import --help for inspect, export, compose and invoke.
   list                      Installed plugins (project & global) with source and sharing
   library [--plugin ID]      Installed CLI operation library (--json for agents)
   chunks [query]            Search installed SSSS UI chunks and validate owner files
@@ -106,6 +109,10 @@ export async function run(argv = []) {
 
   const command = args[0];
   const rest = args.slice(1);
+  if (command === 'import') {
+    const { runPluginImport } = await import('./import.mjs');
+    return runPluginImport(rest);
+  }
   if (command === 'refresh') {
     if (rest.includes('--help') || rest.includes('-h')) {
       console.log('Usage: total-recall plugin refresh [--global]');
