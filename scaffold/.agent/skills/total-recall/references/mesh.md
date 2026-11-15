@@ -7,6 +7,8 @@ Credential lookup, control-server API keys and mesh sync tokens use auth. Enroll
 Presence accepts fresh authenticated observations. Unknown activity cannot imply an active user. No active target is an error for automatic dispatch. Commands succeed only after their actual execution result; notification acknowledgement is not proof the user viewed it. Test timeouts, stale records, denied peers, local execution and remote failures. Never copy/merge brains during leader changes. Significant mesh extraction and truthfulness work remains in progress until owner and integration suites pass.
 
 
+`mesh ssh <node>` is declared `interactive`: from a terminal it is a real session with no time limit (window resizes and Ctrl-C reach ssh). `mesh ssh <node> '<command>'` from a terminal gets a remote terminal (`ssh -t`), so sign-ins such as `claude setup-token` work. Piped or scripted, it runs as before under the runner timeout; use `mesh exec` for scripted commands.
+
 Host service adapters require the explicitly selected absolute TR_PACKAGE_ROOT; independently installed host packages are never execution substitutes. The mesh owner runtime suite passes 249 tests plus three Node manifest/host-boundary tests; these do not prove live mesh provider health.
 
 ## Developer-owned control server

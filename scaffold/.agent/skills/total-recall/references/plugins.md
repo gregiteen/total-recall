@@ -8,6 +8,8 @@ Plugin UI is purpose-specific and belongs in its repository. Bind cards to actua
 
 The bridge rejects undeclared commands even when a manifest declares no commands. Cards execute only explicitly declared read effects. Owner panels may submit one declared secret string with `host.run(command, args, { stdin: value })`; the authenticated server validates the declaration and 64 KiB UTF-8 bound, pipes it with `--stdin`, and suppresses child output. Workspace components resolve to owner UI element ids/tags; missing interfaces and unsupported device access stay unavailable. Live card regions mount owner panels. Full provider behavior and audio sessions still require separate end-to-end verification.
 
+Plugin commands run in a child process with piped, bounded output and a timeout (`timeout_ms`, 1..600000; default 30 s). A subcommand that is a terminal session, such as a remote shell or a sign-in, declares `interactive: true`. When the terminal CLI runs it with stdin and stdout on a TTY, the child is attached to the terminal (all three streams, the terminal's foreground process group) with no timeout, and the CLI exits with its code. The server, scripts, piped calls and composable calls keep piped output and the timeout.
+
 Configuration uses validated records/SSSS contracts. A manifest task schedule is not an active runner. Resolve node placement and daemon evidence; do not run recurring work on an arbitrary laptop. Verify tests/package provenance separately from install/runtime readiness. Keep the owner skill and this router's relevant reference synchronized whenever capabilities change.
 
 

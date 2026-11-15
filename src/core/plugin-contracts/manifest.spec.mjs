@@ -64,6 +64,18 @@ describe('plugin manifest contract', () => {
     ok.cli.subcommands[1].timeout_ms = 600000;
     expect(validateManifestContract(ok).errors).toEqual([]);
   });
+  it('accepts interactive only as a boolean', () => {
+    for (const value of [true, false]) {
+      const m = base();
+      m.cli.subcommands[1].interactive = value;
+      expect(validatePluginManifest(m).valid).toBe(true);
+    }
+    for (const bad of ['true', 1, null]) {
+      const m = base();
+      m.cli.subcommands[1].interactive = bad;
+      expect(validateManifestContract(m).errors.join('\n')).toMatch(/interactive must be a boolean/);
+    }
+  });
   it('keeps secret arguments off the command line', () => {
     const m = base();
     m.cli.subcommands[1].args.push({ name: 'apiKey', flag: '--key', label: 'Key', type: 'string', secret: true });

@@ -151,6 +151,10 @@
                 "minimum": 1,
                 "maximum": 600000
               },
+              "interactive": {
+                "type": "boolean",
+                "description": "The command is a terminal session (a remote shell, a sign-in). Run from the terminal CLI with stdin and stdout on a TTY, it is attached to the terminal with no runner timeout. Every other caller keeps piped output and the timeout."
+              },
               "args": {
                 "type": "array",
                 "items": {

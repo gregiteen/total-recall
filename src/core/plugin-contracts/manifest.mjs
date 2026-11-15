@@ -53,6 +53,8 @@ export function validateManifestContract(manifest) {
       // The runner refuses anything outside this range, so a manifest that
       // declares it must fail validation rather than every call at run time.
       if (sub.timeout_ms !== undefined && (!Number.isInteger(sub.timeout_ms) || sub.timeout_ms < 1 || sub.timeout_ms > 600000)) errors.push(`${where}.timeout_ms must be an integer from 1 to 600000`);
+      // Run from a terminal, an interactive command is attached to it with no timeout (plugin-runner.mjs).
+      if (sub.interactive !== undefined && typeof sub.interactive !== 'boolean') errors.push(`${where}.interactive must be a boolean`);
       if (sub.args !== undefined) {
         if (!Array.isArray(sub.args)) errors.push(`${where}.args must be an array`);
         else {

@@ -24,6 +24,11 @@ export const CLI_MAX_OUTPUT_BYTES = 16 * 1024 * 1024;
 export const MAX_INPUT_BYTES = 64 * 1024;
 export const MAX_REQUEST_BYTES = 1024 * 1024;
 
+/** Both ends a person types into and reads from are a terminal. */
+export function stdioIsTerminal() {
+  return process.stdin.isTTY === true && process.stdout.isTTY === true;
+}
+
 /** A credential is one declared string on stdin, never a command-line value. */
 export function validatePluginSecretInput(plugin, subcommand, input) {
   if (input === undefined) return;
@@ -39,8 +44,9 @@ export function validatePluginSecretInput(plugin, subcommand, input) {
 
 /**
  * @param {object} plugin  A discovered plugin ({ id, dir, manifest }).
- * @param {{ subcommand?: string, args?: string[], cwd?: string, projectRoot?: string|null, timeoutMs?: number }} [options]
- * @returns {Promise<{ ok: boolean, exitCode: number|null, signal: string|null, timedOut: boolean, truncated: boolean, output: string, durationMs: number }>}
+ * @param {{ subcommand?: string, args?: string[], cwd?: string, projectRoot?: string|null, timeoutMs?: number, tty?: boolean }} [options]
+ *   `tty` overrides terminal detection (stdin and stdout are TTYs) for an interactive subcommand.
+ * @returns {Promise<{ ok: boolean, exitCode: number|null, signal: string|null, timedOut: boolean, truncated: boolean, output: string, durationMs: number, interactive?: boolean }>}
  */
 export function runPluginCommand(plugin, options = {}) {
   const { subcommand = '', args = [], cwd = process.cwd(), timeoutMs: requestedTimeoutMs, stdin = 'ignore', stdinText, stdinRequest, composable = false, secretsBrainDir } = options;
@@ -95,6 +101,24 @@ export function runPluginCommand(plugin, options = {}) {
   const childArgv = [CHILD, handler, command, ...(subcommand ? [String(subcommand)] : []), ...safeArgs];
   // Only an explicitly selected project owns repository state. The cwd fallback above preserves legacy activation.
   const statePluginsDir = options.projectRoot ? projectPluginsDir(projectRoot) : recordPluginsDir(plugin);
+  const env = {
+    ...process.env,
+    TR_PACKAGE_ROOT: PACKAGE_ROOT,
+    TOTAL_RECALL_BIN: path.join(PACKAGE_ROOT, 'bin', 'total-recall.mjs'),
+    TR_PLUGIN_ID: plugin.id,
+    TR_PLUGIN_DIR: plugin.dir,
+    TR_PLUGIN_CONFIG: JSON.stringify(readPluginRecord(plugin)?.configuration || {}),
+    ...(statePluginsDir ? { TR_PLUGIN_STATE_DIR: path.join(path.dirname(statePluginsDir), 'plugin-state', plugin.id) } : {}),
+    ...(secretsBrainDir ? { TR_SECRETS_BRAIN: secretsBrainDir } : {}),
+    TR_PLUGIN_COMMAND_MODE: composable ? 'composable' : 'cli',
+  };
+
+  // An interactive subcommand (a remote shell, a sign-in) run by a person at a terminal is
+  // attached to that terminal: no pipes, no output buffer, no timer. Every other caller (the
+  // server, a script, a nested composable call, a stdin request) keeps the bounded path below.
+  const attach = declaration?.interactive === true && stdin === 'inherit' && stdinPayload === undefined &&
+    !composable && (options.tty ?? stdioIsTerminal());
+  if (attach) return runAttached(childArgv, { cwd, env });
 
   return new Promise((resolve) => {
     const started = Date.now();
@@ -108,19 +132,7 @@ export function runPluginCommand(plugin, options = {}) {
     const child = spawn(process.execPath, childArgv, {
       cwd,
       detached: process.platform !== 'win32',
-      env: {
-        ...process.env,
-        TR_PACKAGE_ROOT: PACKAGE_ROOT,
-        TOTAL_RECALL_BIN: path.join(PACKAGE_ROOT, 'bin', 'total-recall.mjs'),
-        TR_PLUGIN_ID: plugin.id,
-        TR_PLUGIN_DIR: plugin.dir,
-        TR_PLUGIN_CONFIG: JSON.stringify(readPluginRecord(plugin)?.configuration || {}),
-        ...(statePluginsDir ? { TR_PLUGIN_STATE_DIR: path.join(path.dirname(statePluginsDir), 'plugin-state', plugin.id) } : {}),
-        ...(secretsBrainDir ? { TR_SECRETS_BRAIN: secretsBrainDir } : {}),
-        TR_PLUGIN_COMMAND_MODE: composable ? 'composable' : 'cli',
-        FORCE_COLOR: '0',
-        NO_COLOR: '1'
-      },
+      env: { ...env, FORCE_COLOR: '0', NO_COLOR: '1' },
       stdio: [stdinPayload !== undefined ? 'pipe' : stdin === 'inherit' ? 'inherit' : 'ignore', 'pipe', 'pipe']
     });
 
@@ -177,6 +189,35 @@ export function runPluginCommand(plugin, options = {}) {
     };
 
     // spawn reports a missing binary / bad cwd as an 'error' event, not a throw.
+    child.on('error', (err) => finish(null, null, err));
+    child.on('close', (code, signal) => finish(code, signal));
+  });
+}
+
+/**
+ * Run a handler on this process's own terminal. The child is not detached: it stays in the
+ * terminal's session and foreground process group, so it gets window resizes (SIGWINCH), Ctrl-C
+ * and the other terminal signals itself. Like a shell waiting on a job, this process ignores
+ * SIGINT and SIGQUIT until the child exits, then reports the child's exit code.
+ */
+function runAttached(childArgv, { cwd, env }) {
+  return new Promise((resolve) => {
+    const started = Date.now();
+    const signals = process.platform === 'win32' ? ['SIGINT'] : ['SIGINT', 'SIGQUIT'];
+    const ignore = () => {};
+    for (const name of signals) process.on(name, ignore);
+    let settled = false;
+    const finish = (exitCode, signal, spawnError) => {
+      if (settled) return;
+      settled = true;
+      for (const name of signals) process.removeListener(name, ignore);
+      const message = spawnError ? `[runner] ${spawnError.message}` : '';
+      resolve({
+        ok: !spawnError && exitCode === 0, exitCode, signal, timedOut: false, truncated: false, interactive: true,
+        output: message, stdout: '', stderr: message, durationMs: Date.now() - started,
+      });
+    };
+    const child = spawn(process.execPath, childArgv, { cwd, env, stdio: 'inherit' });
     child.on('error', (err) => finish(null, null, err));
     child.on('close', (code, signal) => finish(code, signal));
   });

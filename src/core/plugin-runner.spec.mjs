@@ -135,6 +135,61 @@ describe('plugin-runner', () => {
     expect(res.ok).toBe(false);
   });
 
+  describe('interactive subcommands', () => {
+    // The child records which files its stdin, stdout and stderr are, sleeps past the declared
+    // timeout, then exits 4. Identity (device and inode) shows whether it was handed this
+    // process's own streams or a pipe from the runner.
+    const identity = fd => { const s = fs.fstatSync(fd); return `${s.dev}:${s.ino}`; };
+    const makeSession = (id) => {
+      const out = path.join(root, `${id}.json`);
+      const p = makePlugin(root, id, `import fs from 'node:fs';
+        export async function run() {
+          const id = fd => { const s = fs.fstatSync(fd); return s.dev + ':' + s.ino; };
+          fs.writeFileSync(${JSON.stringify(out)}, JSON.stringify([0, 1, 2].map(id)));
+          await new Promise(r => setTimeout(r, 700));
+          process.exit(4);
+        }`);
+      p.manifest.cli.subcommands = [{ name: 'ssh', effect: 'write', interactive: true, timeout_ms: 200 }];
+      return { p, streams: () => JSON.parse(fs.readFileSync(out, 'utf8')) };
+    };
+
+    it('attaches to the terminal with no timeout and returns the exit code', async () => {
+      const { p, streams } = makeSession('attached');
+      const listeners = process.listenerCount('SIGINT');
+      const running = runPluginCommand(p, { args: ['ssh', 'node'], stdin: 'inherit', cwd: root, tty: true });
+      // Like a shell waiting on a job, the runner leaves Ctrl-C to the attached child.
+      expect(process.listenerCount('SIGINT')).toBe(listeners + 1);
+      const res = await running;
+      expect(res).toMatchObject({ interactive: true, timedOut: false, ok: false, exitCode: 4, output: '', stdout: '' });
+      expect(res.durationMs).toBeGreaterThanOrEqual(600);
+      expect(streams()).toEqual([0, 1, 2].map(identity));
+      expect(process.listenerCount('SIGINT')).toBe(listeners);
+    });
+
+    it('keeps pipes and the timeout off a terminal', async () => {
+      const { p, streams } = makeSession('piped');
+      const res = await runPluginCommand(p, { args: ['ssh', 'node'], stdin: 'inherit', cwd: root, tty: false });
+      expect(res.interactive).toBeUndefined();
+      expect(res.timedOut).toBe(true);
+      expect(res.output).toContain('[runner] killed after 200 ms');
+      const [, stdout, stderr] = streams();
+      expect(stdout).not.toBe(identity(1));
+      expect(stderr).not.toBe(identity(2));
+    });
+
+    it('never attaches a server call, a composable call or an undeclared command', async () => {
+      const { p } = makeSession('bounded');
+      for (const options of [{ tty: true }, { stdin: 'inherit', tty: true, composable: true }]) {
+        const res = await runPluginCommand(p, { args: ['ssh', 'node'], cwd: root, ...options });
+        expect(res.interactive).toBeUndefined();
+        expect(res.timedOut).toBe(true);
+      }
+      p.manifest.cli.subcommands[0].interactive = false;
+      const res = await runPluginCommand(p, { args: ['ssh', 'node'], stdin: 'inherit', cwd: root, tty: true });
+      expect(res.timedOut).toBe(true);
+    });
+  });
+
   it('refuses a handler outside the plugin directory', async () => {
     const p = makePlugin(root, 'escape', '');
     p.manifest.cli.handler = '../echo/cli.mjs';
