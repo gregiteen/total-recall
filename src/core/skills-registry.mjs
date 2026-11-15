@@ -1230,6 +1230,9 @@ export function replaceSkillDir(
           relative.split(/[\\/]/).some((part) => part === '..' || part === '.' || !part)) {
         throw new Error(`Invalid managed skill path: ${relative}`);
       }
+      // Older registries incorrectly recorded private brain state as package
+      // content. Such a receipt is never authority to delete that state.
+      if (skillPackageExcludedPath(relative)) continue;
       if (fsImpl.existsSync(path.join(src, relative))) continue;
       const parts = relative.split(/[\\/]/);
       let cursor = stage;

@@ -201,6 +201,25 @@ describe('skills-registry', () => {
     expect(fs.readFileSync(localReference, 'utf8')).toContain('Repository-specific reference');
   });
 
+  it('preserves private state falsely listed as managed by a legacy install', () => {
+    const source = writeSkill(path.join(workspace, 'new'), 'shared-skill');
+    const destination = writeSkill(path.join(workspace, 'old'), 'shared-skill');
+    const privatePaths = ['config/SSSS/auth/metadata.md', 'references/scheduler/jobs.json', 'memory-vault/facts/keep.md'];
+    for (const relative of [...privatePaths, 'references/obsolete.md']) {
+      const file = path.join(destination, relative);
+      fs.mkdirSync(path.dirname(file), { recursive: true });
+      fs.writeFileSync(file, `original:${relative}`);
+    }
+
+    replaceSkillDir(source, destination, { managedFiles: [...privatePaths, 'references/obsolete.md'] });
+
+    for (const relative of privatePaths) {
+      expect(fs.readFileSync(path.join(destination, relative), 'utf8')).toBe(`original:${relative}`);
+    }
+    expect(fs.existsSync(path.join(destination, 'references/obsolete.md'))).toBe(false);
+    expect(fs.readFileSync(path.join(destination, 'SKILL.md'), 'utf8')).toContain('shared-skill');
+  });
+
   it('recognizes symlink aliases as the same physical skill', () => {
     if (process.platform === 'win32') return;
     const source = writeSkill(workspace, 'canonical-skill');
