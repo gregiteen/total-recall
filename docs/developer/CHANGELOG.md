@@ -1,3 +1,17 @@
+## 3.48.0 — 2026-11-15
+
+- `total-recall mesh ssh <node>` is a real terminal session. Before, the runner killed it
+  after 30 s (`[runner] killed after 30000 ms`) and held its output until it ended, so a
+  sign-in run inside it (`claude auth login`, `claude setup-token`) never finished.
+- Plugin contract: a CLI subcommand may declare `interactive: true`. When the terminal CLI
+  runs it with stdin and stdout on a terminal, the plugin is attached to that terminal: all
+  three streams, the terminal's foreground process group (so window resizes and Ctrl-C reach
+  it), no timeout, and the CLI exits with its exit code. The server, scripts, piped calls,
+  composable calls and stdin requests keep piped output and the timeout. Manifest validation
+  accepts the field only as a boolean.
+- Bundle mesh 0.3.2: `ssh` is declared interactive, and a remote command run from a terminal
+  gets `ssh -t`, so `total-recall mesh ssh <node> 'claude setup-token'` can prompt.
+
 ## 3.47.4 — 2026-11-15
 
 - Bundle Metaharness 0.4.4: when no harness can take a task, the route now selects none and
