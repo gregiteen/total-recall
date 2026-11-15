@@ -1,3 +1,11 @@
+## 3.47.4 — 2026-11-15
+
+- Bundle Metaharness 0.4.4: when no harness can take a task, the route now selects none and
+  waits for Codex's quota reset. Before, it ranked the whole catalog. On a node where Codex
+  was the only ready included harness (Claude not signed in), 3.47.3 walled Codex for quota
+  and then chose pi, which bills OpenRouter outside the included-usage policy and had no
+  credit behind it.
+
 ## 3.47.3 — 2026-11-14
 
 - Bundle Metaharness 0.4.3. When the router is about to choose Codex, it first asks Codex
