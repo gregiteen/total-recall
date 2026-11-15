@@ -5,7 +5,7 @@ import { execFileSync } from 'node:child_process';
 import { createEngine } from '@ssss/cli';
 import { serializeDocument, parseDocument } from '@ssss/cli/frontmatter';
 import { contentHash, validateBundle, provisionBundle, importBundle, exportBundle } from '@ssss/cli/bundle';
-import { collectSource, decodeAssets, noLinks, safePath, parseDeclaration, rejectCredentials, sha256, object, MAX_BYTES, MAX_FILES } from './plugin-import-source.mjs';
+import { collectSource, decodeAssets, noLinks, safePath, parseDeclaration, rejectCredentials, unresolvedPlaceholders, sha256, object, MAX_BYTES, MAX_FILES } from './plugin-import-source.mjs';
 import { decodeBundle } from './plugin-bundle.mjs';
 import { validatePluginManifest } from './plugin-loader.mjs';
 
@@ -78,6 +78,8 @@ export function inspectPluginSource(input, options = {}) {
       else if (value?.mcpServers && !candidates.length) candidates.push({ format: 'mcp', name: a.path });
     }
   }
+  // A companion .mcp.json never competes with another declaration.
+  if (candidates.length > 1 && candidates.some(c => c.format === 'mcp' && c.name === '.mcp.json')) candidates.splice(candidates.findIndex(c => c.format === 'mcp' && c.name === '.mcp.json'), 1);
   let selected;
   if (options.format === 'generic') selected = { format: 'generic', name: source.single || assets[0].path };
   else if (options.format) selected = candidates.find(c => c.format === options.format || (options.format === 'native' && c.format === 'native-bundle'));
@@ -92,7 +94,7 @@ export function inspectPluginSource(input, options = {}) {
     assets = decoded.entries.map(e => ({ path: e.path, mode: e.mode, sha256: sha256(e.data), data_b64: e.data.toString('base64') }));
     decodeAssets(assets);
     const result = inspectAssets(assets, 'native', 'plugin.json');
-    return { ...result, provenance: { ...result.provenance, nativeBundle: { sha256: wire.sha256, source: original } } };
+    return { ...result, provenance: { ...result.provenance, nativeBundle: { sha256: wire.sha256, declaration: name, source: original.map(({ path: p, mode, sha256: h }) => ({ path: p, mode, sha256: h })) } } };
   }
   if (format === 'ssss') {
     const bundle = declaration(get(name));
@@ -149,7 +151,7 @@ function inspectAssets(assets, format, name) {
     if (metadata.server.entry_point) local(metadata.server.entry_point);
   }
   if (format === 'openapi') {
-    check(/^3\.[012]\.\d+$/.test(metadata.openapi) && typeof metadata.info?.title === 'string' && typeof metadata.info?.version === 'string' && object(metadata.paths), 'Invalid OpenAPI schema');
+    check(/^3\.[0-2]\.\d+$/.test(metadata.openapi) && typeof metadata.info?.title === 'string' && typeof metadata.info?.version === 'string' && object(metadata.paths), 'Invalid OpenAPI schema');
     for (const [route, item] of Object.entries(metadata.paths)) {
       check(route.startsWith('/') && object(item), 'Invalid OpenAPI path');
       for (const [method, spec] of Object.entries(item)) if (['get', 'post', 'put', 'patch', 'delete', 'head', 'options'].includes(method)) {
@@ -163,8 +165,10 @@ function inspectAssets(assets, format, name) {
   if (format === 'mcp') { check(object(metadata.mcpServers), 'mcpServers object required'); mcp.push(metadata); }
   if (format === 'mcpb' && metadata.server.mcp_config) mcp.push({ mcpServers: { [metadata.name]: metadata.server.mcp_config } });
   if (metadata.mcpServers) {
-    if (typeof metadata.mcpServers === 'string') mcp.push(declaration(assets.find(a => a.path === local(metadata.mcpServers))));
-    else if (format !== 'mcp') mcp.push({ mcpServers: metadata.mcpServers });
+    if (format !== 'mcp') for (const entry of Array.isArray(metadata.mcpServers) ? metadata.mcpServers : [metadata.mcpServers]) {
+      if (typeof entry === 'string') mcp.push(declaration(assets.find(a => a.path === local(entry))));
+      else mcp.push({ mcpServers: entry });
+    }
   }
   for (const a of assets) if (['mcp.json', '.mcp.json'].includes(a.path) && format !== 'mcp') mcp.push(declaration(a));
   for (const config of mcp) {
@@ -172,23 +176,33 @@ function inspectAssets(assets, format, name) {
     for (const [id, spec] of Object.entries(config.mcpServers)) {
       check(object(spec) && (typeof spec.command === 'string' || typeof spec.url === 'string'), 'MCP server requires command or URL');
       check(spec.args === undefined || (Array.isArray(spec.args) && spec.args.every(a => typeof a === 'string')), 'Invalid MCP argv');
-      cap(`mcp:${id}`, 'mcp-server', spec, !spec.type || ['stdio', 'http', 'streamable-http'].includes(spec.type), spec.type === 'sse' ? 'Legacy SSE transport unsupported' : null);
+      const unbound = unresolvedPlaceholders(spec);
+      const unsupported = spec.type === 'sse' ? 'Legacy SSE transport unsupported' : unbound.length ? `Requires credential/configuration binding for ${unbound.join(', ')}; no auth adapter is attached` : null;
+      cap(`mcp:${id}`, 'mcp-server', spec, !unsupported && (!spec.type || ['stdio', 'http', 'streamable-http'].includes(spec.type)), unsupported);
     }
   }
   if (['agent-plugin', 'codex-plugin', 'claude-plugin'].includes(format)) {
     for (const key of ['skills', 'agents', 'commands', 'hooks', 'apps']) if (metadata[key]) cap(key, 'host-declaration', { value: metadata[key] }, false, 'Native host behavior is preserved but not executed');
   }
-  for (const a of assets) if (/^skills\/[^/]+\/SKILL\.md$/.test(a.path)) {
+  const skillDirs = ['skills', ...[metadata.skills].flat().filter(v => typeof v === 'string').map(v => v.replace(/^\.\//, '').replace(/\/$/, ''))].filter(Boolean);
+  for (const a of assets) if (skillDirs.some(d => a.path.startsWith(d + '/') && /^[^/]+\/SKILL\.md$/.test(a.path.slice(d.length + 1)))) {
     const { data } = parseDocument(bytesOf(a).toString('utf8'));
     check(typeof data.name === 'string' && typeof data.description === 'string', 'Invalid portable skill declaration');
     cap(`skill:${data.name}`, 'skill', { ...data, path: a.path }, false, 'Agent instruction capability; requires an agent host');
+  }
+  let companion;
+  if (format === 'agent-plugin' && assets.some(a => a.path === '.codex-plugin/plugin.json')) {
+    const codex = declaration(assets.find(a => a.path === '.codex-plugin/plugin.json'));
+    check(object(codex), 'Codex companion declaration must be an object');
+    // OpenAI documents the root manifest's extensions.com.openai as authoritative over the companion overlay.
+    companion = { path: '.codex-plugin/plugin.json', precedence: 'root extensions.com.openai overrides companion fields', effective: { ...codex, ...(object(metadata.extensions?.['com.openai']) ? metadata.extensions['com.openai'] : {}) } };
   }
   for (const [namespace, extension] of Object.entries(metadata.extensions || {})) {
     check(object(extension), 'Invalid namespaced extension declaration');
     cap(`extension:${namespace}`, 'host-extension', extension, false, 'Namespaced native host extension preserved');
   }
   check(new Set(capabilities.map(c => c.id)).size === capabilities.length, 'Duplicate capability identifiers');
-  return { format, metadata, assets, capabilities, provenance: { source_hash: sha256(JSON.stringify(assets)), declaration: name } };
+  return { format, metadata, assets, capabilities, provenance: { source_hash: sha256(JSON.stringify(assets)), declaration: name, ...(companion ? { companion } : {}) } };
 }
 
 function validateSsss(bundle) {
@@ -200,19 +214,19 @@ function validateSsss(bundle) {
   for (const file of bundle.files) {
     const { data } = parseDocument(file.content);
     if (data.x_plugin_import) {
-      const payload = Buffer.from(parseDocument(file.content).body.trim(), 'base64');
+      const payload = Buffer.from(parseDocument(file.content).body.trim(), 'utf8');
       check(sha256(payload) === data.hash, 'Imported payload integrity mismatch');
       const imported = JSON.parse(payload.toString('utf8'));
       decodeAssets(imported.assets);
-      rejectCredentials(imported.metadata);
     }
   }
 }
 
 function toBundle(inspected) {
   if (inspected.bundle) return inspected.bundle;
-  const payload = Buffer.from(JSON.stringify(inspected)).toString('base64');
-  const files = [{ path: assetPath, content: serializeDocument({ type: 'asset', title: 'Imported plugin source', description: 'Passive lossless plugin declaration and sources', timestamp: '1970-01-01T00:00:00.000Z', name: 'plugin-source', mime_type: 'application/vnd.total-recall.plugin+json', encoding: 'base64', hash: sha256(Buffer.from(payload, 'base64')), x_plugin_import: { format: inspected.format, source_hash: inspected.provenance.source_hash } }, payload) }];
+  // Source bytes are stored exactly once (base64 inside the JSON); metadata and capabilities are rebuilt from them on read.
+  const payload = JSON.stringify({ format: inspected.format, assets: inspected.assets, provenance: inspected.provenance });
+  const files = [{ path: assetPath, content: serializeDocument({ type: 'asset', title: 'Imported plugin source', description: 'Passive lossless plugin declaration and sources', timestamp: '1970-01-01T00:00:00.000Z', name: 'plugin-source', mime_type: 'application/vnd.total-recall.plugin+json', encoding: 'utf-8', hash: sha256(Buffer.from(payload)), x_plugin_import: { format: inspected.format, source_hash: inspected.provenance.source_hash } }, payload) }];
   return { manifest: { name: 'plugin-import', version: '1.0.0', description: 'Imported plugin', exported_at: '1970-01-01T00:00:00.000Z', ssss_core_version: '0.9', required_extensions: [], export_profile: 'backup', primitive_inventory: { asset: 1 }, provisioning: [], parameters: [], file_count: files.length, provenance: { content_hash: contentHash(files), exporter: 'total-recall' } }, files };
 }
 
@@ -255,15 +269,14 @@ export function readImportedPlugin(vault) {
   check(fs.statSync(file).size <= MAX_BYTES * 4, 'Imported asset exceeds bounds');
   const { data, body } = parseDocument(fs.readFileSync(file, 'utf8'));
   check(data.type === 'asset' && data.mime_type === 'application/vnd.total-recall.plugin+json', 'Not an imported plugin asset');
-  const bytes = Buffer.from(body.trim(), 'base64');
+  const bytes = Buffer.from(body.trim(), 'utf8');
   check(sha256(bytes) === data.hash, 'Imported plugin payload hash mismatch');
   const imported = JSON.parse(bytes.toString('utf8'));
   check(imported.format === data.x_plugin_import?.format && imported.provenance.source_hash === data.x_plugin_import.source_hash && sha256(JSON.stringify(imported.assets)) === imported.provenance.source_hash, 'Imported plugin metadata mismatch');
-  decodeAssets(imported.assets); rejectCredentials(imported.metadata);
-  // Rebuild capability declarations so a modified blob cannot inject a handler.
+  decodeAssets(imported.assets);
+  // Rebuild metadata and capability declarations from the hashed bytes so a modified blob cannot inject a handler.
   const rebuilt = inspectAssets(imported.assets, imported.format, imported.provenance.declaration);
-  check(JSON.stringify(rebuilt.capabilities) === JSON.stringify(imported.capabilities), 'Imported capability integrity mismatch');
-  return imported;
+  return { ...rebuilt, provenance: imported.provenance };
 }
 export function exportImportedPlugin(vault) {
   noLinks(vault);

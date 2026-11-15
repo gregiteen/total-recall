@@ -1,6 +1,6 @@
 import fs from 'node:fs';
 import { IMPORT_FORMATS, inspectPluginSource, importPluginSource, readImportedPlugin, exportImportedPlugin } from '../../core/plugin-import.mjs';
-import { invokeImportedPlugin, composeImportedPlugin } from '../../core/plugin-import-runtime.mjs';
+import { invokeFromArgv, composeImportedPlugin } from '../../core/plugin-import-runtime.mjs';
 
 export async function runPluginImport(argv = []) {
   if (!argv.length || argv.includes('--help') || argv.includes('-h')) {
@@ -19,6 +19,12 @@ Import is passive and never installs dependencies or invokes source code. Export
   if (verb === 'formats') { console.log(JSON.stringify(IMPORT_FORMATS)); return; }
   const source = args.shift();
   if (!source) throw new Error('Source or vault required');
+  if (verb === 'invoke') {
+    const result = await invokeFromArgv(source, args);
+    console.log(JSON.stringify(result));
+    if (result?.ok === false) process.exitCode = 1;
+    return result;
+  }
   const options = {}; const positional = []; let input = {};
   for (let i = 0; i < args.length; i++) {
     const arg = args[i];
@@ -38,7 +44,6 @@ Import is passive and never installs dependencies or invokes source code. Export
   else if (verb === 'read') result = readImportedPlugin(source);
   else if (verb === 'export') result = exportImportedPlugin(source);
   else if (verb === 'compose') result = await composeImportedPlugin(source, positional[0]);
-  else if (verb === 'invoke') result = await invokeImportedPlugin(source, positional[0], { ...input, ...options, args: positional.slice(1) });
   else result = await importPluginSource(source, options);
   console.log(JSON.stringify(result));
   if (result?.ok === false) process.exitCode = 1;

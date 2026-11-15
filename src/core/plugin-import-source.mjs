@@ -44,11 +44,18 @@ export function parseDeclaration(bytes, filename) {
 }
 
 const sensitive = /(?:authorization|password|passwd|secret|(?:^|_)token(?:$|_)|api[-_]?key|private[-_]?key|client[-_]?secret|access[-_]?token)/i;
-const placeholder = value => /^(?:\$\{[^}]+\}|\{\{[^}]+\}\}|REQUIREMENT|<[^>]+>)$/.test(value);
+// A placeholder may follow an auth scheme (`Bearer ${TOKEN}`); anything literal left over is a credential.
+const placeholder = value => value === 'REQUIREMENT' || (/\$\{[^}]+\}|\{\{[^}]+\}\}|<[^>]+>/.test(value)
+  && value.replace(/\$\{[^}]+\}|\{\{[^}]+\}\}|<[^>]+>/g, '').replace(/^(?:Bearer|Basic|Token)\s*/i, '').trim() === '');
 /** Reject literal credentials, keeping diagnostics free of input values. */
 export function rejectCredentials(value, location = '', depth = 0) {
   if (depth > 64) throw new Error('Declaration nesting exceeds limit');
   if (typeof value === 'string') {
+    // Large payloads overflow the regex engine's stack; scan overlapping bounded windows instead.
+    if (value.length > 32768) {
+      for (let i = 0; i < value.length; i += 32768) rejectCredentials(value.slice(Math.max(0, i - 512), i + 32768), location, depth + 1);
+      return;
+    }
     if (/-----BEGIN (?:\w+ )?PRIVATE KEY-----|\bBearer\s+(?!\$\{|\{\{|<)[\w.+/=-]{8,}|\b(?:sk|ghp|github_pat)[_-][\w-]{12,}/i.test(value)
       || /(?:password|api[_-]?key|access[_-]?token|client[_-]?secret)\s*[=:]\s*["']?(?!\$\{|\{\{|<)[a-z0-9+/_.-]{8,}/i.test(value)) throw new Error('Literal credential detected; use the auth secrets store and placeholders');
     if (/^[a-z][a-z0-9+.-]*:\/\//i.test(value)) {
@@ -116,7 +123,7 @@ export function decodeAssets(entries) {
     safePath(entry?.path);
     rejectSecretFile(entry.path);
     if (!Number.isInteger(entry.mode) || entry.mode < 0 || (entry.mode & ~0o755)) throw new Error('Unsafe source asset mode');
-    if (seen.has(entry.path) || typeof entry.data_b64 !== 'string' || !/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(entry.data_b64)) throw new Error('Invalid or duplicate source asset');
+    if (seen.has(entry.path) || typeof entry.data_b64 !== 'string' || entry.data_b64.length % 4 !== 0 || !/^[A-Za-z0-9+/]*={0,2}$/.test(entry.data_b64)) throw new Error('Invalid or duplicate source asset');
     seen.add(entry.path);
     const bytes = Buffer.from(entry.data_b64, 'base64'); total += bytes.length;
     if (total > MAX_BYTES || sha256(bytes) !== entry.sha256) throw new Error('Source asset size/hash mismatch');
@@ -128,4 +135,22 @@ export function decodeAssets(entries) {
 
 function rejectSecretFile(relative) {
   if (/^(?:\.env(?:\.(?!example$|sample$).+)?|\.npmrc|\.pypirc|secrets\.enc|id_rsa|id_ed25519)$/i.test(path.basename(relative))) throw new Error('Credential file refused; use the auth secrets store');
+}
+
+/** Standard plugin-root/data variables are expanded at invocation; anything else needs a binding adapter. */
+export const PLUGIN_ROOT_VARS = ['CLAUDE_PLUGIN_ROOT', 'PLUGIN_ROOT', '__dirname'];
+export const PLUGIN_DATA_VARS = ['CLAUDE_PLUGIN_DATA', 'PLUGIN_DATA'];
+export function unresolvedPlaceholders(value) {
+  const found = new Set();
+  for (const m of JSON.stringify(value).matchAll(/\$\{([^}]+)\}|\{\{[^}]+\}\}/g)) {
+    if (m[1] && [...PLUGIN_ROOT_VARS, ...PLUGIN_DATA_VARS].includes(m[1])) continue;
+    found.add(m[1] || m[0]);
+  }
+  return [...found];
+}
+export function expandPluginVars(value, rootDir, dataDir) {
+  if (typeof value === 'string') return value.replace(/\$\{([^}]+)\}/g, (all, name) => PLUGIN_ROOT_VARS.includes(name) ? rootDir : PLUGIN_DATA_VARS.includes(name) ? dataDir : all);
+  if (Array.isArray(value)) return value.map(v => expandPluginVars(v, rootDir, dataDir));
+  if (object(value)) return Object.fromEntries(Object.entries(value).map(([k, v]) => [k, expandPluginVars(v, rootDir, dataDir)]));
+  return value;
 }

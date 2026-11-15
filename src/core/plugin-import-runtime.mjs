@@ -5,7 +5,7 @@ import path from 'node:path';
 import { spawn } from 'node:child_process';
 import { pathToFileURL } from 'node:url';
 import { readImportedPlugin } from './plugin-import.mjs';
-import { safePath, noLinks, MAX_BYTES } from './plugin-import-source.mjs';
+import { safePath, noLinks, expandPluginVars, MAX_BYTES } from './plugin-import-source.mjs';
 import { getPlugin, resolvePluginFile } from './plugin-loader.mjs';
 import { runPluginCommand } from './plugin-runner.mjs';
 
@@ -56,12 +56,14 @@ async function responseJson(response, id) {
 }
 
 async function mcpClient(spec, cwd, operation, input) {
-  literal(spec);
-  let serial = 0, session, protocol = '2025-06-18', child, timer;
+  let serial = 0, session, protocol = '2025-06-18', child;
   const pending = new Map();
-  let send, cleanup;
+  let send, cleanup = async () => {};
   const controller = new AbortController();
-  timer = setTimeout(() => { controller.abort(); stop(child || {}); for (const task of pending.values()) task.reject(new Error('MCP timed out')); }, TIMEOUT);
+  const timer = setTimeout(() => { controller.abort(); if (child) stop(child); for (const task of pending.values()) task.reject(new Error('MCP timed out')); }, TIMEOUT);
+  // The whole lifecycle (validation, spawn, requests, teardown) sits in one try so no path leaks the timer or process.
+  try {
+  literal(spec);
   if (spec.command) {
     ensure(!['npx', 'npm', 'pip', 'uvx', 'bunx'].includes(path.basename(spec.command)), 'Auto-installing MCP launchers are unsupported; install dependencies explicitly');
     ensure(!spec.env || Object.values(spec.env).every(v => typeof v === 'string'), 'Invalid MCP environment');
@@ -99,7 +101,7 @@ async function mcpClient(spec, cwd, operation, input) {
     ensure(message?.id === id && !message.error && message.result !== undefined, 'MCP request failed or invalid response');
     return message.result;
   };
-  try {
+  {
     const initialized = await request('initialize', { protocolVersion: protocol, capabilities: {}, clientInfo: { name: 'total-recall-plugin-import', version: '1.0.0' } });
     ensure(['2024-11-05', '2025-03-26', '2025-06-18'].includes(initialized.protocolVersion), 'Unsupported negotiated MCP protocol version');
     protocol = initialized.protocolVersion;
@@ -115,9 +117,29 @@ async function mcpClient(spec, cwd, operation, input) {
     }
     if (operation === 'list') return { ok: true, tools };
     ensure(typeof input.tool === 'string' && tools.some(t => t.name === input.tool), 'Selected MCP tool is not advertised');
-    return { ok: true, result: await request('tools/call', { name: input.tool, arguments: input.arguments || {} }) };
+    const result = await request('tools/call', { name: input.tool, arguments: input.arguments || {} });
+    // A tool-level failure is reported by the server as isError; it is never a successful call.
+    return { ok: result.isError !== true, result };
+  }
   } finally { await cleanup(); clearTimeout(timer); controller.abort(); }
 }
+
+/** One parser for `invoke` and composed commands: <capability> [--trust-source] [--input JSON] [-- args...]. */
+export function parseInvokeArgv(argv) {
+  const rest = [...argv]; const options = {}; let input = {}; const positional = [];
+  for (let i = 0; i < rest.length; i++) {
+    const arg = rest[i];
+    if (arg === '--') { positional.push(...rest.slice(i + 1)); break; }
+    if (arg === '--trust-source') options.trust = true;
+    else if (arg === '--input') { ensure(rest[i + 1] !== undefined, 'Option requires a value'); try { input = JSON.parse(rest[++i]); } catch { throw new Error('--input must be valid JSON'); } ensure(input && typeof input === 'object' && !Array.isArray(input), '--input must be a JSON object'); }
+    else if (arg === '--json') continue;
+    else if (arg.startsWith('-')) throw new Error('Unknown invoke option');
+    else positional.push(arg);
+  }
+  ensure(positional.length, 'Capability id required');
+  return { id: positional[0], options: { ...input, ...options, args: positional.slice(1) } };
+}
+export function invokeFromArgv(vault, argv) { const { id, options } = parseInvokeArgv(argv); return invokeImportedPlugin(vault, id, options); }
 
 export async function invokeImportedPlugin(vault, id, options = {}) {
   ensure(options.trust === true, 'Invocation requires explicit --trust-source');
@@ -133,7 +155,9 @@ export async function invokeImportedPlugin(vault, id, options = {}) {
       fs.mkdirSync(path.dirname(target), { recursive: true, mode: 0o700 });
       fs.writeFileSync(target, Buffer.from(asset.data_b64, 'base64'), { mode: asset.mode, flag: 'wx' });
     }
-    const spec = capability.schema;
+    const dataDir = path.join(root, '.plugin-data');
+    fs.mkdirSync(dataDir, { mode: 0o700 });
+    const spec = expandPluginVars(capability.schema, root, dataDir);
     if (capability.kind === 'mcp-server') return await mcpClient(spec, root, options.tool ? 'call' : 'list', options);
     if (capability.kind === 'openapi-operation') {
       literal(spec);
@@ -178,7 +202,7 @@ export async function composeImportedPlugin(vault, name, options = {}) {
   const commandFile = path.join(projectRoot, '.agent', 'commands', name + '.mjs');
   ensure(!fs.existsSync(commandFile), 'Composed command already exists');
   const runtime = pathToFileURL(new URL('./plugin-import-runtime.mjs', import.meta.url).pathname).href;
-  const code = `const {invokeImportedPlugin}=await import(${JSON.stringify(runtime)});const trust=args.includes('--trust-source');const clean=args.filter(a=>a!=='--trust-source');const result=await invokeImportedPlugin(${JSON.stringify(path.resolve(vault))},clean[0],{trust,args:clean.slice(1)});console.log(JSON.stringify(result));if(!result.ok)process.exitCode=1;return result;`;
+  const code = `const {invokeFromArgv}=await import(${JSON.stringify(runtime)});const result=await invokeFromArgv(${JSON.stringify(path.resolve(vault))},args);console.log(JSON.stringify(result));if(!result.ok)process.exitCode=1;return result;`;
   const result = await runPluginCommand(owner, { subcommand: 'create', args: [name, code, '--risk', 'write', '--description', 'Invoke an imported plugin capability with explicit source trust'], cwd: projectRoot, projectRoot });
   if (!result.ok) {
     if (fs.existsSync(commandFile)) await runPluginCommand(owner, { subcommand: 'remove', args: [name], cwd: projectRoot, projectRoot });

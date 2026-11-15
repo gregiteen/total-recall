@@ -3,6 +3,7 @@ import { describe, it, expect, afterEach } from 'vitest';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { execFileSync } from 'node:child_process';
 import { inspectPluginSource, importPluginSource, exportImportedPlugin, readImportedPlugin } from './plugin-import.mjs';
 
 const roots = [];
@@ -18,7 +19,7 @@ function fixture(file, value, extra = {}) {
 afterEach(() => { for (const root of roots.splice(0)) fs.rmSync(root, { recursive: true, force: true }); });
 
 const formats = [
-  ['native', 'plugin.json', { id: 'demo', name: 'Demo', version: '1.0.0', description: 'Test', commands: [] }],
+  ['native', 'plugin.json', { id: 'demo', name: 'Demo', version: '1.0.0', description: 'Test plugin', cli: { command: 'demo', handler: './cli.mjs' }, ui: { home: 'home', design_tokens: 'DESIGN.md', elements: [{ id: 'home', kind: 'panel', tag: 'demo-home', module: 'ui/home.js' }] } }],
   ['agent-plugin', 'plugin.json', { name: 'demo', version: '1.0.0', extensions: { 'com.openai': { apps: './.app.json' } }, unknown: { a: [1, 2] } }],
   ['claude-plugin', '.claude-plugin/plugin.json', { name: 'demo', version: '1.0.0' }],
   ['codex-plugin', '.codex-plugin/plugin.json', { name: 'demo', skills: './skills/' }],
@@ -32,7 +33,7 @@ const formats = [
 
 describe('portable plugin imports', () => {
   it.each(formats)('%s preserves all source bytes through SSSS and export', async (format, file, value) => {
-    const source = fixture(file, value, { 'assets/data.bin': Buffer.from([0, 255, 2]), '.mcp.json': '{"mcpServers":{}}' });
+    const source = fixture(file, value, { 'assets/data.bin': Buffer.from([0, 255, 2]), '.mcp.json': '{"mcpServers":{}}', 'cli.mjs': 'export default 1', 'bin.mjs': 'console.log(1)' });
     const options = format === 'generic' ? { format } : {};
     const inspected = inspectPluginSource(source, options);
     expect(inspected.format).toBe(format);
@@ -91,5 +92,110 @@ describe('portable plugin imports', () => {
     expect(() => inspectPluginSource(source)).toThrow(/ambiguous/i);
     const output = temp();
     await expect(importPluginSource(source, { format: 'agent-plugin', output })).rejects.toThrow();
+  });
+
+  it('applies root extensions.com.openai precedence over the .codex-plugin companion without ambiguity', () => {
+    const source = fixture('plugin.json', { name: 'demo', version: '1.0.0', extensions: { 'com.openai': { interface: { displayName: 'Root' } } } }, {
+      '.codex-plugin/plugin.json': JSON.stringify({ name: 'demo', interface: { displayName: 'Companion' }, skills: './skills/' }),
+    });
+    const inspected = inspectPluginSource(source);
+    expect(inspected.format).toBe('agent-plugin');
+    expect(inspected.provenance.companion.effective.interface.displayName).toBe('Root');
+    expect(inspected.provenance.companion.effective.skills).toBe('./skills/');
+    expect(inspected.capabilities.map(c => c.id)).toContain('extension:com.openai');
+  });
+
+  it('imports the latest OpenAPI 3.2.x and rejects structurally invalid documents', () => {
+    const doc = { openapi: '3.2.1', info: { title: 'T', version: '1' }, paths: { '/a': { get: { operationId: 'a', responses: { 200: { description: 'ok' } } } } } };
+    const inspected = inspectPluginSource(fixture('openapi.json', doc));
+    expect(inspected.capabilities.map(c => c.id)).toEqual(['a']);
+    for (const bad of [{ ...doc, openapi: '4.0.0' }, { ...doc, info: {} }, { ...doc, paths: { a: {} } }, { ...doc, paths: { '/a': { get: { operationId: 'a' } } } }]) {
+      expect(() => inspectPluginSource(fixture('openapi.json', bad), { format: 'openapi' })).toThrow();
+    }
+  });
+
+  it('rejects schema-invalid declarations that are well-formed JSON', () => {
+    expect(() => inspectPluginSource(fixture('package.json', { name: 'demo' }), { format: 'npm' })).toThrow(/version/);
+    expect(() => inspectPluginSource(fixture('.claude-plugin/plugin.json', { version: '1' }), { format: 'claude-plugin' })).toThrow(/name/);
+    expect(() => inspectPluginSource(fixture('mcp.json', { mcpServers: { a: {} } }), { format: 'mcp' })).toThrow(/command or URL/);
+    expect(() => inspectPluginSource(fixture('openclaw.plugin.json', { id: 'x' }), { format: 'openclaw' })).toThrow(/configSchema/);
+    expect(() => inspectPluginSource(fixture('manifest.json', { name: 'x', server: {} }), { format: 'mcpb' })).toThrow(/Invalid MCPB/);
+    expect(() => inspectPluginSource(fixture('pyproject.toml', '[tool.x]\na = 1\n'), { format: 'python' })).toThrow(/Python/);
+  });
+
+  it('discovers Agent Plugins skills, custom skill paths and inline, file or array Claude mcpServers', () => {
+    const skill = name => `---\nname: ${name}\ndescription: Does ${name}\n---\nBody`;
+    const source = fixture('.claude-plugin/plugin.json', { name: 'demo', skills: ['./extra-skills'], mcpServers: [{ a: { command: 'node', args: ['a.mjs'] } }, './servers.json'] }, {
+      'skills/one/SKILL.md': skill('one'), 'extra-skills/two/SKILL.md': skill('two'), 'a.mjs': '', 'servers.json': JSON.stringify({ mcpServers: { b: { type: 'http', url: 'https://example.com/mcp' } } }),
+    });
+    const ids = inspectPluginSource(source).capabilities.map(c => c.id).sort();
+    expect(ids).toEqual(['mcp:a', 'mcp:b', 'skill:one', 'skill:two', 'skills']);
+    expect(() => inspectPluginSource(fixture('.claude-plugin/plugin.json', { name: 'demo', mcpServers: './missing.json' }))).toThrow(/absent/);
+  });
+
+  it('marks native-host-only and unbound capabilities unsupported rather than executable', () => {
+    const source = fixture('plugin.json', { name: 'demo', hooks: './hooks.json', mcpServers: { s: { url: 'https://example.com', headers: { Authorization: 'Bearer ${T}' } } } }, { 'hooks.json': '{}' });
+    const caps = Object.fromEntries(inspectPluginSource(source).capabilities.map(c => [c.id, c]));
+    expect(caps.hooks).toMatchObject({ executable: false });
+    expect(caps['mcp:s']).toMatchObject({ executable: false });
+    expect(caps['mcp:s'].unsupported).toMatch(/binding/);
+  });
+
+  it('keeps benign environment and header declarations', () => {
+    const source = fixture('mcp.json', { mcpServers: { s: { command: 'node', env: { NODE_ENV: 'production' } }, h: { url: 'https://example.com/mcp', headers: { Accept: 'application/json' } } } });
+    expect(inspectPluginSource(source).capabilities.every(c => c.executable)).toBe(true);
+  });
+
+  it('stores source bytes once and imports near the size limit', async () => {
+    const source = fixture('extension.json', { name: 'big' }, { 'blob.bin': Buffer.alloc(4_800_000, 7) });
+    const output = path.join(temp(), 'vault');
+    await importPluginSource(source, { format: 'generic', output });
+    const stored = fs.statSync(path.join(output, 'imports/plugin-source.md')).size;
+    expect(stored).toBeLessThan(4_800_000 * 1.4);
+    expect(readImportedPlugin(output).assets.find(a => a.path === 'blob.bin').sha256).toBeTruthy();
+  });
+
+  it('detects tampering with preserved bytes or hashes on read', async () => {
+    const source = fixture('plugin.json', { name: 'demo' });
+    const output = path.join(temp(), 'vault');
+    await importPluginSource(source, { format: 'agent-plugin', output });
+    const file = path.join(output, 'imports/plugin-source.md');
+    fs.writeFileSync(file, fs.readFileSync(file, 'utf8').replace('"format":"agent-plugin"', '"format":"npm"      '));
+    expect(() => readImportedPlugin(output)).toThrow();
+  });
+
+  it('leaves no namespace or staging directory when composition fails', async () => {
+    const source = fixture('plugin.json', { name: 'demo' });
+    const parent = temp(); const output = path.join(parent, 'vault');
+    await expect(importPluginSource(source, { format: 'agent-plugin', output, compose: 'Bad Name', projectRoot: temp() })).rejects.toThrow();
+    expect(fs.readdirSync(parent)).toEqual([]);
+  });
+
+  it('refuses a missing or pre-existing output', async () => {
+    const source = fixture('plugin.json', { name: 'demo' });
+    await expect(importPluginSource(source, { format: 'agent-plugin' })).rejects.toThrow(/output/i);
+    await expect(importPluginSource(source, { format: 'agent-plugin', output: temp() })).rejects.toThrow(/exists/);
+  });
+
+  it('imports MCPB archives with bounded members and rejects unsafe archives', () => {
+    const dir = temp(); const zip = path.join(dir, 'demo.mcpb');
+    execFileSync('python3', ['-c', `import zipfile,sys,json
+z=zipfile.ZipFile(sys.argv[1],'w'); z.writestr('manifest.json', json.dumps({'manifest_version':'0.3','name':'demo','version':'1.0.0','server':{'type':'node','entry_point':'server.js'}})); z.writestr('server.js','1'); z.close()
+y=zipfile.ZipFile(sys.argv[2],'w'); y.writestr('../evil.json','{}'); y.close()`, zip, path.join(dir, 'bad.mcpb')]);
+    const inspected = inspectPluginSource(zip);
+    expect(inspected.format).toBe('mcpb');
+    expect(inspected.provenance.archive.sha256).toHaveLength(64);
+    expect(() => inspectPluginSource(path.join(dir, 'bad.mcpb'))).toThrow();
+    fs.writeFileSync(path.join(dir, 'corrupt.mcpb'), 'not a zip');
+    expect(() => inspectPluginSource(path.join(dir, 'corrupt.mcpb'))).toThrow(/archive/i);
+  });
+
+  it('rejects an MCPB manifest whose entry point is not shipped', () => {
+    expect(() => inspectPluginSource(fixture('manifest.json', { manifest_version: '0.3', name: 'demo', version: '1.0.0', server: { type: 'node', entry_point: 'server.js' } }))).toThrow(/absent|directory/i);
+  });
+
+  it('rejects invalid SSSS bundles', () => {
+    const source = fixture('bundle.json', { manifest: { name: 'x' }, files: [{ path: 'a.md', content: 'x' }] });
+    expect(() => inspectPluginSource(source, { format: 'ssss' })).toThrow(/Invalid SSSS/);
   });
 });
