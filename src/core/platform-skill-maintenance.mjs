@@ -10,9 +10,12 @@ import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import matter from './frontmatter.mjs';
 import { readSkillPackage, skillPackageExcludedPath } from './skills-registry.mjs';
+import { readProcessCommand, shouldHonorPidLock } from './pid-lock.mjs';
 
 const ROOT = fileURLToPath(new URL('../../', import.meta.url));
 const RECEIPT = '.platform-distribution.json';
+const LOCAL = '.platform-refresh';
+const LOCK = '.platform-refresh.lock';
 const START = '<!-- total-recall:platform-distribution:v1 -->';
 const END = '<!-- /total-recall:platform-distribution:v1 -->';
 const digest = data => crypto.createHash('sha256').update(data).digest('hex');
@@ -75,13 +78,13 @@ function routeFor(hash) {
   return `${START}\nRead the [maintained platform core](core/distributions/${hash}/SKILL.md) for current protocol contracts. Preserve authored instructions outside this block.\n${END}`;
 }
 
-function inspectReceipt(target, skillId, wrapper) {
-  if (!stat(regularPath(target, RECEIPT))) {
+function verifyReceipt(target, skillId, wrapper, receipt) {
+  if (!receipt) {
     if (wrapper.includes(START) || wrapper.includes(END)) throw new Error('Platform route has no receipt');
     return null;
   }
-  const receipt = JSON.parse(readRegular(target, RECEIPT));
-  if (receipt.schema !== 1 || receipt.skill !== skillId || !/^[a-f0-9]{64}$/.test(receipt.hash) ||
+  if (Object.keys(receipt).sort().join(',') !== 'files,hash,package,package_version,schema,skill,skill_version,source_path' ||
+      receipt.schema !== 1 || receipt.skill !== skillId || !/^[a-f0-9]{64}$/.test(receipt.hash) ||
       !receipt.files || !Object.keys(receipt.files).length || receipt.files['SKILL.md'] === undefined) {
     throw new Error('Invalid platform distribution receipt');
   }
@@ -95,7 +98,109 @@ function inspectReceipt(target, skillId, wrapper) {
       throw new Error(`Maintained platform core drift: ${relative}`);
     }
   }
+  const identity = { package: receipt.package, package_version: receipt.package_version,
+    skill: receipt.skill, skill_version: receipt.skill_version, files: receipt.files };
+  if (typeof receipt.source_path !== 'string' || !path.isAbsolute(receipt.source_path) ||
+      digest(JSON.stringify(identity)) !== receipt.hash) throw new Error('Invalid platform receipt provenance');
   return receipt;
+}
+
+function inspectState(target, skillId, wrapper) {
+  const bytes = stat(regularPath(target, RECEIPT)) ? readRegular(target, RECEIPT) : null;
+  const document = bytes ? JSON.parse(bytes) : null;
+  if (document?.schema !== 2) return { receipt: verifyReceipt(target, skillId, wrapper, document), bytes, pending: null };
+  const { checksum, ...intent } = document;
+  if (Object.keys(intent).sort().join(',') !== 'after_wrapper_sha256,before_wrapper_sha256,next,previous,schema' ||
+      checksum !== digest(JSON.stringify(intent)) ||
+      !/^[a-f0-9]{64}$/.test(intent.before_wrapper_sha256) || !/^[a-f0-9]{64}$/.test(intent.after_wrapper_sha256) ||
+      !intent.next || intent.next.schema !== 1 || intent.previous && intent.previous.schema !== 1) {
+    throw new Error('Invalid platform refresh pending receipt');
+  }
+  const hash = digest(wrapper);
+  const phase = hash === intent.before_wrapper_sha256 ? 'before-wrapper'
+    : hash === intent.after_wrapper_sha256 ? 'after-wrapper' : null;
+  if (!phase) throw new Error('Authored wrapper drift from pending platform refresh');
+  // Validate both possible receipts and all core bytes. A journal never grants
+  // authority to install an unverified layer, traverse private paths or infer a
+  // missing receipt from a route alone.
+  const before = phase === 'before-wrapper' ? wrapper : intent.previous
+    ? wrapper.replace(routeFor(intent.next.hash), routeFor(intent.previous.hash))
+    : wrapper.endsWith(`\n\n${routeFor(intent.next.hash)}\n`)
+      ? wrapper.slice(0, -(`\n\n${routeFor(intent.next.hash)}\n`.length)) : null;
+  if (before === null || digest(before) !== intent.before_wrapper_sha256) throw new Error('Invalid pending platform wrapper transition');
+  verifyReceipt(target, skillId, before, intent.previous);
+  const after = intent.previous ? before.replace(routeFor(intent.previous.hash), routeFor(intent.next.hash))
+    : before + `\n\n${routeFor(intent.next.hash)}\n`;
+  if (digest(after) !== intent.after_wrapper_sha256) throw new Error('Invalid pending platform wrapper transition');
+  verifyReceipt(target, skillId, after, intent.next);
+  return { receipt: intent.previous, bytes, pending: document, phase, after };
+}
+
+function syncDirectory(directory) {
+  const fd = fs.openSync(directory, fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW);
+  try { fs.fsyncSync(fd); } finally { fs.closeSync(fd); }
+}
+
+function writeTemporary(target, data, mode = 0o600) {
+  const directory = regularPath(target, LOCAL, { directory: true });
+  fs.mkdirSync(directory, { recursive: true, mode: 0o700 });
+  const file = path.join(directory, crypto.randomUUID());
+  const fd = fs.openSync(file, 'wx', mode);
+  try {
+    fs.writeFileSync(fd, data);
+    fs.fchmodSync(fd, mode);
+    fs.fsyncSync(fd);
+  } catch (error) {
+    fs.rmSync(file, { force: true });
+    throw error;
+  } finally { fs.closeSync(fd); }
+  return file;
+}
+
+function publish(target, relative, data, expected) {
+  const file = regularPath(target, relative);
+  const tmp = writeTemporary(target, data, stat(file)?.mode & 0o777 || 0o600);
+  try {
+    regularPath(target, relative);
+    const bytes = stat(file) ? readRegular(target, relative) : null;
+    if (expected === null ? bytes !== null : !bytes?.equals(expected)) throw new Error(`Platform ${relative === 'SKILL.md' ? 'wrapper' : 'receipt'} changed during refresh`);
+    fs.renameSync(tmp, file);
+    syncDirectory(target);
+  } finally { fs.rmSync(tmp, { force: true }); }
+}
+
+function inspectLock(target) {
+  const file = regularPath(target, LOCK);
+  if (!stat(file)) return null;
+  const bytes = readRegular(target, LOCK), entry = stat(file);
+  let owner;
+  try { owner = JSON.parse(bytes); } catch { throw new Error('EEXIST: Unknown platform refresh lock'); }
+  if (owner.schema !== 1 || !Number.isInteger(owner.pid) || owner.pid < 1 ||
+      typeof owner.command !== 'string' || !owner.command || !/^[a-f0-9-]{36}$/.test(owner.token || '')) {
+    throw new Error('EEXIST: Unknown platform refresh lock');
+  }
+  const verdict = shouldHonorPidLock(owner.pid, { entryHint: owner.command, readCommand: readProcessCommand,
+    isAlive: pid => { try { process.kill(pid, 0); return true; } catch (error) { if (error.code === 'ESRCH') return false; throw error; } } });
+  return { bytes, entry, dead: verdict.reason === 'dead' };
+}
+
+function acquireLock(target) {
+  const previous = inspectLock(target);
+  if (previous) {
+    if (!previous.dead || stat(path.join(target, LOCK))?.ino !== previous.entry.ino ||
+        !readRegular(target, LOCK).equals(previous.bytes)) throw new Error('EEXIST: Platform refresh lock is held or changed');
+    fs.unlinkSync(path.join(target, LOCK));
+  }
+  const command = readProcessCommand(process.pid);
+  if (!command) throw new Error('Cannot verify platform refresh process identity');
+  const bytes = Buffer.from(JSON.stringify({ schema: 1, pid: process.pid, command, token: crypto.randomUUID() }));
+  const tmp = writeTemporary(target, bytes);
+  try { fs.linkSync(tmp, regularPath(target, LOCK)); }
+  finally { fs.unlinkSync(tmp); }
+  return () => {
+    // Never unlink a replacement lock belonging to another process.
+    if (stat(regularPath(target, LOCK)) && readRegular(target, LOCK).equals(bytes)) fs.unlinkSync(path.join(target, LOCK));
+  };
 }
 
 /** The CLI supplies only its own package root; distributionRoot is a test seam.
@@ -109,15 +214,23 @@ export function refreshPlatformSkill({ skillId, repo, apply = false, expectedSou
   // Resolve OS aliases above the explicitly selected root (e.g. macOS /var).
   // A link at the selected root itself is rejected by lstat above.
   const repoRoot = fs.realpathSync(repo);
-  const source = sourceSnapshot(skillId, distributionRoot);
+  const available = sourceSnapshot(skillId, distributionRoot);
   const target = regularPath(repoRoot, `.agent/skills/${skillId}`, { directory: true });
   if (!stat(target)?.isDirectory()) throw new Error('Platform refresh requires an existing skill install');
-  if (target === source.provenance.source_path || target.startsWith(source.provenance.source_path + path.sep) ||
-      source.provenance.source_path.startsWith(target + path.sep)) throw new Error('Platform target aliases distribution source');
+  if (target === available.provenance.source_path || target.startsWith(available.provenance.source_path + path.sep) ||
+      available.provenance.source_path.startsWith(target + path.sep)) throw new Error('Platform target aliases distribution source');
   const wrapperBytes = readRegular(target, 'SKILL.md');
   const wrapper = wrapperBytes.toString();
   if (matter(wrapper).data.name !== skillId) throw new Error('Existing wrapper belongs to another skill');
-  const previous = inspectReceipt(target, skillId, wrapper);
+  const state = inspectState(target, skillId, wrapper);
+  const previous = state.receipt;
+  const next = state.pending?.next || { schema: 1, ...available.provenance, hash: available.hash };
+  const { schema, hash, ...provenance } = next;
+  // A pending transition is completed at its already verified pinned version,
+  // even when the installed package advanced since the interrupted attempt.
+  const source = { provenance, hash, entries: state.pending ? [] : available.entries };
+  regularPath(target, LOCAL, { directory: true });
+  const existingLock = inspectLock(target);
   const layer = `core/distributions/${source.hash}`;
   // Prevalidate the whole write set. Collisions are verified, never overwritten.
   for (const entry of source.entries) {
@@ -126,23 +239,27 @@ export function refreshPlatformSkill({ skillId, repo, apply = false, expectedSou
       throw new Error(`Unmanaged platform layer collision: ${entry.path}`);
     }
   }
-  const nextWrapper = previous ? wrapper.replace(routeFor(previous.hash), routeFor(source.hash))
+  const nextWrapper = state.pending ? state.after : previous ? wrapper.replace(routeFor(previous.hash), routeFor(source.hash))
     : wrapper + `\n\n${routeFor(source.hash)}\n`;
   const result = { success: true, dryRun: !apply, skillId, target,
     source: { ...source.provenance, hash: source.hash }, previousHash: previous?.hash || null,
-    current: previous?.hash === source.hash, actions: previous?.hash === source.hash ? [] : [
+    availableSourceHash: available.hash,
+    lock: existingLock ? existingLock.dead ? 'abandoned' : 'active' : 'absent',
+    pending: state.pending ? { recoverable: true, phase: state.phase, lock: existingLock ? existingLock.dead ? 'abandoned' : 'active' : 'absent' } : null,
+    current: !state.pending && previous?.hash === source.hash, actions: !state.pending && previous?.hash === source.hash ? [] : [
       ...source.entries.map(entry => ({ op: 'ensure-immutable-file', path: `${layer}/${entry.path}`, sha256: digest(entry.data) })),
       { op: 'route-preserved-wrapper', path: 'SKILL.md' }, { op: 'record-provenance', path: RECEIPT },
     ] };
   if (!apply) return result;
   if (expectedSourceHash !== source.hash) throw new Error('Apply requires --source-hash from the reviewed distribution plan');
-  if (result.current) return result;
-  const lock = path.join(target, '.platform-refresh.lock');
-  const fd = fs.openSync(lock, 'wx', 0o600);
+  if (result.current && !existingLock) return result;
+  const release = acquireLock(target);
   try {
+    if (result.current) return { ...result, lock: 'absent' };
     // A competing refresh must not invalidate the plan while acquiring its lock.
     if (!readRegular(target, 'SKILL.md').equals(wrapperBytes) ||
-        JSON.stringify(inspectReceipt(target, skillId, wrapper)) !== JSON.stringify(previous)) {
+        !((state.bytes === null && !stat(regularPath(target, RECEIPT))) ||
+          state.bytes && readRegular(target, RECEIPT).equals(state.bytes))) {
       throw new Error('Platform install changed during planning');
     }
     for (const entry of source.entries) {
@@ -156,25 +273,25 @@ export function refreshPlatformSkill({ skillId, repo, apply = false, expectedSou
       regularPath(target, relative);
       fs.writeFileSync(file, entry.data, { flag: 'wx', mode: entry.mode });
     }
-    // Source bytes are already snapshotted; a moving distribution cannot change
-    // what this plan installs. Only these two small managed files are replaced.
-    const publish = (relative, data, expected) => {
-      const file = regularPath(target, relative);
-      const tmp = `${file}.${crypto.randomUUID()}.tmp`;
-      try {
-        fs.writeFileSync(tmp, data, { flag: 'wx', mode: stat(file)?.mode & 0o777 || 0o600 });
-        fs.chmodSync(tmp, stat(file)?.mode & 0o777 || 0o600);
-        regularPath(target, relative);
-        if (expected && !readRegular(target, relative).equals(expected)) throw new Error('Platform wrapper changed during refresh');
-        fs.renameSync(tmp, file);
-      } finally { fs.rmSync(tmp, { force: true }); }
-    };
-    publish('SKILL.md', nextWrapper, wrapperBytes);
-    publish(RECEIPT, JSON.stringify({ schema: 1, ...source.provenance, hash: source.hash }, null, 2) + '\n');
-    inspectReceipt(target, skillId, readRegular(target, 'SKILL.md').toString());
-    return result;
+    // Flush every referenced layer before the durable two-state receipt can
+    // authorize its route. Private brain paths are never walked or flushed.
+    const directories = new Set([target]);
+    for (const relative of Object.keys(next.files)) {
+      const file = regularPath(target, `${layer}/${relative}`);
+      const fd = fs.openSync(file, fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW);
+      try { fs.fsyncSync(fd); } finally { fs.closeSync(fd); }
+      for (let dir = path.dirname(file); dir !== target; dir = path.dirname(dir)) directories.add(dir);
+    }
+    for (const dir of [...directories].sort((a, b) => b.length - a.length)) syncDirectory(dir);
+    if (!readRegular(target, 'SKILL.md').equals(wrapperBytes)) throw new Error('Platform wrapper changed during refresh');
+    const intent = { schema: 2, previous, next, before_wrapper_sha256: digest(wrapperBytes), after_wrapper_sha256: digest(nextWrapper) };
+    const pendingBytes = state.bytes && state.pending ? state.bytes : Buffer.from(JSON.stringify({ ...intent, checksum: digest(JSON.stringify(intent)) }, null, 2) + '\n');
+    if (!state.pending) publish(target, RECEIPT, pendingBytes, state.bytes);
+    if (state.phase !== 'after-wrapper') publish(target, 'SKILL.md', nextWrapper, wrapperBytes);
+    publish(target, RECEIPT, JSON.stringify(next, null, 2) + '\n', pendingBytes);
+    inspectState(target, skillId, readRegular(target, 'SKILL.md').toString());
+    return { ...result, pending: null, lock: 'absent', recovered: Boolean(state.pending), current: source.hash === available.hash };
   } finally {
-    fs.closeSync(fd);
-    fs.unlinkSync(lock);
+    release();
   }
 }

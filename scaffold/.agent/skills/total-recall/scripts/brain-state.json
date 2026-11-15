@@ -32,6 +32,7 @@
     "skills-registry",
     "plugins",
     ".snapshots",
+    ".platform-refresh",
     ".git",
     "node_modules"
   ],
@@ -40,7 +41,9 @@
     "embeddings.db",
     "daemon.pid",
     ".extension-connected",
-    "graph.canvas"
+    "graph.canvas",
+    ".platform-distribution.json",
+    ".platform-refresh.lock"
   ],
   "extensions": [
     ".enc",

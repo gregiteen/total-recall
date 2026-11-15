@@ -43,6 +43,6 @@ it('runs the real source CLI against an existing disposable install without regi
     run(['--apply', '--source-hash', plan.source.hash]);
     expect(fs.readFileSync(path.join(target, 'SKILL.md'), 'utf8').startsWith(wrapper)).toBe(true);
     expect(run(['--json']).current).toBe(true);
-    expect(fs.readdirSync(target).sort()).toEqual(['.platform-distribution.json', 'SKILL.md', 'core']);
+    expect(fs.readdirSync(target).sort()).toEqual(['.platform-distribution.json', '.platform-refresh', 'SKILL.md', 'core']);
   } finally { fs.rmSync(root, { recursive: true, force: true }); }
 });

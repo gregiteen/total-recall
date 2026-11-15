@@ -3,9 +3,11 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
+import crypto from 'node:crypto';
 import { spawnSync } from 'node:child_process';
 import { refreshPlatformSkill } from './platform-skill-maintenance.mjs';
-import { deploySkill, registerSkill } from './skills-registry.mjs';
+import { deploySkill, registerSkill, skillPackageFiles, hashSkillContent, copySkillDir, skillPackageExcludedPath } from './skills-registry.mjs';
+import { isBrainState, rsyncExcludes } from './brain-state.mjs';
 
 let root, repo, distributionRoot, target, source;
 const put = (file, data) => { fs.mkdirSync(path.dirname(file), { recursive: true }); fs.writeFileSync(file, data); };
@@ -220,5 +222,155 @@ describe('distribution platform refresh', () => {
     // Immutable files left by an interrupted attempt are verified on retry.
     vi.restoreAllMocks();
     expect(apply().success).toBe(true);
+  });
+
+  const failureCases = ['first adoption', 'update'].flatMap(stage => ['before', 'after', 'flush', 'write'].flatMap(kind =>
+    [1, 2, 3].map(boundary => [stage, kind, boundary])));
+  it.each(failureCases)('recovers %s after %s publication boundary %i without force or state loss', (stage, kind, boundary) => {
+    if (stage === 'update') {
+      apply();
+      fs.appendFileSync(path.join(target, 'SKILL.md'), '\nLater authored text.\n');
+      put(path.join(source, 'references/contract.md'), 'next version');
+    }
+    put(path.join(target, 'memory-vault/rules/preserve.md'), 'canonical state');
+    put(path.join(target, 'config/local.json'), 'local config');
+    const inodes = ['memory-vault/rules/preserve.md', 'config/local.json'].map(file => fs.statSync(path.join(target, file)).ino);
+    const rename = fs.renameSync, sync = fs.fsyncSync, write = fs.writeFileSync;
+    let count = 0, armed = false;
+    vi.spyOn(fs, 'renameSync').mockImplementation((from, to) => {
+      count++;
+      if (count === boundary && kind === 'before') throw new Error('injected publication failure');
+      const result = rename(from, to);
+      if (count === boundary && kind === 'after') throw new Error('injected publication failure');
+      if (count === boundary && kind === 'flush') armed = true;
+      return result;
+    });
+    vi.spyOn(fs, 'fsyncSync').mockImplementation(fd => {
+      if (armed && fs.fstatSync(fd).isDirectory()) { armed = false; throw new Error('injected publication failure'); }
+      return sync(fd);
+    });
+    vi.spyOn(fs, 'writeFileSync').mockImplementation((file, data, ...args) => {
+      if (kind === 'write' && typeof file === 'number' && count + 1 === boundary &&
+          (String(data).includes('<!-- total-recall:platform-distribution:v1 -->') || /\n  "schema": [12],/.test(String(data)))) {
+        throw new Error('injected publication failure');
+      }
+      return write(file, data, ...args);
+    });
+    expect(() => apply()).toThrow('injected publication failure');
+    vi.restoreAllMocks();
+    const before = tree(root), pending = plan();
+    expect(tree(root)).toEqual(before); // read-only recovery inspection
+    if (boundary !== 1 || !['before', 'write'].includes(kind)) {
+      if (!(boundary === 3 && ['after', 'flush'].includes(kind))) expect(pending.pending?.recoverable).toBe(true);
+    }
+    apply();
+    expect(plan()).toMatchObject({ current: true, pending: null });
+    expect(get(path.join(target, 'SKILL.md')).startsWith(wrapper)).toBe(true);
+    if (stage === 'update') expect(get(path.join(target, 'SKILL.md'))).toContain('Later authored text.');
+    for (const [i, file] of ['memory-vault/rules/preserve.md', 'config/local.json'].entries()) {
+      expect(fs.statSync(path.join(target, file)).ino).toBe(inodes[i]);
+    }
+    expect(get(path.join(target, 'memory-vault/rules/preserve.md'))).toBe('canonical state');
+    expect(get(path.join(target, 'config/local.json'))).toBe('local config');
+  });
+
+  const crashes = ['first adoption', 'update'].flatMap(stage => ['before', 'after'].flatMap(kind => [1, 2, 3].map(boundary => [stage, kind, boundary])));
+  it.each(crashes)('retries actual CLI after abrupt %s crash %s publication %i', (stage, kind, boundary) => {
+    if (stage === 'update') apply();
+    // Refresh the actual source distribution; the same real CLI can recover it.
+    distributionRoot = process.cwd();
+    put(path.join(target, 'config/preserve.json'), 'private state');
+    const inode = fs.statSync(path.join(target, 'config/preserve.json')).ino;
+    const runner = `import fs from 'node:fs';
+      const api = await import(process.argv[1]); const options = JSON.parse(process.argv[2]);
+      const rename = fs.renameSync; let count = 0;
+      fs.renameSync = (from,to) => { count++; if (count === ${boundary} && ${JSON.stringify(kind)} === 'before') process.exit(71);
+        const result = rename(from,to); if (count === ${boundary} && ${JSON.stringify(kind)} === 'after') process.exit(71); return result; };
+      api.refreshPlatformSkill({...options, apply:true, expectedSourceHash:api.refreshPlatformSkill(options).source.hash});`;
+    const child = spawnSync(process.execPath, ['--input-type=module', '-e', runner,
+      new URL('./platform-skill-maintenance.mjs', import.meta.url).href, JSON.stringify(options())], { encoding: 'utf8', timeout: 10000 });
+    expect(child.status, child.stderr).toBe(71);
+    const cli = args => spawnSync(process.execPath, ['bin/total-recall.mjs', 'skill', 'refresh-platform', 'total-recall', '--repo', repo, ...args], { encoding: 'utf8', timeout: 10000 });
+    const before = tree(root), inspected = cli(['--dry-run']);
+    expect(inspected.status, inspected.stderr).toBe(0);
+    expect(tree(root)).toEqual(before);
+    const report = JSON.parse(inspected.stdout);
+    expect(report.lock).toBe('abandoned');
+    const retry = cli(['--apply', '--source-hash', report.source.hash]);
+    expect(retry.status, retry.stderr).toBe(0);
+    expect(plan()).toMatchObject({ current: true, pending: null, lock: 'absent' });
+    expect(get(path.join(target, 'SKILL.md')).startsWith(wrapper)).toBe(true);
+    expect(get(path.join(target, 'config/preserve.json'))).toBe('private state');
+    expect(fs.statSync(path.join(target, 'config/preserve.json')).ino).toBe(inode);
+  });
+
+  it.each(['checksum', 'private-path', 'wrapper', 'symlink', 'layer'])('fails closed for tampered pending %s state and leaves authored/private bytes intact', kind => {
+    const rename = fs.renameSync;
+    let count = 0;
+    vi.spyOn(fs, 'renameSync').mockImplementation((from, to) => {
+      if (++count === 2) throw new Error('stop before wrapper');
+      return rename(from, to);
+    });
+    expect(() => apply()).toThrow('stop before wrapper');
+    vi.restoreAllMocks();
+    const file = path.join(target, '.platform-distribution.json');
+    const pending = JSON.parse(get(file));
+    if (kind === 'checksum') { pending.checksum = '0'.repeat(64); put(file, JSON.stringify(pending)); }
+    if (kind === 'private-path') {
+      pending.next.files['config/leak.json'] = '0'.repeat(64);
+      const { checksum, ...intent } = pending;
+      pending.checksum = crypto.createHash('sha256').update(JSON.stringify(intent)).digest('hex');
+      put(file, JSON.stringify(pending));
+    }
+    if (kind === 'wrapper') fs.appendFileSync(path.join(target, 'SKILL.md'), 'unrecognized authored edit');
+    if (kind === 'symlink') { fs.renameSync(file, `${file}.saved`); fs.symlinkSync(`${file}.saved`, file); }
+    if (kind === 'layer') put(path.join(target, `core/distributions/${pending.next.hash}/references/contract.md`), 'authored core edit');
+    put(path.join(target, 'config/live.json'), 'keep');
+    const before = tree(root);
+    expect(() => apply()).toThrow(/pending|Unsafe|drift/);
+    expect(tree(root)).toEqual(before);
+  });
+
+  it('finishes a pinned pending transition when the available distribution changes', () => {
+    const rename = fs.renameSync;
+    let count = 0;
+    vi.spyOn(fs, 'renameSync').mockImplementation((from, to) => {
+      if (++count === 3) throw new Error('stop before final receipt');
+      return rename(from, to);
+    });
+    expect(() => apply()).toThrow('stop before final receipt');
+    vi.restoreAllMocks();
+    const pinned = plan().source.hash;
+    put(path.join(source, 'references/contract.md'), 'new available version');
+    expect(plan()).toMatchObject({ source: { hash: pinned }, pending: { recoverable: true } });
+    expect(plan().availableSourceHash).not.toBe(pinned);
+    apply();
+    expect(plan().pending).toBeNull();
+    expect(plan().current).toBe(false);
+    apply();
+    expect(plan().current).toBe(true);
+  });
+
+  it('excludes host-local receipts, pending state, lock and temporary authored bytes at every depth while exporting the immutable portable core', () => {
+    const result = apply();
+    const hash = hashSkillContent(target);
+    const names = ['.platform-distribution.json', '.platform-refresh.lock', '.platform-refresh/transient-wrapper'];
+    for (const prefix of ['', 'nested/']) for (const name of names) {
+      const relative = prefix + name;
+      // Keep the root's real final receipt: metadata mutation cannot change a
+      // package hash, and nested pending documents must not be exported either.
+      if (relative !== '.platform-distribution.json') put(path.join(target, relative), '/host/local/source-path PRIVATE-CANARY');
+      expect(isBrainState(relative)).toBe(true);
+      expect(skillPackageExcludedPath(relative)).toBe(true);
+      expect(skillPackageFiles(target)).not.toContain(relative);
+    }
+    expect(hashSkillContent(target)).toBe(hash);
+    expect(rsyncExcludes()).toEqual(expect.arrayContaining(['.platform-distribution.json', '.platform-refresh.lock', '.platform-refresh/']));
+    const exported = path.join(root, 'exported');
+    copySkillDir(target, exported);
+    expect(fs.existsSync(path.join(exported, `core/distributions/${result.source.hash}/references/contract.md`))).toBe(true);
+    expect(skillPackageFiles(exported).some(relative => names.some(name => relative.endsWith(name)))).toBe(false);
+    expect(fs.existsSync(path.join(exported, '.platform-distribution.json'))).toBe(false);
+    expect(fs.existsSync(path.join(exported, 'nested/.platform-refresh'))).toBe(false);
   });
 });
