@@ -9,6 +9,8 @@ export interface DrawerConfig {
   shortcuts: { label: string; href: string }[]
 }
 export interface DrawerRevision { config: DrawerConfig; version: string | null }
+export interface DrawerHistory { version: string | null; history: { version: string; savedAt: string; config: DrawerConfig }[] }
+export interface PluginDesignChoice { markdown: string | null; version: string | null }
 export interface PluginDesign { revision: string | null; css: string; components: string[] }
 export interface WorkspaceChunk {
   key: string
@@ -55,13 +57,33 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
   return data as T
 }
 
-export function readDrawer(side: DrawerSide, signal?: AbortSignal) {
-  return request<DrawerRevision>(`/api/dashboard/drawers/${side}`, { signal })
+export function readDrawer(side: DrawerSide, signal?: AbortSignal, brainId = 'global') {
+  return request<DrawerRevision>(`/api/dashboard/drawers/${side}?brain=${encodeURIComponent(brainId)}`, { signal })
 }
 
-export function saveDrawer(side: DrawerSide, revision: DrawerRevision) {
+export function saveDrawer(side: DrawerSide, revision: DrawerRevision, brainId = 'global') {
   return request<DrawerRevision>(`/api/dashboard/drawers/${side}`, {
-    method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(revision),
+    method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...revision, brainId }),
+  })
+}
+
+export function readDrawerHistory(side: DrawerSide, signal?: AbortSignal, brainId = 'global') {
+  return request<DrawerHistory>(`/api/dashboard/drawers/${side}/history?brain=${encodeURIComponent(brainId)}`, { signal })
+}
+
+export function restoreDrawer(side: DrawerSide, revision: string, version: string | null, brainId = 'global') {
+  return request<DrawerRevision>(`/api/dashboard/drawers/${side}/restore`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ revision, version, brainId }),
+  })
+}
+
+export function readPluginDesignChoice(plugin: string, brainId: string, signal?: AbortSignal) {
+  return request<PluginDesignChoice>(`/api/ui-chunks/${encodeURIComponent(plugin)}/design/choice?brain=${encodeURIComponent(brainId)}`, { signal })
+}
+
+export function savePluginDesignChoice(plugin: string, brainId: string, choice: PluginDesignChoice) {
+  return request<PluginDesignChoice>(`/api/ui-chunks/${encodeURIComponent(plugin)}/design/choice`, {
+    method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...choice, brainId }),
   })
 }
 

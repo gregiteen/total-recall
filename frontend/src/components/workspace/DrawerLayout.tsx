@@ -2,8 +2,8 @@ import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import type { PluginInfo } from '../../api/plugins'
 import {
-  findWorkspaceChunks, readDrawer, readWorkspaceChunk, saveDrawer,
-  type DrawerConfig, type DrawerRevision, type DrawerSide, type PanelRef, type PluginDesign, type WorkspaceChunk,
+  findWorkspaceChunks, readDrawer, readDrawerHistory, restoreDrawer, readWorkspaceChunk, saveDrawer,
+  type DrawerConfig, type DrawerHistory, type DrawerRevision, type DrawerSide, type PanelRef, type PluginDesign, type WorkspaceChunk,
 } from '../../api/workspace-drawers'
 import { PluginPanel, pluginElements } from '../plugins/PluginPanel'
 import { ScopedPluginCommands } from '../plugins/ScopedPluginCommands'
@@ -146,7 +146,14 @@ function LayoutEditor({ side, draft, onChange, plugins, brainId }: {
   </div>
 }
 
-export function DrawerLayout({ side, view, plugins, brainId }: {
+export function DrawerLayout(props: {
+  side: DrawerSide; view: 'custom' | 'shortcuts'; plugins: PluginInfo[] | null; brainId?: string
+}) {
+  // Remount editing and history state on a scope change, including in-flight saves.
+  return <ScopedDrawerLayout key={`${props.brainId}:${props.side}`} {...props} />
+}
+
+function ScopedDrawerLayout({ side, view, plugins, brainId }: {
   side: DrawerSide; view: 'custom' | 'shortcuts'; plugins: PluginInfo[] | null; brainId?: string
 }) {
   const [revision, setRevision] = useState<DrawerRevision | null>(null)
@@ -154,19 +161,27 @@ export function DrawerLayout({ side, view, plugins, brainId }: {
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
   const [refresh, setRefresh] = useState(0)
+  const [history, setHistory] = useState<DrawerHistory | null>(null)
+  const [selected, setSelected] = useState('')
   useEffect(() => {
     const controller = new AbortController()
-    void readDrawer(side, controller.signal).then(
-      current => { if (!controller.signal.aborted) { setRevision(current); setError('') } },
+    void readDrawer(side, controller.signal, brainId).then(
+      current => { if (!controller.signal.aborted) { setRevision(current); setHistory(null); setSelected(''); setError('') } },
       error => { if (!controller.signal.aborted) setError(error.message) },
     )
     return () => controller.abort()
-  }, [refresh, side])
+  }, [refresh, side, brainId])
   return <div className="drawer-stack">
     <div className="drawer-actions">
       {!draft && <button type="button" className="btn btn-primary btn-sm" disabled={!revision}
         onClick={() => { setDraft(revision!.config); setError('') }}>{view === 'shortcuts' ? 'Edit shortcuts' : 'Edit drawer'}</button>}
       {!draft && <button type="button" className="btn btn-ghost btn-sm" onClick={() => setRefresh(refresh + 1)}>Refresh</button>}
+      {!draft && <button type="button" className="btn btn-ghost btn-sm" disabled={busy || !revision} onClick={async () => {
+        setBusy(true); setError('')
+        try { setHistory(await readDrawerHistory(side, undefined, brainId)); setSelected('') }
+        catch (error) { setError(error instanceof Error ? error.message : 'Could not read saved revisions.') }
+        finally { setBusy(false) }
+      }}>Saved revisions</button>}
     </div>
     {error && <p className="drawer-error" role="alert">{error}</p>}
     {!revision && !error && <p role="status">Loading the saved drawer…</p>}
@@ -174,8 +189,8 @@ export function DrawerLayout({ side, view, plugins, brainId }: {
       event.preventDefault()
       setBusy(true); setError('')
       try {
-        setRevision(await saveDrawer(side, { config: draft, version: revision.version }))
-        setDraft(null)
+        setRevision(await saveDrawer(side, { config: draft, version: revision.version }, brainId))
+        setDraft(null); setHistory(null); setSelected('')
       } catch (error) { setError(error instanceof Error ? error.message : 'Could not save the drawer.') }
       finally { setBusy(false) }
     }}>
@@ -185,6 +200,23 @@ export function DrawerLayout({ side, view, plugins, brainId }: {
         <button type="button" className="btn btn-ghost" disabled={busy} onClick={() => { setDraft(null); setError('') }}>Cancel</button>
       </div>
     </form>}
+    {!draft && history && <section className="drawer-stack" aria-label="Saved drawer revisions">
+      <label>Saved revision
+        <select className="select" value={selected} onChange={event => setSelected(event.target.value)}>
+          <option value="">Choose a saved revision…</option>
+          {history.history.map(entry => <option key={entry.version} value={entry.version}>{new Date(entry.savedAt).toLocaleString()} · {entry.version.slice(0, 8)}</option>)}
+        </select>
+      </label>
+      {!history.history.length && <p>No prior saved revisions.</p>}
+      <button type="button" className="btn btn-ghost" disabled={!selected || busy} onClick={async () => {
+        setBusy(true); setError('')
+        try {
+          setRevision(await restoreDrawer(side, selected, history.version, brainId))
+          setHistory(null); setSelected('')
+        } catch (error) { setError(error instanceof Error ? error.message : 'Could not restore the drawer.') }
+        finally { setBusy(false) }
+      }}>Restore saved revision</button>
+    </section>}
     {!draft && revision && (view === 'shortcuts' ? <ShortcutList shortcuts={revision.config.shortcuts} /> : <>
       {revision.config.html && <DrawerMarkup title={`${side} drawer custom HTML`} html={revision.config.html} />}
       {revision.config.chunks.map(key => <PublishedChunk key={`${brainId}:${key}:${refresh}`} name={key} side={side} plugins={plugins} brainId={brainId} designOwner={key.split(':')[0]} />)}

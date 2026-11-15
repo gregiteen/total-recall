@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { addWorkspaceUiChunk, getUiChunk, readPluginDesign, searchUiChunks, UiChunkInputError } from '../../core/ui-chunks.mjs';
+import { addWorkspaceUiChunk, getUiChunk, readPluginDesign, readPluginDesignChoice, writePluginDesignChoice, searchUiChunks, UiChunkInputError } from '../../core/ui-chunks.mjs';
 import { chooseUiComposition } from '../../core/ui-chunk-choice.mjs';
 import {
   createWorkspacePage, listWorkspacePages, prepareWorkspacePage, publishWorkspaceComposition,
@@ -68,8 +68,30 @@ router.get('/api/ui-chunks/:plugin/design/revision', requireAuth, requireScope('
     if (revision !== undefined && (typeof revision !== 'string' || !/^[a-f0-9]{64}$/.test(revision))) {
       throw new UiChunkInputError('Invalid design revision.');
     }
-    return readPluginDesign(req.params.plugin, { ...workspaceTarget(req, req.query.brain), revision });
+    return readPluginDesign(req.params.plugin, { ...resolvePluginBrainTargets([req.query.brain ?? 'global'], req.auth)[0], revision });
   }));
+
+router.get('/api/ui-chunks/:plugin/design/choice', requireAuth, requireScope('config:read'), (req, res) =>
+  sendWorkspaceData(res, () => {
+    const { brainDir, projectRoot } = resolvePluginBrainTargets([req.query.brain], req.auth)[0];
+    return readPluginDesignChoice(brainDir, req.params.plugin, projectRoot);
+  }, 'Design choice'));
+
+router.put('/api/ui-chunks/:plugin/design/choice', requireAuth, requireScope('config:write'), async (req, res) => {
+  res.set('Cache-Control', 'private, no-store');
+  if (!req.is('application/json')) return res.status(415).json({ error: 'Use JSON to save a design choice.' });
+  try {
+    const { brainId, markdown, version } = req.body ?? {};
+    const { brainDir, projectRoot } = resolvePluginBrainTargets([brainId], req.auth)[0];
+    if (Object.keys(req.body ?? {}).some(key => !['brainId', 'markdown', 'version'].includes(key))) throw new UiChunkInputError('Invalid design choice request.');
+    return res.json(await writePluginDesignChoice(brainDir, req.params.plugin, markdown, version, projectRoot));
+  } catch (error) {
+    if (error instanceof UiChunkInputError) return res.status(400).json({ error: error.message });
+    if (sendScopeError(res, error)) return;
+    if (error.message.startsWith('Plugin state version conflict')) return res.status(409).json({ error: 'The design choice changed. Reload before saving.' });
+    return res.status(500).json({ error: 'Could not save the design choice.' });
+  }
+});
 
 router.get('/api/ui-chunks/:plugin/composition/current', requireAuth, requireScope('config:read'), (req, res) =>
   sendWorkspaceData(res, () => {

@@ -4,7 +4,8 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { requireAuth, requireScope } from '../auth.mjs';
 import { getNodes } from '../../core/vault-cache.mjs';
-import { DrawerInputError, readDrawerConfig, writeDrawerConfig } from '../../core/workspace-drawers.mjs';
+import { DrawerInputError, readDrawerConfig, readDrawerHistory, restoreDrawerConfig, writeDrawerConfig } from '../../core/workspace-drawers.mjs';
+import { resolvePluginBrainTargets } from '../plugin-brain-targets.mjs';
 import {
   VAULT_DIR,
   BRAIN_DIR,
@@ -19,28 +20,45 @@ const router = Router();
 // (breaks on Windows and on paths with encoded characters).
 const ROOT = process.env.TR_ROOT || SHARED_ROOT || path.join(path.dirname(fileURLToPath(import.meta.url)), '..', '..', '..');
 
-router.get('/api/dashboard/drawers/:edge', requireAuth, requireScope('config:read'), (req, res) => {
-  res.set('Cache-Control', 'no-store');
+function drawerError(res, error) {
+  if (error instanceof DrawerInputError) return res.status(400).json({ error: error.message });
+  if ([400, 403, 404, 409, 503].includes(error.status)) return res.status(error.status).json({ error: error.message });
+  if (error.message.startsWith('Plugin state version conflict')) {
+    return res.status(409).json({ error: 'The drawer changed elsewhere. Reload it before saving or restoring.' });
+  }
+  return res.status(500).json({ error: 'Could not access the saved drawer.' });
+}
+
+for (const history of [false, true]) {
+  router.get('/api/dashboard/drawers/:edge' + (history ? '/history' : ''), requireAuth, requireScope('config:read'), (req, res) => {
+    res.set('Cache-Control', 'private, no-store');
+    try {
+      const { brainDir } = resolvePluginBrainTargets([req.query.brain ?? 'global'], req.auth)[0];
+      return res.json((history ? readDrawerHistory : readDrawerConfig)(brainDir, req.params.edge));
+    } catch (error) { return drawerError(res, error); }
+  });
+}
+
+router.put('/api/dashboard/drawers/:edge', requireAuth, requireScope('config:write'), async (req, res) => {
+  res.set('Cache-Control', 'private, no-store');
+  if (!req.is('application/json')) return res.status(415).json({ error: 'Use JSON to save the drawer.' });
   try {
-    return res.json(readDrawerConfig(BRAIN_DIR, req.params.edge));
+    const { brainDir } = resolvePluginBrainTargets([req.body?.brainId ?? 'global'], req.auth)[0];
+    if (Object.keys(req.body ?? {}).some(key => !['brainId', 'config', 'version'].includes(key))) throw new DrawerInputError('Invalid drawer save request.');
+    return res.json(await writeDrawerConfig(brainDir, req.params.edge, req.body?.config, req.body?.version));
   } catch (error) {
-    if (error instanceof DrawerInputError) return res.status(400).json({ error: error.message });
-    return res.status(500).json({ error: 'Could not read the saved drawer.' });
+    return drawerError(res, error);
   }
 });
 
-router.put('/api/dashboard/drawers/:edge', requireAuth, requireScope('config:write'), async (req, res) => {
-  res.set('Cache-Control', 'no-store');
-  if (!req.is('application/json')) return res.status(415).json({ error: 'Use JSON to save the drawer.' });
+router.post('/api/dashboard/drawers/:edge/restore', requireAuth, requireScope('config:write'), async (req, res) => {
+  res.set('Cache-Control', 'private, no-store');
+  if (!req.is('application/json')) return res.status(415).json({ error: 'Use JSON to restore the drawer.' });
   try {
-    return res.json(await writeDrawerConfig(BRAIN_DIR, req.params.edge, req.body?.config, req.body?.version));
-  } catch (error) {
-    if (error instanceof DrawerInputError) return res.status(400).json({ error: error.message });
-    if (error.message.startsWith('Plugin state version conflict')) {
-      return res.status(409).json({ error: 'The drawer changed elsewhere. Reload it before saving.' });
-    }
-    return res.status(500).json({ error: 'Could not save the drawer.' });
-  }
+    const { brainDir } = resolvePluginBrainTargets([req.body?.brainId ?? 'global'], req.auth)[0];
+    if (Object.keys(req.body ?? {}).some(key => !['brainId', 'revision', 'version'].includes(key))) throw new DrawerInputError('Invalid drawer restore request.');
+    return res.json(await restoreDrawerConfig(brainDir, req.params.edge, req.body?.revision, req.body?.version));
+  } catch (error) { return drawerError(res, error); }
 });
 
 router.get('/api/dashboard/instructions', requireAuth, requireScope('instructions:read'), (req, res) => {

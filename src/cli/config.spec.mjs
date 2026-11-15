@@ -4,6 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import yaml from 'yaml';
 import configCommand from './config.mjs';
+import { globalPluginsDir } from '../core/plugin-loader.mjs';
 
 describe('config CLI command', () => {
   let tmpAgentDir;
@@ -137,5 +138,62 @@ describe('config CLI command', () => {
     }
     await expect(configCommand(['get', 'dashboard'])).rejects.toThrow('individual');
     expect(fs.readFileSync(file, 'utf8')).toBe(before);
+  });
+
+  it('exposes drawer history and restore with explicit CAS versions and selected-brain isolation', async () => {
+    const output = vi.spyOn(console, 'log').mockImplementation(() => {});
+    const result = () => JSON.parse(output.mock.calls.at(-1)[0]);
+    process.env.TR_BRAIN = path.join(tmpAgentDir, 'selected-brain');
+    const file = path.join(tmpAgentDir, 'layout.json');
+    fs.writeFileSync(file, JSON.stringify({ html: 'First' }));
+    await expect(configCommand(['drawer', 'right', '--file', file])).rejects.toThrow('--version');
+    await configCommand(['drawer', 'right', '--file', file, '--version', 'null']);
+    const first = result();
+    fs.writeFileSync(file, JSON.stringify({ html: 'Second' }));
+    await configCommand(['drawer', 'right', '--file', file, '--version', first.version]);
+    const second = result();
+    await configCommand(['drawer', 'right', '--history']);
+    expect(result()).toMatchObject({ version: second.version, history: [{ version: first.version, config: first.config }] });
+    await expect(configCommand(['drawer', 'right', '--restore', first.version, '--version', first.version])).rejects.toThrow('version conflict');
+    await configCommand(['drawer', 'right', '--restore', first.version, '--version', second.version]);
+    expect(result().config).toEqual(first.config);
+    await configCommand(['drawer', 'bottom', '--history']);
+    expect(result()).toEqual({ history: [], version: null });
+    await configCommand(['drawer', 'right', '--global']);
+    expect(result().version).toBe(null);
+    await expect(configCommand(['drawer', 'right', '--restore', first.version, '--file', file, '--version', second.version])).rejects.toThrow('Invalid drawer');
+    await expect(configCommand(['drawer', 'right', '--version', second.version, '--version', second.version])).rejects.toThrow('Invalid workspace');
+  });
+
+  it('chooses and removes bounded DESIGN.md content without changing the owner or executing code', async () => {
+    const output = vi.spyOn(console, 'log').mockImplementation(() => {});
+    const result = () => JSON.parse(output.mock.calls.at(-1)[0]);
+    process.env.TR_BRAIN = path.join(tmpAgentDir, 'selected-brain');
+    const owner = path.join(globalPluginsDir(), 'design-cli');
+    fs.mkdirSync(owner, { recursive: true });
+    fs.writeFileSync(path.join(owner, 'plugin.json'), JSON.stringify({ id: 'design-cli', name: 'Design CLI', description: 'Owner', version: '1.0.0' }));
+    fs.writeFileSync(path.join(owner, 'DESIGN.md'), '# Owner\n');
+    const file = path.join(tmpAgentDir, 'DESIGN.md');
+    const markdown = '---\ncolors:\n  primary: "#abcdef"\n---\n<script>throw new Error("must not execute")</script>\n';
+    fs.writeFileSync(file, markdown);
+    await configCommand(['design', 'design-cli']);
+    expect(result()).toEqual({ markdown: null, version: null });
+    await configCommand(['design', 'design-cli', '--file', file, '--version', 'null']);
+    const selected = result();
+    expect(selected.markdown).toBe(markdown);
+    expect(fs.readFileSync(path.join(owner, 'DESIGN.md'), 'utf8')).toBe('# Owner\n');
+    await expect(configCommand(['design', 'design-cli', '--remove', '--version', 'null'])).rejects.toThrow('version conflict');
+    await configCommand(['design', 'design-cli', '--global']);
+    expect(result().markdown).toBe(null);
+    await configCommand(['design', 'design-cli', '--remove', '--version', selected.version]);
+    expect(result().markdown).toBe(null);
+    const removed = result();
+    fs.writeFileSync(file, 'x'.repeat(65537));
+    await expect(configCommand(['design', 'design-cli', '--file', file, '--version', removed.version])).rejects.toThrow('bounded regular file');
+    const link = path.join(tmpAgentDir, 'linked.md');
+    fs.symlinkSync(file, link);
+    await expect(configCommand(['design', 'design-cli', '--file', link, '--version', removed.version])).rejects.toThrow();
+    await configCommand(['design', 'design-cli']);
+    expect(result()).toEqual(removed);
   });
 });

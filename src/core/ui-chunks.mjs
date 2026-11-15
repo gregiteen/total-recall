@@ -14,6 +14,8 @@ const surfaces = new Set(['page', 'left', 'right', 'bottom']);
 const maxFileBytes = 64 * 1024;
 const maxQueryLength = 1024;
 const POOL = 'workspace-chunk-pool';
+const DESIGN = 'workspace-design';
+export const MAX_USER_DESIGN_BYTES = 64 * 1024;
 export const uiChunkRegistryPath = path.join(import.meta.dirname, 'ui-chunk.registry.json');
 const registry = JSON.parse(fs.readFileSync(uiChunkRegistryPath, 'utf8'));
 const validator = createValidator({ extensions: [registry] });
@@ -120,10 +122,67 @@ export function compilePluginDesign(markdown) {
   return { css, components };
 }
 
-export function readPluginDesign(plugin, { projectRoot = process.cwd(), revision } = {}) {
+function designOwner(plugin, projectRoot) {
   if (!isId(plugin)) throw new UiChunkInputError('Invalid plugin ID.');
   const owner = discoverPlugins(projectRoot).find(entry => entry.id === plugin && entry.valid);
-  if (!owner || !pluginActivation(owner, { projectRoot }).enabled) return null;
+  return owner && pluginActivation(owner, { projectRoot }).enabled ? owner : null;
+}
+
+function designStore(brainDir, plugin) {
+  if (typeof brainDir !== 'string' || !path.isAbsolute(brainDir)) throw new UiChunkInputError('Select a brain for the design choice.');
+  return new PluginStateStore(path.join(brainDir, 'config', `workspace-design-${plugin}.json`), DESIGN);
+}
+
+function userDesign(markdown) {
+  if (typeof markdown !== 'string' || !markdown.trim() || markdown.includes('\0') ||
+      Buffer.byteLength(markdown, 'utf8') > MAX_USER_DESIGN_BYTES) {
+    throw new UiChunkInputError('Supply DESIGN.md content of at most 64 KiB.');
+  }
+  try {
+    const result = compilePluginDesign(markdown);
+    if (result.css === ':root{}\n') throw new Error();
+    return result;
+  } catch { throw new UiChunkInputError('The user design contains invalid or unsafe tokens.'); }
+}
+
+export function readPluginDesignChoice(brainDir, plugin, projectRoot = process.cwd()) {
+  if (!designOwner(plugin, projectRoot)) return null;
+  const store = designStore(brainDir, plugin);
+  const record = store.read({ markdown: null });
+  if (!record || typeof record !== 'object' || Array.isArray(record) ||
+      Object.keys(record).length !== 1 || !Object.hasOwn(record, 'markdown')) {
+    throw new UiChunkInputError('The saved design choice is invalid.');
+  }
+  if (record.markdown !== null) userDesign(record.markdown);
+  return { markdown: record.markdown, version: store.version };
+}
+
+export async function writePluginDesignChoice(brainDir, plugin, markdown, version, projectRoot = process.cwd()) {
+  if (!designOwner(plugin, projectRoot)) throw new UiChunkInputError('The design owner must be installed and enabled.');
+  if (version !== null && (typeof version !== 'string' || !/^[a-f0-9]{64}$/.test(version))) {
+    throw new UiChunkInputError('Reload the design choice before saving.');
+  }
+  if (markdown !== null) userDesign(markdown);
+  // Validate existing data rather than silently replacing a corrupt selection.
+  readPluginDesignChoice(brainDir, plugin, projectRoot);
+  const result = await executePluginState({
+    file: designStore(brainDir, plugin).file, plugin: DESIGN, action: 'write',
+    value: { markdown }, expectedVersion: version,
+  });
+  return { markdown, version: result.version };
+}
+
+export function readPluginDesign(plugin, { projectRoot = process.cwd(), brainDir, revision } = {}) {
+  const owner = designOwner(plugin, projectRoot);
+  if (!owner) return null;
+  if (brainDir) {
+    const choice = readPluginDesignChoice(brainDir, plugin, projectRoot);
+    if (choice.markdown !== null) {
+      const version = createHash('sha256').update('workspace:' + choice.version).digest('hex');
+      return revision === version ? { unchanged: true }
+        : { revision: version, ...userDesign(choice.markdown) };
+    }
+  }
   const root = fs.realpathSync(owner.dir);
   const declared = owner.manifest.ui?.design_tokens;
   for (const file of declared ? [declared] : ['DESIGN.md', 'ui/DESIGN.md']) {

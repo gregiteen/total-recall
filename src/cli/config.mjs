@@ -4,6 +4,45 @@ import yaml from 'yaml';
 import { resolveBrainDir, parseLayerFlag } from './agent-dir.mjs';
 import { writeFileSecure } from '../core/secure-file.mjs';
 
+function readWorkspaceFile(filename, limit) {
+  const fd = fs.openSync(filename, fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW | fs.constants.O_NONBLOCK);
+  try {
+    const stat = fs.fstatSync(fd);
+    if (!stat.isFile() || stat.size > limit) throw new Error('Workspace input must be a bounded regular file.');
+    const buffer = Buffer.alloc(limit + 1);
+    let used = 0;
+    while (used < buffer.length) {
+      const count = fs.readSync(fd, buffer, used, buffer.length - used, null);
+      if (!count) break;
+      used += count;
+    }
+    if (used > limit) throw new Error('Workspace input exceeds the byte limit.');
+    return new TextDecoder('utf-8', { fatal: true }).decode(buffer.subarray(0, used));
+  } finally { fs.closeSync(fd); }
+}
+
+function workspaceOptions(args) {
+  const options = {};
+  for (let index = 0; index < args.length; index++) {
+    const flag = args[index];
+    if (!['--file', '--version', '--restore', '--history', '--remove'].includes(flag) || Object.hasOwn(options, flag)) throw new Error('Invalid workspace configuration option.');
+    if (['--history', '--remove'].includes(flag)) options[flag] = true;
+    else {
+      const value = args[++index];
+      if (!value || value.startsWith('--')) throw new Error('Workspace option requires a value.');
+      options[flag] = value;
+    }
+  }
+  return options;
+}
+
+function workspaceVersion(options) {
+  const version = options['--version'];
+  if (version === 'null') return null;
+  if (typeof version !== 'string' || !/^[a-f0-9]{64}$/.test(version)) throw new Error('Supply --version <current hash|null> from a prior read.');
+  return version;
+}
+
 // Pre-defined mapping of known settings
 const KEY_MAP = {
   'session_ttl_hours': { file: 'security', path: 'dashboard.session_ttl_hours', type: 'number' },
@@ -153,7 +192,12 @@ export default async function configCommand(args) {
     get [key]      Retrieve the value of a configuration key. If key is omitted, lists all keys.
     set <key> <v>  Set the value of a configuration key. Converts inputs to correct type.
     drawer <right|bottom>                 Read a workspace drawer as JSON
-    drawer <right|bottom> --file <json>   Save a workspace drawer configuration
+    drawer <right|bottom> --history       Read bounded saved revisions
+    drawer <right|bottom> --file <json> --version <hash|null>   Save a drawer
+    drawer <right|bottom> --restore <revision> --version <hash>   Restore a drawer
+    design <plugin>                      Read the selected-brain DESIGN.md choice
+    design <plugin> --file <markdown> --version <hash|null>   Choose DESIGN.md content
+    design <plugin> --remove --version <hash>   Return to the owner design
 
   Options:
     --global       Explicitly target the global brain configuration (~/.agent/)
@@ -180,15 +224,31 @@ export default async function configCommand(args) {
   }
 
   if (command === 'drawer') {
-    const { readDrawerConfig, writeDrawerConfig } = await import('../core/workspace-drawers.mjs');
-    const [, edge, fileFlag, file] = remainingArgs;
-    if (!edge || (remainingArgs.length !== 2 && (remainingArgs.length !== 4 || fileFlag !== '--file' || !file))) {
-      throw new Error('Usage: total-recall config drawer <right|bottom> [--file <json>] [--global|--project]');
-    }
+    const { readDrawerConfig, readDrawerHistory, restoreDrawerConfig, writeDrawerConfig } = await import('../core/workspace-drawers.mjs');
+    const [, edge, ...flags] = remainingArgs;
+    const options = workspaceOptions(flags);
+    const file = options['--file'], restore = options['--restore'];
+    if (!edge || options['--remove'] || (file && restore) || (options['--history'] && (file || restore)) || (!file && !restore && options['--version'])) throw new Error('Invalid drawer options. See config --help.');
     const brain = layer === 'auto' && process.env.TR_BRAIN ? path.resolve(process.env.TR_BRAIN) : resolveBrainDir(layer);
-    const current = readDrawerConfig(brain, edge);
-    if (file && fs.statSync(file).size > 512 * 1024) throw new Error('Drawer file exceeds 512 KiB.');
-    const result = file ? await writeDrawerConfig(brain, edge, JSON.parse(fs.readFileSync(file, 'utf8')), current.version) : current;
+    const result = file ? await writeDrawerConfig(brain, edge, JSON.parse(readWorkspaceFile(file, 512 * 1024)), workspaceVersion(options))
+      : restore ? await restoreDrawerConfig(brain, edge, restore, workspaceVersion(options))
+      : options['--history'] ? readDrawerHistory(brain, edge) : readDrawerConfig(brain, edge);
+    console.log(JSON.stringify(result, null, 2));
+    return;
+  }
+
+  if (command === 'design') {
+    const { readPluginDesignChoice, writePluginDesignChoice, MAX_USER_DESIGN_BYTES } = await import('../core/ui-chunks.mjs');
+    const [, plugin, ...flags] = remainingArgs;
+    const options = workspaceOptions(flags);
+    const file = options['--file'], remove = options['--remove'];
+    if (!plugin || options['--history'] || options['--restore'] || (file && remove) || (!file && !remove && options['--version'])) throw new Error('Invalid design options. See config --help.');
+    const brain = layer === 'auto' && process.env.TR_BRAIN ? path.resolve(process.env.TR_BRAIN) : resolveBrainDir(layer);
+    const projectRoot = layer === 'global' ? null : process.cwd();
+    const result = file || remove
+      ? await writePluginDesignChoice(brain, plugin, remove ? null : readWorkspaceFile(file, MAX_USER_DESIGN_BYTES), workspaceVersion(options), projectRoot)
+      : readPluginDesignChoice(brain, plugin, projectRoot);
+    if (!result) throw new Error('The design owner must be installed and enabled.');
     console.log(JSON.stringify(result, null, 2));
     return;
   }

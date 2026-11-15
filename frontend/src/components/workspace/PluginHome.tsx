@@ -5,6 +5,7 @@ import { drawerPanels, PublishedChunk } from './DrawerLayout'
 import { PluginPanel } from '../plugins/PluginPanel'
 import { scopedPluginOperations } from '../plugins/scoped-plugin-operations'
 import { usePluginDesign } from './usePluginDesign'
+import { PluginDesignChoice } from './PluginDesignChoice'
 
 export function PluginHome({ plugin, plugins, brainId, onCommand }: {
   plugin: PluginInfo; plugins: PluginInfo[] | null; brainId?: string; onCommand: (name: string) => void
@@ -52,6 +53,7 @@ export function PluginHome({ plugin, plugins, brainId, onCommand }: {
   }, [plugin.id, brainId])
 
   return <div className="plugin-home">
+    <PluginDesignChoice pluginId={plugin.id} brainId={brainId} />
     {loading && <p role="status">Loading published blocks…</p>}
     {liveDesign?.issue && <p role="status">{liveDesign.issue}</p>}
     {!loading && chunks.map(chunk =>

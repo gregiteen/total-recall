@@ -1,8 +1,21 @@
 import { useEffect, useState } from 'react'
 import { readPluginDesign, type PluginDesign } from '../../api/workspace-drawers'
 
+export function refreshPluginDesign(pluginId: string, brainId: string) {
+  window.dispatchEvent(new CustomEvent('workspace-design-changed', { detail: { pluginId, brainId } }))
+}
+
 export function usePluginDesign(pluginId: string | undefined, brainId?: string) {
   const [current, setCurrent] = useState<{ pluginId: string; brainId?: string; design?: PluginDesign; issue?: string }>()
+  const [refreshKey, setRefreshKey] = useState(0)
+  useEffect(() => {
+    const changed = (event: Event) => {
+      const detail = (event as CustomEvent).detail
+      if (detail?.pluginId === pluginId && detail?.brainId === brainId) setRefreshKey(key => key + 1)
+    }
+    window.addEventListener('workspace-design-changed', changed)
+    return () => window.removeEventListener('workspace-design-changed', changed)
+  }, [pluginId, brainId])
   useEffect(() => {
     if (!pluginId) return
     const controller = new AbortController()
@@ -33,6 +46,6 @@ export function usePluginDesign(pluginId: string | undefined, brainId?: string) 
       controller.abort()
       clearTimeout(timer)
     }
-  }, [pluginId, brainId])
+  }, [pluginId, brainId, refreshKey])
   return current?.pluginId === pluginId && current?.brainId === brainId ? current : undefined
 }
