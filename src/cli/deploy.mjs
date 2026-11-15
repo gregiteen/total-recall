@@ -94,6 +94,39 @@ function logOk(msg)        { console.error(`  ✅ ${msg}`); _uiEmit?.('ok', msg)
 function logSkip(msg)      { console.error(`  ⏭  ${msg}`); _uiEmit?.('info', msg); }
 function logWarn(msg)      { console.error(`  ⚠️  ${msg}`); _uiEmit?.('warn', msg); }
 
+// ─── Remote credential custody (Auth-owned) ───────────────────────────────────
+// Core never opens, copies or writes a secrets store. The Auth owner projects
+// only explicitly named keys, over SSH stdin; a missing prerequisite or failed
+// write is thrown, never skipped. No value reaches argv, logs or this return.
+const WIZARD_KEY_NAMES = { googleApiKey: 'GOOGLE_API_KEY', openaiApiKey: 'OPENAI_API_KEY' };
+
+export function wizardSecretKeys(wizardOpts = {}) {
+  if (Array.isArray(wizardOpts.secretKeys)) return wizardOpts.secretKeys;
+  return Object.entries(WIZARD_KEY_NAMES).filter(([opt]) => wizardOpts[opt]).map(([, name]) => name);
+}
+
+export async function provisionRemoteCustody({ target, wizardOpts = {}, load = __loadOwnedPlugin, brainDir, log: say = log, warn = logWarn }) {
+  const { provisionDeployTarget } = await load('auth', 'secrets-deploy-custody');
+  const { defaultBrainDir } = await load('auth', 'secrets-store');
+  const outcome = await provisionDeployTarget(brainDir || process.env.TR_BRAIN || defaultBrainDir(), target, { keys: wizardSecretKeys(wizardOpts) });
+  if (!outcome.ok) throw new Error(`Credential provisioning stopped (${outcome.code}): ${outcome.message} ${outcome.action}`);
+  if (!outcome.provisioned) warn(`${outcome.message} ${outcome.action}`);
+  else say(`Provisioned ${outcome.count} credential key(s) to the remote .env: ${outcome.keys.join(', ')}`);
+  return outcome;
+}
+
+/** Run the remote deploy; the dashboard password travels on stdin, never in argv. */
+export async function runRemoteTotalRecallDeploy({ target, prefix, wizardOpts = {}, extraArgs = [], load = __loadOwnedPlugin }) {
+  const { runRemoteWithStdin } = await load('auth', 'secrets-deploy-custody');
+  const quote = (v) => `'${String(v).replace(/'/g, `'\\''`)}'`;
+  let cmd = `npx --yes total-recall deploy --domain ${quote(wizardOpts.domain || 'localhost')}`;
+  if (wizardOpts.dashboardPassword) cmd += ' --dashboard-password-stdin';
+  for (const a of extraArgs) cmd += ` ${a}`;
+  const result = runRemoteWithStdin(target, `${prefix} ${cmd}`, { stdin: wizardOpts.dashboardPassword ? `${wizardOpts.dashboardPassword}\n` : '' });
+  if (!result.ok) throw new Error(`Remote Total Recall deployment failed: ${result.message}`);
+  return result;
+}
+
 function commandExists(cmd) {
   if (!cmd || !/^[a-zA-Z0-9_-]+$/.test(cmd)) {
     return false;
@@ -204,6 +237,7 @@ function parseArgs(args) {
       case '--cloudflare-quick': opts.cloudflareQuick = true; break;
       case '--allow-insecure-http': opts.allowInsecureHttp = true; break;
       case '--dashboard-password': opts.dashboardPassword = args[++i]; break;
+      case '--dashboard-password-stdin': opts.dashboardPasswordStdin = true; break;
       case '--ui': opts.ui = true; break;
       case '--ui-port': opts.uiPort = parseInt(args[++i], 10) || 3001; break;
       case '--dry-run': opts.dryRun = true; break;
@@ -494,68 +528,16 @@ export default async function deploy(args) {
           `${cmdPrefix} which node || (curl -fsSL https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.7/install.sh -o nvm_install.sh && bash nvm_install.sh && rm nvm_install.sh && export NVM_DIR="$HOME/.nvm" && [ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh" && nvm install 20)`
         ], { stdio: 'inherit' });
 
-        // Deploy full secrets store (SSOT) + .env projection to remote TR brain
-        try {
-          log('🔒 Syncing Total Recall secrets store to remote host...');
-          const { defaultBrainDir, resolveSecretsPath } = await __loadOwnedPlugin('auth', 'secrets-store');
-          const { buildDeploySecretsPayload } = await __loadOwnedPlugin('auth', 'secrets-env-export');
-          const localBrain = process.env.TR_BRAIN || defaultBrainDir();
-          const secretsPath = resolveSecretsPath(localBrain);
-          const remoteConfig = '.agent/skills/total-recall/config';
-          if (fs.existsSync(secretsPath)) {
-            spawnSync('ssh', [
-              '-o', 'StrictHostKeyChecking=accept-new',
-              `${user}@${ip}`,
-              `mkdir -p ~/${remoteConfig}`,
-            ]);
-            spawnSync(
-              'scp',
-              ['-o', 'StrictHostKeyChecking=accept-new', secretsPath, `${user}@${ip}:~/${remoteConfig}/secrets.enc`],
-              { stdio: 'inherit' },
-            );
-            try {
-              const payload = await buildDeploySecretsPayload(localBrain, { includeGlobal: true });
-              const b64 = Buffer.from(payload.dotenv, 'utf8').toString('base64');
-              spawnSync('ssh', [
-                '-o', 'StrictHostKeyChecking=accept-new',
-                `${user}@${ip}`,
-                `mkdir -p ~/.agent/skills/total-recall ~/${remoteConfig} && echo ${b64} | base64 -d > ~/.agent/skills/total-recall/.env && chmod 600 ~/.agent/skills/total-recall/.env ~/${remoteConfig}/secrets.enc`,
-              ]);
-            } catch {
-              /* optional env projection */
-            }
-            logOk('Secrets store + .env projection written remotely.');
-          } else if (wizardOpts.googleApiKey || wizardOpts.openaiApiKey) {
-            const secretsContent = JSON.stringify({
-              google_api_key: wizardOpts.googleApiKey || '',
-              openai_api_key: wizardOpts.openaiApiKey || '',
-            });
-            spawnSync('ssh', [
-              '-o', 'StrictHostKeyChecking=accept-new',
-              `${user}@${ip}`,
-              `mkdir -p ~/${remoteConfig} && printf '%s' '${secretsContent.replace(/'/g, "'\\''")}' > ~/${remoteConfig}/secrets.enc && chmod 600 ~/${remoteConfig}/secrets.enc`,
-            ]);
-            logOk('Wizard credentials written remotely (no local secrets.enc found).');
-          } else {
-            logWarn('No local secrets.enc — skip remote secret sync.');
-          }
-        } catch (err) {
-          logWarn(`Could not sync secrets remotely: ${err.message}`);
-        }
+        // Auth-owned scoped provisioning; failures stop the deploy.
+        log('🔒 Provisioning named Total Recall credentials to remote host...');
+        const localTarget = { host: ip, user, remoteDir: '.agent/skills/total-recall', sshOpts: ['-o', 'StrictHostKeyChecking=accept-new'] };
+        await provisionRemoteCustody({ target: localTarget, wizardOpts });
 
         logStep('3/3', 'Deploying Total Recall remotely...');
-        let deployCmd = `npx --yes total-recall deploy --domain ${wizardOpts.domain || 'localhost'}`;
-        if (wizardOpts.dashboardPassword) {
-          deployCmd += ` --dashboard-password "${wizardOpts.dashboardPassword}"`;
-        }
-        if (wizardOpts.httpsMethod === 'cloudflare-quick') {
-          deployCmd += ` --cloudflare-quick`;
-        }
-        spawnSync('ssh', [
-          '-o', 'StrictHostKeyChecking=accept-new',
-          `${user}@${ip}`,
-          `${cmdPrefix} ${deployCmd}`
-        ], { stdio: 'inherit' });
+        await runRemoteTotalRecallDeploy({
+          target: localTarget, prefix: cmdPrefix, wizardOpts,
+          extraArgs: wizardOpts.httpsMethod === 'cloudflare-quick' ? ['--cloudflare-quick'] : [],
+        });
 
         logStep('Done', 'Generating access token & discovering endpoints...');
         const pat = spawnSync('ssh', [
@@ -994,64 +976,17 @@ export default async function deploy(args) {
         }
         logOk('Node.js and nvm installed remotely');
 
-        // Full secrets SSOT + .env projection (not a 2-key stub)
-        try {
-          log('🔒 Syncing Total Recall secrets store to remote VM...');
-          const { defaultBrainDir, resolveSecretsPath } = await __loadOwnedPlugin('auth', 'secrets-store');
-          const { buildDeploySecretsPayload } = await __loadOwnedPlugin('auth', 'secrets-env-export');
-          const localBrain = process.env.TR_BRAIN || defaultBrainDir();
-          const secretsPath = resolveSecretsPath(localBrain);
-          const remoteConfig = '/root/.agent/skills/total-recall/config';
-          if (fs.existsSync(secretsPath)) {
-            spawnSync('ssh', [...sshArgs, `mkdir -p ${remoteConfig}`]);
-            spawnSync(
-              'scp',
-              ['-i', privateKeyPath, '-o', 'StrictHostKeyChecking=accept-new', secretsPath, `root@${ip}:${remoteConfig}/secrets.enc`],
-              { stdio: 'inherit' },
-            );
-            try {
-              const payload = await buildDeploySecretsPayload(localBrain, { includeGlobal: true });
-              const b64 = Buffer.from(payload.dotenv, 'utf8').toString('base64');
-              spawnSync('ssh', [
-                ...sshArgs,
-                `mkdir -p /root/.agent/skills/total-recall && echo ${b64} | base64 -d > /root/.agent/skills/total-recall/.env && chmod 600 /root/.agent/skills/total-recall/.env ${remoteConfig}/secrets.enc`,
-              ]);
-            } catch {
-              /* optional */
-            }
-            logOk('Secrets store + .env projection written remotely.');
-          } else if (wizardOpts.googleApiKey || wizardOpts.openaiApiKey) {
-            const secretsContent = JSON.stringify({
-              google_api_key: wizardOpts.googleApiKey || '',
-              openai_api_key: wizardOpts.openaiApiKey || '',
-            });
-            spawnSync('ssh', [
-              ...sshArgs,
-              `mkdir -p ${remoteConfig} && printf '%s' '${secretsContent.replace(/'/g, "'\\''")}' > ${remoteConfig}/secrets.enc && chmod 600 ${remoteConfig}/secrets.enc`,
-            ]);
-            logOk('Wizard credentials written remotely.');
-          } else {
-            logWarn('No local secrets.enc — skip remote secret sync.');
-          }
-        } catch (err) {
-          logWarn(`Could not sync secrets remotely: ${err.message}`);
-        }
+        // Auth-owned scoped provisioning; failures stop the deploy.
+        log('🔒 Provisioning named Total Recall credentials to remote VM...');
+        const vmTarget = { host: ip, user: 'root', remoteDir: '/root/.agent/skills/total-recall', sshOpts: ['-i', privateKeyPath, '-o', 'StrictHostKeyChecking=accept-new'] };
+        await provisionRemoteCustody({ target: vmTarget, wizardOpts });
 
         log('🧠 Running Total Recall deploy remotely...');
-        let deployCmd = `npx --yes total-recall deploy --domain ${wizardOpts.domain || 'localhost'}`;
-        if (wizardOpts.dashboardPassword) {
-          deployCmd += ` --dashboard-password "${wizardOpts.dashboardPassword}"`;
-        }
-        deployCmd += ` --cloudflare-quick`;
-
-        const remoteDeployResult = spawnSync('ssh', [
-          ...sshArgs,
-          `export NVM_DIR="$HOME/.nvm" && [ -s "$NVM_DIR/nvm.sh" ] && \\. "$NVM_DIR/nvm.sh" && ${deployCmd}`
-        ], { stdio: 'inherit' });
-
-        if (remoteDeployResult.status !== 0) {
-          throw new Error('Remote Total Recall deployment failed.');
-        }
+        await runRemoteTotalRecallDeploy({
+          target: vmTarget,
+          prefix: 'export NVM_DIR="$HOME/.nvm" && [ -s "$NVM_DIR/nvm.sh" ] && \\. "$NVM_DIR/nvm.sh" &&',
+          wizardOpts, extraArgs: ['--cloudflare-quick'],
+        });
 
         logStep('6/6', 'Activating Cloudflare Quick Tunnel and secure HTTPS links...');
 
@@ -1286,6 +1221,10 @@ ${fmtLine('Target VFS:   ', '~/.agent/')}
 
   // ── Step 7: Copy default config ──
   copyDefaultConfig(opts.dryRun);
+  if (opts.dashboardPasswordStdin) {
+    opts.dashboardPassword = fs.readFileSync(0, 'utf8').split(/\r?\n/)[0] || null;
+    if (!opts.dashboardPassword) throw new Error('--dashboard-password-stdin received no password on stdin.');
+  }
   await hardenSecurityConfig(opts.dryRun, opts.dashboardPassword);
 
   // ── Step 7: Install Reverse Proxy / Tunnel ──
