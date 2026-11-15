@@ -322,11 +322,6 @@ const CORE_METADATA = {
     usage: 'total-recall help [topic|command]',
     effect: 'read'
   },
-  collab: {
-    description: 'Launch collaborative sandbox server.',
-    usage: 'total-recall collab',
-    effect: 'read'
-  },
   command: {
     description: 'Create or manage dynamic composed agent CLI commands.',
     usage: 'total-recall command [create|list|remove]',

@@ -60,10 +60,9 @@ export async function loadPluginModule(id, name, { activeRequired = false, requi
   return import(pathToFileURL(file).href);
 }
 
-export async function loadPluginRouters() {
+export async function loadPluginRouters({ projectRoot = process.cwd(), discover = discoverPlugins, activation = pluginActivation } = {}) {
   const routers = [];
-  const projectRoot = process.cwd();
-  for (const plugin of discoverPlugins(projectRoot).filter(item => item.valid)) {
+  for (const plugin of discover(projectRoot).filter(item => item.valid)) {
     for (const relative of plugin.manifest.runtime?.routers || []) {
       process.env.TR_PACKAGE_ROOT = PACKAGE_ROOT;
       const file = resolvePluginFile(plugin.dir, relative);
@@ -71,8 +70,10 @@ export async function loadPluginRouters() {
       if (typeof module.default !== 'function') throw new Error(`Plugin ${plugin.id} router must export middleware`);
       const guarded = function router(req, res, next) {
         const ownsPath = module.default.stack?.some(layer => layer.route && layer.match(req.path));
-        if (!pluginActivation(plugin, { projectRoot }).enabled && ownsPath) return res.status(503).json({ error: `Plugin ${plugin.id} is inactive` });
-        if (!pluginActivation(plugin, { projectRoot }).enabled) return next();
+        const current = discover(projectRoot).find(item => item.id === plugin.id && item.valid && item.dir === plugin.dir);
+        const enabled = current && activation(current, { projectRoot }).enabled;
+        if (!enabled && ownsPath) return res.status(503).json({ error: `Plugin ${plugin.id} is unavailable or inactive` });
+        if (!enabled) return next();
         return module.default(req, res, next);
       };
       // Preserve the real mounted route stack for API/CLI discovery.

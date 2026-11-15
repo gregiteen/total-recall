@@ -522,15 +522,6 @@ Completely purge background services, configurations, and shims.
 
 ---
 
-### `collab`
-Start the Express + WebSockets collaboration server and Vite/React browser simulation portal.
-- **What it does**: Spins up the user management, group sharing database, persistent page-tied annotation registry, and live WebSockets channel connection router concurrently in one terminal wrapper.
-- **Usage**:
-  ```bash
-  npx total-recall collab
-  ```
-
----
 
 ### `brain`
 List, inspect or register brain layers. `total-recall brain status` shows the current project brain and physical global storage.

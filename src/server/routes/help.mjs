@@ -137,7 +137,7 @@ router.get('/api', (req, res) => {
 /**
  * GET /api/help
  * Returns a list of help topics, or the content of a specific topic.
- * Query: ?topic=cli-reference|ssss|architecture|collab
+ * Query: ?topic=cli-reference|ssss|architecture
  */
 router.get('/api/help', requireAuth, (req, res) => {
   const { topic } = req.query;
@@ -149,8 +149,7 @@ router.get('/api/help', requireAuth, (req, res) => {
       topics: [
         { id: 'cli-reference', title: 'CLI Reference Guide', description: 'npx total-recall command catalog and flags' },
         { id: 'ssss',          title: 'SSSS Specifications', description: 'Structured Semantic Syntax System guide' },
-        { id: 'architecture',  title: 'System Architecture', description: 'System topology and VFS structures' },
-        { id: 'collab',        title: 'Collaboration Guide', description: 'Collaborative workspaces and team annotations' }
+        { id: 'architecture',  title: 'System Architecture', description: 'System topology and VFS structures' }
       ]
     });
   }
@@ -163,8 +162,6 @@ router.get('/api/help', requireAuth, (req, res) => {
       filePath = path.join(docsDir, 'SSSS.md');
     } else if (topic === 'architecture') {
       filePath = path.join(docsDir, 'ARCHITECTURE.md');
-    } else if (topic === 'collab') {
-      filePath = path.join(referenceDir, 'collab.md');
     } else {
       return res.status(404).json({ error: 'Help topic not found' });
     }

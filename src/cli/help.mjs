@@ -179,7 +179,7 @@ function printGeneralHelp() {
     \x1b[33mcompile\x1b[0m, \x1b[33mrebuild\x1b[0m, \x1b[33mconnect\x1b[0m, \x1b[33mskill\x1b[0m, \x1b[33mimport-rules\x1b[0m
 
   \x1b[1mAgentic & Chat Operations:\x1b[0m
-    \x1b[33mchat\x1b[0m, \x1b[33mcollab\x1b[0m, \x1b[33mcommand\x1b[0m, \x1b[33mresearch\x1b[0m, \x1b[33mdream\x1b[0m, \x1b[33mtask\x1b[0m, \x1b[33mshare\x1b[0m, \x1b[33mfriction\x1b[0m
+    \x1b[33mchat\x1b[0m, \x1b[33mcommand\x1b[0m, \x1b[33mresearch\x1b[0m, \x1b[33mdream\x1b[0m, \x1b[33mtask\x1b[0m, \x1b[33mshare\x1b[0m, \x1b[33mfriction\x1b[0m
 
   \x1b[1mData Ingestion & Portability:\x1b[0m
     \x1b[33mingest\x1b[0m, \x1b[33mexport\x1b[0m, \x1b[33mbackup\x1b[0m, \x1b[33mrestore\x1b[0m, \x1b[33msnapshot\x1b[0m, \x1b[33msync\x1b[0m, \x1b[33mmigrate\x1b[0m

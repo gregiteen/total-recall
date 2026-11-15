@@ -140,7 +140,6 @@ function MainContent({ activeBrainId }: { activeBrainId: string }) {
           <Route path="/models" element={<Navigate to="/settings" replace />} />
           <Route path="/health" element={<Navigate to="/settings" replace />} />
           <Route path="/usage" element={<Navigate to="/settings" replace />} />
-          <Route path="/collab" element={<Navigate to="/memory" replace />} />
           <Route path="/instructions" element={<Navigate to="/memory" replace />} />
           <Route path="/design" element={<Navigate to="/memory" replace />} />
           <Route path="/okf" element={<Navigate to="/memory" replace />} />

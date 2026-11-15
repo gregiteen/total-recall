@@ -69,3 +69,55 @@ describe('plugin daemon services', () => {
     expect(validatePluginManifest({ ...base, runtime: { modules: { s: 's.mjs' }, daemon: 's' } }).errors.join(' ')).toMatch(/runtime.daemon must be an array/);
   });
 });
+
+describe('manifest-declared upgrades', () => {
+  const plugin = { id: 'wire-owner', valid: true, dir: '/fixture/owner', manifest: { runtime: { modules: { wire: 'wire.mjs' }, upgrades: [{ path: '/live-wire', module: 'wire' }] } } };
+  const socket = () => ({ destroyed: false, response: '', on() {}, end(value) { this.response = value; } });
+  const request = url => ({ url });
+  it('dispatches the exact declared path with literal query and shared activation guard', async () => {
+    const { createPluginUpgradeHandler } = await import('./plugin-runtime.mjs');
+    let active = true, received;
+    const handle = createPluginUpgradeHandler({ discover: () => [plugin], activation: () => ({ enabled: active }), load: async (id, name, options) => {
+      expect([id, name, options.activeRequired]).toEqual(['wire-owner', 'wire', true]);
+      return { handleUpgrade: (...args) => { received = args; } };
+    } });
+    const req = request('/live-wire?token=literal'), sock = socket(), head = Buffer.from('fixture');
+    await handle(req, sock, head);
+    expect(received.slice(0,3)).toEqual([req, sock, head]);
+    expect(received[3].isActive()).toBe(true);
+    active = false; expect(received[3].isActive()).toBe(false);
+  });
+  it('denies absent, invalid, inactive, ambiguous and undeclared paths without importing code', async () => {
+    const { createPluginUpgradeHandler } = await import('./plugin-runtime.mjs');
+    for (const [owners, active, url, status] of [
+      [[], true, '/live-wire', '404'], [[{...plugin,valid:false}],true,'/live-wire','404'],
+      [[plugin],false,'/live-wire','503'], [[plugin,plugin],true,'/live-wire','503'],
+      [[plugin],true,'/live-wire/other','404'],
+    ]) {
+      let loaded=false;
+      const handle=createPluginUpgradeHandler({discover:()=>owners,activation:()=>({enabled:active}),load:async()=>{loaded=true;}});
+      const sock=socket(); await handle(request(url),sock,Buffer.alloc(0));
+      expect(sock.response).toContain(status); expect(loaded).toBe(false);
+    }
+  });
+  it('rechecks removal during import and fails closed for broken handlers', async () => {
+    const { createPluginUpgradeHandler } = await import('./plugin-runtime.mjs');
+    for (const mode of ['remove','missing-export','throw']) {
+      let owners=[plugin], called=false;
+      const handle=createPluginUpgradeHandler({discover:()=>owners,activation:()=>({enabled:true}),load:async()=>{
+        if(mode==='remove') owners=[];
+        if(mode==='missing-export') return {};
+        if(mode==='throw') throw new Error('fixture');
+        return {handleUpgrade:()=>{called=true;}};
+      }});
+      const sock=socket();await handle(request('/live-wire'),sock,Buffer.alloc(0));
+      expect(sock.response).toContain('503');expect(called).toBe(false);
+    }
+  });
+  it('validates absolute paths and declared modules', () => {
+    const base={id:'wire-owner',name:'Wire owner',version:'1.0.0',description:'Upgrade declaration fixture',cli:{command:'wire-owner',handler:'cli.mjs'}};
+    for(const upgrades of ['wire',[{path:'relative',module:'wire'}],[{path:'/wire?query',module:'wire'}],[{path:'/wire',module:'unknown'}],[{path:'/wire',module:'wire'},{path:'/wire',module:'wire'}]]) {
+      expect(validatePluginManifest({...base,runtime:{modules:{wire:'wire.mjs'},upgrades}}).errors.join(' ')).toMatch(/runtime.upgrades/);
+    }
+  });
+});

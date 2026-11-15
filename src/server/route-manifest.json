@@ -29,34 +29,6 @@
   },
   {
     "method": "GET",
-    "path": "/api/collab/annotations"
-  },
-  {
-    "method": "POST",
-    "path": "/api/collab/annotations"
-  },
-  {
-    "method": "POST",
-    "path": "/api/collab/auth/login"
-  },
-  {
-    "method": "POST",
-    "path": "/api/collab/auth/register"
-  },
-  {
-    "method": "GET",
-    "path": "/api/collab/groups"
-  },
-  {
-    "method": "POST",
-    "path": "/api/collab/groups"
-  },
-  {
-    "method": "POST",
-    "path": "/api/collab/groups/join"
-  },
-  {
-    "method": "GET",
     "path": "/api/config"
   },
   {

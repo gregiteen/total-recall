@@ -55,7 +55,6 @@ Classification for the portable-memory product focus. Commands remain available 
 | Command | Role |
 |---------|------|
 | `chat` | Terminal chat against local server |
-| `collab` | Collab sandbox dev server |
 | `friction` | Watchdog latency analysis |
 | `upgrade` | Kernel model swap helpers |
 | `migrate` | Schema migrations |

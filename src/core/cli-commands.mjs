@@ -63,7 +63,6 @@ export const CLI_COMMANDS = {
   group:    'group.mjs',
   groups:   'group.mjs',
   help:     'help.mjs',
-  collab:   'collab.mjs',
   command:  'command.mjs',
   export:   'export.mjs',
   harness:  'harness.mjs',
