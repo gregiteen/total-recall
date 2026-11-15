@@ -13,7 +13,7 @@ import YAML from 'yaml';
 import matter from './frontmatter.mjs';
 import { ensureFullProjectBrain } from './project-brain.mjs';
 import { checkSkillLayerContract } from './skill-config.mjs';
-import { BRAIN_STATE } from './brain-state.mjs';
+import { isBrainState } from './brain-state.mjs';
 
 export const REGISTRY_VERSION = 1;
 
@@ -106,13 +106,12 @@ function readSkillPackage(skillDir, { allowRootLink = false, requireSkillMd = tr
   } else if (!stat.isDirectory()) return [];
   const root = fs.realpathSync(skillDir);
   if (!fs.statSync(root).isDirectory()) return [];
-  const anchored = fs.existsSync(path.join(root, 'SKILL.md'));
-  if (requireSkillMd && !anchored) return [];
+  if (requireSkillMd && !fs.existsSync(path.join(root, 'SKILL.md'))) return [];
   const entries = [];
   const visit = (dir, relative = '') => {
     for (const entry of fs.readdirSync(dir, { withFileTypes: true }).sort((a, b) => a.name.localeCompare(b.name))) {
       const next = relative ? `${relative}/${entry.name}` : entry.name;
-      if (skillPackageExcludedPath(next, { anchored })) continue;
+      if (skillPackageExcludedPath(next)) continue;
       const abs = path.join(dir, entry.name);
       if (entry.isDirectory()) visit(abs, next);
       else if (entry.isFile()) {
@@ -157,9 +156,9 @@ export function hashSkillLayer(skillDir, layer) {
   let count = 0;
   const visit = (dir, relative = '') => {
     for (const entry of fs.readdirSync(dir, { withFileTypes: true }).sort((a, b) => a.name.localeCompare(b.name))) {
-      if (entry.name === '.git' || entry.name === 'node_modules' || entry.name === '.DS_Store') continue;
       if (layer === 'repo' && !relative && entry.name === 'core') continue;
       const next = relative ? `${relative}/${entry.name}` : entry.name;
+      if (skillPackageExcludedPath(next)) continue;
       const file = path.join(dir, entry.name);
       if (entry.isDirectory()) visit(file, next);
       else if (entry.isFile()) {
@@ -318,18 +317,15 @@ export function skillPackageExcluded(name) {
 }
 
 /**
- * True when a path relative to the package root is private brain state. Name
- * rules apply at every depth; the shared brain-state directories (config/,
- * scheduler/, skills-registry/ ...) apply only at the root of a skill package,
- * so `references/config/` documentation and `core/config.schema.json` stay,
- * while state files and extensions (embeddings.db, *.enc, *.log) never ship.
+ * True when a path relative to a package (or layer) root is private brain
+ * state. Name rules and the shared brain-state policy both apply at every
+ * depth, so nested config/, scheduler/ or skills-registry/ directories never
+ * ship; `core/config.schema.json` is a file, not state, and stays. There is no
+ * escape hatch for nested state directories.
  */
-export function skillPackageExcludedPath(relative, { anchored = true } = {}) {
+export function skillPackageExcludedPath(relative) {
   const parts = String(relative).split(/[\\/]+/).filter(Boolean);
-  if (parts.some(skillPackageExcluded)) return true;
-  if (anchored && BRAIN_STATE.dirs.has(parts[0])) return true;
-  const base = parts[parts.length - 1];
-  return Boolean(base) && (BRAIN_STATE.files.has(base) || BRAIN_STATE.extensions.has(path.extname(base)));
+  return parts.some(skillPackageExcluded) || isBrainState(parts.join('/'));
 }
 
 /** Resolve a possibly-missing path through its nearest existing ancestor. */
@@ -369,10 +365,13 @@ export function copySkillDir(src, dest) {
     if (error.code !== 'ENOENT') throw error;
   }
   fs.mkdirSync(dest, { recursive: true });
+  // A parent must be a real directory; a target is always removed first so the
+  // write creates a fresh inode and can never reach another path through a
+  // hardlink or symlink at the destination.
   const clear = (target, keepDirectory) => {
     let existing;
     try { existing = fs.lstatSync(target); } catch { return; }
-    if (existing.isSymbolicLink() || (keepDirectory ? !existing.isDirectory() : existing.isDirectory())) {
+    if (!keepDirectory || existing.isSymbolicLink() || !existing.isDirectory()) {
       fs.rmSync(target, { recursive: true, force: true });
     }
   };
@@ -386,7 +385,7 @@ export function copySkillDir(src, dest) {
     }
     const target = path.join(dest, ...parts);
     clear(target, false);
-    fs.writeFileSync(target, entry.data, { mode: entry.mode });
+    fs.writeFileSync(target, entry.data, { mode: entry.mode, flag: 'wx' });
   }
 }
 

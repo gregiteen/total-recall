@@ -890,7 +890,9 @@ describe('skills-registry', () => {
       put('embeddings.db', 'db');
       put('references/run.log', 'noise');
       put('references/guide.md', '# Guide');
-      put('references/config/notes.md', '# Authored notes about config');
+      put('references/config/auth/token.json', '{"token":"nested"}');
+      put('references/scheduler/jobs.json', '[]');
+      put('scripts/skills-registry/index.yaml', 'nested');
       put('scripts/check.mjs', 'export {};');
       put('core/config.schema.json', '{"type":"object"}');
       put('config.json', '{"authored":true}');
@@ -898,7 +900,7 @@ describe('skills-registry', () => {
     }
 
     const AUTHORED = [
-      'config.json', 'core/config.schema.json', 'references/config/notes.md',
+      'config.json', 'core/config.schema.json',
       'references/guide.md', 'scripts/check.mjs', 'SKILL.md',
     ];
 
@@ -923,10 +925,40 @@ describe('skills-registry', () => {
       copySkillDir(skill, dest);
       expect(skillPackageFiles(dest)).toEqual(AUTHORED);
       expect(hashSkillContent(dest)).toBe(hashSkillContent(skill));
-      for (const hidden of ['config/secrets.enc', 'scheduler', 'skills-registry', 'memory-vault', 'embeddings.db', 'references/run.log']) {
+      for (const hidden of ['config/secrets.enc', 'references/config', 'references/scheduler', 'scripts/skills-registry', 'scheduler', 'skills-registry', 'memory-vault', 'embeddings.db', 'references/run.log']) {
         expect(fs.existsSync(path.join(dest, hidden))).toBe(false);
       }
       expect(readSkillMeta(skill).managed_files).toEqual(AUTHORED);
+    });
+
+    it('keeps nested private state out of the layer hashes and layered copies', () => {
+      const skill = brainShapedSkill('layers');
+      fs.mkdirSync(path.join(skill, 'core', 'config'), { recursive: true });
+      fs.writeFileSync(path.join(skill, 'core', 'config', 'auth.json'), 'nested core state');
+      const core = hashSkillLayer(skill, 'core');
+      const repo = hashSkillLayer(skill, 'repo');
+      fs.writeFileSync(path.join(skill, 'core', 'config', 'auth.json'), 'rotated');
+      fs.writeFileSync(path.join(skill, 'references', 'scheduler', 'jobs.json'), '[1]');
+      fs.writeFileSync(path.join(skill, 'config', 'secrets.enc'), 'rotated');
+      expect(hashSkillLayer(skill, 'core')).toBe(core);
+      expect(hashSkillLayer(skill, 'repo')).toBe(repo);
+      const dest = path.join(workspace, 'core-copy');
+      copySkillDir(path.join(skill, 'core'), dest);
+      expect(fs.readdirSync(dest)).toEqual(['config.schema.json']);
+    });
+
+    it('writes a fresh inode so a hardlinked destination file is never modified', () => {
+      if (process.platform === 'win32') return;
+      const skill = writeSkill(path.join(workspace, 'catalog'), 'hardlinked');
+      const outside = path.join(workspace, 'outside.txt');
+      fs.writeFileSync(outside, 'untouched');
+      const dest = path.join(workspace, 'dest');
+      fs.mkdirSync(dest);
+      fs.linkSync(outside, path.join(dest, 'SKILL.md'));
+      copySkillDir(skill, dest);
+      expect(fs.readFileSync(outside, 'utf8')).toBe('untouched');
+      expect(fs.readFileSync(path.join(dest, 'SKILL.md'), 'utf8')).toContain('Body content');
+      expect(fs.statSync(path.join(dest, 'SKILL.md')).nlink).toBe(1);
     });
 
     it('does not let private state change the package hash or newest-copy time', () => {
