@@ -31,6 +31,8 @@ Commands:
   list                      Installed plugins (project & global) with source and sharing
   library [--plugin ID]      Installed CLI operation library (--json for agents)
   chunks [query]            Search installed SSSS UI chunks and validate owner files
+  connection <id>           Owner-reported provider connection from cached evidence only
+                            (--brain global|project:ID, --json); never probes or reads credentials
   refresh                   Rebuild installed command inventories and instruction surfaces
   copies [dir] [--apply]    Audit repository copies of shared defaults and shadow links. --apply
                             deletes bundled matches, unlinks shadows (on/off records are kept)
@@ -156,6 +158,11 @@ export async function run(argv = []) {
     }
     if (!result.compilation.ok || result.cleanup?.ok === false) process.exitCode = 1;
     return;
+  }
+
+  if (command === 'connection') {
+    const { runPluginConnection } = await import('./connection.mjs');
+    return runPluginConnection(rest);
   }
 
   if (command === 'chunks') {

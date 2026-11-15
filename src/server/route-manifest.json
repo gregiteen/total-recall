@@ -496,6 +496,10 @@
     "path": "/api/plugins/:id/conformance"
   },
   {
+    "method": "GET",
+    "path": "/api/plugins/:id/connection"
+  },
+  {
     "method": "POST",
     "path": "/api/plugins/:id/credentials"
   },

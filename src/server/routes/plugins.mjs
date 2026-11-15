@@ -151,6 +151,24 @@ router.put('/api/plugins/:id/configuration', requireAuth, requireScope('config:w
   } catch (err) { badRequest(res, err.message); }
 });
 
+/**
+ * Owner-reported provider connection for one selected brain. Reads the owner's
+ * cached evidence only: no probe, refresh, spend or credential access, and
+ * nothing is written. Anything the owner did not report stays unreported.
+ */
+router.get('/api/plugins/:id/connection', requireAuth, requireScope('config:read'), async (req, res) => {
+  try {
+    const target = surfaceTarget(req, req.query.brain);
+    const plugin = getPluginById(req.params.id, target.projectRoot);
+    if (!plugin) return res.status(404).json({ error: 'Plugin unavailable' });
+    const { readPluginConnection } = await import('../../core/plugin-connections.mjs');
+    res.set('Cache-Control', 'no-store').json(await readPluginConnection(plugin, target));
+  } catch (err) {
+    if ([400, 403, 404, 409, 503].includes(err.status)) return res.status(err.status).json({ error: err.message });
+    serverError(res, err);
+  }
+});
+
 /** Serve only modules declared by an installed plugin's UI manifest. */
 router.get('/api/plugins/:id/ui/:element', requireAuth, requireScope('config:read'), (req, res) => {
   try {

@@ -1,15 +1,31 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
 import { useLocation, useSearchParams } from 'react-router-dom'
 import {
-  fetchBundledPlugins, fetchPeerPlugins, fetchPlugins, installPlugin, removePlugin,
+  fetchBundledPlugins, fetchPeerPlugins, fetchPluginConnection, fetchPlugins, installPlugin, removePlugin,
   setPluginActivation, setPluginShared, type BrainPluginActivation, type BundledPlugin,
-  type PeersResponse, type PluginInfo
+  type PeersResponse, type PluginConnection, type PluginInfo
 } from '../../api/plugins'
 import { PluginPanel, pluginElements } from './PluginPanel'
 import { PluginSettings } from './PluginSettings'
 import { PluginHome } from '../workspace/PluginHome'
 import { readSavedPluginCredentials } from '../../api/plugin-credentials'
 import { ScopedPluginCommands } from './ScopedPluginCommands'
+
+const METHOD_LABELS = { 'api-key': 'API key', oauth: 'OAuth', 'dashboard-session': 'Dashboard session', none: 'None', unknown: 'Unknown' }
+const FAILURE_LABELS = {
+  'credential-missing': 'Credential missing', 'credential-rejected': 'Credential rejected', 'provider-unavailable': 'Provider unreachable',
+  'rate-limited': 'Rate limited', timeout: 'Timed out', 'request-failed': 'Last request failed',
+}
+
+function connectionLabel(connection: PluginConnection | 'loading' | undefined) {
+  if (connection === 'loading') return { text: 'Reading…', badge: '' }
+  if (!connection?.reported) return { text: 'Unreported', badge: '' }
+  const when = connection.checkedAt ? ` · checked ${new Date(connection.checkedAt).toLocaleString()}` : ''
+  if (connection.status === 'stale') return { text: `Stale · last ${connection.lastStatus}${when}`, badge: 'badge-warning' }
+  if (connection.status === 'unknown') return { text: 'Not yet verified', badge: '' }
+  const text = connection.status === 'connected' ? 'Connected' : connection.failure ? FAILURE_LABELS[connection.failure] : 'Failed'
+  return { text: text + when, badge: connection.status === 'connected' ? 'badge-success' : 'badge-error' }
+}
 
 type Notice = { text: string; error?: boolean }
 type OpenAttempt = { pluginId: string; brainId: string; error?: string }
@@ -219,7 +235,17 @@ function PluginDetail({ plugin, plugins, brainId, stale, opening, onUse, onChang
     }).catch(() => { if (!disposed) setSavedCredentials(null) })
     return () => { disposed = true }
   }, [plugin.id, credentialCount, tab])
-  const credentialLabel = !credentialCount ? 'Dashboard session'
+  const connectionKey = brainId && enabled && !stale ? `${plugin.id}\n${brainId}` : undefined
+  const [connection, setConnection] = useState<{ key: string; report: PluginConnection }>()
+  useEffect(() => {
+    if (tab !== 'settings' || !canManage || !connectionKey || !brainId) return
+    let disposed = false
+    void fetchPluginConnection(plugin.id, brainId).catch((): PluginConnection => ({ reported: false }))
+      .then(report => { if (!disposed) setConnection({ key: connectionKey, report }) })
+    return () => { disposed = true }
+  }, [tab, canManage, connectionKey, plugin.id, brainId])
+  const reported = connectionKey && connection?.key === connectionKey ? connection.report : connectionKey && tab === 'settings' ? 'loading' as const : undefined
+  const credentialLabel = !credentialCount ? undefined
     : !savedCredentials ? 'Credential status unavailable'
     : declaredCredentials.some(secret => secret.required && !savedCredentials.has(secret.key)) ? 'Credential required'
     : declaredCredentials.some(secret => savedCredentials.has(secret.key)) ? 'Saved in Auth' : 'Optional credential'
@@ -332,8 +358,9 @@ function PluginDetail({ plugin, plugins, brainId, stale, opening, onUse, onChang
             {stale ? 'Unknown' : activation?.state === 'mixed' ? 'Mixed' : error ? 'Error' : activation?.mode === 'on-use' ? 'On use' : enabled ? 'Active' : activation ? 'Off' : 'Unknown'}
           </span>
         </dd></div>
-        <div><dt>Authentication</dt><dd>{credentialLabel}</dd></div>
-        <div><dt>Provider connection</dt><dd>Unreported</dd></div>
+        <div><dt>Authentication</dt><dd>{reported && reported !== 'loading' && reported.reported ? METHOD_LABELS[reported.method] : reported === 'loading' ? 'Reading…' : 'Unreported'}</dd></div>
+        {credentialLabel && <div><dt>Credentials</dt><dd>{credentialLabel}</dd></div>}
+        <div><dt>Provider connection</dt><dd>{(label => <span className={`badge ${label.badge}`.trim()}>{label.text}</span>)(connectionLabel(reported))}</dd></div>
         <div><dt>Installed</dt><dd>v{plugin.version} · {pluginOrigin(plugin)} · {plugin.scope}</dd></div>
       </dl>
       {activationList}

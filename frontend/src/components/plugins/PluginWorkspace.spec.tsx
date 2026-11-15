@@ -26,6 +26,7 @@ let listFailure: boolean
 let delayedInventory: Map<string, Promise<Response>>
 let design: { revision: string; css: string; components: string[] } | undefined
 let designInvalid: boolean
+let connectionBody: ((brain: string) => unknown) | undefined
 let composition: { chunks: { key: string; plugin: string; title: string; surfaces: string[]; sha256: string }[]; version: string | null }
 const requests: Array<{ path: string; init?: RequestInit }> = []
 
@@ -42,6 +43,7 @@ beforeEach(() => {
   design = undefined
   designInvalid = false
   composition = { chunks: [], version: null }
+  connectionBody = undefined
   requests.length = 0
   globalThis.fetch = vi.fn((url: RequestInfo | URL, init?: RequestInit) => {
     const path = String(url)
@@ -49,6 +51,10 @@ beforeEach(() => {
     requests.push({ path, init })
     if (parsed.pathname === '/api/plugins') return delayedInventory.get(parsed.searchParams.get('brain') || '') ??
       json({ plugins: installed }, listFailure ? 500 : 200)
+    if (parsed.pathname === '/api/plugins/demo/connection') {
+      const body = connectionBody?.(parsed.searchParams.get('brain') || '')
+      return body === undefined ? json({}, 404) : json(body)
+    }
     if (path.endsWith('/activation')) {
       if (activationFailure) return json({ error: 'Activation rejected' }, 400)
       const { enabled: manual, mode, brainIds } = JSON.parse(String(init?.body))
@@ -119,8 +125,111 @@ describe('PluginWorkspace', () => {
     fireEvent.click(view.getByRole('button', { name: 'Settings' }))
     expect(await view.findByText('Credential required')).toBeInTheDocument()
     expect(view.getByText(/1.0.0 · Core · global/)).toBeInTheDocument()
-    expect(view.getByText('Unreported')).toBeInTheDocument()
+    expect(view.getAllByText('Unreported')).toHaveLength(2)
     expect(requests.some(request => request.path.endsWith('/run'))).toBe(false)
+  })
+
+  describe('owner connection report', () => {
+    const when = '2026-11-15T12:00:00.000Z'
+    const report = (extra: Record<string, unknown> = {}) => ({ pluginId: 'demo', reported: true, status: 'connected', method: 'api-key', checkedAt: when, freshness: 'fresh', ...extra })
+    async function openSettings(brain = 'global') {
+      renderWorkspace('/memory?plugin=demo', brain)
+      const view = within(await screen.findByRole('region', { name: 'Demo plugin' }))
+      fireEvent.click(view.getByRole('button', { name: 'Settings' }))
+      return view
+    }
+    const connectionRequests = () => requests.filter(request => request.path.includes('/connection'))
+
+    it('shows the owner method and time after reading, only with GET and no credential or run traffic', async () => {
+      let release!: (value: unknown) => void
+      const gate = new Promise(resolve => { release = resolve })
+      connectionBody = () => report()
+      const original = globalThis.fetch
+      globalThis.fetch = vi.fn(async (url: RequestInfo | URL, init?: RequestInit) => {
+        if (String(url).includes('/connection')) await gate
+        return original(url, init)
+      }) as typeof fetch
+      const view = await openSettings()
+      expect(await view.findAllByText('Reading…')).toHaveLength(2)
+      release(undefined)
+      expect(await view.findByText(/^Connected · checked /)).toBeInTheDocument()
+      expect(view.getByText('API key')).toBeInTheDocument()
+      expect(view.queryByText('Dashboard session')).not.toBeInTheDocument()
+      expect(connectionRequests().map(request => request.path)).toEqual(['/api/plugins/demo/connection?brain=global'])
+      expect(connectionRequests().every(request => (request.init?.method ?? 'GET') === 'GET')).toBe(true)
+      expect(requests.some(request => request.path.endsWith('/run') || /\/auth\/secrets\/[^?]/.test(request.path))).toBe(false)
+    })
+
+    it('keeps an unverified owner unknown, never connected, and does not infer from saved credentials', async () => {
+      connectionBody = () => report({ status: 'unknown', checkedAt: null, freshness: 'none' })
+      const view = await openSettings()
+      expect(await view.findByText('Not yet verified')).toBeInTheDocument()
+      expect(view.getByText('API key')).toBeInTheDocument()
+      expect(view.queryByText('Connected')).not.toBeInTheDocument()
+    })
+
+    it('shows a curated failure label and a stale marker for old evidence', async () => {
+      connectionBody = () => report({ status: 'failed', failure: { code: 'credential-rejected', message: 'ignored server text' } })
+      const failed = await openSettings()
+      expect(await failed.findByText(/^Credential rejected · checked /)).toBeInTheDocument()
+      expect(screen.queryByText(/ignored server text/)).not.toBeInTheDocument()
+    })
+
+    it('marks stale evidence as stale instead of its old status', async () => {
+      connectionBody = () => report({ status: 'stale', lastStatus: 'connected', freshness: 'stale' })
+      const view = await openSettings()
+      expect(await view.findByText(/^Stale · last connected · checked /)).toBeInTheDocument()
+      expect(view.queryByText(/^Connected/)).not.toBeInTheDocument()
+    })
+
+    it.each([
+      ['malformed', { pluginId: 'demo', reported: true, status: 'connected' }],
+      ['future', report({ checkedAt: '2999-01-01T00:00:00.000Z' })],
+      ['other plugin', report({ pluginId: 'other' })],
+      ['uncurated method', report({ method: 'password' })],
+      ['uncurated failure', report({ status: 'failed', failure: { code: 'CANARY raw provider body' } })],
+      ['unreported', { pluginId: 'demo', reported: false, reason: 'no-report', message: 'CANARY' }],
+    ])('treats a %s report as unreported and renders none of it', async (_name, body) => {
+      connectionBody = () => body
+      const view = await openSettings()
+      await waitFor(() => expect(view.getAllByText('Unreported')).toHaveLength(2))
+      expect(document.body.textContent).not.toMatch(/CANARY|password|2999/)
+    })
+
+    it('is unreported when the request fails', async () => {
+      connectionBody = () => report()
+      const original = globalThis.fetch
+      globalThis.fetch = vi.fn((url: RequestInfo | URL, init?: RequestInit) => String(url).includes('/connection')
+        ? Promise.reject(new Error('offline')) : original(url, init)) as typeof fetch
+      const view = await openSettings()
+      await waitFor(() => expect(view.getAllByText('Unreported')).toHaveLength(2))
+    })
+
+    it('reads nothing for an inactive plugin or while viewing another tab', async () => {
+      connectionBody = () => report()
+      installed = [{ ...plugin, activation: { enabled: false, state: 'inactive' } }]
+      const view = await openSettings()
+      await waitFor(() => expect(view.getAllByText('Unreported')).toHaveLength(2))
+      expect(connectionRequests()).toEqual([])
+    })
+
+    it('does not show one brain\'s report for another', async () => {
+      connectionBody = brain => brain === 'global' ? report() : report({ status: 'unknown', checkedAt: null, freshness: 'none' })
+      installed = [{ ...plugin, activationByBrain: [
+        { brainId: 'global', name: 'Global Brain', enabled: true, state: 'active' },
+        { brainId: 'project:music', name: 'Music', enabled: true, state: 'active' },
+      ] }]
+      const view = render(workspace('/memory?plugin=demo', 'global'))
+      fireEvent.click(await screen.findByRole('button', { name: 'Settings' }))
+      expect(await screen.findByText(/^Connected · checked /)).toBeInTheDocument()
+      view.rerender(workspace('/memory?plugin=demo', 'project:music'))
+      fireEvent.click(await screen.findByRole('button', { name: 'Settings' }))
+      expect(await screen.findByText('Not yet verified')).toBeInTheDocument()
+      expect(screen.queryByText(/^Connected/)).not.toBeInTheDocument()
+      expect(connectionRequests().map(request => request.path)).toEqual([
+        '/api/plugins/demo/connection?brain=global', '/api/plugins/demo/connection?brain=project%3Amusic',
+      ])
+    })
   })
 
   it('opens declared operations from Home without executing or loading a legacy card', async () => {

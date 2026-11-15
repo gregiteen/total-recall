@@ -323,3 +323,54 @@ export interface PluginExecution {
   agent: string; node: string; cwd?: string; allowUnknownAuth?: boolean;
   permissions: { read: boolean; write: boolean; send: boolean; destructive: boolean };
 }
+
+// ── Owner-reported connection ────────────────────────────────────────────────
+//
+// The host never decides a plugin is connected: the owner reports it from its own
+// recorded evidence. Anything this contract cannot verify reads as unreported.
+
+export const CONNECTION_METHODS = ['api-key', 'oauth', 'dashboard-session', 'none', 'unknown'] as const
+export const CONNECTION_FAILURES = ['credential-missing', 'credential-rejected', 'provider-unavailable', 'rate-limited', 'timeout', 'request-failed'] as const
+export type ConnectionMethod = typeof CONNECTION_METHODS[number]
+export type ConnectionFailure = typeof CONNECTION_FAILURES[number]
+type ReportedStatus = 'connected' | 'failed' | 'unknown'
+
+export type PluginConnection =
+  | { reported: false }
+  | {
+    reported: true
+    status: ReportedStatus | 'stale'
+    lastStatus?: Exclude<ReportedStatus, 'unknown'>
+    method: ConnectionMethod
+    checkedAt: string | null
+    failure?: ConnectionFailure
+  }
+
+const FUTURE_SKEW_MS = 5 * 60 * 1000
+const one = <T extends readonly string[]>(list: T, value: unknown): value is T[number] => typeof value === 'string' && list.includes(value)
+
+/** Accept only the documented report; a malformed or future-dated one is unreported. */
+export function parsePluginConnection(data: any, pluginId: string, now = Date.now()): PluginConnection {
+  if (!data || typeof data !== 'object' || data.pluginId !== pluginId) return { reported: false }
+  if (data.reported !== true || !one(CONNECTION_METHODS, data.method)) return { reported: false }
+  const timestamp = typeof data.checkedAt === 'string' ? Date.parse(data.checkedAt) : NaN
+  const dated = Number.isFinite(timestamp) && timestamp <= now + FUTURE_SKEW_MS
+  if (data.status === 'unknown') return data.checkedAt === null ? { reported: true, status: 'unknown', method: data.method, checkedAt: null } : { reported: false }
+  if (!dated) return { reported: false }
+  const failure = data.failure?.code
+  if (data.status === 'connected') return failure === undefined ? { reported: true, status: 'connected', method: data.method, checkedAt: data.checkedAt } : { reported: false }
+  if (data.status === 'failed') return one(CONNECTION_FAILURES, failure)
+    ? { reported: true, status: 'failed', method: data.method, checkedAt: data.checkedAt, failure } : { reported: false }
+  if (data.status === 'stale' && (data.lastStatus === 'connected' || data.lastStatus === 'failed')) {
+    return { reported: true, status: 'stale', lastStatus: data.lastStatus, method: data.method, checkedAt: data.checkedAt,
+      ...(one(CONNECTION_FAILURES, failure) ? { failure } : {}) }
+  }
+  return { reported: false }
+}
+
+/** Cached owner evidence for one selected brain. Reading never probes, refreshes or writes. */
+export async function fetchPluginConnection(pluginId: string, brainId: string): Promise<PluginConnection> {
+  const res = await apiFetch(`${API_BASE}/api/plugins/${encodeURIComponent(pluginId)}/connection?brain=${encodeURIComponent(brainId)}`, { cache: 'no-store' })
+  if (!res.ok) return { reported: false }
+  return parsePluginConnection(await readJson(res), pluginId)
+}
