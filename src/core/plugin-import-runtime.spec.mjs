@@ -28,6 +28,26 @@ rl.on('line', line => { const m = JSON.parse(line);
 const stdioFiles = { 'mcp.json': JSON.stringify({ mcpServers: { demo: { command: 'node', args: ['${CLAUDE_PLUGIN_ROOT}/server.mjs'] } } }), 'server.mjs': STDIO_SERVER };
 
 describe('imported plugin runtime', () => {
+  it('invokes real native run/default handlers with literal argv and propagates return or process exit codes', async () => {
+    const manifest = { id: 'demo', name: 'Demo', version: '1.0.0', description: 'Native commands fixture',
+      commands: ['run', 'default', 'exit'].map(name => ({ name, handler: `${name}.mjs` })),
+      ui: { home: 'home', design_tokens: 'DESIGN.md', elements: [{ id: 'home', kind: 'panel', tag: 'demo-home', module: 'ui/home.js' }] } };
+    const vault = await vaultOf({ 'plugin.json': JSON.stringify(manifest),
+      'run.mjs': 'export async function run(argv) { return { argv, exitCode: argv.includes("fail") ? 7 : 0 }; } export default function () { throw Error("run takes precedence"); }',
+      'default.mjs': 'export const run = "metadata"; export default async function (args) { return { args, exitCode: args.includes("fail") ? 4 : 0 }; }',
+      'exit.mjs': 'export default function () { console.error("native failed"); process.exit(6); }',
+    });
+    const args = ['space value', '--literal', '$(printf unsafe)', 'quote"value'];
+    await expect(invokeImportedPlugin(vault, 'run', { args })).rejects.toThrow(/trust-source/);
+    const run = await invokeImportedPlugin(vault, 'run', { trust: true, args });
+    expect(run).toMatchObject({ ok: true, exitCode: 0 });
+    expect(JSON.parse(run.stdout).argv).toEqual([process.execPath, 'total-recall', 'run', ...args]);
+    const def = await invokeImportedPlugin(vault, 'default', { trust: true, args });
+    expect(def).toMatchObject({ ok: true, exitCode: 0 }); expect(JSON.parse(def.stdout).args).toEqual(args);
+    expect(await invokeImportedPlugin(vault, 'run', { trust: true, args: ['fail'] })).toMatchObject({ ok: false, exitCode: 7 });
+    expect(await invokeImportedPlugin(vault, 'default', { trust: true, args: ['fail'] })).toMatchObject({ ok: false, exitCode: 4 });
+    expect(await invokeImportedPlugin(vault, 'exit', { trust: true })).toMatchObject({ ok: false, exitCode: 6, stderr: 'native failed\n' });
+  });
   it('lists and calls real stdio MCP tools, expanding the plugin root, and reports tool errors as failures', async () => {
     const vault = await vaultOf(stdioFiles, { format: 'mcp' });
     const listed = await invokeImportedPlugin(vault, 'mcp:demo', { trust: true });
@@ -41,6 +61,7 @@ describe('imported plugin runtime', () => {
   it('requires explicit trust and refuses unknown or unsupported capabilities', async () => {
     const vault = await vaultOf({ 'package.json': JSON.stringify({ name: 'demo', version: '1.0.0', bin: { run: 'bin.mjs', py: 'x.py' } }), 'bin.mjs': 'console.log("hi")', 'x.py': 'print(1)' });
     await expect(invokeImportedPlugin(vault, 'run', {})).rejects.toThrow(/trust-source/);
+    await expect(invokeFromArgv(vault, ['run', '--input', '{"trust":true}'])).rejects.toThrow(/trust-source/);
     await expect(invokeImportedPlugin(vault, 'py', { trust: true })).rejects.toThrow(/JavaScript|unsupported/i);
     await expect(invokeImportedPlugin(vault, 'missing', { trust: true })).rejects.toThrow();
   });
@@ -77,6 +98,11 @@ describe('imported plugin runtime', () => {
   it('marks credential-bound MCP servers unavailable instead of executable', async () => {
     const vault = await vaultOf({ 'mcp.json': JSON.stringify({ mcpServers: { web: { url: 'https://example.invalid/mcp', headers: { Authorization: 'Bearer ${TOKEN}' } } } }) });
     await expect(invokeImportedPlugin(vault, 'mcp:web', { trust: true })).rejects.toThrow(/binding/);
+  });
+
+  it.each(['PLUGIN_DATA', 'CLAUDE_PLUGIN_DATA'])('requires persistent binding for %s rather than a temporary data directory', async variable => {
+    const vault = await vaultOf({ 'mcp.json': JSON.stringify({ mcpServers: { data: { command: 'node', args: ['${' + variable + '}/server.mjs'] } } }) });
+    await expect(invokeImportedPlugin(vault, 'mcp:data', { trust: true })).rejects.toThrow(/persistent binding/);
   });
 
   it('does not leak timers or processes when MCP configuration is invalid', async () => {

@@ -5,6 +5,7 @@ import crypto from 'node:crypto';
 import matter from './frontmatter.mjs';
 import { processOperationAsync } from './operation-validator.mjs';
 import { findVfsDocumentByPath } from './vfs-documents.mjs';
+import { noLinks } from './plugin-import-source.mjs';
 
 const sha256 = text => crypto.createHash('sha256').update(text).digest('hex');
 const bytesHash = bytes => `sha256:${crypto.createHash('sha256').update(bytes).digest('hex')}`;
@@ -13,7 +14,7 @@ export const CAPABILITY_PATH = 'system/plugin-capabilities/installed-capabilitie
 
 export async function syncPluginCapabilities(catalog, vaultRoot, { execute = processOperationAsync } = {}) {
   // Preflight all destination ancestors before reading or invoking any write.
-  let current = path.resolve(vaultRoot);
+  let current = noLinks(vaultRoot);
   const destinations = [current, ...CAPABILITY_PATH.split('/').map(part => (current = path.join(current, part)))];
   for (const destination of destinations) {
     try { if (fs.lstatSync(destination).isSymbolicLink()) throw new Error('Capability storage cannot follow symlinks'); }

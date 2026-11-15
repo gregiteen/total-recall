@@ -16,9 +16,11 @@ export function safePath(value) {
 }
 export function noLinks(target) {
   let absolute = path.resolve(target);
-  // macOS exposes its system temporary directory through /var -> /private/var.
-  // Only canonicalize this OS-owned alias, never arbitrary source links.
-  if (process.platform === 'darwin' && absolute.startsWith('/var/') && fs.readlinkSync('/var') === 'private/var') absolute = '/private' + absolute;
+  // Only accept the exact macOS system aliases; all source links stay forbidden.
+  if (process.platform === 'darwin') for (const alias of ['/var', '/tmp']) {
+    if ((absolute === alias || absolute.startsWith(alias + '/')) && fs.lstatSync(alias, { throwIfNoEntry: false })?.isSymbolicLink()
+      && path.resolve('/', fs.readlinkSync(alias)) === '/private' + alias) absolute = '/private' + absolute;
+  }
   let current = path.parse(absolute).root;
   for (const part of absolute.slice(current.length).split(path.sep).filter(Boolean)) {
     current = path.join(current, part);
@@ -137,19 +139,19 @@ function rejectSecretFile(relative) {
   if (/^(?:\.env(?:\.(?!example$|sample$).+)?|\.npmrc|\.pypirc|secrets\.enc|id_rsa|id_ed25519)$/i.test(path.basename(relative))) throw new Error('Credential file refused; use the auth secrets store');
 }
 
-/** Standard plugin-root/data variables are expanded at invocation; anything else needs a binding adapter. */
+/** Root variables are portable; data variables require a durable binding adapter. */
 export const PLUGIN_ROOT_VARS = ['CLAUDE_PLUGIN_ROOT', 'PLUGIN_ROOT', '__dirname'];
 export const PLUGIN_DATA_VARS = ['CLAUDE_PLUGIN_DATA', 'PLUGIN_DATA'];
 export function unresolvedPlaceholders(value) {
   const found = new Set();
   for (const m of JSON.stringify(value).matchAll(/\$\{([^}]+)\}|\{\{[^}]+\}\}/g)) {
-    if (m[1] && [...PLUGIN_ROOT_VARS, ...PLUGIN_DATA_VARS].includes(m[1])) continue;
+    if (m[1] && PLUGIN_ROOT_VARS.includes(m[1])) continue;
     found.add(m[1] || m[0]);
   }
   return [...found];
 }
 export function expandPluginVars(value, rootDir, dataDir) {
-  if (typeof value === 'string') return value.replace(/\$\{([^}]+)\}/g, (all, name) => PLUGIN_ROOT_VARS.includes(name) ? rootDir : PLUGIN_DATA_VARS.includes(name) ? dataDir : all);
+  if (typeof value === 'string') return value.replace(/\$\{([^}]+)\}/g, (all, name) => PLUGIN_ROOT_VARS.includes(name) ? rootDir : PLUGIN_DATA_VARS.includes(name) && typeof dataDir === 'string' ? dataDir : all);
   if (Array.isArray(value)) return value.map(v => expandPluginVars(v, rootDir, dataDir));
   if (object(value)) return Object.fromEntries(Object.entries(value).map(([k, v]) => [k, expandPluginVars(v, rootDir, dataDir)]));
   return value;

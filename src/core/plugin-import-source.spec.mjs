@@ -59,6 +59,16 @@ describe('source collection', () => {
     expect(() => noLinks(path.join(link, 'a.json'))).toThrow(/Symlink/);
   });
 
+  it.skipIf(process.platform !== 'darwin')('accepts the real /tmp alias but rejects arbitrary links below it', () => {
+    const root = fs.mkdtempSync('/tmp/tr-import-alias-'); roots.push(root);
+    fs.writeFileSync(path.join(root, 'a.json'), '{}');
+    expect(noLinks(root)).toBe('/private' + root);
+    expect(collectSource(root).entries.map(e => e.path)).toEqual(['a.json']);
+    fs.symlinkSync(root, path.join(root, 'linked'));
+    expect(() => noLinks(path.join(root, 'linked/a.json'))).toThrow(/Symlink/);
+    expect(() => collectSource(root)).toThrow(/symlink/i);
+  });
+
   it('rejects unsafe paths', () => {
     for (const bad of ['', '/abs', '../x', 'a/../b', 'a//b', 'a\\b', 'a:b', './x']) expect(() => safePath(bad)).toThrow();
     expect(safePath('a/b.json')).toBe('a/b.json');
@@ -90,7 +100,8 @@ describe('asset decoding', () => {
 
 describe('plugin variables', () => {
   it('expands standard root/data variables and reports every other placeholder', () => {
-    expect(unresolvedPlaceholders({ a: '${CLAUDE_PLUGIN_ROOT}/x', b: '${PLUGIN_DATA}' })).toEqual([]);
+    expect(unresolvedPlaceholders({ a: '${CLAUDE_PLUGIN_ROOT}/x' })).toEqual([]);
+    expect(unresolvedPlaceholders({ a: '${PLUGIN_DATA}', b: '${CLAUDE_PLUGIN_DATA}' })).toEqual(['PLUGIN_DATA', 'CLAUDE_PLUGIN_DATA']);
     expect(unresolvedPlaceholders({ a: '${TOKEN}', b: '{{x}}' }).sort()).toEqual(['TOKEN', '{{x}}']);
     expect(expandPluginVars({ a: ['${CLAUDE_PLUGIN_ROOT}/x', '${PLUGIN_DATA}', '${OTHER}'] }, '/r', '/d')).toEqual({ a: ['/r/x', '/d', '${OTHER}'] });
   });

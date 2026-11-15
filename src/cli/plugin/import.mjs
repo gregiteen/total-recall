@@ -3,7 +3,8 @@ import { IMPORT_FORMATS, inspectPluginSource, importPluginSource, readImportedPl
 import { invokeFromArgv, composeImportedPlugin } from '../../core/plugin-import-runtime.mjs';
 
 export async function runPluginImport(argv = []) {
-  if (!argv.length || argv.includes('--help') || argv.includes('-h')) {
+  const optionArgv = argv.slice(0, argv.indexOf('--') < 0 ? undefined : argv.indexOf('--'));
+  if (!argv.length || optionArgv.includes('--help') || optionArgv.includes('-h')) {
     console.log(`Usage: total-recall plugin import <source> --output <fresh-vault> [--format FORMAT] [--select NAME] [--dry-run] [--compose NAME]
        total-recall plugin import inspect <source> [--format FORMAT] [--select NAME]
        total-recall plugin import formats

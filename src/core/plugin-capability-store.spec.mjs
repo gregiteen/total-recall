@@ -85,6 +85,13 @@ describe('plugin capability store', () => {
     await expect(syncPluginCapabilities(catalog([]), linkedFile)).rejects.toThrow('symlinks');
     expect(fs.readFileSync(path.join(external, 'target.md'), 'utf8')).toBe('x');
   });
+  it('refuses a symlink in a vault ancestor before reading or writing the destination', async () => {
+    const root = temp(); const outside = temp();
+    fs.symlinkSync(outside, path.join(root, 'linked'));
+    const calls = [];
+    await expect(syncPluginCapabilities(catalog([]), path.join(root, 'linked/vault'), { execute: async e => { calls.push(e); return { success: true }; } })).rejects.toThrow(/Symlink/);
+    expect(calls).toEqual([]); expect(fs.readdirSync(outside)).toEqual([]);
+  });
   it('preflights with a dry run and writes nothing when validation or commit fails', async () => {
     const vault = temp(); const calls = [];
     await expect(syncPluginCapabilities(catalog([]), vault, { execute: async e => { calls.push(e.dry_run); return { success: false, validation: { errors: ['bad shape'] } }; } })).rejects.toThrow('bad shape');

@@ -15,7 +15,7 @@ export const isSensitiveKey = key => { const k = normalizeKey(key); return !REFE
 /** Keep arbitrary declaration metadata, but never persist credential material. */
 export function sanitizeDeclaration(value, key = '') {
   if (key && isSensitiveKey(key) && !/^credentials$/i.test(key)) {
-    if (typeof value === 'boolean' || typeof value === 'number' || value === null || value === undefined) return value;
+    if (typeof value === 'boolean' || value === null || value === undefined) return value;
     if (typeof value === 'string' && ENV_REFERENCE.test(value)) return value;
     return '[REDACTED]';
   }
@@ -23,7 +23,10 @@ export function sanitizeDeclaration(value, key = '') {
   if (/^credentials$/i.test(key) && value && typeof value === 'object' && !Array.isArray(value)) return Object.fromEntries(Object.keys(value).map(k => [k, '[REDACTED]']));
   const secretDeclaration = value && typeof value === 'object' && (value.secret === true || isSensitiveKey(value.name || value.key || ''));
   if (value && typeof value === 'object') return Object.fromEntries(Object.entries(value).map(([k, v]) => [k, secretDeclaration && VALUE_FIELDS.has(k) ? '[REDACTED]' : sanitizeDeclaration(v, k)]));
-  if (typeof value === 'string') return value.replace(/(https?:\/\/)[^/\s@]+@/g, '$1[REDACTED]@').replace(/\b(Bearer\s+)(?!\[REDACTED\])\S+/gi, '$1[REDACTED]').replace(/([?&](?:token|key|api_key|secret|password)=)[^&#\s]*/gi, '$1[REDACTED]');
+  if (typeof value === 'string') return value.replace(/(https?:\/\/)[^/\s@]+@/g, '$1[REDACTED]@').replace(/\b(Bearer\s+)(?!\[REDACTED\])\S+/gi, '$1[REDACTED]').replace(/([?&])([^=&#\s]+)=([^&#\s]*)/g, (all, separator, name) => {
+    let decoded; try { decoded = decodeURIComponent(name); } catch { return all; }
+    return decoded.toLowerCase() === 'key' || isSensitiveKey(decoded) ? `${separator}${name}=[REDACTED]` : all;
+  });
   return value;
 }
 

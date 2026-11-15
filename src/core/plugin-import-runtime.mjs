@@ -137,7 +137,7 @@ export function parseInvokeArgv(argv) {
     else positional.push(arg);
   }
   ensure(positional.length, 'Capability id required');
-  return { id: positional[0], options: { ...input, ...options, args: positional.slice(1) } };
+  return { id: positional[0], options: { ...input, trust: options.trust === true, args: positional.slice(1) } };
 }
 export function invokeFromArgv(vault, argv) { const { id, options } = parseInvokeArgv(argv); return invokeImportedPlugin(vault, id, options); }
 
@@ -155,9 +155,7 @@ export async function invokeImportedPlugin(vault, id, options = {}) {
       fs.mkdirSync(path.dirname(target), { recursive: true, mode: 0o700 });
       fs.writeFileSync(target, Buffer.from(asset.data_b64, 'base64'), { mode: asset.mode, flag: 'wx' });
     }
-    const dataDir = path.join(root, '.plugin-data');
-    fs.mkdirSync(dataDir, { mode: 0o700 });
-    const spec = expandPluginVars(capability.schema, root, dataDir);
+    const spec = expandPluginVars(capability.schema, root);
     if (capability.kind === 'mcp-server') return await mcpClient(spec, root, options.tool ? 'call' : 'list', options);
     if (capability.kind === 'openapi-operation') {
       literal(spec);
@@ -187,7 +185,7 @@ export async function invokeImportedPlugin(vault, id, options = {}) {
     const handler = noLinks(path.join(root, safePath(spec.handler.replace(/^\.\//, ''))));
     if (capability.kind === 'npm-bin') return await runProcess(process.execPath, [handler, ...args], root);
     if (capability.kind === 'native-command') {
-      const bootstrap = `const m=await import(${JSON.stringify(pathToFileURL(handler).href)}); const f=m.run||m.default;if(typeof f!=='function')throw Error('Handler missing');const a=JSON.parse(process.argv[1]); const r=await f(m.run?[process.execPath,'total-recall',${JSON.stringify(id)},...a]:a);if(r!==undefined)console.log(JSON.stringify(r));if(r?.exitCode)process.exitCode=r.exitCode;`;
+      const bootstrap = `const m=await import(${JSON.stringify(pathToFileURL(handler).href)}); const hasRun=typeof m.run==='function';const f=hasRun?m.run:m.default;if(typeof f!=='function')throw Error('Handler missing');const a=JSON.parse(process.argv[1]); const r=await f(hasRun?[process.execPath,'total-recall',${JSON.stringify(id)},...a]:a);if(r!==undefined)console.log(JSON.stringify(r));if(r?.exitCode)process.exitCode=r.exitCode;`;
       return await runProcess(process.execPath, ['--input-type=module', '-e', bootstrap, JSON.stringify(args)], root);
     }
     throw new Error('Unsupported capability runtime');

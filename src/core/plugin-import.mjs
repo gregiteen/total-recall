@@ -5,7 +5,7 @@ import { execFileSync } from 'node:child_process';
 import { createEngine } from '@ssss/cli';
 import { serializeDocument, parseDocument } from '@ssss/cli/frontmatter';
 import { contentHash, validateBundle, provisionBundle, importBundle, exportBundle } from '@ssss/cli/bundle';
-import { collectSource, decodeAssets, noLinks, safePath, parseDeclaration, rejectCredentials, unresolvedPlaceholders, sha256, object, MAX_BYTES, MAX_FILES } from './plugin-import-source.mjs';
+import { collectSource, decodeAssets, noLinks, safePath, parseDeclaration, rejectCredentials, unresolvedPlaceholders, PLUGIN_DATA_VARS, sha256, object, MAX_BYTES, MAX_FILES } from './plugin-import-source.mjs';
 import { decodeBundle } from './plugin-bundle.mjs';
 import { validatePluginManifest } from './plugin-loader.mjs';
 
@@ -113,8 +113,24 @@ function inspectAssets(assets, format, name) {
   else metadata = declaration(assets.find(a => a.path === name));
   check(object(metadata), 'Plugin declaration must be an object');
   rejectCredentials(metadata);
+  let companion;
+  const inline = metadata.extensions?.['com.openai'];
+  const codexAsset = format === 'agent-plugin' && assets.find(a => a.path === '.codex-plugin/plugin.json');
+  if (codexAsset) {
+    const codex = declaration(codexAsset);
+    check(object(codex), 'Codex companion declaration must be an object');
+    // Inline OpenAI settings replace the whole overlay; portable root identity stays canonical.
+    companion = { path: codexAsset.path, precedence: 'root extensions.com.openai replaces companion settings', effective: object(inline) ? inline : codex };
+  }
+  const openai = format === 'agent-plugin' ? (object(inline) ? inline : companion?.effective) : null;
+  const components = [metadata, ...(openai ? [openai] : [])];
   const capabilities = [];
-  const cap = (id, kind, spec, executable = false, unsupported = null) => capabilities.push({ id, kind, description: spec.description || spec.title || id, schema: spec, declarationComplete: true, executable, unsupported });
+  const cap = (id, kind, spec, executable = false, unsupported = null) => {
+    if (unresolvedPlaceholders(spec).some(v => PLUGIN_DATA_VARS.includes(v))) {
+      executable = false; unsupported = 'Persistent plugin data requires an explicit persistent binding; this adapter provides no durable data directory';
+    }
+    capabilities.push({ id, kind, description: spec.description || spec.title || id, schema: spec, declarationComplete: true, executable, unsupported });
+  };
   const local = relative => {
     check(typeof relative === 'string', 'Invalid source reference');
     const p = safePath(relative.replace(/^\.\//, ''));
@@ -164,38 +180,38 @@ function inspectAssets(assets, format, name) {
   const mcp = [];
   if (format === 'mcp') { check(object(metadata.mcpServers), 'mcpServers object required'); mcp.push(metadata); }
   if (format === 'mcpb' && metadata.server.mcp_config) mcp.push({ mcpServers: { [metadata.name]: metadata.server.mcp_config } });
-  if (metadata.mcpServers) {
-    if (format !== 'mcp') for (const entry of Array.isArray(metadata.mcpServers) ? metadata.mcpServers : [metadata.mcpServers]) {
-      if (typeof entry === 'string') mcp.push(declaration(assets.find(a => a.path === local(entry))));
+  const mcpFiles = new Set(format === 'mcp' ? [name] : []);
+  const addMcpFile = file => { const p = local(file); if (!mcpFiles.has(p)) { mcpFiles.add(p); mcp.push(declaration(assets.find(a => a.path === p))); } };
+  for (const component of components) if (component.mcpServers) {
+    if (format !== 'mcp') for (const entry of Array.isArray(component.mcpServers) ? component.mcpServers : [component.mcpServers]) {
+      if (typeof entry === 'string') addMcpFile(entry);
       else mcp.push({ mcpServers: entry });
     }
   }
-  for (const a of assets) if (['mcp.json', '.mcp.json'].includes(a.path) && format !== 'mcp') mcp.push(declaration(a));
+  const implicitMcpFiles = format === 'agent-plugin' && object(inline) ? ['mcp.json'] : ['mcp.json', '.mcp.json'];
+  for (const a of assets) if (implicitMcpFiles.includes(a.path)) addMcpFile(a.path);
   for (const config of mcp) {
     check(object(config.mcpServers), 'Invalid MCP config');
     for (const [id, spec] of Object.entries(config.mcpServers)) {
       check(object(spec) && (typeof spec.command === 'string' || typeof spec.url === 'string'), 'MCP server requires command or URL');
       check(spec.args === undefined || (Array.isArray(spec.args) && spec.args.every(a => typeof a === 'string')), 'Invalid MCP argv');
       const unbound = unresolvedPlaceholders(spec);
-      const unsupported = spec.type === 'sse' ? 'Legacy SSE transport unsupported' : unbound.length ? `Requires credential/configuration binding for ${unbound.join(', ')}; no auth adapter is attached` : null;
+      const auth = spec.extensions?.['com.openai']?.auth || spec.auth;
+      const unsupported = auth && auth.type !== 'none' ? 'Declared MCP authentication requires an explicit auth adapter' : spec.type === 'sse' ? 'Legacy SSE transport unsupported' : unbound.length ? `Requires credential/configuration binding for ${unbound.join(', ')}; no auth adapter is attached` : null;
       cap(`mcp:${id}`, 'mcp-server', spec, !unsupported && (!spec.type || ['stdio', 'http', 'streamable-http'].includes(spec.type)), unsupported);
     }
   }
   if (['agent-plugin', 'codex-plugin', 'claude-plugin'].includes(format)) {
-    for (const key of ['skills', 'agents', 'commands', 'hooks', 'apps']) if (metadata[key]) cap(key, 'host-declaration', { value: metadata[key] }, false, 'Native host behavior is preserved but not executed');
+    for (const key of ['skills', 'agents', 'commands', 'hooks', 'apps']) {
+      const value = metadata[key] ?? openai?.[key];
+      if (value) cap(key, 'host-declaration', { value }, false, 'Native host behavior is preserved but not executed');
+    }
   }
-  const skillDirs = ['skills', ...[metadata.skills].flat().filter(v => typeof v === 'string').map(v => v.replace(/^\.\//, '').replace(/\/$/, ''))].filter(Boolean);
+  const skillDirs = ['skills', ...components.flatMap(c => [c.skills].flat()).filter(v => typeof v === 'string').map(v => v.replace(/^\.\//, '').replace(/\/$/, ''))].filter(Boolean);
   for (const a of assets) if (skillDirs.some(d => a.path.startsWith(d + '/') && /^[^/]+\/SKILL\.md$/.test(a.path.slice(d.length + 1)))) {
     const { data } = parseDocument(bytesOf(a).toString('utf8'));
     check(typeof data.name === 'string' && typeof data.description === 'string', 'Invalid portable skill declaration');
     cap(`skill:${data.name}`, 'skill', { ...data, path: a.path }, false, 'Agent instruction capability; requires an agent host');
-  }
-  let companion;
-  if (format === 'agent-plugin' && assets.some(a => a.path === '.codex-plugin/plugin.json')) {
-    const codex = declaration(assets.find(a => a.path === '.codex-plugin/plugin.json'));
-    check(object(codex), 'Codex companion declaration must be an object');
-    // OpenAI documents the root manifest's extensions.com.openai as authoritative over the companion overlay.
-    companion = { path: '.codex-plugin/plugin.json', precedence: 'root extensions.com.openai overrides companion fields', effective: { ...codex, ...(object(metadata.extensions?.['com.openai']) ? metadata.extensions['com.openai'] : {}) } };
   }
   for (const [namespace, extension] of Object.entries(metadata.extensions || {})) {
     check(object(extension), 'Invalid namespaced extension declaration');

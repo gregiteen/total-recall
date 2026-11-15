@@ -4,6 +4,8 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
+import { createEngine } from '@ssss/cli';
+import { packPlugin } from './plugin-bundle.mjs';
 import { inspectPluginSource, importPluginSource, exportImportedPlugin, readImportedPlugin } from './plugin-import.mjs';
 
 const roots = [];
@@ -32,6 +34,15 @@ const formats = [
 ];
 
 describe('portable plugin imports', () => {
+  it('imports a real native bundle and verifies its declared handler bytes on read', async () => {
+    const metadata = formats[0][2]; const source = fixture('plugin.json', metadata, { 'cli.mjs': 'export default () => 1' });
+    const bundle = fixture('native.json', packPlugin(source, metadata));
+    const output = path.join(temp(), 'vault');
+    await importPluginSource(path.join(bundle, 'native.json'), { format: 'native', output });
+    const restored = readImportedPlugin(output);
+    expect(restored.metadata).toEqual(metadata);
+    expect(Buffer.from(restored.assets.find(a => a.path === 'cli.mjs').data_b64, 'base64').toString()).toBe('export default () => 1');
+  });
   it.each(formats)('%s preserves all source bytes through SSSS and export', async (format, file, value) => {
     const source = fixture(file, value, { 'assets/data.bin': Buffer.from([0, 255, 2]), '.mcp.json': '{"mcpServers":{}}', 'cli.mjs': 'export default 1', 'bin.mjs': 'console.log(1)' });
     const options = format === 'generic' ? { format } : {};
@@ -94,15 +105,42 @@ describe('portable plugin imports', () => {
     await expect(importPluginSource(source, { format: 'agent-plugin', output })).rejects.toThrow();
   });
 
-  it('applies root extensions.com.openai precedence over the .codex-plugin companion without ambiguity', () => {
+  it('replaces the entire Codex overlay with inline settings, preserving portable components and bytes through roundtrip', async () => {
     const source = fixture('plugin.json', { name: 'demo', version: '1.0.0', extensions: { 'com.openai': { interface: { displayName: 'Root' } } } }, {
-      '.codex-plugin/plugin.json': JSON.stringify({ name: 'demo', interface: { displayName: 'Companion' }, skills: './skills/' }),
+      '.codex-plugin/plugin.json': JSON.stringify({ name: 'demo', interface: { displayName: 'Companion' }, skills: './extra/', mcpServers: './.mcp.json' }),
+      'extra/hidden/SKILL.md': '---\nname: hidden\ndescription: Hidden overlay\n---\nBody',
+      '.mcp.json': '{"mcpServers":{"hidden":{"command":"node"}}}',
+      'mcp.json': '{"mcpServers":{"portable":{"command":"node"}}}',
+      'skills/root/SKILL.md': '---\nname: root\ndescription: Portable skill\n---\nBody',
     });
     const inspected = inspectPluginSource(source);
     expect(inspected.format).toBe('agent-plugin');
     expect(inspected.provenance.companion.effective.interface.displayName).toBe('Root');
-    expect(inspected.provenance.companion.effective.skills).toBe('./skills/');
+    expect(inspected.provenance.companion.effective.skills).toBeUndefined();
     expect(inspected.capabilities.map(c => c.id)).toContain('extension:com.openai');
+    expect(inspected.capabilities.map(c => c.id)).toEqual(expect.arrayContaining(['mcp:portable', 'skill:root']));
+    expect(inspected.capabilities.map(c => c.id)).not.toEqual(expect.arrayContaining(['mcp:hidden', 'skill:hidden']));
+    const output = path.join(temp(), 'vault'); await importPluginSource(source, { output });
+    expect(readImportedPlugin(output)).toEqual(inspected);
+  });
+
+  it('discovers fallback companion custom skills and MCP exactly once and rebuilds them after export/import', async () => {
+    const source = fixture('plugin.json', { name: 'demo' }, {
+      '.codex-plugin/plugin.json': JSON.stringify({ name: 'demo', skills: './extra/', mcpServers: ['./.mcp.json', './custom.json'] }),
+      'extra/one/SKILL.md': '---\nname: one\ndescription: Custom skill\n---\nBody',
+      '.mcp.json': '{"mcpServers":{"stdio":{"command":"node","args":["${PLUGIN_ROOT}/server.mjs"],"env":{"NODE_ENV":"test"}}}}',
+      'custom.json': '{"mcpServers":{"remote":{"type":"streamable-http","url":"https://example.invalid/mcp","extensions":{"com.openai":{"auth":{"type":"oauth"}}}}}}',
+      'server.mjs': '',
+    });
+    const inspected = inspectPluginSource(source);
+    expect(inspected.capabilities.map(c => c.id).sort()).toEqual(['mcp:remote', 'mcp:stdio', 'skill:one', 'skills']);
+    expect(inspected.capabilities.find(c => c.id === 'mcp:remote')).toMatchObject({ executable: false, unsupported: expect.stringMatching(/auth adapter/) });
+    expect(inspected.capabilities.find(c => c.id === 'mcp:stdio').schema.env).toEqual({ NODE_ENV: 'test' });
+    const first = path.join(temp(), 'vault'); await importPluginSource(source, { output: first });
+    expect(readImportedPlugin(first)).toEqual(inspected);
+    const bundle = fixture('bundle.json', exportImportedPlugin(first));
+    const second = path.join(temp(), 'vault'); await importPluginSource(path.join(bundle, 'bundle.json'), { output: second });
+    expect(readImportedPlugin(second)).toEqual(inspected);
   });
 
   it('imports the latest OpenAPI 3.2.x and rejects structurally invalid documents', () => {
@@ -169,6 +207,30 @@ describe('portable plugin imports', () => {
     const parent = temp(); const output = path.join(parent, 'vault');
     await expect(importPluginSource(source, { format: 'agent-plugin', output, compose: 'Bad Name', projectRoot: temp() })).rejects.toThrow();
     expect(fs.readdirSync(parent)).toEqual([]);
+  });
+
+  it('cleans a real committed staging vault after a reported engine failure', async () => {
+    const source = fixture('plugin.json', { name: 'demo' }); const parent = temp(); const output = path.join(parent, 'vault');
+    const kernel = createEngine(); let committed = false;
+    const engine = { processOperation: async (envelope, vault, options) => {
+      const result = await kernel.processOperation(envelope, vault, options);
+      if (!envelope.dry_run) { expect(result.success).toBe(true); expect(fs.existsSync(path.join(vault, 'imports/plugin-source.md'))).toBe(true); committed = true; return { success: false }; }
+      return result;
+    } };
+    await expect(importPluginSource(source, { output, engine })).rejects.toThrow(/commit failed/);
+    expect(committed).toBe(true); expect(fs.readdirSync(parent)).toEqual([]);
+  });
+
+  it('preserves an output collision introduced during staging and removes only its own stage', async () => {
+    const source = fixture('plugin.json', { name: 'demo' }); const parent = temp(); const output = path.join(parent, 'vault');
+    const kernel = createEngine();
+    const engine = { processOperation: async (envelope, vault, options) => {
+      const result = await kernel.processOperation(envelope, vault, options);
+      if (!envelope.dry_run) { fs.mkdirSync(output); fs.writeFileSync(path.join(output, 'authored.txt'), 'preserve'); }
+      return result;
+    } };
+    await expect(importPluginSource(source, { output, engine })).rejects.toThrow(/collision/);
+    expect(fs.readdirSync(parent)).toEqual(['vault']); expect(fs.readFileSync(path.join(output, 'authored.txt'), 'utf8')).toBe('preserve');
   });
 
   it('refuses a missing or pre-existing output', async () => {

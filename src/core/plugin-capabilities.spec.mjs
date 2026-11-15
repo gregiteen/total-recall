@@ -76,6 +76,11 @@ describe('installed capability ingestion', () => {
       env: { NODE_ENV: 'production', PORT: '3000', DB_PASSWORD: '[REDACTED]', GH_TOKEN: '${GH_TOKEN}' }, headers: { Accept: 'application/json', Authorization: '[REDACTED]' }, credentials: { user: '[REDACTED]' } });
     expect(JSON.stringify(out)).not.toMatch(/"[a-h]"|u:p|token=h/);
   });
+  it('redacts numeric credentials and encoded or compound URL credential names', () => {
+    const out = sanitizeDeclaration({ token: 123456, max_tokens: 100, url: 'https://example.invalid/mcp?access_token=literal-one&clientSecret=literal-two&%61pi_key=literal-three&page=2' });
+    expect(out.token).toBe('[REDACTED]'); expect(out.max_tokens).toBe(100);
+    expect(out.url).toBe('https://example.invalid/mcp?access_token=[REDACTED]&clientSecret=[REDACTED]&%61pi_key=[REDACTED]&page=2');
+  });
   it('treats missing and non-regular handlers as unavailable, including the root CLI entry', () => {
     const p = fixture(); fs.mkdirSync(path.join(p.dir, 'dir-handler'));
     for (const handler of ['missing.mjs', 'dir-handler']) {

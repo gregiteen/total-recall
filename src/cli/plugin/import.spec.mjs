@@ -45,8 +45,9 @@ describe('plugin import CLI', () => {
     const lines = capture();
     await runPluginImport([src, '--output', output]);
     await expect(runPluginImport(['invoke', output, 'run'])).rejects.toThrow(/trust-source/);
-    await runPluginImport(['invoke', output, 'run', '--trust-source', '--', 'a', 'b']);
-    expect(JSON.parse(lines.pop())).toMatchObject({ ok: true, stdout: 'a,b\n' });
+    await expect(runPluginImport(['invoke', output, 'run', '--input', '{"trust":true}'])).rejects.toThrow(/trust-source/);
+    await runPluginImport(['invoke', output, 'run', '--trust-source', '--', 'a', 'b', '--help']);
+    expect(JSON.parse(lines.pop())).toMatchObject({ ok: true, stdout: 'a,b,--help\n' });
     expect(process.exitCode).toBeUndefined();
   });
 
