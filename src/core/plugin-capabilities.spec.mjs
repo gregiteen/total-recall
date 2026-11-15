@@ -2,7 +2,7 @@ import { describe, it, expect, afterEach } from 'vitest';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { pluginCapabilities } from './plugin-capabilities.mjs';
+import { pluginCapabilities, sanitizeDeclaration } from './plugin-capabilities.mjs';
 import { buildPluginCatalog } from './plugin-catalog.mjs';
 import { syncPluginCapabilities, CAPABILITY_PATH } from './plugin-capability-store.mjs';
 import { findVfsDocumentByPath } from './vfs-documents.mjs';
@@ -67,5 +67,25 @@ describe('installed capability ingestion', () => {
     expect(hits.find(c => c.kind === 'api')).toMatchObject({ plugin: 'example', callable: false, provenance: { manifest: 'plugin.json' } });
     const actions = await queryCliSemanticIndex('records', { harvest: () => caps, minScore: 0, limit: 100, actionableOnly: true });
     expect(actions.length).toBeGreaterThan(0); expect(actions.every(c => c.callable)).toBe(true);
+  });
+  it('redacts credential suffix fields but keeps benign routing values', () => {
+    const out = sanitizeDeclaration({ client_secret: 'a', API_KEY_TOKEN: 'b', clientSecret: 'c', token_env: 'GH_TOKEN', max_tokens: 100, auth: { refresh_token: 'd' },
+      env: { NODE_ENV: 'production', PORT: '3000', DB_PASSWORD: 'e', GH_TOKEN: '${GH_TOKEN}' }, headers: { Accept: 'application/json', Authorization: 'Bearer f' },
+      credentials: { user: 'g' }, url: 'https://u:p@host/x?token=h' });
+    expect(out).toMatchObject({ client_secret: '[REDACTED]', API_KEY_TOKEN: '[REDACTED]', clientSecret: '[REDACTED]', token_env: 'GH_TOKEN', max_tokens: 100, auth: { refresh_token: '[REDACTED]' },
+      env: { NODE_ENV: 'production', PORT: '3000', DB_PASSWORD: '[REDACTED]', GH_TOKEN: '${GH_TOKEN}' }, headers: { Accept: 'application/json', Authorization: '[REDACTED]' }, credentials: { user: '[REDACTED]' } });
+    expect(JSON.stringify(out)).not.toMatch(/"[a-h]"|u:p|token=h/);
+  });
+  it('treats missing and non-regular handlers as unavailable, including the root CLI entry', () => {
+    const p = fixture(); fs.mkdirSync(path.join(p.dir, 'dir-handler'));
+    for (const handler of ['missing.mjs', 'dir-handler']) {
+      p.manifest.cli.handler = handler;
+      const caps = pluginCapabilities(p, active).filter(c => c.kind === 'cli');
+      expect(caps.length).toBeGreaterThan(1);
+      expect(caps.every(c => c.state === 'unavailable' && c.callable === false)).toBe(true);
+      const catalog = buildPluginCatalog(temp(), { discover: () => [p] });
+      expect(catalog.plugins[0].callable).toBe(false);
+      expect(catalog.commands).toEqual([]);
+    }
   });
 });

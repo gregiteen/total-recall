@@ -4,16 +4,36 @@ import { resolvePluginFile } from './plugin-loader.mjs';
 
 export const fingerprint = value => crypto.createHash('sha256').update(JSON.stringify(value)).digest('hex');
 
+const SENSITIVE_KEY = /(^|_)(password|passwd|passphrase|secret|token|api_?key|access_?key|private_?key|authorization|cookie|credential|bearer|session_?id)(_|$)/;
+// A key that names or describes a secret (env var name, file, label) rather than holding one.
+const REFERENCE_KEY = /_(env|var|name|ref|file|path|header|label|type|scope|required|help|hint|description|url|endpoint)$/;
+const ENV_REFERENCE = /^\$\{?[A-Za-z_][A-Za-z0-9_]*\}?$/;
+const VALUE_FIELDS = new Set(['default', 'value', 'example', 'examples']);
+const normalizeKey = key => String(key).replace(/([a-z0-9])([A-Z])/g, '$1_$2').replace(/[-\s.]+/g, '_').toLowerCase();
+export const isSensitiveKey = key => { const k = normalizeKey(key); return !REFERENCE_KEY.test(k) && SENSITIVE_KEY.test(k); };
+
 /** Keep arbitrary declaration metadata, but never persist credential material. */
 export function sanitizeDeclaration(value, key = '') {
-  if (/^(authorization|password|passwd|token|api[_-]?key|client[_-]?secret|access[_-]?token|refresh[_-]?token|private[_-]?key|cookie)$/i.test(key)) return '[REDACTED]';
+  if (key && isSensitiveKey(key) && !/^credentials$/i.test(key)) {
+    if (typeof value === 'boolean' || typeof value === 'number' || value === null || value === undefined) return value;
+    if (typeof value === 'string' && ENV_REFERENCE.test(value)) return value;
+    return '[REDACTED]';
+  }
   if (Array.isArray(value)) return value.map(v => sanitizeDeclaration(v));
-  if (/^(env|headers|credentials)$/i.test(key) && value && typeof value === 'object') return Object.fromEntries(Object.keys(value).map(k => [k, '[REDACTED]']));
-  if (value && typeof value === 'object' && /password|secret|token|api[_-]?key|private[_-]?key/i.test(value.name || value.key || '')) return Object.fromEntries(Object.entries(value).map(([k, v]) => [k, ['default', 'value', 'example', 'examples'].includes(k) ? '[REDACTED]' : sanitizeDeclaration(v, k)]));
-  if (value && typeof value === 'object' && value.secret === true) return Object.fromEntries(Object.entries(value).map(([k, v]) => [k, ['default', 'value', 'example', 'examples'].includes(k) ? '[REDACTED]' : sanitizeDeclaration(v, k)]));
-  if (value && typeof value === 'object') return Object.fromEntries(Object.entries(value).map(([k, v]) => [k, sanitizeDeclaration(v, k)]));
-  if (typeof value === 'string') return value.replace(/(https?:\/\/)[^/\s@]+@/g, '$1[REDACTED]@').replace(/\b(Bearer\s+)\S+/gi, '$1[REDACTED]').replace(/([?&](?:token|key|api_key|secret|password)=)[^&#\s]*/gi, '$1[REDACTED]');
+  if (/^credentials$/i.test(key) && value && typeof value === 'object' && !Array.isArray(value)) return Object.fromEntries(Object.keys(value).map(k => [k, '[REDACTED]']));
+  const secretDeclaration = value && typeof value === 'object' && (value.secret === true || isSensitiveKey(value.name || value.key || ''));
+  if (value && typeof value === 'object') return Object.fromEntries(Object.entries(value).map(([k, v]) => [k, secretDeclaration && VALUE_FIELDS.has(k) ? '[REDACTED]' : sanitizeDeclaration(v, k)]));
+  if (typeof value === 'string') return value.replace(/(https?:\/\/)[^/\s@]+@/g, '$1[REDACTED]@').replace(/\b(Bearer\s+)(?!\[REDACTED\])\S+/gi, '$1[REDACTED]').replace(/([?&](?:token|key|api_key|secret|password)=)[^&#\s]*/gi, '$1[REDACTED]');
   return value;
+}
+
+/** Containment is refused loudly; a missing or non-regular handler is merely unavailable. */
+function fileAvailability(dir, file) {
+  try { resolvePluginFile(dir, file); return true; }
+  catch (error) {
+    if (error.code === 'ENOENT' || error.code === 'ENOTDIR' || /must resolve to a file/.test(error.message)) return false;
+    throw new Error('Unsafe plugin capability file');
+  }
 }
 
 export function pluginCapabilities(plugin, activation) {
@@ -25,11 +45,7 @@ export function pluginCapabilities(plugin, activation) {
     const id = `plugin:${plugin.id}:${kind}:${encodeURIComponent(name)}`;
     if (ids.has(id)) throw new Error('Duplicate plugin capability identity');
     ids.add(id);
-    let available = true;
-    if (file) {
-      try { resolvePluginFile(plugin.dir, file); }
-      catch (error) { if (error.code === 'ENOENT') available = false; else throw new Error('Unsafe plugin capability file'); }
-    }
+    const available = file ? fileAvailability(plugin.dir, file) : true;
     const callable = plugin.valid === true && activation.enabled && bridge && available;
     const value = { id, plugin: plugin.id, kind, name, description: declaration.description || manifest.description || '', usage,
       schema: declaration.inputSchema || declaration.input_schema || declaration.schema || null, args: declaration.args ?? null,
