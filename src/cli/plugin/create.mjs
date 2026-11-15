@@ -71,45 +71,6 @@ async function tokenCommand(args) {
 `;
 }
 
-/** UI panel with the paste-your-key form every API-key plugin starts with. */
-function tokenPanelSource(id, panelClass, pluginName, apiKeys) {
-  return `// Paste-your-key panel. Emits \`save-token\`; the host pipes it to
-// \`total-recall ${id} token set --stdin\` (stored in secrets, never shown again).
-class ${panelClass} extends HTMLElement {
-  set view(value) { this._view = value; this.render(); }
-  get view() { return this._view; }
-  connectedCallback() { this.render(); }
-  render() {
-    const root = this.shadowRoot || this.attachShadow({ mode: 'open' });
-    root.replaceChildren();
-    const present = Boolean(this._view && this._view.present);
-    const style = document.createElement('style');
-    style.textContent = ':host { display:block; color:var(--color-text); background:var(--color-surface); border:1px solid var(--color-border); border-radius:var(--radius-md); padding:var(--spacing-md); } .row { display:flex; gap:8px; margin-top:8px; } input { flex:1; padding:6px 8px; }';
-    const title = document.createElement('h3');
-    title.textContent = ${JSON.stringify(pluginName + ' API key')};
-    const state = document.createElement('p');
-    state.textContent = present ? 'A key is saved. Paste a new one to replace it.' : 'No key yet. Paste it to start using this plugin.';
-    const form = document.createElement('form');
-    form.className = 'row';
-    const input = document.createElement('input');
-    input.type = 'password'; input.autocomplete = 'off'; input.required = true;
-    input.placeholder = ${JSON.stringify(apiKeys[0])};
-    input.setAttribute('aria-label', ${JSON.stringify(pluginName + ' API key')});
-    const button = document.createElement('button');
-    button.type = 'submit'; button.textContent = 'Save and test';
-    form.append(input, button);
-    form.addEventListener('submit', (event) => {
-      event.preventDefault();
-      this.dispatchEvent(new CustomEvent('save-token', { detail: { key: ${JSON.stringify(apiKeys[0])}, token: input.value.trim() }, bubbles: true, composed: true }));
-      input.value = '';
-    });
-    root.append(style, title, state, form);
-  }
-}
-customElements.define('${id}-panel', ${panelClass});
-`;
-}
-
 export async function createPlugin(args = []) {
   // Every plugin is installed in the shared folder; --global is accepted and changes nothing.
   let withCli = args.includes("--with-cli");
