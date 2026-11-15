@@ -17,6 +17,8 @@ total-recall plugin import export ./imported-plugin > plugin.ssss.json
 Supply a complete package directory for referenced assets. Use `--format FORMAT`
 for ambiguous packages or `--format generic` for unfamiliar declarations. Local
 marketplaces require `--select NAME`; remote marketplace sources are unsupported.
+Directory collection skips private `.agent` brains, VCS and dependency directories.
+Public `skills/`, `.codex-plugin/` and `.claude-plugin/` metadata remain included.
 Output must be absent. Complete-plan validation precedes staging and publication;
 existing output is never intentionally overwritten. Exported SSSS bundles can be
 imported into another fresh vault.

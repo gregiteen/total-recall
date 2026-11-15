@@ -105,7 +105,7 @@ export function collectSource(input) {
   };
   const walk = (dir, prefix = '') => {
     for (const e of fs.readdirSync(dir, { withFileTypes: true }).sort((a, b) => a.name.localeCompare(b.name))) {
-      if (['.git', 'node_modules', '.venv', '__pycache__'].includes(e.name)) continue;
+      if (['.agent', '.git', 'node_modules', '.venv', '__pycache__'].includes(e.name)) continue;
       const relative = prefix + e.name;
       safePath(relative);
       if (e.isSymbolicLink()) throw new Error('Source symlinks are forbidden');

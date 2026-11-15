@@ -34,6 +34,30 @@ const formats = [
 ];
 
 describe('portable plugin imports', () => {
+  it('imports native checkouts without collecting the private brain or following its skill links', async () => {
+    const source = fixture('plugin.json', formats[0][2], {
+      'cli.mjs': 'export default () => 1',
+      '.agent/secrets.enc': 'private encrypted credential fixture',
+      '.agent/skills/total-recall/memory-vault/private.md': 'Private brain fixture',
+      'skills/public/SKILL.md': '---\nname: public\ndescription: Public portable skill\n---\nBody',
+      '.codex-plugin/plugin.json': '{"name":"demo","skills":"./skills/"}',
+      '.claude-plugin/plugin.json': '{"name":"demo"}',
+    });
+    const outside = fixture('outside.txt', 'Outside private fixture');
+    fs.symlinkSync(outside, path.join(source, '.agent/skills/linked'));
+    const inspected = inspectPluginSource(source, { format: 'native' });
+    expect(inspected.assets.map(a => a.path).sort()).toEqual([
+      '.claude-plugin/plugin.json', '.codex-plugin/plugin.json', 'cli.mjs', 'plugin.json', 'skills/public/SKILL.md',
+    ]);
+    const output = path.join(temp(), 'vault');
+    expect((await importPluginSource(source, { format: 'native', output })).ok).toBe(true);
+    const restored = readImportedPlugin(output);
+    expect(restored.assets).toEqual(inspected.assets);
+    expect(JSON.stringify(restored)).not.toContain('Private brain fixture');
+    fs.symlinkSync(outside, path.join(source, 'skills/escape'));
+    expect(() => inspectPluginSource(source, { format: 'native' })).toThrow(/symlink/i);
+  });
+
   it('imports a real native bundle and verifies its declared handler bytes on read', async () => {
     const metadata = formats[0][2]; const source = fixture('plugin.json', metadata, { 'cli.mjs': 'export default () => 1' });
     const bundle = fixture('native.json', packPlugin(source, metadata));
