@@ -234,10 +234,13 @@ export function formatAccessTarget(resolved) {
  * cannot silently offer a different key first and get the connection refused
  * before the right key is ever tried.
  */
-export function buildSshArgs(resolved, { command = null, extraOptions = [] } = {}) {
+export function buildSshArgs(resolved, { command = null, extraOptions = [], terminal = false } = {}) {
   if (!resolved?.complete) return null;
 
   const args = [];
+  // ssh gives a remote command no terminal unless asked, so a sign-in run from a
+  // person's terminal (`mesh ssh node 'claude setup-token'`) could not prompt.
+  if (terminal && command) args.push('-t');
   if (resolved.port && resolved.port !== DEFAULT_SSH_PORT) args.push('-p', String(resolved.port));
   if (resolved.identity_file) {
     args.push('-i', resolved.identity_file, '-o', 'IdentitiesOnly=yes');

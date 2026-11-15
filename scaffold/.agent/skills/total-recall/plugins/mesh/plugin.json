@@ -2,7 +2,7 @@
   "$schema": "https://github.com/gregiteen/total-recall/blob/main/metadata.plugin.schema.json",
   "id": "mesh",
   "name": "Headscale",
-  "version": "0.3.1",
+  "version": "0.3.2",
   "description": "Control-server mesh administration, Tailscale SSH, and peer node discovery.",
   "license": "MIT",
   "reuse": {
@@ -166,8 +166,9 @@
       },
       {
         "name": "ssh",
-        "description": "Mesh ssh operation",
-        "effect": "write"
+        "description": "Open a terminal session on a mesh node, or run a command there",
+        "effect": "write",
+        "interactive": true
       },
       {
         "name": "exec",

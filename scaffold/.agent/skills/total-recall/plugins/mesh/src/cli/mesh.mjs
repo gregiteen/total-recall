@@ -402,8 +402,11 @@ export default async function meshCli(argv = []) {
         return;
       }
 
+      // Run from a terminal, total-recall attaches this command to it (manifest
+      // `interactive`), so ssh reads and writes the person's terminal directly.
       const sshArgs = buildSshArgs(resolved, {
         command: args.length ? args.join(' ') : null,
+        terminal: process.stdin.isTTY === true && process.stdout.isTTY === true,
       });
       const res = spawnSync('ssh', sshArgs, { stdio: 'inherit' });
       process.exitCode = res.status ?? 1;
