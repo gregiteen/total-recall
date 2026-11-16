@@ -503,7 +503,7 @@ export default function OnboardingPage() {
           )}
 
           <p style={{ marginTop: 14, fontSize: 12, color: 'var(--text-tertiary)' }}>
-            CLI: <code>npx total-recall secret import-env --all</code>
+            CLI: <code>total-recall auth secret --help</code>
             {' · '}
             <Link to="/keys" style={{ color: 'var(--accent)' }}>Secrets page</Link>
           </p>
@@ -614,7 +614,7 @@ export default function OnboardingPage() {
       </div>
 
       <p style={{ marginTop: 32, fontSize: 12, color: 'var(--text-tertiary)' }}>
-        CLI-first: <code>init → secret import-env --all → connect → remember → dream</code>
+        CLI-first: <code>init → connect → remember → recall</code>
       </p>
 
       {stepIdx < STEPS.length - 1 && (

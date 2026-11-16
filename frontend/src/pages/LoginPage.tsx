@@ -373,8 +373,7 @@ export default function LoginPage({ onAuthenticated }: Props) {
 
         {(!needsReset && !isFirstTime) && (
           <p style={{ textAlign: "center", fontSize: 11, color: "var(--text-tertiary)", margin: 0, lineHeight: 1.5 }}>
-            Local-first vault · credentials in{" "}
-            <code style={{ color: "#93c5fd", fontSize: 11 }}>~/.agent/config/security.yml</code>
+            Local-first memory · secure sign-in
           </p>
         )}
       </div>
