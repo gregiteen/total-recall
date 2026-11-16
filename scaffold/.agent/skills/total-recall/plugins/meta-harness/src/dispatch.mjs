@@ -2,7 +2,7 @@
 import { executeOnNode } from './executor.mjs';
 import { classifyFailure, INCLUDED_BILLING, READ_ONLY_ADAPTERS, cancellationResult } from './worker.mjs';
 import { recordRunReceipt } from './learner.mjs';
-import { isGitRepo, createWorktree, removeWorktree, commitAll, deleteBranch } from './worktree.mjs';
+import { isGitRepo, createWorktree, removeWorktree, commitAll, deleteBranch, gitPointerProblem } from './worktree.mjs';
 import { randomUUID } from 'node:crypto';
 import { includedAdmission, openRouterAdmission, readIncludedPolicy } from './included-usage.mjs';
 import { queueIncludedJob } from './usage-queue.mjs';
@@ -49,6 +49,7 @@ export async function dispatchWithReceipt(request, { dispatchFn, node = request.
     result = { ok: false, error: message, agent: request.agent, ...(error?.code === 'NOT_READY' ? { failureKind: 'not-ready' } : classifyFailure(message)) };
   } finally {
     if (scratch) {
+      let keep = false;
       try {
         if (branch) {
           const commit = commitAll(scratch, result?.cancelled ? 'meta-harness: unfinished cancelled dispatch' : 'meta-harness: dispatch changes');
@@ -56,8 +57,13 @@ export async function dispatchWithReceipt(request, { dispatchFn, node = request.
           else if (result?.sessionId) result = { ...result, branch };
           else deleteBranch(request.cwd, branch);
         }
-      } finally { removeWorktree(request.cwd, scratch); }
-      if (branch && !result?.branch) deleteBranch(request.cwd, branch);
+      } catch (error) {
+        // A refused commit must leave the checkout available for recovery, without running status there.
+        if (!gitPointerProblem(scratch)) throw error;
+        keep = true;
+        result = { ...result, ok: false, failureKind: 'security', error: String(error.message), branch, keptWorktree: scratch };
+      } finally { if (!keep) removeWorktree(request.cwd, scratch); }
+      if (!keep && branch && !result?.branch) deleteBranch(request.cwd, branch);
     }
   }
   const durationMs = Date.now() - started;

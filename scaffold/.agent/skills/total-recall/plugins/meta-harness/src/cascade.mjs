@@ -9,7 +9,7 @@ import { recordRunReceipt } from './learner.mjs';
 import { resolvePool, localExecutionNode } from './pool.mjs';
 import { routeTask } from './router.mjs';
 import { runQualityGate } from './gate.mjs';
-import { isGitRepo, isDirty, pushBranch, createWorktree, removeWorktree, commitAll, linkDependencies, deleteBranch, provideDependencies } from './worktree.mjs';
+import { isGitRepo, isDirty, gitPointerProblem, pushBranch, createWorktree, removeWorktree, commitAll, linkDependencies, deleteBranch, provideDependencies } from './worktree.mjs';
 import { forwardRemoteOperation } from './remote-operation.mjs';
 import { queueIncludedJob } from './usage-queue.mjs';
 import { configDir } from './paths.mjs';
@@ -85,7 +85,7 @@ export async function executeRoutedTask(task, options = {}) {
       attempt.dependencies = (options.provideDependencies || provideDependencies)(cwd, directory);
       const prompt = `Work only in this checkout. Do not commit; the harness commits your changes.\nTask:\n${task}${diagnostic ? `\n\nA previous attempt by ${previous} failed. Diagnostic:\n${diagnostic}` : ''}`;
       const result = await dispatchWithReceipt({ agent: harness, node, branch, cwd: directory, contextCwd: cwd, contextTask: task, prompt, permissions: { read: true, write: true }, timeoutMs,
-        ...controls, goal: controls.goal || task,
+        ...controls, goal: controls.goal || task.slice(0, 4000),
         ...(progressFile ? { progressFile } : {}), allowUnknownAuth: options.allowUnknownAuth === true }, { dispatchFn: options.dispatchFn, role: 'Routed', complexityScore: route.complexity?.score, escalatedFrom: previous, replay, retryId: options.retryId });
       attempt.ok = result.ok === true;
       if (result.cancelled) stopped = result;
@@ -146,7 +146,12 @@ export async function executeRoutedTask(task, options = {}) {
         if (wip) { attempt.wip = wip; attempt.branch = branch; carried = wip; }
       } else if (!attempt.ok && attempt.commit) carried = attempt.commit;
       // Edits that could not be committed are never deleted (A-114): the checkout and branch stay for recovery.
-      if (attempt.wipError && isDirty(directory)) { attempt.keptWorktree = directory; attempt.branch = branch; }
+      const unsafeGit = gitPointerProblem(directory);
+      if (unsafeGit) {
+        stopped = { ok: false, failureKind: 'security', error: `Refusing to run git as root: ${unsafeGit} during an agent-user run.` };
+        attempt.ok = false; attempt.error = stopped.error; attempt.failureKind = stopped.failureKind;
+      }
+      if (unsafeGit || (attempt.wipError && isDirty(directory))) { attempt.keptWorktree = directory; attempt.branch = branch; }
       else {
         removeWorktree(cwd, directory);
         if (!attempt.ok && !attempt.wip && !attempt.commit && !attempt.sessionId) { deleteBranch(cwd, branch); attempt.branch = null; }

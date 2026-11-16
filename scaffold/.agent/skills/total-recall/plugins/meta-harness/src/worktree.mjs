@@ -5,9 +5,12 @@ import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 
 const SECRET_FILE = /^(\.env(\..*)?|.*\.(pem|key|p12|pfx)|secrets\.enc|id_(rsa|ed25519|ecdsa)|credentials(\.json)?)$/i;
-const git = (cwd, args, timeout = 30000) => spawnSync('git', args, { cwd, encoding: 'utf8', timeout, maxBuffer: 64 * 1024 * 1024 });
-function must(cwd, args, what) {
-  const result = git(cwd, args);
+const git = (cwd, args, timeout = 30000, options) => {
+  assertGitPointer(cwd, options);
+  return spawnSync('git', args, { cwd, encoding: 'utf8', timeout, maxBuffer: 64 * 1024 * 1024 });
+};
+function must(cwd, args, what, options) {
+  const result = git(cwd, args, 30000, options);
   if (result.status !== 0) throw new Error(`${what} failed: ${String(result.stderr || result.error || '').trim().slice(0, 300)}`);
   return result.stdout.trim();
 }
@@ -114,23 +117,111 @@ export function removeWorktree(cwd, directory) {
   }
   git(cwd, ['worktree', 'remove', '--force', directory], 60000);
   fs.rmSync(directory, { recursive: true, force: true });
+  GIT_POINTERS.delete(path.resolve(directory));
+}
+/**
+ * An agent user can write the checkout directory, so it can unlink or replace `<cwd>/.git` even though it
+ * cannot write inside it. Record it before such a run; commitAll verifies it before root runs git there,
+ * because a planted hook or config (core.hooksPath, core.fsmonitor, filter drivers) would run as root.
+ */
+const GIT_POINTERS = new Map();
+const gitPointerPath = directory => path.join(path.resolve(directory), '.git');
+/** Filesystem-only inventory: never enter git metadata or follow workspace symlinks. */
+export function gitMetadataEntries(directory) {
+  const pending = [path.resolve(directory)], found = [];
+  while (pending.length) {
+    const cwd = pending.pop();
+    const entries = fs.readdirSync(cwd, { withFileTypes: true });
+    const dot = entries.find(entry => entry.name === '.git');
+    if (dot) found.push({ cwd, metadata: path.join(cwd, '.git'), symlink: dot.isSymbolicLink() });
+    const bare = entries.some(entry => entry.name === 'HEAD' && entry.isFile()) &&
+      ['objects', 'refs'].every(name => entries.some(entry => entry.name === name && entry.isDirectory()));
+    if (bare) { found.push({ cwd, metadata: cwd, symlink: false }); continue; }
+    for (const entry of entries) if (entry.name !== '.git' && entry.isDirectory()) pending.push(path.join(cwd, entry.name));
+  }
+  return found;
+}
+
+function snapshotGitPath(dot, lstat) {
+  let stat;
+  try { stat = lstat(dot); } catch (error) {
+    if (error.code !== 'ENOENT') throw error;
+    return { type: 'missing' };
+  }
+  if (stat.isSymbolicLink()) throw new Error(`${dot} is a symlink, so it cannot be protected from the agent user.`);
+  if (!stat.isDirectory() && !stat.isFile()) throw new Error(`${dot} is not a git directory or pointer file.`);
+  return { type: stat.isDirectory() ? 'directory' : 'file', ino: stat.ino, dev: stat.dev,
+    ...(stat.isFile() ? { content: fs.readFileSync(dot) } : {}) };
+}
+export function recordGitPointer(directory, { lstat = fs.lstatSync, protect = [] } = {}) {
+  // A second attempt cannot bless metadata that a previous agent already replaced.
+  assertGitPointer(directory, { lstat });
+  const dot = gitPointerPath(directory);
+  const paths = [...new Set([dot, ...protect.map(item => path.resolve(item))])];
+  const snapshots = new Map(paths.map(item => [item, snapshotGitPath(item, lstat)]));
+  const pointer = snapshots.get(dot);
+  GIT_POINTERS.set(path.resolve(directory), { snapshots, entries: new Set(gitMetadataEntries(directory).map(entry => entry.metadata)) });
+  return pointer;
+}
+/** The reason the checkout's `.git` is no longer what was recorded, or null. Directories never recorded are not checked. */
+export function gitPointerProblem(directory = process.cwd(), { lstat = fs.lstatSync } = {}) {
+  const recorded = GIT_POINTERS.get(path.resolve(directory));
+  if (!recorded) return null;
+  const { snapshots, entries } = recorded;
+  for (const [dot, expected] of snapshots) {
+    const problem = gitPathProblem(dot, expected, lstat);
+    if (problem) return problem;
+    // lstat on the final component alone would follow an agent-replaced ancestor symlink.
+    const relative = path.relative(path.resolve(directory), dot);
+    if (relative && relative !== '..' && !relative.startsWith(`..${path.sep}`) && !path.isAbsolute(relative)) {
+      for (let parent = path.dirname(dot); parent !== path.resolve(directory); parent = path.dirname(parent)) {
+        if (lstat(parent).isSymbolicLink()) return `${parent} is now a symlink`;
+      }
+    }
+  }
+  // Root git may inspect embedded repos/submodules. Metadata created during the run is untrusted too.
+  try {
+    for (const entry of gitMetadataEntries(directory)) if (!entries.has(entry.metadata)) return `${entry.metadata} was created`;
+  } catch (error) { return `Cannot inspect git metadata in ${directory}: ${error.message}`; }
+  return null;
+}
+function gitPathProblem(dot, expected, lstat) {
+  let stat;
+  try { stat = lstat(dot); } catch (error) {
+    if (error.code !== 'ENOENT') throw error;
+    return expected.type === 'missing' ? null : `${dot} was removed`;
+  }
+  if (expected.type === 'missing') return `${dot} was created`;
+  if (stat.isSymbolicLink()) return `${dot} is now a symlink`;
+  if (stat.uid !== 0) return `${dot} is not owned by root (uid ${stat.uid})`;
+  if (stat.ino !== expected.ino || stat.dev !== expected.dev) return `${dot} was replaced`;
+  if (expected.type === 'directory') return stat.isDirectory() ? null : `${dot} was replaced`;
+  if (!stat.isFile()) return `${dot} was replaced`;
+  return fs.readFileSync(dot).equals(expected.content) ? null : `${dot} changed`;
+}
+function assertGitPointer(directory, options) {
+  const problem = gitPointerProblem(directory, options);
+  if (problem) throw new Error(`Refusing to run git as root: ${problem} during an agent-user run.`);
 }
 /** Commit whatever the agent left. Returns the commit, or null when it changed nothing. */
-export function commitAll(directory, message) {
+export function commitAll(directory, message, { lstat = fs.lstatSync } = {}) {
+  assertGitPointer(directory, { lstat });
+  const run = args => git(directory, args, 30000, { lstat });
+  const require = (args, what) => must(directory, args, what, { lstat });
   // Stage everything git does not ignore. Naming node_modules in the pathspec fails when it is
   // ignored (A-114), so it is unstaged afterwards instead, for repositories that do not ignore it.
-  must(directory, ['add', '-A'], 'Staging agent changes');
-  git(directory, ['rm', '-r', '--cached', '-q', '--ignore-unmatch', '--', 'node_modules']);
+  require(['add', '-A'], 'Staging agent changes');
+  run(['rm', '-r', '--cached', '-q', '--ignore-unmatch', '--', 'node_modules']);
   // The linked private plan folder (A-116) is the operator's, never part of the agent's commit.
-  try { if (fs.lstatSync(path.join(directory, PLANS)).isSymbolicLink()) git(directory, ['rm', '-r', '--cached', '-q', '--ignore-unmatch', '--', PLANS]); } catch { /* no link */ }
+  try { if (fs.lstatSync(path.join(directory, PLANS)).isSymbolicLink()) run(['rm', '-r', '--cached', '-q', '--ignore-unmatch', '--', PLANS]); } catch { /* no link */ }
   // Seeded skills are scaffolding, not the agent's work. A repository that tracks them keeps normal history.
-  for (const file of MANDATORY_SKILLS) if (git(directory, ['cat-file', '-e', `HEAD:${file}`]).status !== 0) git(directory, ['rm', '--cached', '-q', '--ignore-unmatch', '--', file]);
-  if (git(directory, ['diff', '--cached', '--quiet']).status === 0) return null;
-  const staged = git(directory, ['diff', '--cached', '--name-only']).stdout.split('\n').filter(Boolean);
+  for (const file of MANDATORY_SKILLS) if (run(['cat-file', '-e', `HEAD:${file}`]).status !== 0) run(['rm', '--cached', '-q', '--ignore-unmatch', '--', file]);
+  if (run(['diff', '--cached', '--quiet']).status === 0) return null;
+  const staged = run(['diff', '--cached', '--name-only']).stdout.split('\n').filter(Boolean);
   const secret = staged.filter(file => SECRET_FILE.test(path.basename(file)));
   if (secret.length) throw new Error(`Refusing to commit files that look like credentials: ${secret.join(', ')}`);
-  must(directory, ['commit', '-m', message], 'Committing agent changes');
-  return headCommit(directory);
+  require(['commit', '-m', message], 'Committing agent changes');
+  return require(['rev-parse', 'HEAD'], 'Reading HEAD');
 }
 /** Remove owned checkouts. Cancellation keeps branches that contain work. */
 export function removeActiveWorktrees({ preserveChanges = false } = {}) {

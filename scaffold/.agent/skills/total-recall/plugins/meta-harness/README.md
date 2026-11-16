@@ -1,5 +1,38 @@
 # Metaharness
 
+When Metaharness runs as root on Linux, Claude runs as a dedicated non-root Unix
+account with `--permission-mode bypassPermissions`. The operator must provision
+that account with a readable, writable home, install the Linux `acl` package, and
+select it on that node:
+
+```sh
+total-recall meta-harness agent-user <name>
+total-recall meta-harness agent-user --json
+total-recall meta-harness agent-user --clear
+```
+
+Managed agents cannot change this setting. Dispatch refuses an unset user, uid 0,
+an unusable home or a failed ACL grant. ACLs give the account write access to its
+checkout, read access to git metadata, bootstrap files and executables, and
+execute-only access to ancestor directories. Git common directories and `.git`
+entries, including nested repositories, receive read-only protection after all
+other grants. Agent-owned metadata and metadata symlinks are refused. Before
+root runs git after the agent, the harness checks the recorded metadata's type,
+identity, root ownership and exact pointer bytes, and rejects newly created nested
+git metadata. A refused commit preserves the checkout for recovery. Ownership is
+never changed. Git trusts only this checkout through the child process's runtime
+`safe.directory` setting. HOME, USER and LOGNAME select the account; Claude still
+receives its subscription token from Total Recall Auth.
+
+Claude's MCP server gets access only to this job's inbox/events under the root
+brain, plus plugin source and Node. `ask`, replies and `operator` approvals use
+those files. `rules` approvals call `total-recall decision run`, which cannot read
+root's brain or Auth store as the agent user, so they deny on failure. MCP alert
+delivery also requires root's Auth access and may fail; questions and approvals
+remain visible through `watch`. No brain or secret-store ACL is granted to work
+around these limits. Other platforms and non-root launches retain their existing
+identity and configuration.
+
 `total-recall meta-harness router-benchmark --json` evaluates the real host
 `shortlistActions -> queryCliSemanticIndex` and owner `routeTask` separately.
 It reads the complete installed composable CLI library; no plugin tasks or

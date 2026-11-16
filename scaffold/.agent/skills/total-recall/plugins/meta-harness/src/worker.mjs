@@ -647,13 +647,21 @@ export async function inspectAgents({ probe = runProcess, env = process.env, ids
   return { agents, evidence: 'Version and login probes only; actual execution requires a completed run' };
 }
 
-export async function dispatchAgent(request, { probe = runProcess, env = process.env, bootstrap = totalRecallBootstrap, sessionRunner } = {}) {
+export async function dispatchAgent(request, { probe = runProcess, env = process.env, bootstrap = totalRecallBootstrap, sessionRunner, agentUser = {} } = {}) {
   const adapter = getActiveAdapters().find(item => item.id === request.agent);
   if (!adapter || !path.isAbsolute(request.cwd || '') || typeof request.prompt !== 'string' || !request.prompt.trim()) throw new Error('Explicit supported agent, absolute workspace and prompt required');
   if (Buffer.byteLength(request.prompt) > 65536) throw notReady(`The prompt is ${Buffer.byteLength(request.prompt)} bytes and the limit is 65536, so it was not sent`);
   if (!fs.statSync(request.cwd).isDirectory()) throw new Error('Selected workspace is not a directory');
   const binary = findBinary(adapter.binary, env);
   if (!binary) throw notReady(`${adapter.name} is not installed on the selected node`);
+  // Claude refuses full permissions as root, so a root Linux host runs it as the configured non-root user.
+  let account = null;
+  const agentUsers = adapter.id === 'claude' ? await import('./agent-user.mjs') : null;
+  if (agentUsers?.agentUserRequired(agentUser)) {
+    const user = await agentUsers.readAgentUser();
+    if (!user) throw notReady('Claude refuses full permissions as root; set a non-root agent user with total-recall meta-harness agent-user <name>');
+    account = agentUsers.resolveAgentAccount(user, agentUser);
+  }
   const billing = request[INCLUDED_BILLING];
   const openRouter = billing?.openRouter;
   if (billing && (adapter.custom || !(openRouter ? OPENROUTER_AGENTS : ['codex', 'claude']).includes(adapter.id))) {
@@ -706,6 +714,31 @@ export async function dispatchAgent(request, { probe = runProcess, env = process
   const temporary = fs.mkdtempSync(path.join(os.tmpdir(), 'meta-harness-prompt-'));
   try {
   const prompt = await bootstrap({ ...request, bootstrapDirectory: temporary }, { probe, env });
+  if (account) {
+    // The ACLs, MCP config and session runner must address the same job, including direct dispatch.
+    request = { ...request, jobId: request.jobId || process.env.TR_METAHARNESS_JOB || `session-${randomUUID()}` };
+    const exec = agentUser.exec || ((file, args, options = {}) => execFileSync(file, args, { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], ...options }));
+    const writable = [request.cwd];
+    // Root runs git in these later (the harness commits, the updater fast-forwards), so the agent only reads them.
+    let protect;
+    try {
+      const worktree = await import('./worktree.mjs');
+      worktree.recordGitPointer(request.cwd, { lstat: agentUser.lstat });
+      protect = agentUsers.gitProtectionPaths(request.cwd, { exec });
+      worktree.recordGitPointer(request.cwd, { protect, lstat: agentUser.lstat });
+    } catch (error) { throw notReady(error.message); }
+    const readOnly = [temporary];
+    for (const file of [binary, fs.realpathSync(binary)]) if (!readOnly.includes(file)) readOnly.push(file);
+    const jobId = request.jobId || process.env.TR_METAHARNESS_JOB;
+    if (jobId) {
+      const access = await agentUsers.mcpAccess(jobId);
+      writable.push(...access.writable);
+      readOnly.push(...access.readOnly);
+    }
+    agentUsers.grantAgentAccess(account, { writable, readOnly, protect }, { exec });
+    try { agentUsers.verifyAgentHome(account, { exec }); }
+    catch (error) { throw notReady(error.message); }
+  }
   const credentials = claudeToken ? claudeTokenEnv(claudeToken) : claudeKey ? claudeIncludedEnv(claudeKey) : {};
   if (openRouter && ['dsh', 'pi'].includes(adapter.id)) credentials.OPENROUTER_API_KEY = openRouter.key;
   for (const [name, candidates] of Object.entries(adapter.credentials || {})) {
@@ -784,6 +817,14 @@ export async function dispatchAgent(request, { probe = runProcess, env = process
   fs.writeFileSync(progressFile.replace('.events.jsonl', '.session.json'), snapshot, { mode: 0o600 });
   if (ownerProgress) fs.writeFileSync(ownerFile.replace('.events.jsonl', '.session.json'), snapshot, { mode: 0o600 });
   let parsed;
+  const launchEnv = { ...agentEnvironment(env), ...credentials, ...modelEnv, TR_META_HARNESS_RUN: '1' };
+  if (account) {
+    // Root's explicit config paths must not override the dedicated user's HOME.
+    for (const name of ['CLAUDE_CONFIG_DIR', 'XDG_CONFIG_HOME', 'XDG_DATA_HOME']) delete launchEnv[name];
+    Object.assign(launchEnv, { HOME: account.home, USER: account.user, LOGNAME: account.user });
+    // ACLs retain root ownership. Git otherwise refuses this intentionally shared checkout.
+    Object.assign(launchEnv, { GIT_CONFIG_COUNT: '1', GIT_CONFIG_KEY_0: 'safe.directory', GIT_CONFIG_VALUE_0: fs.realpathSync(request.cwd) });
+  }
   const frames = [];
   const captureFrame = frame => {
     if (frames.length >= 80) return;
@@ -798,7 +839,8 @@ export async function dispatchAgent(request, { probe = runProcess, env = process
   };
   try {
     parsed = await (sessionRunner || runSession)({ request, adapter, binary, args,
-      env: { ...agentEnvironment(env), ...credentials, ...modelEnv, TR_META_HARNESS_RUN: '1' }, prompt, progress: liveProgress, onFrame: captureFrame,
+      env: launchEnv,
+      ...(account ? { runAs: { uid: account.uid, gid: account.gid } } : {}), prompt, progress: liveProgress, onFrame: captureFrame,
       register: stop => { const id = Symbol('session'); ACTIVE_GROUPS.set(id, stop); return () => ACTIVE_GROUPS.delete(id); } });
     if (cancellationResult()) parsed = { ...parsed, ...cancellationResult() };
     if (frames.length) Object.assign(parsed, toolEvidence(nativeToolResults(adapter.id, frames)));

@@ -29,7 +29,7 @@ export function sessionOptions(request) {
 }
 
 export async function runSession({ request, adapter, binary, args, env, prompt, progress, register = () => () => {},
-  driverFactory, controlToolsFactory = createMcpTools, onFrame = () => {} } = {}) {
+  driverFactory, controlToolsFactory = createMcpTools, onFrame = () => {}, runAs } = {}) {
   const options = sessionOptions(request);
   options.captureExecution = adapter.id === 'openclaw';
   options.trackTurns = true;
@@ -115,7 +115,8 @@ export async function runSession({ request, adapter, binary, args, env, prompt, 
     ...(options.maxBudgetUsd !== undefined ? { maxBudgetUsd: Math.max(0, options.maxBudgetUsd - used.costUsd) } : {}),
     ...(options.maxTokens !== undefined ? { maxTokens: Math.max(1, options.maxTokens - used.inputTokens - used.outputTokens) } : {}) };
   driver = factory({ harness: adapter, binary, args, cwd: request.cwd,
-    env: { ...env, TR_METAHARNESS_JOB: job }, job: { id: job }, options: driverOptions, onEvent, onFrame });
+    env: { ...env, TR_METAHARNESS_JOB: job }, job: { id: job }, options: driverOptions, onEvent, onFrame,
+    ...(runAs ? { runAs } : {}) });
   tools = controlToolsFactory({ job, approvalPolicy: options.approvalPolicy || 'auto', questionTimeoutMs: options.questionTimeoutMs });
   const unregister = register(() => { stop('cancelled', 'Job cancelled.'); void driver.close(); });
   const wait = promise => Promise.race([promise, stopped]);

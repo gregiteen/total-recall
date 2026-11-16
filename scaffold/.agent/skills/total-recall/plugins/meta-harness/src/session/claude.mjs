@@ -18,7 +18,7 @@ const failureKind = (text, subtype) => /error_max_(turns|budget_usd)/.test(subty
 
 /** Own one Claude stream-json process. Only Node built-ins are used on remote nodes. */
 export function createClaudeDriver({ harness, binary, args = [], cwd, env, job,
-  options = {}, onEvent = () => {}, onFrame = () => {}, spawnFn = spawn } = {}) {
+  options = {}, onEvent = () => {}, onFrame = () => {}, spawnFn = spawn, runAs } = {}) {
   const capabilities = Object.fromEntries(controls.map(key => [key, 'unsupported']));
   let sessionId = options.forkSession ? randomUUID() : options.sessionId || randomUUID();
   let child, lines, started = false, closing = false, exited = false, initialized = false;
@@ -208,7 +208,7 @@ export function createClaudeDriver({ harness, binary, args = [], cwd, env, job,
       // goal-check turn needs a different schema from the requested result.
       if (JSON.stringify(resultSchema) !== JSON.stringify(options.resultSchema) || maxTurns !== options.maxTurns || maxBudgetUsd !== options.maxBudgetUsd) {
         await this.close();
-        continuation = createClaudeDriver({ harness, binary, args, cwd, env, job, spawnFn, onEvent, onFrame,
+        continuation = createClaudeDriver({ harness, binary, args, cwd, env, job, spawnFn, onEvent, onFrame, runAs,
           options: { ...options, sessionId, resumeSession: true, forkSession: false, resultSchema, maxTurns, maxBudgetUsd } });
         await continuation.start(text);
         done = continuation.done;
@@ -227,6 +227,7 @@ export function createClaudeDriver({ harness, binary, args = [], cwd, env, job,
       try {
         child = spawnFn(binary || harness?.binary || 'claude', launchArgs(), {
           cwd, env, shell: false, detached: process.platform !== 'win32', stdio: ['pipe', 'pipe', 'pipe'],
+          ...(runAs ? { uid: runAs.uid, gid: runAs.gid } : {}),
         });
         child.once('error', error => { fail(error); if (!child.pid) { exited = true; resolveExit(); } });
         child.stdin.on('error', error => { if (!closing && !exited) fail(error); });
@@ -290,7 +291,7 @@ export function createClaudeDriver({ harness, binary, args = [], cwd, env, job,
       if (!initialized) throw new Error('Claude session is not live.');
       if (atTurn !== undefined) throw new Error('Claude CLI cannot fork at a selected turn.');
       const fork = createClaudeDriver({ harness, binary, args,
-        cwd, env, job, options: { ...options, sessionId, resumeSession: true, forkSession: true }, spawnFn });
+        cwd, env, job, options: { ...options, sessionId, resumeSession: true, forkSession: true }, spawnFn, runAs });
       try {
         // /rename is a documented local print-mode command. It materializes the fork
         // without replaying the brief or asking a model to do more work.

@@ -36,7 +36,7 @@ export async function listTargets() {
 export function workerProgram(request) {
   // Materialize a portable module graph. The stdin launcher imports only Node
   // built-ins. Relative imports resolve inside this owned bundle on the node.
-  const names = ['worker.mjs', 'control.mjs', 'jobs.mjs', 'paths.mjs', 'mcp-server.mjs',
+  const names = ['worker.mjs', 'control.mjs', 'jobs.mjs', 'paths.mjs', 'mcp-server.mjs', 'agent-user.mjs', 'worktree.mjs', 'ssss-store.mjs',
     ...fs.readdirSync(new URL('./session/', import.meta.url)).filter(name => name.endsWith('.mjs')).map(name => `session/${name}`)];
   const files = Object.fromEntries(names.map(name => [name, fs.readFileSync(new URL(name, import.meta.url), 'utf8')]));
   return `import fs from 'node:fs';

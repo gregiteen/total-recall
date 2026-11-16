@@ -113,7 +113,7 @@ async function runPipeline(task, poolInfo, options) {
   const run = async (stage, harness, prompt, { workdir = cwd, permissions, role = stage.role } = {}) => {
     stage.status = 'running';
     const result = await dispatchWithReceipt({ agent: harness.id, node: 'local', cwd: workdir, contextCwd: cwd, contextTask: task, prompt,
-      ...sessionOptions({ ...options, cwd }), goal: stage.role === 'Implementer' ? options.goal || task : prompt.slice(0, 4000),
+      ...sessionOptions({ ...options, cwd }), goal: stage.role === 'Implementer' ? options.goal || task.slice(0, 4000) : prompt.slice(0, 4000),
       ...(stage.role === 'Implementer' && options.model !== undefined ? { model: options.model } : {}),
       permissions: permissions || stage.permissions, allowUnknownAuth: options.allowUnknownAuth === true }, { dispatchFn: options.dispatchFn, role, complexityScore: complexity.score });
     stage.status = result.cancelled ? 'cancelled' : result.ok ? 'completed' : result.queued ? 'queued' : 'failed';
@@ -233,7 +233,7 @@ async function runRace(task, poolInfo, options) {
     try {
       const started = Date.now();
       directory = createWorktree(cwd, { branch });
-      const result = await dispatchWithReceipt({ agent: harness, node: 'local', cwd: directory, contextCwd: cwd, contextTask: task, ...sessionOptions({ ...options, cwd }), goal: options.goal || task, ...(options.model !== undefined ? { model: options.model } : {}), prompt: `[ROLE: IMPLEMENTER]\nWork only in this checkout. Implement the task and its tests. Do not commit.\nTask:\n${task}`, permissions: WRITE, allowUnknownAuth: options.allowUnknownAuth === true }, { dispatchFn: options.dispatchFn, role: 'Race' });
+      const result = await dispatchWithReceipt({ agent: harness, node: 'local', cwd: directory, contextCwd: cwd, contextTask: task, ...sessionOptions({ ...options, cwd }), goal: options.goal || task.slice(0, 4000), ...(options.model !== undefined ? { model: options.model } : {}), prompt: `[ROLE: IMPLEMENTER]\nWork only in this checkout. Implement the task and its tests. Do not commit.\nTask:\n${task}`, permissions: WRITE, allowUnknownAuth: options.allowUnknownAuth === true }, { dispatchFn: options.dispatchFn, role: 'Race' });
       const commit = result.ok || result.cancelled ? commitAll(directory, `meta-harness race: ${task.slice(0, 60)}\n\nAgent: ${harness}`) : null;
       if (result.cancelled) {
         keep = Boolean(commit);

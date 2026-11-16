@@ -177,6 +177,15 @@ async function runOperation(argv) {
       result = await (operation === 'included-bind-claude-plan' ? usage.bindClaudeMaxPlan : usage.bindClaudeIncludedKey)(evidence);
     }
   }
+  else if (operation === 'agent-user') {
+    const users = await import('./src/agent-user.mjs');
+    if (has('--clear')) result = await users.writeAgentUser(null);
+    else if (positional[0]) {
+      if (users.agentUserRequired()) users.resolveAgentAccount(positional[0]);
+      result = await users.writeAgentUser(positional[0]);
+    }
+    else result = { user: await users.readAgentUser(), required: users.agentUserRequired() };
+  }
   else if (['usage-queue', 'usage-retry', 'usage-cancel'].includes(operation)) {
     const queue = await import('./src/usage-queue.mjs');
     if (operation === 'usage-queue') result = { ok: true, jobs: await queue.listIncludedJobs() };

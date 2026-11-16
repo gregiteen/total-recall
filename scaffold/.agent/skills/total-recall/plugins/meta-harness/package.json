@@ -1,6 +1,6 @@
 {
   "name": "tr-plugin-meta-harness",
-  "version": "0.4.5",
+  "version": "0.4.8",
   "description": "Total Recall Metaharness plugin",
   "type": "module",
   "scripts": {
