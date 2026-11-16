@@ -31,3 +31,10 @@ Internal CLI consumers may use `auth secret get KEY --json`: a missing key retur
 ## Mesh-identity secret sync
 
 `TR_SECRETS_SYNC_MODE=mesh-identity` makes a node fetch only the keys its mesh grant allows (`GET /api/secrets/mesh`, then each key) and merge them into its own encrypted store under its own master password; keys whose grant was removed are deleted only after a successful list, and an unreachable leader leaves the store untouched. Every read and refusal is audited as `mesh:<node>`. The default remains legacy whole-store sync behind `TR_MESH_SYNC_TOKEN`; switching a live node, and retiring that token and `/api/secrets/sync`, needs the owner's authorization. Verified end to end on a test mesh with the production secrets runtime: granted node got exactly its keys, ungranted and off-mesh callers got 403, revocation removed the key, and a stopped leader left the node's store intact.
+
+
+## Backend connection credentials
+
+Settings, connect, relay, startup, status and deployment use the same host Auth store (`TR_SECRETS_BRAIN`, otherwise the global brain). Public `brain.json` settings never receive a new token. A backend token is stored through Auth configuration with its endpoint origin in the same encrypted update; changing the public URL cannot rebind it. Unbound Auth tokens are not forwarded. Supply a token through `connect <client> --brain <url> --token-stdin` or the existing Auth secret stdin command with `--bound-origin <url>`. No credential value belongs in argv or output.
+
+Auth may read an explicitly selected legacy `brain.json` token in place for that file's endpoint after the Auth store opens successfully. It never copies, migrates or rotates it implicitly. Changing the endpoint of a file that still carries a legacy token is refused; preserve legacy data and use the owning explicit migration procedure. A failed Auth open never falls back to legacy data. Configuration saves validate before writes and report applied, failed and unattempted sections for partial outcomes; do not infer all-or-nothing behavior.

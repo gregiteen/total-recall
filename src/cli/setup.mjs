@@ -22,8 +22,8 @@ import path from 'node:path';
 import https from 'node:https';
 import { fileURLToPath } from 'node:url';
 import { resolveAgentDir, resolveBrainDir } from './agent-dir.mjs';
-import { saveBackendConnection } from '../core/connection-token.mjs';
-const { loadSecrets, saveSecrets } = await __loadOwnedPlugin('auth', 'secrets-store');
+import { saveBackendConnection, authStoreDir } from '../core/connection-token.mjs';
+
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -375,15 +375,16 @@ async function getGitHubUser(githubToken) {
 
 // ─── Store brain config ───────────────────────────────────────────────────────
 
-async function storeBrainConfig(brDir, brainUrl, token, provider, apiKey, extra = {}) {
+/** A per-key owner write never substitutes an empty store after failed decryption. */
+export async function saveSetupSecret(key, value, { load = __loadOwnedPlugin, brainDir = authStoreDir() } = {}) {
+  const { setSecret } = await load('auth', 'secrets-store');
+  await setSecret(brainDir, key, value, { actor: 'setup' });
+}
+
+export async function storeBrainConfig(brDir, brainUrl, token, provider, apiKey, extra = {}) {
   // The access token is kept by Auth, bound to the backend URL; brain.json holds public settings only.
   await saveBackendConnection(brDir, { url: brainUrl, token: token || undefined, provider, ...extra });
-
-  // secrets.enc
-  let secrets = {};
-  try { secrets = await loadSecrets(brDir); } catch {}
-  if (apiKey) secrets[`${provider}_api_key`] = apiKey;
-  await saveSecrets(brDir, secrets);
+  if (apiKey) await saveSetupSecret(`${provider}_api_key`, apiKey);
 }
 
 // ─── Main ─────────────────────────────────────────────────────────────────────
@@ -475,11 +476,7 @@ export default async function setup(args) {
           );
         }
         // Store GitHub token for sync --push
-        const brainDir = resolveBrainDir();
-        let secrets = {};
-        try { secrets = await loadSecrets(brainDir); } catch {}
-        secrets.github_token = githubToken;
-        if (!dryRun) await saveSecrets(brainDir, secrets);
+        if (!dryRun) await saveSetupSecret('github_token', githubToken);
       } else {
         warn('Could not authenticate with that token — skipping GitHub backup.');
       }
@@ -603,7 +600,7 @@ export default async function setup(args) {
     const result = await remoteSetup(ip, user, { domain });
     pat = result.pat;
     ok(`Brain deployed at: ${brainUrl}`);
-    if (pat) ok(`Access token: ${pat}`);
+    if (pat) ok('Access token received; storing it through Auth.');
   }
 
   // ── Step 5: Store config locally ─────────────────────────────────────────────
@@ -639,7 +636,7 @@ export default async function setup(args) {
     hr();
     info('Connecting IDEs...');
     const connectArgs = brainUrl ? ['--brain', brainUrl] : [];
-    if (pat) connectArgs.push('--token', pat);
+    // The connection was already saved through Auth; connect resolves it for this origin.
 
     for (const ide of selectedIDEs) {
       const client = ide.value || ide;
@@ -664,12 +661,12 @@ export default async function setup(args) {
 
   if (brainUrl) {
     console.log(`  Brain URL:   ${brainUrl}`);
-    if (pat) console.log(`  Access token: ${pat}`);
+    if (pat) console.log('  Access token: stored through Auth');
     console.log('');
     console.log('  OpenAI-compatible config for any app:');
     console.log(`    baseURL:  ${brainUrl}/v1`);
     console.log(`    model:    total-recall/gemma4`);
-    if (pat) console.log(`    apiKey:   ${pat}`);
+    console.log('    apiKey:   <resolve the configured credential through Auth>');
   }
 
   console.log('\n  Next steps:');
