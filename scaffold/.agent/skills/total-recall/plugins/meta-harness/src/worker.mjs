@@ -13,21 +13,27 @@ export const INCLUDED_BILLING = Symbol('included-billing');
 export const OPENROUTER_AGENTS = ['dsh', 'pi', 'hermes', 'openclaw'];
 export const CODEX_PLAN_ARGS = ['-c', 'forced_login_method="chatgpt"', '-c', 'model_provider="openai"'];
 const claudeIncludedEnv = key => ({ ANTHROPIC_API_KEY: key, ANTHROPIC_BASE_URL: 'https://api.anthropic.com' });
-const CLAUDE_PLAN_ARGS = ['--settings', JSON.stringify({
-  apiKeyHelper: '',
-  fastMode: false,
-  env: {
-    ANTHROPIC_BASE_URL: 'https://api.anthropic.com',
-    ANTHROPIC_API_KEY: '',
-    ANTHROPIC_AUTH_TOKEN: '',
-    ANTHROPIC_CUSTOM_HEADERS: '',
-    ANTHROPIC_PROFILE: '',
-    CLAUDE_CODE_OAUTH_TOKEN: '',
-    CLAUDE_CODE_USE_BEDROCK: '0',
-    CLAUDE_CODE_USE_VERTEX: '0',
-    CLAUDE_CODE_USE_FOUNDRY: '0',
-  },
-})];
+// Every credential Claude Code could bill through, blanked so a run uses only the one route chosen.
+const CLAUDE_BLANK_ENV = {
+  ANTHROPIC_BASE_URL: 'https://api.anthropic.com',
+  ANTHROPIC_API_KEY: '',
+  ANTHROPIC_AUTH_TOKEN: '',
+  ANTHROPIC_CUSTOM_HEADERS: '',
+  ANTHROPIC_PROFILE: '',
+  CLAUDE_CODE_OAUTH_TOKEN: '',
+  CLAUDE_CODE_USE_BEDROCK: '0',
+  CLAUDE_CODE_USE_VERTEX: '0',
+  CLAUDE_CODE_USE_FOUNDRY: '0',
+};
+const CLAUDE_PLAN_ARGS = ['--settings', JSON.stringify({ apiKeyHelper: '', fastMode: false, env: CLAUDE_BLANK_ENV })];
+// The subscription token from Total Recall Auth (claude setup-token) is the only credential left in
+// place: it does not rotate, so every process and node can share it without signing the others out.
+const { CLAUDE_CODE_OAUTH_TOKEN: _token, ...CLAUDE_TOKEN_BLANK_ENV } = CLAUDE_BLANK_ENV;
+const CLAUDE_TOKEN_ARGS = ['--settings', JSON.stringify({ apiKeyHelper: '', fastMode: false, env: CLAUDE_TOKEN_BLANK_ENV })];
+const claudeTokenEnv = token => ({ CLAUDE_CODE_OAUTH_TOKEN: token, ANTHROPIC_BASE_URL: 'https://api.anthropic.com' });
+/** A token Claude accepts as a first-party subscription login, never an API key. */
+export const claudeTokenAccepted = auth => auth?.loggedIn === true && auth.apiProvider === 'firstParty' &&
+  auth.authMethod !== 'api_key' && !/ANTHROPIC_API_KEY|apiKeyHelper/.test(String(auth.apiKeySource || ''));
 
 function claudeSettingArgs(sources) {
   if (sources === undefined) return [];
@@ -46,6 +52,13 @@ async function readClaudeAuth(binary, { cwd, probe, env, args = [] }) {
   const auth = await probe(binary, [...args, 'auth', 'status', '--json'], { cwd, env, timeoutMs: 15000 });
   if (auth.exitCode !== 0 || auth.reason) return null;
   try { return JSON.parse(auth.stdout); } catch { return null; }
+}
+
+/** What Claude reports for the subscription token from Total Recall Auth, or null when it cannot tell. */
+export async function readClaudeTokenAccount(token, { cwd = process.cwd(), probe = runProcess, env = process.env } = {}) {
+  const binary = findBinary('claude', env);
+  if (!binary) return null;
+  return readClaudeAuth(binary, { cwd, probe, env: { ...agentEnvironment(env), ...claudeTokenEnv(token) }, args: CLAUDE_TOKEN_ARGS });
 }
 
 export async function readClaudeMaxOrganization(cwd, { probe = runProcess, env = process.env } = {}) {
@@ -591,7 +604,7 @@ export async function totalRecallBootstrap(request, { probe = runProcess, env = 
 }
 
 /** Authentication is `true` or `false` only when a real probe says so. Everything else stays 'unknown' until a run proves it. */
-export async function inspectAgents({ probe = runProcess, env = process.env, ids, cwd, claudeKey, claudePlan, settingSources } = {}) {
+export async function inspectAgents({ probe = runProcess, env = process.env, ids, cwd, claudeKey, claudePlan, claudeToken, settingSources } = {}) {
   const selected = getActiveAdapters().filter(adapter => !ids || ids.includes(adapter.id));
   // Probes run together: this is on the path of every route, and each harness answers on its own.
   const agents = await Promise.all(selected.map(async adapter => {
@@ -607,10 +620,11 @@ export async function inspectAgents({ probe = runProcess, env = process.env, ids
       } else if (adapter.id === 'claude') {
         const value = await readClaudeAuth(binary, {
           cwd, probe,
-          args: claudePlan ? [...CLAUDE_PLAN_ARGS, ...claudeSettingArgs(settingSources)] : [],
-          env: { ...agentEnvironment(env), ...(claudeKey ? claudeIncludedEnv(claudeKey) : {}) },
+          args: claudeToken ? [...CLAUDE_TOKEN_ARGS, ...claudeSettingArgs(settingSources)]
+            : claudePlan ? [...CLAUDE_PLAN_ARGS, ...claudeSettingArgs(settingSources)] : [],
+          env: { ...agentEnvironment(env), ...(claudeToken ? claudeTokenEnv(claudeToken) : claudeKey ? claudeIncludedEnv(claudeKey) : {}) },
         });
-        item.authenticated = claudePlan ? claudeMaxOrganization(value) === claudePlan :
+        item.authenticated = claudeToken ? claudeTokenAccepted(value) : claudePlan ? claudeMaxOrganization(value) === claudePlan :
           value?.loggedIn === true && value.apiProvider === 'firstParty' &&
           (claudeKey ? value.authMethod === 'api_key' : value.authMethod === 'claude.ai' && !value.apiKeySource && Boolean(value.subscriptionType));
       } else if (adapter.id === 'cursor') {
@@ -647,13 +661,15 @@ export async function dispatchAgent(request, { probe = runProcess, env = process
   }
   const claudeKey = billing && adapter.id === 'claude' ? billing.key : undefined;
   const claudePlan = billing && adapter.id === 'claude' ? billing.claudePlan : undefined;
-  if (billing && adapter.id === 'claude' && !claudePlan && !claudeKey) throw notReady('Claude has no verified Max login or included usage key.');
-  const inspected = await inspectAgents({ probe, env, ids: [adapter.id], cwd: request.cwd, claudeKey, claudePlan, settingSources: request.settingSources });
+  const claudeToken = billing && adapter.id === 'claude' ? billing.claudeToken : undefined;
+  if (billing && adapter.id === 'claude' && !claudePlan && !claudeKey && !claudeToken) throw notReady('Claude has no verified token in Total Recall Auth, Max login or included usage key.');
+  const inspected = await inspectAgents({ probe, env, ids: [adapter.id], cwd: request.cwd, claudeKey, claudePlan, claudeToken, settingSources: request.settingSources });
   const state = inspected.agents.find(item => item.id === adapter.id);
   if (!state.versionVerified) throw notReady(`${adapter.name} did not report a version`);
   if (state.authenticated === false) {
     return { agent: adapter.id, ok: false, failureKind: 'auth',
-      error: claudePlan ? 'Sign in to the verified Claude Max account on this node.' :
+      error: claudeToken ? 'Claude did not accept the CLAUDE_CODE_OAUTH_TOKEN in Total Recall Auth; create a new one with claude setup-token and store it there.' :
+        claudePlan ? 'Sign in to the verified Claude Max account on this node.' :
         claudeKey ? 'Claude did not select the verified Anthropic API key.' : `${adapter.name} is not signed in on this node`, exitCode: null };
   }
   if (state.blockedBy === 'no-chat-model') throw notReady(`${adapter.name} has no chat model installed on this node`);
@@ -690,7 +706,7 @@ export async function dispatchAgent(request, { probe = runProcess, env = process
   const temporary = fs.mkdtempSync(path.join(os.tmpdir(), 'meta-harness-prompt-'));
   try {
   const prompt = await bootstrap({ ...request, bootstrapDirectory: temporary }, { probe, env });
-  const credentials = claudeKey ? claudeIncludedEnv(claudeKey) : {};
+  const credentials = claudeToken ? claudeTokenEnv(claudeToken) : claudeKey ? claudeIncludedEnv(claudeKey) : {};
   if (openRouter && ['dsh', 'pi'].includes(adapter.id)) credentials.OPENROUTER_API_KEY = openRouter.key;
   for (const [name, candidates] of Object.entries(adapter.credentials || {})) {
     if (Object.hasOwn(credentials, name)) continue;
@@ -743,7 +759,8 @@ export async function dispatchAgent(request, { probe = runProcess, env = process
   // (dispatch.mjs), not by the harness sandbox.
   if (adapter.id === 'codex') args[args.indexOf('--sandbox') + 1] = 'danger-full-access';
   if (billing && adapter.id === 'codex') args.unshift(...CODEX_PLAN_ARGS);
-  if (claudePlan) args.unshift(...CLAUDE_PLAN_ARGS);
+  if (claudeToken) args.unshift(...CLAUDE_TOKEN_ARGS);
+  else if (claudePlan) args.unshift(...CLAUDE_PLAN_ARGS);
   // acceptEdits denied every command a headless run cannot approve, including the preflight and tests (A-104).
   if (adapter.id === 'claude') args[args.indexOf('--permission-mode') + 1] = 'bypassPermissions';
   if (adapter.id === 'agy') args[args.indexOf('--mode') + 1] = allowWrites ? 'accept-edits' : 'plan';

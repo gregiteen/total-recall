@@ -1,3 +1,15 @@
+## 3.49.0 — Unreleased
+
+- Import native and foreign plugin declarations, MCP configurations and API specifications with provenance, compatibility reports and explicit runtime trust. Keep installed capability inventories private and make declared capabilities available to CLI composition and routing.
+- Add selected-brain drawer history and conflict-protected restore, validated user design choices and automatic owner-design fallback. Plugin Settings reads cached owner connection reports with authentication method, time and stale/unavailable states.
+- Keep private brain state and unsafe links out of native plugin bundles, skill conversion and portable skill packages. Preserve private state incorrectly listed in legacy managed installation receipts; report declared skill metadata versions accurately.
+- Require Auth ownership for settings credentials and scoped remote deployment projections. Passwords travel on stdin; the remote CLI uses the same explicitly pinned Total Recall package. Credential failures remain explicit and do not fall back to plaintext stores.
+- Replace swallowed fsync with a fixed authorized SSSS transaction broker and a separate confined index worker. Report interrupted or partial commitment honestly.
+- Correct public onboarding and discovery examples; remove stale installed-plugin counts and an unused legacy token-panel generator.
+- Move the legacy Collab app, HTTP routes and WebSocket implementation to its plugin owner. Core loads declared plugin routers and upgrades generically and preserves the memory event stream.
+- Refresh maintained platform skill distributions with immutable provenance, preserved authored wrappers and crash recovery. Resolve explicitly configured global skill locations without weakening repository link guards.
+- Report configured background-worker placement consistently across startup, status and health while preserving local process conflicts. Bundle tested Auth, Code Quality and Metaharness updates, including shared dependency enforcement and the router benchmark.
+
 ## 3.48.0 — 2026-11-15
 
 - `total-recall mesh ssh <node>` is a real terminal session. Before, the runner killed it

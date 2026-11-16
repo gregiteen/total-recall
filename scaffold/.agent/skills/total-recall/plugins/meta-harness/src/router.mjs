@@ -21,7 +21,7 @@ import { getModelCatalog, joinHarnessModels } from './model-catalog.mjs';
 import { readReceipts, activeQuotaWalls, activeCredentialBlocks, includedBillingReceipts, recordRunReceipt } from './learner.mjs';
 import { resolvePool, exclusionReason, isLocalExecutionNode } from './pool.mjs';
 import { readCodexRateLimits, measuredWalls } from './telemetry.mjs';
-import { claudeProofCurrent, INCLUDED_AGENTS, readIncludedPolicy, readCodexAllowance } from './included-usage.mjs';
+import { claudeProofCurrent, claudeTokenCurrent, INCLUDED_AGENTS, readIncludedPolicy, readCodexAllowance } from './included-usage.mjs';
 import { derivedDir } from './paths.mjs';
 import { createModelValidator, filterPoolByModel } from './model-selection.mjs';
 
@@ -165,7 +165,8 @@ export async function inspectQuotas(options = {}) {
   }
 
   // Harness state comes from the selected machine. Quota walls are this machine's receipts.
-  const claudePlan = policy.enabled ? policy.claudePlan?.organization : undefined;
+  const claudeToken = policy.enabled && claudeTokenCurrent(policy);
+  const claudePlan = policy.enabled && !claudeToken ? policy.claudePlan?.organization : undefined;
   const inspected = remote ? await (options.inspectNodeFn || inspectNode)(options.node) :
     await (options.inspect || inspectAgents)({ env: process.env, cwd: options.cwd, claudePlan });
   const codexLimits = remote ? null : readCodexRateLimits();
@@ -176,7 +177,7 @@ export async function inspectQuotas(options = {}) {
   const blocks = activeCredentialBlocks(receipts);
   for (const installed of inspected.agents || []) {
     const agent = policy.enabled && !remote && installed.id === 'claude' && !claudePlan ?
-      { ...installed, authenticated: claudeProofCurrent(policy) } : installed;
+      { ...installed, authenticated: claudeToken || claudeProofCurrent(policy) } : installed;
     const wall = walls[agent.id];
     const block = blocks[agent.id];
     const policyBlocked = policy.enabled && !INCLUDED_AGENTS.includes(agent.id);
@@ -191,7 +192,7 @@ export async function inspectQuotas(options = {}) {
     else if (agent.authenticated === 'unknown') status = 'unverified';
     const quota = {
       installed: Boolean(agent.installed), version: agent.version || null,
-      billingModel: policy.enabled && !remote && !claudePlan && agent.id === 'claude' ? 'included-api-credits' :
+      billingModel: policy.enabled && !remote && !claudePlan && !claudeToken && agent.id === 'claude' ? 'included-api-credits' :
         agent.id === 'ollama' ? 'local' : metered.has(agent.id) ? 'metered' : 'subscription',
       rolling5hUsedPercent: null, weeklyUsedPercent: null, usagePercent: null,
       quotaSource: 'none', quotaNote: reason || 'No usage figure is available from this harness', status,

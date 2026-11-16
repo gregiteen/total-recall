@@ -1,7 +1,7 @@
 {
   "id": "meta-harness",
   "name": "Metaharness",
-  "version": "0.4.4",
+  "version": "0.4.5",
   "description": "Discover, configure, document, track, and run coding agent harnesses through Total Recall across mesh nodes.",
   "gate": {
     "tasks": ["Run work in another agent harness", "Choose which harness takes a task", "Check harness versions, sign-in and quota", "Read a harness's official documentation"],
@@ -31,6 +31,26 @@
     "alias": "cli-agents",
     "handler": "cli.mjs",
     "subcommands": [
+      {
+        "name": "router-benchmark",
+        "description": "Evaluate real capability retrieval and harness routing with versioned labels, efficiency metrics and regression thresholds; no provider calls or task dispatch; --save persists owner SSSS reports/events",
+        "effect": "write", "output": "json", "timeout_ms": 480000,
+        "args": [
+          { "name": "coreRoot", "flag": "--core-root", "type": "string", "label": "Verified core source for catalog and retrieval" },
+          { "name": "allowCatalogChange", "flag": "--allow-catalog-change", "type": "boolean", "label": "Compare changed catalogs with compatible fixed labels" },
+          { "name": "k", "flag": "--k", "type": "number", "label": "Shortlist size (default 20)" },
+          { "name": "repeats", "flag": "--repeats", "type": "number", "label": "Corpus passes (default 3)" },
+          { "name": "catalogSamples", "flag": "--catalog-samples", "type": "number", "label": "Description probes (default 24)" },
+          { "name": "corpus", "flag": "--corpus", "type": "string", "label": "Versioned corpus JSON" },
+          { "name": "baseline", "flag": "--baseline", "type": "string", "label": "Comparable baseline JSON" },
+          { "name": "minRecall", "flag": "--min-recall", "type": "number", "label": "Minimum recall at k" },
+          { "name": "minMrr", "flag": "--min-mrr", "type": "number", "label": "Minimum MRR" },
+          { "name": "maxP95Ms", "flag": "--max-p95-ms", "type": "number", "label": "Maximum p95 milliseconds" },
+          { "name": "maxRecallDrop", "flag": "--max-recall-drop", "type": "number", "label": "Allowed baseline recall loss" },
+          { "name": "cwd", "flag": "--cwd", "type": "string", "label": "Project catalog scope" },
+          { "name": "save", "flag": "--save", "type": "boolean", "label": "Persist owner SSSS report and events" }
+        ]
+      },
       {
         "name": "status",
         "description": "Inspect local agent binaries and authentication metadata",
@@ -300,6 +320,15 @@
         "effect": "write",
         "output": "json",
         "args": []
+      },
+      {
+        "name": "included-bind-claude-token",
+        "description": "Bind the Claude subscription token (claude setup-token) stored in Total Recall Auth, after Claude accepts it",
+        "effect": "write",
+        "output": "json",
+        "args": [
+          { "name": "key", "type": "string", "label": "Auth key name (default CLAUDE_CODE_OAUTH_TOKEN)", "required": false, "flag": "--key" }
+        ]
       },
       {
         "name": "openrouter-bind",

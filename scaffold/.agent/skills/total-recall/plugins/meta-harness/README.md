@@ -1,5 +1,51 @@
 # Metaharness
 
+`total-recall meta-harness router-benchmark --json` evaluates the real host
+`shortlistActions -> queryCliSemanticIndex` and owner `routeTask` separately.
+It reads the complete installed composable CLI library; no plugin tasks or
+provider calls run. `--k 20 --repeats 3 --catalog-samples 24` are defaults.
+Use `--core-root /absolute/core` to select one verified Total Recall source for both
+catalog CLI and retrieval imports. The library runs as `node <root>/bin/total-recall.mjs`;
+an installed runner cannot override the selection. `TR_PACKAGE_ROOT` remains the
+default host and may also be needed by the owner CLI storage imports at startup.
+
+Independent semantic, ambiguous, multi-step and unavailable cases are separate
+from mechanically generated catalog-description probes. Harness cases exercise
+real routing against controlled ready/inactive/quota scenarios, not live readiness.
+JSON includes corpus data/version/hash, catalog fingerprint/hash, source hashes,
+timestamps, individual rankings, recall@k, MRR, top-one accuracy, label coverage,
+candidate reduction and typed-question UTF-8 bytes. Question bytes are a payload
+size measurement, not actual provider prompt usage or token savings. Multiple
+expected groups require all steps; alternatives within a group are interchangeable.
+Absent labels lower coverage and remain in recall denominators.
+
+First-call latency excludes module loading and OS cold-cache guarantees; warm
+latency covers subsequent corpus passes. Catalog queries include all declared
+CLI/API/MCP/nested-router capabilities; actionable shortlist measurements are
+separate and exclude unsupported/inactive declarations. Missing installed surfaces
+are explicit coverage gaps. Real-core declaration fixtures are correctness tests,
+separate from live catalog measurements. Retrieval has no abstention or
+activation-enforcement contract: refusal correctness, live execution quality,
+costs and tokens stay null. Scenario refusal correctness belongs to the harness layer.
+
+Use `--corpus cases.json` for schema-1 `{id,version,cases}` (plus `schemaVersion:1`),
+with capability cases `{id,layer:"capability",surface:"cli",intent,groups:[[label]],provenance}`;
+surface may also be `api`, `mcp`, or `router`. Harness cases use `layer:"harness"`,
+`scenario:"ready"|"inactive"|"quota"` and `expected:["codex","claude"]` (empty
+means refuse). Labels use declared IDs such as `plugin:auth:cli:status`. Legacy CLI aliases
+resolve from declaration identities, never from router responses.
+`--catalog-samples 0` disables generated probes.
+
+`--min-recall`, `--min-mrr`, `--max-p95-ms` fail with exit 1 when unmet.
+`--baseline report.json --max-recall-drop 0` rejects recall regression against a
+matching corpus/catalog/configuration; source hashes may differ for before/after.
+`--allow-catalog-change` permits changed catalogs only with the same fixed corpus
+and compatible resolved label mappings. Use `--catalog-samples 0` or a fixed
+external corpus to compare changing catalogs; dynamic probes remain catalog specific.
+Invalid input or unavailable catalog also fails. `--save` explicitly persists the
+report through the validated owner SSSS ledger and native events; normal routing
+receipts are untouched. Without it the result is returned only on stdout.
+
 Built-in and validated custom adapters share one plugin. Use `dispatch` or
 `route --execute` for agent work. `runtime <agent> ...` accepts supported maintenance
 commands such as `codex login status`, `hermes gateway status`, and `dsh models`.

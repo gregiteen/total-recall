@@ -1,7 +1,7 @@
 ---
 name: auth
 description: "Encrypted credentials, repository bindings, dashboard sign-in and access across brains and machines."
-version: 1.3.0
+version: 1.3.2
 repo_scoped: false
 ---
 

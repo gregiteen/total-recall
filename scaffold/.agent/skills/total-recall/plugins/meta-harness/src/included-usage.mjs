@@ -6,7 +6,7 @@ import { spawn } from 'node:child_process';
 import { createInterface } from 'node:readline';
 import { pathToFileURL } from 'node:url';
 import { configDir } from './paths.mjs';
-import { agentEnvironment, CODEX_PLAN_ARGS, findBinary, OPENROUTER_AGENTS, readClaudeMaxOrganization } from './worker.mjs';
+import { agentEnvironment, CODEX_PLAN_ARGS, findBinary, OPENROUTER_AGENTS, readClaudeMaxOrganization, readClaudeTokenAccount, claudeTokenAccepted } from './worker.mjs';
 import { activeQuotaWalls, includedBillingReceipts, readReceipts } from './learner.mjs';
 
 export const INCLUDED_AGENTS = ['claude', 'codex'];
@@ -32,6 +32,9 @@ export async function readIncludedPolicy(store) {
         !Number.isFinite(Date.parse(state.claude.expiresAt)))) ||
       (state.claudePlan !== undefined && (!/^[\w-]{1,100}$/.test(state.claudePlan?.organization || '') ||
         state.claudePlan.usageCreditsEnabled !== false || !Number.isFinite(Date.parse(state.claudePlan.verifiedAt)))) ||
+      (state.claudeToken !== undefined && (!validKeyName(state.claudeToken?.keyName) ||
+        !/^[a-f0-9]{64}$/.test(state.claudeToken.fingerprint || '') || !Number.isFinite(Date.parse(state.claudeToken.verifiedAt)) ||
+        (state.claudeToken.organization != null && !/^[\w-]{1,100}$/.test(state.claudeToken.organization)))) ||
       (state.openRouter !== undefined && (!state.openRouter || typeof state.openRouter !== 'object' ||
         Array.isArray(state.openRouter) || !Object.entries(state.openRouter).every(([agent, binding]) => validOpenRouterBinding(agent, binding))))) {
     throw new Error('Included usage policy is invalid; dispatch stopped.');
@@ -73,6 +76,15 @@ async function authKey(keyName) {
   const value = await authValue(keyName);
   if (!/^sk-ant-api[0-9]+-[\w-]+$/.test(value)) {
     throw new Error('The selected Anthropic API key is missing or invalid in Total Recall Auth.');
+  }
+  return value;
+}
+
+/** The Claude subscription token (claude setup-token) stored in Total Recall Auth. Never an API key. */
+async function authClaudeToken(keyName) {
+  const value = (await authValue(keyName)).trim();
+  if (!/^sk-ant-oat[0-9]+-[\w-]+$/.test(value)) {
+    throw new Error(`${keyName} in Total Recall Auth is missing or is not a Claude subscription token (create one with claude setup-token).`);
   }
   return value;
 }
@@ -125,6 +137,28 @@ export async function bindClaudeIncludedKey(evidence, { readKey = authKey, now =
 }
 
 export const claudeProofCurrent = (policy, now = Date.now()) => Date.parse(policy.claude?.expiresAt) > now;
+export const claudeTokenCurrent = policy => Boolean(policy?.claudeToken?.fingerprint);
+
+/**
+ * Bind Claude to the subscription token in Total Recall Auth (Greg, 2026-11-15: everything uses the auth
+ * plugin). Claude must accept it as a first-party login, never an API key. Only its fingerprint is kept,
+ * so a replaced token must be bound again before it is used.
+ */
+export async function bindClaudeToken({ keyName = 'CLAUDE_CODE_OAUTH_TOKEN' } = {}, { readKey = authClaudeToken, readAccount = readClaudeTokenAccount } = {}) {
+  requireOperator();
+  if (!validKeyName(keyName)) throw new Error('Name the Total Recall Auth key that holds the Claude token.');
+  const token = await readKey(keyName);
+  const account = await readAccount(token);
+  if (!claudeTokenAccepted(account)) {
+    throw new Error(`Claude did not accept ${keyName} as a subscription login${account?.authMethod ? ` (it reported ${account.authMethod})` : ''}.`);
+  }
+  if (account.subscriptionType && account.subscriptionType !== 'max') throw new Error(`${keyName} belongs to a ${account.subscriptionType} plan, not Max.`);
+  const store = await policyStore();
+  const state = await readIncludedPolicy(store);
+  const organization = /^[\w-]{1,100}$/.test(account.orgId || '') ? account.orgId : null;
+  store.write({ ...state, enabled: true, claudeToken: { keyName, organization, verifiedAt: new Date().toISOString(), fingerprint: sha256(token) } });
+  return includedUsageStatus();
+}
 
 /** Bind the observed account setting to this host's native Claude Max login. */
 export async function bindClaudeMaxPlan(evidence, { readOrganization = readClaudeMaxOrganization } = {}) {
@@ -146,7 +180,9 @@ export async function includedUsageStatus({ probe = false } = {}) {
   const policy = await readIncludedPolicy();
   const claude = policy.claude ? { organization: policy.claude.organization, verifiedAt: policy.claude.verifiedAt,
     expiresAt: policy.claude.expiresAt, current: claudeProofCurrent(policy) } : null;
-  return { ok: true, policyVersion: VERSION, enabled: policy.enabled, claude, claudePlan: policy.claudePlan ?? null,
+  const claudeToken = policy.claudeToken ? { keyName: policy.claudeToken.keyName, organization: policy.claudeToken.organization,
+    verifiedAt: policy.claudeToken.verifiedAt } : null;
+  return { ok: true, policyVersion: VERSION, enabled: policy.enabled, claude, claudePlan: policy.claudePlan ?? null, claudeToken,
     openRouter: policy.openRouter ?? {},
     ...(probe ? { codex: await readCodexAllowance(process.cwd()) } : {}) };
 }
@@ -229,15 +265,25 @@ export async function readCodexAllowance(cwd, { query = queryCodexAccount } = {}
   catch (error) { return { ok: false, failureKind: 'billing-policy', error: error.message }; }
 }
 
-export async function includedAdmission(agent, cwd, policy, { readKey = authKey, codex = readCodexAllowance,
+export async function includedAdmission(agent, cwd, policy, { readKey = authKey, readToken = authClaudeToken, codex = readCodexAllowance,
   receipts = readReceipts } = {}) {
   if (!INCLUDED_AGENTS.includes(agent)) return { ok: false, failureKind: 'billing-policy', error: 'This harness is outside the included usage policy.' };
-  if (agent === 'claude' && !policy.claudePlan && !claudeProofCurrent(policy)) {
-    return { ok: false, failureKind: 'billing-policy', error: 'Verify the native Claude Max login with Usage credits off, or bind a verified included grant.' };
+  if (agent === 'claude' && !claudeTokenCurrent(policy) && !policy.claudePlan && !claudeProofCurrent(policy)) {
+    return { ok: false, failureKind: 'billing-policy', error: 'Store a Claude subscription token (claude setup-token) in Total Recall Auth and bind it with included-bind-claude-token.' };
   }
   const wall = activeQuotaWalls(includedBillingReceipts(await receipts()))[agent];
   if (wall) return { ok: false, failureKind: 'quota', error: 'This harness is waiting for included usage.', resetsAt: wall.resetReported ? wall.until : null };
   if (agent === 'codex') return codex(cwd);
+  // The token in Total Recall Auth comes first: it works on every node without a per-machine login.
+  if (claudeTokenCurrent(policy)) {
+    try {
+      const token = await readToken(policy.claudeToken.keyName);
+      if (sha256(token) !== policy.claudeToken.fingerprint) throw new Error(`${policy.claudeToken.keyName} changed in Total Recall Auth; bind it again with included-bind-claude-token.`);
+      return { ok: true, claudeToken: token };
+    } catch (error) {
+      return { ok: false, failureKind: 'auth', error: error.message };
+    }
+  }
   if (policy.claudePlan) return { ok: true, claudePlan: policy.claudePlan.organization };
   try {
     const key = await readKey(policy.claude.keyName);

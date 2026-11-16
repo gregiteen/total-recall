@@ -3,7 +3,7 @@ import { ADAPTER_CATALOG } from '../capability/index.mjs';
 import { inspectAgents, getActiveAdapters } from './worker.mjs';
 import { readReceipts, activeQuotaWalls, activeCredentialBlocks, includedBillingReceipts } from './learner.mjs';
 import { measuredWalls } from './telemetry.mjs';
-import { claudeProofCurrent, INCLUDED_AGENTS, readIncludedPolicy } from './included-usage.mjs';
+import { claudeProofCurrent, claudeTokenCurrent, INCLUDED_AGENTS, readIncludedPolicy } from './included-usage.mjs';
 import os from 'node:os';
 
 const describe = (id, extra = {}) => {
@@ -27,14 +27,16 @@ export function exclusionReason(agent, wall, credentialBlock, { allowUnknownAuth
 export async function resolvePool({ availableHarnesses, inspect = inspectAgents, receipts = readReceipts, allowUnknownAuth = false, policy } = {}) {
   policy ??= await readIncludedPolicy();
   if (!policy.enabled && Array.isArray(availableHarnesses) && availableHarnesses.length) return { ready: availableHarnesses.map(id => describe(id)), excluded: [], walls: {} };
-  const claudePlan = policy.enabled ? policy.claudePlan?.organization : undefined;
+  // A token bound from Total Recall Auth stands in for any per-machine login, so no native login is probed.
+  const claudeToken = policy.enabled && claudeTokenCurrent(policy);
+  const claudePlan = policy.enabled && !claudeToken ? policy.claudePlan?.organization : undefined;
   const [{ agents = [] }, entries] = await Promise.all([inspect({ env: process.env, claudePlan }), receipts()]);
   const billingEntries = policy.enabled ? includedBillingReceipts(entries) : entries;
   const walls = { ...activeQuotaWalls(billingEntries), ...(!policy.enabled ? measuredWalls() : {}) };
   const blocks = activeCredentialBlocks(billingEntries);
   const ready = [], excluded = [];
   for (const installed of agents) {
-    const agent = policy.enabled && installed.id === 'claude' && !claudePlan ? { ...installed, authenticated: claudeProofCurrent(policy) } : installed;
+    const agent = policy.enabled && installed.id === 'claude' && !claudePlan ? { ...installed, authenticated: claudeToken || claudeProofCurrent(policy) } : installed;
     const policyBlocked = policy.enabled && (!INCLUDED_AGENTS.includes(agent.id) || (Array.isArray(availableHarnesses) && !availableHarnesses.includes(agent.id)));
     const reason = policyBlocked ? 'outside the included usage route' : exclusionReason(agent, walls[agent.id], blocks[agent.id], { allowUnknownAuth: !policy.enabled && allowUnknownAuth });
     if (!reason) ready.push(describe(agent.id, { authVerified: agent.authenticated === true }));

@@ -16,6 +16,7 @@ Coordinates coding agent harnesses across mesh nodes. `cli-agents` is an alias o
 5. **Cost.** dsh, hermes and other metered harnesses bill per token, and `route` warns when it picks one. `--jev` also makes a metered call.
 
 ## Commands
+- `router-benchmark [--k 20] [--repeats 3] [--catalog-samples 24] [--corpus file.json] [--min-recall 0.8] [--min-mrr 0.5] [--max-p95-ms 1000] [--baseline report.json] [--max-recall-drop 0] [--save] --json`: measure actual host capability retrieval separately from owner harness readiness scenarios. No provider or plugin tasks run. Explicit save creates an owner SSSS report/event, separate from execution receipts. API/MCP/router cases and capability refusals are unsupported until the production router supports them.
 - `status`, `inspect --node <id>`, `upstream`, `changelog <agent>`, `catalog`, `nodes`: what is installed, signed in and current.
 - `quota [--node <id>]`: readiness, measured usage and walls, OpenRouter balance, and memory across the fleet.
 - `benchmarks`: pricing, Artificial Analysis indices, SWE-bench Pro, and pass rates from this machine's receipts. Refresh with `maintenance --models`.

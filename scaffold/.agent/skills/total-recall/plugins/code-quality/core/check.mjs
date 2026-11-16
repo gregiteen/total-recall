@@ -36,6 +36,7 @@ import path from 'node:path';
 import os from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { stateDir } from './state.mjs';
+import { ensureGateDependencies } from './dependencies.mjs';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -680,51 +681,6 @@ function runCheck(check) {
 
 // ─── Main ─────────────────────────────────────────────────────────────────────
 
-/**
- * Restore the repository's locked dependencies before any gate runs. Idle repositories have
- * their node_modules removed by the scheduled disk cleanup, and a gate run against a missing
- * tree reports import failures as if the code were broken. Installs exactly what the lockfile
- * pins, only when the installed tree is missing or older than the lockfile.
- */
-const LOCKFILES = [
-  { file: 'package-lock.json', manager: 'npm', marker: path.join('node_modules', '.package-lock.json'), args: ['ci', '--no-audit', '--no-fund'] },
-  { file: 'pnpm-lock.yaml', manager: 'pnpm', marker: path.join('node_modules', '.modules.yaml'), args: ['install', '--frozen-lockfile'] },
-  { file: 'yarn.lock', manager: 'yarn', marker: path.join('node_modules', '.yarn-integrity'), args: ['install', '--frozen-lockfile'] },
-];
-
-function dependencyState(root) {
-  if (!existsSync(path.join(root, 'package.json'))) return { action: 'none', reason: 'no package.json' };
-  const lock = LOCKFILES.find((entry) => existsSync(path.join(root, entry.file)));
-  if (!lock) return { action: 'none', reason: 'no lockfile' };
-  const marker = path.join(root, lock.marker);
-  const stale = !existsSync(marker) || statSync(marker).mtimeMs < statSync(path.join(root, lock.file)).mtimeMs;
-  return { action: stale ? 'install' : 'present', manager: lock.manager, lockfile: lock.file, args: lock.args };
-}
-
-function ensureDependencies() {
-  const state = dependencyState(REPO_ROOT);
-  if (config.installDependencies === false || state.action !== 'install') {
-    return { ...state, action: config.installDependencies === false && state.action === 'install' ? 'disabled' : state.action, args: undefined };
-  }
-  const started = Date.now();
-  console.error(`   → dependencies: ${state.manager} ${state.args.join(' ')} (${state.lockfile})`);
-  return new Promise((resolve) => {
-    const child = spawn(state.manager, state.args, { cwd: REPO_ROOT, stdio: ['ignore', 'pipe', 'pipe'], env: process.env });
-    currentChild = child;
-    let tail = '';
-    const keep = (chunk) => { tail = (tail + chunk).slice(-4000); };
-    child.stdout.on('data', keep);
-    child.stderr.on('data', keep);
-    const done = (code, error) => {
-      currentChild = null;
-      resolve({ action: code === 0 ? 'installed' : 'failed', manager: state.manager, lockfile: state.lockfile,
-        durationMs: Date.now() - started, ...(code === 0 ? {} : { error: error || tail.trim().split('\n').slice(-20).join('\n') }) });
-    };
-    child.on('error', (err) => done(null, err.message));
-    child.on('close', (code) => done(code));
-  });
-}
-
 async function main() {
   const wantTier = TIER_ORDER[TIER];
   if (!wantTier) fail(`Unknown --tier ${TIER} (expected: fast | full | remote)`);
@@ -759,9 +715,9 @@ async function main() {
   const testedHead = gitHead();
   console.error(` [code-quality] ${config.toolchain} — ${checks.length} check(s) in ${REPO_ROOT}`);
 
-  const dependencies = await ensureDependencies();
+  const dependencies = await ensureGateDependencies(REPO_ROOT, { enabled: config.installDependencies !== false });
   if (dependencies.action === 'failed') {
-    console.error(`      dependency install failed (${dependencies.manager}, ${dependencies.lockfile}); no gate ran:\n${dependencies.error}`);
+    console.error(`      dependency readiness failed; no gate ran:\n${dependencies.error}`);
   }
 
   const results = [];

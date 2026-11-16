@@ -33,6 +33,15 @@ export function createSessionCredentials({ brainDir, load = loadSecretsSync, sav
       const hash = Object.hasOwn(hashes, username.toLowerCase()) ? hashes[username.toLowerCase()] : null;
       return typeof hash === 'string' ? bcrypt.compare(password, hash) : false;
     },
+    // Explicit compatibility for a caller-selected legacy user record. Never
+    // import or rewrite it, and never let an old password bypass a newer one.
+    async verifyLegacyCollaborationPassword(username, password, legacyHash) {
+      if (typeof username !== 'string' || !username || typeof password !== 'string' || password.length > 4096) return false;
+      const hashes = load(brainDir).collaboration_password_hashes || {};
+      const hash = Object.hasOwn(hashes, username.toLowerCase()) ? hashes[username.toLowerCase()] : legacyHash;
+      if (typeof hash !== 'string' || !/^\$2[ab]\$(?:0[4-9]|1[0-6])\$[./A-Za-z0-9]{53}$/.test(hash)) return false;
+      return bcrypt.compare(password, hash);
+    },
     signToken(purpose, payload, { ttlSeconds = 86400 } = {}) {
       if (!Number.isInteger(ttlSeconds) || ttlSeconds < 15 || ttlSeconds > 604800) throw new Error('Invalid token lifetime');
       return jwt.sign(payload, signingKey(purpose), { algorithm: 'HS256', expiresIn: ttlSeconds, audience: purpose, issuer: 'total-recall-auth' });

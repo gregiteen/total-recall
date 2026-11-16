@@ -90,7 +90,7 @@ export function removeRemoteTarget(brainDir, name) {
   return { removed, targets: next };
 }
 
-function sshBaseArgs(target) {
+export function sshBaseArgs(target) {
   return [
     '-o', 'BatchMode=yes',
     '-o', 'ConnectTimeout=8',
@@ -99,7 +99,7 @@ function sshBaseArgs(target) {
   ];
 }
 
-function sshDestination(target) {
+export function sshDestination(target) {
   return `${target.user || 'root'}@${target.host}`;
 }
 
@@ -119,16 +119,27 @@ function runSsh(target, remoteCommand, { input } = {}) {
   return result;
 }
 
+/** Run a script under POSIX sh whatever the remote login shell is (fish and csh parse `||`, `$$` and `2>` differently). */
+function posixShell(script) {
+  return `sh -c '${String(script).replace(/'/g, `'\\''`)}'`;
+}
+
 function quoteRemotePath(p) {
   // POSIX single-quote escaping — safe for arbitrary remote paths.
-  return `'${String(p).replace(/'/g, `'\\''`)}'`;
+  const text = String(p);
+  if (/[\0\r\n]/.test(text)) throw new Error('Unsafe remote path');
+  const quoted = `'${text.replace(/'/g, `'\\''`)}'`;
+  // A relative path (or ~/…) resolves under the remote HOME, which a quoted tilde would not.
+  if (text.startsWith('/')) return quoted;
+  if (text === '~') return '"$HOME"';
+  return text.startsWith('~/') ? `"$HOME"/${quoted.replace(/^'~\//, "'")}` : `"$HOME"/${quoted}`;
 }
 
 /**
  * Fetch the current remote file body (empty string if absent/unreachable-file).
  */
 function fetchRemoteFile(target, remoteFile) {
-  const r = runSsh(target, `cat ${quoteRemotePath(remoteFile)} 2>/dev/null || true`);
+  const r = runSsh(target, posixShell(`cat ${quoteRemotePath(remoteFile)} 2>/dev/null || true`));
   if (r.error || r.status !== 0) throw new Error(`SSH read failed for target "${target.name}": ${r.error?.message || (r.stderr || '').slice(0, 300)}`);
   if (r.error) throw new Error(`SSH connect failed for target "${target.name}": ${r.error.message}`);
   return r.stdout || '';
@@ -140,11 +151,11 @@ function fetchRemoteFile(target, remoteFile) {
  * dropped connection mid-write can't leave a truncated secrets file live.
  */
 function writeRemoteFile(target, remoteFile, body) {
-  const tmp = `${remoteFile}.tr-tmp.$$`;
-  const cmd =
-    `set -e; TMP="${remoteFile}.tr-tmp.$$"; ` +
-    `cat > "$TMP" && chmod 600 "$TMP" && mv "$TMP" ${quoteRemotePath(remoteFile)}`;
-  const r = runSsh(target, cmd, { input: body });
+  const file = quoteRemotePath(remoteFile);
+  const dir = quoteRemotePath(path.posix.dirname(remoteFile));
+  // Both paths are single-quoted; only the fixed `$$` suffix is shell-expanded.
+  const cmd = `set -e; umask 077; mkdir -p ${dir}; TMP=${file}.tr-tmp.$$; cat > "$TMP" && chmod 600 "$TMP" && mv "$TMP" ${file}`;
+  const r = runSsh(target, posixShell(cmd), { input: body });
   if (r.error) throw new Error(`SSH write failed for target "${target.name}": ${r.error.message}`);
   if (r.status !== 0) {
     throw new Error(
@@ -152,6 +163,17 @@ function writeRemoteFile(target, remoteFile, body) {
     );
   }
   return true;
+}
+
+/**
+ * Merge an already-built projection into the remote file and write it in one
+ * atomic rename. Nothing is read or written remotely before the caller has
+ * finished building and validating the projection.
+ */
+export function pushProjection(target, remoteFile, projection, { partial = false } = {}) {
+  let existing;
+  try { existing = fetchRemoteFile(target, remoteFile); } catch (err) { err.phase = 'read'; throw err; }
+  try { writeRemoteFile(target, remoteFile, mergeEnvManagedBlock(existing, projection.body, { partial })); } catch (err) { err.phase = 'write'; throw err; }
 }
 
 /**
@@ -169,6 +191,18 @@ export async function deployEnvToRemote(brainDir, targetName, opts = {}) {
       `Unknown remote target "${targetName}". Configure one first: npx total-recall auth secret remote add ${targetName} --host <host> --path </remote/dir>`,
     );
   }
+  return deployEnvToTarget(brainDir, target, opts);
+}
+
+/**
+ * Deploy the projection to an explicit target object (not read from the
+ * registry), so a one-off deploy target never has to be persisted.
+ *
+ * @param {string} brainDir
+ * @param {RemoteTarget} target
+ * @param {{ dryRun?: boolean, keys?: string[], skipRestart?: boolean }} opts
+ */
+export async function deployEnvToTarget(brainDir, target, opts = {}) {
 
   // Match the same projection local `export-env --path .` builds: repo-bound
   // secrets (set with --repo <name>) only resolve when the caller's project
@@ -210,9 +244,7 @@ export async function deployEnvToRemote(brainDir, targetName, opts = {}) {
     };
   }
 
-  const existing = fetchRemoteFile(target, remoteFile);
-  const merged = mergeEnvManagedBlock(existing, projection.body, { partial: Boolean(opts.keys?.length) });
-  writeRemoteFile(target, remoteFile, merged);
+  pushProjection(target, remoteFile, projection, { partial: Boolean(opts.keys?.length) });
 
   let restarted = false;
   let restartOutput = null;

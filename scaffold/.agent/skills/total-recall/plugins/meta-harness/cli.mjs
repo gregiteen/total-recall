@@ -32,6 +32,7 @@ import { continueJob } from './src/session-jobs.mjs';
 import { chatTarget, setChatDefault } from './src/chat.mjs';
 
 const VALUE_FLAGS = ['--result-schema-json', '--goal', '--max-turns', '--max-budget-usd', '--max-tokens', '--result-schema', '--at', '--node', '--mode', '--orchestrator', '--branch', '--reviewer', '--thread', '--status', '--platform', '--agent', '--url', '--query', '--tier', '--threshold', '--author', '--explorer', '--architect', '--implementer', '--verifier', '--title', '--summary', '--cwd', '--tools', '--setting-sources', '--model', '--name', '--tail', '--timeout-ms', '--void', '--reason', '--approvals', '--question-timeout-ms', '--brains'];
+VALUE_FLAGS.push('--k', '--repeats', '--catalog-samples', '--corpus', '--baseline', '--min-recall', '--min-mrr', '--max-p95-ms', '--max-recall-drop', '--core-root');
 export function parseArguments(args) {
   const positional = [];
   for (let index = 1; index < args.length; index += 1) {
@@ -136,7 +137,17 @@ async function runOperation(argv) {
       .filter(([, flag]) => value(flag) !== undefined).map(([key, flag]) => [key, ['maxTurns', 'maxBudgetUsd', 'maxTokens', 'questionTimeoutMs'].includes(key) ? Number(value(flag)) : value(flag)])) });
   const modelOption = () => (value('--model') === undefined ? {} : { model: value('--model') });
   let result;
-  if (operation === 'status') result = {...await inspectNode(value('--node') || 'local'),documentation:documentationStatus()};
+  if (operation === 'router-benchmark') {
+    const allowed = new Set(['--json', '--save', '--allow-catalog-change', '--core-root', ...['--k', '--repeats', '--catalog-samples', '--corpus', '--baseline', '--min-recall', '--min-mrr', '--max-p95-ms', '--max-recall-drop', '--cwd']]);
+    for (const arg of args.slice(1)) if (arg.startsWith('--') && !allowed.has(arg)) throw new Error(`Unsupported router-benchmark flag: ${arg}`);
+    if (positional.length) throw new Error('router-benchmark takes flags only');
+    const { runRouterBenchmark } = await import('./src/router-benchmark.mjs');
+    const numeric = Object.fromEntries([['k', '--k'], ['repeats', '--repeats'], ['catalogSamples', '--catalog-samples'], ['minRecall', '--min-recall'], ['minMrr', '--min-mrr'], ['maxP95Ms', '--max-p95-ms'], ['maxRecallDrop', '--max-recall-drop']].filter(([, flag]) => value(flag) !== undefined).map(([key, flag]) => [key, Number(value(flag))]));
+    const json = flag => value(flag) === undefined ? undefined : JSON.parse(fs.readFileSync(value(flag), 'utf8'));
+    result = await runRouterBenchmark({ ...numeric, coreRoot: value('--core-root'), allowCatalogChange: has('--allow-catalog-change'), corpus: json('--corpus'), baseline: json('--baseline'), projectRoot: value('--cwd') || process.cwd(), save: has('--save') });
+    if (!result.ok) process.exitCode = 1;
+  }
+  else if (operation === 'status') result = {...await inspectNode(value('--node') || 'local'),documentation:documentationStatus()};
   else if (operation === 'catalog') result = { adapters: getActiveAdapters(), permissions: ['read', 'write', 'send', 'destructive'] };
   else if (operation === 'chat-target') result = chatTarget(value('--brains'));
   else if (operation === 'chat-default') result = setChatDefault(positional[0], value('--url'));
@@ -153,10 +164,11 @@ async function runOperation(argv) {
     const { bindOpenRouter } = await import('./src/included-usage.mjs');
     result = await bindOpenRouter(positional[0], positional[1], value('--model'));
   }
-  else if (['included-status', 'included-enforce', 'included-bind-claude', 'included-bind-claude-plan'].includes(operation)) {
+  else if (['included-status', 'included-enforce', 'included-bind-claude', 'included-bind-claude-plan', 'included-bind-claude-token'].includes(operation)) {
     const usage = await import('./src/included-usage.mjs');
     if (operation === 'included-status') result = await usage.includedUsageStatus({ probe: has('--probe') });
     else if (operation === 'included-enforce') result = await usage.enforceIncludedUsage();
+    else if (operation === 'included-bind-claude-token') result = await usage.bindClaudeToken({ keyName: value('--key') || 'CLAUDE_CODE_OAUTH_TOKEN' });
     else {
       if (!has('--stdin')) throw new Error('Pass verified Claude billing evidence as JSON on stdin.');
       const input = fs.readFileSync(0, 'utf8');

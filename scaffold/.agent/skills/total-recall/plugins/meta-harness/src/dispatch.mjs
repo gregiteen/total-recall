@@ -31,7 +31,7 @@ export async function dispatchWithReceipt(request, { dispatchFn, node = request.
       if (!admission.ok) {
         result = { ...admission, agent: request.agent, exitCode: null };
         launchPrevented = true;
-      } else effective = { ...request, [INCLUDED_BILLING]: { key: admission.key, claudePlan: admission.claudePlan, openRouter: admission.openRouter } };
+      } else effective = { ...request, [INCLUDED_BILLING]: { key: admission.key, claudePlan: admission.claudePlan, claudeToken: admission.claudeToken, openRouter: admission.openRouter } };
     }
     result = cancellationResult() || result;
     if (!result) {
