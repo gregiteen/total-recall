@@ -1,7 +1,7 @@
 // @vitest-environment node
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
-// Mock fs before importing logger so the module-level existsSync/mkdirSync don't fail
+// Keep filesystem effects isolated while exercising log persistence.
 vi.mock('fs', () => ({
   default: {
     existsSync: vi.fn(() => true),
@@ -86,6 +86,15 @@ describe('logger', () => {
     expect(parsed.level).toBe('info');
     expect(parsed.message).toBe('hello world');
     expect(parsed.timestamp).toBeDefined();
+  });
+
+  it('creates missing log storage on the first actual entry, without import-time initialization', () => {
+    expect(fsMock.mkdirSync).not.toHaveBeenCalled();
+    fsMock.existsSync.mockReturnValue(false);
+    logger.info('cold-start', 'persist first entry');
+    expect(fsMock.mkdirSync).toHaveBeenCalledWith(LOG_DIR, { recursive: true });
+    expect(fsMock.appendFileSync).toHaveBeenCalledOnce();
+    fsMock.existsSync.mockReturnValue(true);
   });
 
   it('does not write debug entries unless TR_LOG_LEVEL=debug', () => {

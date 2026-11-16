@@ -1,8 +1,10 @@
-import os from 'node:os';
+import fs from 'node:fs';
+import path from 'node:path';
+import { getGlobalAgentDir } from './agent-dir.mjs';
 import { refreshPlatformSkill } from '../core/platform-skill-maintenance.mjs';
 
 /** Explicit scope and a reviewed hash are required; no registry discovery or init. */
-export function runPlatformRefresh(args, { home = os.homedir(), refresh = refreshPlatformSkill } = {}) {
+export function runPlatformRefresh(args, { globalAgentDir = getGlobalAgentDir, refresh = refreshPlatformSkill } = {}) {
   const skillId = args[0];
   const flags = args.slice(1);
   const values = {};
@@ -19,7 +21,13 @@ export function runPlatformRefresh(args, { home = os.homedir(), refresh = refres
   if (Boolean(values['--repo']) === Boolean(values['--global']) || values['--apply'] && values['--dry-run']) {
     throw new Error('Usage: skill refresh-platform <id> (--repo <existing-root> | --global) [--apply --source-hash <plan-hash>] [--dry-run] [--json]');
   }
-  const result = refresh({ skillId, repo: values['--repo'] || home,
+  // The explicit global root is operator configuration, including legacy
+  // relocation links. Pin its physical skills anchor once; descendants still
+  // pass the core's strict checks, and --repo never takes this path.
+  const scope = values['--global']
+    ? { globalSkillsDir: fs.realpathSync(path.join(globalAgentDir(), 'skills')) }
+    : { repo: values['--repo'] };
+  const result = refresh({ skillId, ...scope,
     apply: Boolean(values['--apply']), expectedSourceHash: values['--source-hash'] });
   console.log(JSON.stringify(result, null, 2));
   return result;

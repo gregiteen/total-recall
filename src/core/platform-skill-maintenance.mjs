@@ -206,16 +206,16 @@ function acquireLock(target) {
 /** The CLI supplies only its own package root; distributionRoot is a test seam.
  * Apply requires the exact hash returned by a read-only plan. There is no force.
  */
-export function refreshPlatformSkill({ skillId, repo, apply = false, expectedSourceHash,
+export function refreshPlatformSkill({ skillId, repo, globalSkillsDir, apply = false, expectedSourceHash,
   distributionRoot = ROOT } = {}) {
-  if (!repo || !stat(path.resolve(repo))?.isDirectory()) {
-    throw new Error('Platform refresh requires an existing repository or home root');
+  if (Boolean(repo) === Boolean(globalSkillsDir) || !stat(path.resolve(repo || globalSkillsDir))?.isDirectory()) {
+    throw new Error('Platform refresh requires one existing repository or canonical global skills root');
   }
   // Resolve OS aliases above the explicitly selected root (e.g. macOS /var).
   // A link at the selected root itself is rejected by lstat above.
-  const repoRoot = fs.realpathSync(repo);
+  const anchor = globalSkillsDir ? regularPath(path.resolve(globalSkillsDir), '', { directory: true }) : fs.realpathSync(repo);
   const available = sourceSnapshot(skillId, distributionRoot);
-  const target = regularPath(repoRoot, `.agent/skills/${skillId}`, { directory: true });
+  const target = regularPath(anchor, globalSkillsDir ? skillId : `.agent/skills/${skillId}`, { directory: true });
   if (!stat(target)?.isDirectory()) throw new Error('Platform refresh requires an existing skill install');
   if (target === available.provenance.source_path || target.startsWith(available.provenance.source_path + path.sep) ||
       available.provenance.source_path.startsWith(target + path.sep)) throw new Error('Platform target aliases distribution source');

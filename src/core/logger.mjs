@@ -7,10 +7,6 @@ import { brainDir } from './local-config.mjs';
 const BRAIN_DIR = brainDir;
 const LOG_DIR = path.join(BRAIN_DIR, 'logs');
 
-if (!fs.existsSync(LOG_DIR)) {
-  fs.mkdirSync(LOG_DIR, { recursive: true });
-}
-
 const getLogFile = () => {
   const d = new Date();
   return path.join(LOG_DIR, `system-${d.toISOString().split('T')[0]}.jsonl`);
@@ -156,6 +152,9 @@ export const logger = {
     console.error(line.trim());
 
     try {
+      // Read-only CLI imports must not initialize brain state. Create storage
+      // only when an actual log entry needs to be persisted.
+      if (!fs.existsSync(LOG_DIR)) fs.mkdirSync(LOG_DIR, { recursive: true });
       pruneOldLogs();
       enforceLogSize();
       fs.appendFileSync(getLogFile(), line);
