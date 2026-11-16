@@ -1,6 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { loadSecretsSync } from './secrets-gateway.mjs';
+import { loadSecretsSync, META_KEY } from './secrets-gateway.mjs';
 
 /** Runtime field -> canonical Auth store key. The settings and deploy writers use these exact keys. */
 export const RUNTIME_CREDENTIAL_KEYS = Object.freeze({
@@ -46,16 +46,51 @@ function readLegacyBrainJson(file) {
   } catch { return null; } finally { fs.closeSync(fd); }
 }
 
+/** An Auth credential is bound at save time; the binding lives in Auth metadata and never follows brain.json. */
+function authBinding(secrets, key) {
+  const row = secrets?.[META_KEY]?.keys?.[key];
+  return row && typeof row.bound_origin === 'string' ? row.bound_origin : null;
+}
+
 /**
- * The backend connection token for one endpoint, bound to that endpoint's origin.
+ * Save the backend connection token under its canonical Auth key, bound to one endpoint origin.
+ * Binding and value are written in one store update. The outcome names the key and origin, never the token.
+ */
+export async function saveConnectionToken({ brainDir, url, token, actor = 'configuration' } = {}) {
+  if (!brainDir) throw new Error('Select an auth store');
+  const origin = originOf(url);
+  if (!origin) throw new Error('A connection token needs an http(s) backend URL to bind to');
+  if (typeof token !== 'string' || !token.trim()) throw new Error('A connection token must be a non-empty string');
+  const { setSecret } = await import('./secrets-store.mjs');
+  await setSecret(brainDir, 'TOTAL_RECALL_TOKEN', token, { actor, bound_origin: origin });
+  return { key: 'TOTAL_RECALL_TOKEN', origin };
+}
+
+/**
+ * Refuse to point a brain.json that still holds a legacy token at a different origin: the token
+ * was saved for the file's current endpoint and would otherwise follow the new URL. The file is
+ * only read, never changed.
+ */
+export function assertLegacyTokenNotRebound({ file, url }) {
+  const cfg = readLegacyBrainJson(file);
+  if (!cfg || typeof cfg.token !== 'string' || !cfg.token) return { ok: true };
+  const current = typeof cfg.url === 'string' ? originOf(cfg.url) : null;
+  const next = originOf(url);
+  if (!next) throw new Error('The backend URL must be http(s)');
+  if (current === next) return { ok: true };
+  throw new Error('This brain.json holds a legacy token for its current endpoint; clear it before changing the endpoint');
+}
+
+/**
+ * The backend connection token for one endpoint.
  *
  * The Auth store is mandatory and its failures propagate: a missing password, a plaintext or
- * undecryptable store never falls back to a legacy file. `legacyBrainJson` lists explicit
- * brain.json files of the brain context, in precedence order. The first one with a valid
- * http(s) `url` defines the configured endpoint. A saved token (the Auth key TOTAL_RECALL_TOKEN,
- * else that file's legacy `token`) is returned only when `url` has the same origin as the
- * configured endpoint. With no configured endpoint, or a different origin, no saved token is
- * returned. Legacy data is read in place: never copied, migrated or rotated.
+ * undecryptable store never falls back to a legacy file. An Auth token is returned only for the
+ * origin it was bound to when saved (see saveConnectionToken); a token with no binding is never
+ * forwarded. `legacyBrainJson` lists explicit brain.json files of the brain context, in precedence
+ * order; the first one with a valid http(s) `url` is the configured endpoint, and its own legacy
+ * `token` is returned only for that endpoint's origin and only when Auth supplies none. Legacy data
+ * is read in place: never copied, migrated or rotated.
  *
  * @returns {{ token: string|null, source: 'auth'|'legacy'|null, origin: string|null, reason?: string }}
  */
@@ -74,11 +109,16 @@ export function connectionToken({ brainDir, url = null, legacyBrainJson = [] } =
     legacyToken = typeof cfg.token === 'string' && cfg.token ? cfg.token : null;
     break;
   }
-  if (!configured) return { token: null, source: null, origin: null, reason: 'no-configured-endpoint' };
   const requested = url == null ? configured : originOf(url);
-  if (!requested || requested !== configured) return { token: null, source: null, origin: configured, reason: 'origin-mismatch' };
+  if (!requested) return { token: null, source: null, origin: configured, reason: configured ? 'origin-mismatch' : 'no-configured-endpoint' };
   const authToken = typeof secrets.TOTAL_RECALL_TOKEN === 'string' && secrets.TOTAL_RECALL_TOKEN ? secrets.TOTAL_RECALL_TOKEN : null;
-  if (authToken) return { token: authToken, source: 'auth', origin: configured };
-  if (legacyToken) return { token: legacyToken, source: 'legacy', origin: configured };
-  return { token: null, source: null, origin: configured, reason: 'no-saved-token' };
+  let reason = 'no-saved-token';
+  if (authToken) {
+    const bound = authBinding(secrets, 'TOTAL_RECALL_TOKEN');
+    if (bound && bound === requested) return { token: authToken, source: 'auth', origin: bound };
+    reason = bound ? 'origin-mismatch' : 'token-unbound';
+  }
+  if (legacyToken && configured === requested) return { token: legacyToken, source: 'legacy', origin: configured };
+  if (legacyToken) reason = 'origin-mismatch';
+  return { token: null, source: null, origin: configured, reason };
 }

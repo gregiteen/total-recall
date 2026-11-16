@@ -286,6 +286,7 @@ function printHelp() {
       --auto-rotate       Enable auto-rotate flag
     --tags <a,b,c>      Optional tags saying what the key is and what uses it
     --notes <text>
+    --bound-origin <url>  The one http(s) origin a connection credential may be sent to
     --label <text>
     --project <path>
     --headscale-url <https-url>
@@ -381,6 +382,7 @@ function parseArgs(args) {
     rotate_days: null,
     auto_rotate: false,
     notes: null,
+    bound_origin: undefined,
     tags: null,
     label: null,
     project: null,
@@ -566,6 +568,9 @@ function parseArgs(args) {
         break;
       case '--notes':
         out.notes = args[++i];
+        break;
+      case '--bound-origin':
+        out.bound_origin = args[++i];
         break;
       case '--label':
         out.label = args[++i];
@@ -901,6 +906,7 @@ export default async function secretCli(argv) {
         rotate_every_days: opts.rotate_days,
         auto_rotate: opts.auto_rotate,
         notes: opts.notes,
+        bound_origin: opts.bound_origin,
         label: opts.label,
         project_path: opts.project,
         headscale_url: opts.headscale_url,

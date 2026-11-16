@@ -730,84 +730,17 @@ export function startDeployUI(port = 3001) {
           let opts;
           try { opts = JSON.parse(body || '{}'); } catch { opts = {}; }
           const { ides = [], installRelay = true, installObsidian = false, brainUrl, token } = opts;
-          const results = [];
-
-          // IDE-to-connect-client mapping (coding agents only — Obsidian handled separately)
-          const IDE_CLIENTS = {
-            'claude-code': { client: 'claude-code', label: 'Claude Code' },
-            'codex':       { client: 'codex',       label: 'Codex' },
-            'cursor':      { client: 'cursor',       label: 'Cursor' },
-            'antigravity': { client: 'antigravity',  label: 'Antigravity' },
-            'vscode':      { client: 'vscode',       label: 'VS Code Copilot' },
-            'gemini':      { client: 'gemini',       label: 'Gemini CLI' },
-            'pi':          { client: 'pi',           label: 'Pi Coding Agent' },
-            'hermes':      { client: 'hermes',       label: 'Hermes Agent' },
-            'hermes-agent':{ client: 'hermes-agent', label: 'Hermes Agent' },
-            'dsh':         { client: 'dsh',          label: 'DeepSeek Harness (dsh)' },
-            'deepseek-harness': { client: 'deepseek-harness', label: 'DeepSeek Harness' },
-            'openclaw':    { client: 'openclaw',     label: 'OpenClaw' },
-          };
-
           const { spawnSync: sp } = await import('node:child_process');
-          const nodeBin = process.execPath;
-          const scriptPath = new URL('../../bin/total-recall.mjs', import.meta.url).pathname;
-
-          for (const ide of ides) {
-            const mapping = IDE_CLIENTS[ide];
-            if (!mapping) { results.push({ label: ide, ok: false, message: 'Unknown IDE' }); continue; }
-            const args = ['connect', mapping.client];
-            if (brainUrl) args.push('--brain', brainUrl);
-            if (token) args.push('--token', token);
-            args.push('--force');
-            try {
-              const r = sp(nodeBin, [scriptPath, ...args], { encoding: 'utf8', timeout: 30000 });
-              if (r.status === 0) {
-                results.push({ label: mapping.label, ok: true, message: 'Connected' });
-              } else {
-                const err = (r.stderr || r.stdout || '').trim().split('\n').pop() || 'failed';
-                results.push({ label: mapping.label, ok: false, skipped: err.includes('exists'), message: err });
-              }
-            } catch (e) {
-              results.push({ label: mapping.label, ok: false, message: e.message });
-            }
-          }
-
-
-          // Install relay as system service
-          let relayResult = null;
-          if (installRelay) {
-            try {
-              const relayArgs = [scriptPath, 'relay', 'install'];
-              if (brainUrl) {
-                // Write brain config so relay knows where to ship
-                const { resolveAgentDir } = await import('./agent-dir.mjs');
-                const agentDir = resolveAgentDir();
-                const configDir = path.join(agentDir, 'skills', 'total-recall', 'config');
-                fs.mkdirSync(configDir, { recursive: true });
-                const config = { url: brainUrl };
-                if (token) config.token = token;
-                fs.writeFileSync(path.join(configDir, 'brain.json'), JSON.stringify(config, null, 2));
-              }
-              const rr = sp(nodeBin, relayArgs, { encoding: 'utf8', timeout: 30000 });
-              relayResult = { ok: rr.status === 0, message: rr.status === 0 ? 'Installed as system service (starts on boot)' : (rr.stderr || rr.stdout || '').trim().split('\n').pop() };
-            } catch (e) {
-              relayResult = { ok: false, message: e.message };
-            }
-          }
-
-          // Connect Obsidian vault sync
-          let obsidianResult = null;
-          if (installObsidian) {
-            try {
-              const obsArgs = [scriptPath, 'connect', 'obsidian'];
-              if (brainUrl) obsArgs.push('--brain', brainUrl);
-              obsArgs.push('--force');
-              const or = sp(nodeBin, obsArgs, { encoding: 'utf8', timeout: 30000 });
-              obsidianResult = { ok: or.status === 0, message: or.status === 0 ? 'Vault sync configured' : (or.stderr || or.stdout || '').trim().split('\n').pop() };
-            } catch (e) {
-              obsidianResult = { ok: false, message: e.message };
-            }
-          }
+          const { runConnectIdes } = await import('./deploy-ui-connect.mjs');
+          const outcome = await runConnectIdes({ ides, installRelay, installObsidian, brainUrl, token }, {
+            spawnSync: sp,
+            nodeBin: process.execPath,
+            scriptPath: new URL('../../bin/total-recall.mjs', import.meta.url).pathname,
+            loadAuthConfiguration: async () => (await import('../core/plugin-runtime.mjs')).loadPluginModule('auth', 'configuration'),
+            authBrainDir: async () => (await import('./deploy.mjs')).authBrainDir(),
+            relayConfigDir: async () => path.join((await import('./agent-dir.mjs')).resolveAgentDir(), 'skills', 'total-recall', 'config'),
+          }).catch(e => ({ ok: false, results: [{ label: 'Connect', ok: false, message: e.message }], relayResult: null, obsidianResult: null }));
+          const { results, relayResult, obsidianResult } = outcome;
 
           // Persist the connected IDE choices to wizard-config.json
           try {
@@ -826,7 +759,7 @@ export function startDeployUI(port = 3001) {
           }
 
           res.writeHead(200, { 'Content-Type': 'application/json' });
-          res.end(JSON.stringify({ ok: true, results, relayResult, obsidianResult }));
+          res.end(JSON.stringify({ ok: outcome.ok, results, relayResult, obsidianResult }));
         });
         return;
       }

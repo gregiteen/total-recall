@@ -45,7 +45,7 @@ import yaml from 'yaml';
 import crypto from 'node:crypto';
 import { loadPluginModule } from '../core/plugin-runtime.mjs';
 import { writeFileSecure } from '../core/secure-file.mjs';
-import { globalBrainDir } from '../core/local-config.mjs';
+import { authStoreDir } from '../core/connection-token.mjs';
 
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -124,8 +124,8 @@ export function wizardSecretKeys(wizardOpts = {}) {
  * The Auth store's brain directory: an explicit, validated path, else the selected secrets brain or
  * the global brain. TR_BRAIN is never used: the startup CLI reads it as a brain URL, not a directory.
  */
-export function authBrainDir(explicit, env = process.env, fallback = globalBrainDir) {
-  const candidate = explicit !== undefined ? explicit : (env.TR_SECRETS_BRAIN || fallback);
+export function authBrainDir(explicit, env = process.env, fallback) {
+  const candidate = explicit !== undefined ? explicit : (env.TR_SECRETS_BRAIN || fallback || authStoreDir({}));
   if (typeof candidate !== 'string' || !candidate || candidate.includes('\0') || /^[A-Za-z][A-Za-z0-9+.-]*:\/\//.test(candidate) || !path.isAbsolute(candidate)) {
     throw new Error('The Auth brain directory must be an absolute local path.');
   }

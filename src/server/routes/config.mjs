@@ -18,6 +18,7 @@ import { requireAuth, requireScope, loadSecurityConfig } from '../auth.mjs';
 import { BRAIN_DIR, CONFIG_DIR, serverError, badRequest } from './_shared.mjs';
 import { loadRuntimeConfig } from '../../core/runtime.mjs';
 import { writeFileSecure } from '../../core/secure-file.mjs';
+import { authStoreDir } from '../../core/connection-token.mjs';
 
 const router = Router();
 
@@ -202,7 +203,7 @@ router.get('/api/config-json', requireAuth, requireScope('config:read'), async (
     const safeSecrets = {};
     try {
       const { listSecretsMeta } = await __loadOwnedPlugin('auth', 'secrets-store');
-      const meta = await listSecretsMeta(BRAIN_DIR);
+      const meta = await listSecretsMeta(authStoreDir());
       if (!Array.isArray(meta)) throw new Error('Invalid Auth metadata');
       for (const row of meta) {
         if (!row || typeof row !== 'object') throw new Error('Invalid Auth metadata');
@@ -262,6 +263,29 @@ router.post('/api/config-json', requireAuth, requireScope('config:write'), async
     }
     if (invalid.length) return res.status(400).json({ error: `Unsupported or invalid config fields: ${invalid.join(', ')}. Nothing was changed.` });
 
+    // The backend credential is bound by Auth to one endpoint. Resolve that endpoint and check the
+    // legacy file before any write, so a refusal changes nothing.
+    let bindUrl;
+    if (brainToken !== undefined || (isPlain(brainFields) && typeof brainFields.url === 'string')) {
+      let existingUrl;
+      try { existingUrl = JSON.parse(fs.readFileSync(brainPath, 'utf8'))?.url; } catch { /* no public config yet */ }
+      bindUrl = isPlain(brainFields) && typeof brainFields.url === 'string' ? brainFields.url : existingUrl;
+      if (brainToken !== undefined && !/^https?:\/\//i.test(String(bindUrl || ''))) {
+        return res.status(400).json({ error: 'A backend token needs an http(s) backend URL. Nothing was changed.' });
+      }
+      if (isPlain(brainFields) && typeof brainFields.url === 'string') {
+        try {
+          const owner = await __loadOwnedPlugin('auth', 'configuration');
+          owner.assertLegacyTokenNotRebound({ file: brainPath, url: brainFields.url });
+        } catch (err) {
+          const legacy = /legacy token/.test(String(err?.message));
+          return res.status(legacy ? 409 : 503).json({ error: legacy
+            ? 'brain.json holds a legacy token for its current endpoint; clear it before changing the endpoint. Nothing was changed.'
+            : 'Auth configuration is unavailable. Nothing was changed.' });
+        }
+      }
+    }
+
     // Only real secret values reach Auth; masked placeholders from GET are ignored.
     const secretOps = [];
     for (const [alias, key] of Object.entries(SECRET_KEYS)) {
@@ -273,7 +297,7 @@ router.post('/api/config-json', requireAuth, requireScope('config:write'), async
     }
 
     // An explicit backend credential goes to the Auth owner under its canonical key, never into brain.json.
-    if (brainToken !== undefined) secretOps.push({ alias: 'brain.token', key: BACKEND_TOKEN_KEY, value: brainToken });
+    if (brainToken !== undefined) secretOps.push({ alias: 'brain.token', key: BACKEND_TOKEN_KEY, value: brainToken, bindUrl });
 
     const plan = [];
     if (secretOps.length) plan.push('secrets');
@@ -295,8 +319,12 @@ router.post('/api/config-json', requireAuth, requireScope('config:write'), async
       try {
         const { setSecret, deleteSecret } = await __loadOwnedPlugin('auth', 'secrets-store');
         for (const op of secretOps) {
-          if (op.remove) await deleteSecret(BRAIN_DIR, op.key, { action: 'delete', actor: 'settings-config' });
-          else await setSecret(BRAIN_DIR, op.key, op.value, { action: 'set', actor: 'settings-config' });
+          if (op.bindUrl) {
+            // Auth fixes the endpoint binding in the same store update as the value.
+            const { saveConnectionToken } = await __loadOwnedPlugin('auth', 'configuration');
+            await saveConnectionToken({ brainDir: authStoreDir(), url: op.bindUrl, token: op.value, actor: 'settings-config' });
+          } else if (op.remove) await deleteSecret(authStoreDir(), op.key, { action: 'delete', actor: 'settings-config' });
+          else await setSecret(authStoreDir(), op.key, op.value, { action: 'set', actor: 'settings-config' });
           appliedKeys.push(op.alias);
         }
         applied.push('secrets');

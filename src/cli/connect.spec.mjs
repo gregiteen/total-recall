@@ -5,6 +5,7 @@
  * for Cursor, Claude Code, and Codex clients, and registers the client
  * in clients.json.
  */
+import { readTokenStdin } from './connect.mjs';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import fs from 'node:fs';
 import os from 'node:os';
@@ -377,12 +378,23 @@ describe('maskToken', () => {
     const masked = maskToken(token);
     expect(masked).not.toContain(token);
     expect(masked.startsWith('tr_abc')).toBe(true);
-    expect(masked).toContain('brain.json');
+    expect(masked).toContain('Auth');
   });
 
   it('hides short or missing tokens entirely', async () => {
     const { maskToken } = await import('./connect.mjs');
     expect(maskToken('short')).toBe('<PAT>');
     expect(maskToken(undefined)).toBe('<PAT>');
+  });
+});
+
+describe('connect --token-stdin', () => {
+  it('reads one line, trims it, and never needs argv', () => {
+    expect(readTokenStdin({}, () => 'tr_abc \nignored\n', false)).toBe('tr_abc');
+  });
+  it('refuses a terminal, empty input and a second token source', () => {
+    expect(() => readTokenStdin({}, () => 'x', true)).toThrow(/not a terminal/);
+    expect(() => readTokenStdin({}, () => '\n', false)).toThrow(/received no token/);
+    expect(() => readTokenStdin({ token: 'tr_argv' }, () => 'x', false)).toThrow(/not both/);
   });
 });

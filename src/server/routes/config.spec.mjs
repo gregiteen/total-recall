@@ -7,6 +7,7 @@ import fs from 'node:fs';
 
 let authEnabled = true;
 const authOwner = vi.hoisted(() => ({ listSecretsMeta: vi.fn(), setSecret: vi.fn(), deleteSecret: vi.fn() }));
+const configOwner = vi.hoisted(() => ({ saveConnectionToken: vi.fn(), assertLegacyTokenNotRebound: vi.fn(), runtimeConfiguration: () => ({}) }));
 const writes = vi.hoisted(() => ({ writeFileSecure: vi.fn() }));
 const fixture = vi.hoisted(() => ({ security: { api: { pats: [] }, rate_limits: {} } }));
 
@@ -15,7 +16,7 @@ vi.mock('../../core/secure-file.mjs', () => ({ writeFileSecure: writes.writeFile
 vi.mock('../../core/plugin-runtime.mjs', async importOriginal => {
   const actual = await importOriginal();
   return { ...actual, loadPluginModule: vi.fn(async (id, name, ...args) => {
-    return id === 'auth' && name === 'secrets-store' ? authOwner : actual.loadPluginModule(id, name, ...args);
+    return id === 'auth' && name === 'secrets-store' ? authOwner : id === 'auth' && name === 'configuration' ? configOwner : actual.loadPluginModule(id, name, ...args);
   }) };
 });
 
@@ -53,6 +54,7 @@ app.use(configRouter);
 
 describe('Config Router', () => {
   beforeEach(() => {
+    process.env.TR_SECRETS_BRAIN = '/tmp/mock-brain';
     authEnabled = true;
     vi.restoreAllMocks();
     vi.clearAllMocks();
@@ -61,6 +63,8 @@ describe('Config Router', () => {
     authOwner.listSecretsMeta.mockReset().mockResolvedValue([]);
     authOwner.deleteSecret.mockReset().mockResolvedValue(false);
     authOwner.setSecret.mockReset().mockResolvedValue(undefined);
+    configOwner.saveConnectionToken.mockReset().mockResolvedValue({ key: 'TOTAL_RECALL_TOKEN', origin: 'https://x.test' });
+    configOwner.assertLegacyTokenNotRebound.mockReset().mockReturnValue({ ok: true });
   });
 
   it('GET /api/config requires auth', async () => {
@@ -277,18 +281,53 @@ describe('Config Router', () => {
     describe('backend credential under Auth', () => {
       const NEW_TOKEN = 'tr_new_backend_token_canary_55';
 
-      it('sends an explicit token to Auth under the canonical key and never writes it to brain.json', async () => {
+      it('sends an explicit token to Auth, bound to the endpoint, and never writes it to brain.json', async () => {
         stubFiles();
         const res = await request(app).post('/api/config-json').send({ brain: { name: 'n', token: NEW_TOKEN, has_token: true } });
         expect(res.status).toBe(200);
         expect(res.body).toEqual({ success: true, applied: ['secrets', 'brain'] });
-        expect(authOwner.setSecret).toHaveBeenCalledExactlyOnceWith('/tmp/mock-brain', 'TOTAL_RECALL_TOKEN', NEW_TOKEN, { action: 'set', actor: 'settings-config' });
+        // The endpoint is the one already in the public config; Auth fixes the binding with the value.
+        expect(configOwner.saveConnectionToken).toHaveBeenCalledExactlyOnceWith({ brainDir: '/tmp/mock-brain', url: 'https://x.test', token: NEW_TOKEN, actor: 'settings-config' });
+        expect(authOwner.setSecret).not.toHaveBeenCalled();
         const written = writes.writeFileSecure.mock.calls.map(c => c[1]).join('\n');
         expect(written).not.toContain(NEW_TOKEN);
         // The legacy file token is preserved in place: not copied, exposed or migrated.
         expect(JSON.parse(writes.writeFileSecure.mock.calls[0][1])).toMatchObject({ token: BRAIN_TOKEN, name: 'n' });
         expect(JSON.stringify(res.body)).not.toContain(NEW_TOKEN);
-        expect(authOwner.setSecret).not.toHaveBeenCalledWith(expect.anything(), expect.anything(), BRAIN_TOKEN, expect.anything());
+      });
+
+      it('binds a new token to the URL submitted in the same save', async () => {
+        stubFiles();
+        await request(app).post('/api/config-json').send({ brain: { url: 'https://new.test', token: NEW_TOKEN } });
+        expect(configOwner.saveConnectionToken.mock.calls[0][0]).toMatchObject({ url: 'https://new.test' });
+      });
+
+      it('refuses a token with no endpoint, changing nothing', async () => {
+        vi.spyOn(fs, 'existsSync').mockReturnValue(false);
+        const res = await request(app).post('/api/config-json').send({ brain: { token: NEW_TOKEN } });
+        expect(res.status).toBe(400);
+        expect(res.body.error).toMatch(/needs an http\(s\) backend URL/);
+        expect(configOwner.saveConnectionToken).not.toHaveBeenCalled();
+        expect(writes.writeFileSecure).not.toHaveBeenCalled();
+      });
+
+      it('refuses to move a legacy-token brain.json to another endpoint, changing nothing', async () => {
+        stubFiles();
+        configOwner.assertLegacyTokenNotRebound.mockImplementation(() => { throw new Error('This brain.json holds a legacy token for its current endpoint; clear it before changing the endpoint'); });
+        const res = await request(app).post('/api/config-json').send({ brain: { url: 'https://new.test' }, security: { network: { require_https: false } } });
+        expect(res.status).toBe(409);
+        expect(configOwner.assertLegacyTokenNotRebound).toHaveBeenCalledWith({ file: '/tmp/mock-brain/config/brain.json', url: 'https://new.test' });
+        expect(writes.writeFileSecure).not.toHaveBeenCalled();
+        expect(authOwner.setSecret).not.toHaveBeenCalled();
+      });
+
+      it('reports Auth configuration unavailable before writing anything', async () => {
+        stubFiles();
+        configOwner.assertLegacyTokenNotRebound.mockImplementation(() => { throw new Error('auth-canary decrypt failure'); });
+        const res = await request(app).post('/api/config-json').send({ brain: { url: 'https://new.test' } });
+        expect(res.status).toBe(503);
+        expect(JSON.stringify(res.body)).not.toContain('auth-canary');
+        expect(writes.writeFileSecure).not.toHaveBeenCalled();
       });
 
       it('a token-only save touches no config file', async () => {
@@ -303,14 +342,14 @@ describe('Config Router', () => {
         stubFiles();
         const res = await request(app).post('/api/config-json').send({ brain: { token: '', has_token: true } });
         expect(res.status).toBe(200);
-        expect(authOwner.setSecret).not.toHaveBeenCalled();
+        expect(configOwner.saveConnectionToken).not.toHaveBeenCalled();
         expect(authOwner.deleteSecret).not.toHaveBeenCalled();
         expect(writes.writeFileSecure).not.toHaveBeenCalled();
       });
 
       it('a failed Auth write is reported with files untouched and no diagnostics', async () => {
         stubFiles();
-        authOwner.setSecret.mockRejectedValue(new Error('auth-canary'));
+        configOwner.saveConnectionToken.mockRejectedValue(new Error('auth-canary'));
         const res = await request(app).post('/api/config-json').send({ brain: { name: 'n', token: NEW_TOKEN } });
         expect(res.status).toBe(503);
         expect(res.body).toMatchObject({ applied: [], failed: 'secrets', not_attempted: ['brain'] });

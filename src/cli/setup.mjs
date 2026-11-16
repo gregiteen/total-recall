@@ -22,7 +22,7 @@ import path from 'node:path';
 import https from 'node:https';
 import { fileURLToPath } from 'node:url';
 import { resolveAgentDir, resolveBrainDir } from './agent-dir.mjs';
-import { writeBrainConnection } from '../core/memory-brain.mjs';
+import { saveBackendConnection } from '../core/connection-token.mjs';
 const { loadSecrets, saveSecrets } = await __loadOwnedPlugin('auth', 'secrets-store');
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -376,7 +376,8 @@ async function getGitHubUser(githubToken) {
 // ─── Store brain config ───────────────────────────────────────────────────────
 
 async function storeBrainConfig(brDir, brainUrl, token, provider, apiKey, extra = {}) {
-  writeBrainConnection(brDir, { url: brainUrl, token, provider, ...extra });
+  // The access token is kept by Auth, bound to the backend URL; brain.json holds public settings only.
+  await saveBackendConnection(brDir, { url: brainUrl, token: token || undefined, provider, ...extra });
 
   // secrets.enc
   let secrets = {};

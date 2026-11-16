@@ -86,6 +86,15 @@ export function mergeSecretMeta(prev = {}, patch = {}) {
   // provides TICKETS_SIGNING_SECRET to the repos it is bound to (see resolveSecretKey).
   assign('provides', (v) => (v == null || v === '' ? null : String(v)));
   assign('project_path', (v) => (v == null || v === '' ? null : String(v)));
+  // The one http(s) origin a connection credential may be sent to; fixed when the value is saved.
+  assign('bound_origin', (v) => {
+    if (v == null || v === '') return null;
+    try {
+      const url = new URL(String(v));
+      if (url.protocol !== 'http:' && url.protocol !== 'https:') throw new Error('protocol');
+      return url.origin;
+    } catch { throw new Error('bound_origin must be an http(s) origin'); }
+  });
   assign('headscale_url', (v) => (v == null || v === '' ? null : String(v)));
   // Command that prints the headscale server log. Watch mode needs it because
   // headscale exposes no pending-registration API -- a device waiting to be
@@ -528,6 +537,7 @@ export async function setSecret(brainDir, key, value, opts = {}) {
 
   const secrets = ensureMeta(await loadSecrets(brainDir));
   const prev = secrets[META_KEY].keys[key] || {};
+  const prevValue = secrets[key];
   const now = new Date().toISOString();
   secrets[key] = String(value);
   secrets[META_KEY].keys[key] = mergeSecretMeta(prev, {
@@ -546,6 +556,8 @@ export async function setSecret(brainDir, key, value, opts = {}) {
     auto_rotate: opts.auto_rotate !== undefined ? opts.auto_rotate : prev.auto_rotate,
     notes: opts.notes !== undefined ? opts.notes : prev.notes,
     project_path: opts.project_path !== undefined ? opts.project_path : prev.project_path,
+    // A changed value never inherits the previous endpoint binding.
+    bound_origin: opts.bound_origin !== undefined ? opts.bound_origin : (prevValue === String(value) && prev.bound_origin ? prev.bound_origin : null),
     label: opts.label !== undefined ? opts.label : prev.label,
     created_at: prev.created_at || now,
     updated_at: now,

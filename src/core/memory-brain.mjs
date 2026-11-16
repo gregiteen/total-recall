@@ -34,6 +34,8 @@ function readBrainConfig(file) {
 
 /** Update connection settings without replacing the existing brain identity. */
 export function writeBrainConnection(brainDir, fields) {
+  // brain.json is public configuration. A token goes to the Auth owner (saveBackendConnection).
+  if (fields && Object.hasOwn(fields, 'token')) throw new Error('A connection token cannot be written to brain.json; store it through Auth.');
   const file = path.join(brainDir, 'config', 'brain.json');
   const current = readBrainConfig(file);
   ensureDir(path.dirname(file));

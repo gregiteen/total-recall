@@ -34,7 +34,7 @@ describe('resolveConnectionToken against the real Auth owner', () => {
   });
 
   it('serves the Auth token for the configured origin and refuses another origin', async () => {
-    await store.setSecret(authBrain, 'TOTAL_RECALL_TOKEN', 'auth-token');
+    await owner.saveConnectionToken({ brainDir: authBrain, url: 'https://brain.test', token: 'auth-token' });
     expect((await resolve()).token).toBe('auth-token');
     expect(await resolve({ url: 'https://elsewhere.test' })).toMatchObject({ token: null, reason: 'origin-mismatch' });
   });
@@ -54,8 +54,14 @@ describe('resolveConnectionToken against the real Auth owner', () => {
     await expect(resolve()).rejects.toThrow(/Unlock auth/);
   });
 
+  it('never forwards an Auth token that has no endpoint binding', async () => {
+    fs.writeFileSync(legacyFile, JSON.stringify({ url: 'https://brain.test' }));
+    await store.setSecret(authBrain, 'TOTAL_RECALL_TOKEN', 'unbound-token');
+    expect(await resolve()).toMatchObject({ token: null, reason: 'token-unbound' });
+  });
+
   it('selects the store from TR_SECRETS_BRAIN, never TR_BRAIN', async () => {
-    await store.setSecret(authBrain, 'TOTAL_RECALL_TOKEN', 'auth-token');
+    await owner.saveConnectionToken({ brainDir: authBrain, url: 'https://brain.test', token: 'auth-token' });
     process.env.TR_SECRETS_BRAIN = authBrain;
     const prevUrl = process.env.TR_BRAIN; process.env.TR_BRAIN = 'https://brain.test';
     try { expect((await resolveConnectionToken({ owner, url: 'https://brain.test', legacyBrainJson: [legacyFile] })).token).toBe('auth-token'); }

@@ -2,11 +2,10 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { agentDir as configAgentDir, brainDir as configBrainDir, xdgConfigHome, trBrain, trPat } from '../core/config.mjs';
-import { resolveConnectionToken } from '../core/connection-token.mjs';
+import { resolveConnectionToken, saveBackendConnection } from '../core/connection-token.mjs';
 import { fileURLToPath } from 'node:url';
 import { resolveAgentDir, getBothBrains, detectProjectBrain } from './agent-dir.mjs';
 import { discoverRepoSkills, projectSkillsAsCommands } from './skill-projection.mjs';
-import { writeBrainConnection } from '../core/memory-brain.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 // Resolve templates dir relative to this file (src/cli/ → ../../templates/)
@@ -243,6 +242,7 @@ function parseArgs(args) {
     switch (args[i]) {
       case '--brain': opts.brain = args[++i]; break;
       case '--token': opts.token = args[++i]; break;
+      case '--token-stdin': opts.tokenStdin = true; break;
       case '--vault': opts.vault = args[++i]; break;
       case '--force': opts.force = true; break;
       case '--json': opts.json = true; break;
@@ -284,7 +284,8 @@ function printHelp() {
 
   Options:
     --brain <url>      Brain base URL for API clients
-    --token <token>    Bearer PAT for generated snippets
+    --token <token>    Bearer PAT for generated snippets (visible in the process list; prefer --token-stdin)
+    --token-stdin      Read the PAT from one line of stdin instead of argv
     --vault <path>     Obsidian vault path (auto-detected on macOS if omitted)
     --force            Overwrite generated target files
     --json             Emit machine-readable connection details
@@ -379,9 +380,10 @@ function readInstructions(cwd, agentDir) {
   return fs.readFileSync(found, 'utf8');
 }
 
-function ensureBrainConfig(brainDir, opts) {
+/** Public url only goes to brain.json; an explicit token is kept by Auth, bound to that url. */
+async function ensureBrainConfig(brainDir, opts, explicitToken) {
   if (!opts.brain) return null;
-  return writeBrainConnection(brainDir, { url: opts.brain, token: opts.token || undefined });
+  return saveBackendConnection(brainDir, { url: opts.brain, token: explicitToken || undefined });
 }
 
 function registerClient(brainDir, clientName, preset, projectionPath) {
@@ -450,8 +452,8 @@ function apiDetails(opts) {
     ssss_manifest_url: `${base}/api/ssss`,
     discovery_url: `${base}/.well-known/total-recall.json`,
     // Never the token itself: this goes to stdout and --json, where it lands in
-    // terminal scrollback, CI logs and agent transcripts. Clients read the
-    // token from brain.json (0600).
+    // terminal scrollback, CI logs and agent transcripts. Clients resolve the
+    // token through the Auth owner.
     authorization_header: opts.token ? `Authorization: Bearer ${maskToken(opts.token)}` : 'Authorization: Bearer <PAT>'
   };
 }
@@ -459,7 +461,7 @@ function apiDetails(opts) {
 export function maskToken(token) {
   const value = String(token || '');
   if (value.length <= 8) return '<PAT>';
-  return `${value.slice(0, 6)}… (full token in config/brain.json)`;
+  return `${value.slice(0, 6)}… (full token stored by Auth)`;
 }
 
 function detectObsidianVault() {
@@ -674,12 +676,25 @@ $ARGUMENTS`
 }
 
 
+/** Read the connection token from stdin once; refuse a terminal, empty input or a second source. */
+export function readTokenStdin(opts = {}, readStdin = () => fs.readFileSync(0, 'utf8'), isTTY = Boolean(process.stdin.isTTY)) {
+  if (opts.token) throw new Error('Use either --token or --token-stdin, not both.');
+  if (isTTY) throw new Error('--token-stdin needs the token piped on stdin, not a terminal.');
+  const token = readStdin().split(/\r?\n/)[0].trim();
+  if (!token) throw new Error('--token-stdin received no token on stdin.');
+  return token;
+}
+
 export default async function connect(args) {
   const opts = parseArgs(args);
   if (opts.help || !opts.client) {
     printHelp();
     return;
   }
+  // Consumed before any other work, so no later subprocess can take it and a bad input stops here.
+  if (opts.tokenStdin) opts.token = readTokenStdin(opts);
+  // Only a token the operator supplied is saved; one resolved from Auth or a legacy file is never copied.
+  const explicitToken = opts.token || null;
 
   if (opts.client === 'gemini') {
     console.error("Gemini CLI was deprecated by Google; Antigravity (agy) is the official Google agent harness. Run 'total-recall connect antigravity' instead.");
@@ -779,7 +794,7 @@ export default async function connect(args) {
     }
   }
 
-  const brainConfigPath = ensureBrainConfig(brainDir, opts);
+  const brainConfigPath = await ensureBrainConfig(brainDir, opts, explicitToken);
   const details = apiDetails(opts);
   const result = {
     client: opts.client,
