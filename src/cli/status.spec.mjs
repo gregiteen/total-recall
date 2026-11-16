@@ -219,6 +219,40 @@ describe('status command', () => {
     expect(logs).toContain('Local daemon:     not-started');
   });
 
+  it('asks the configured local server for health, not port 3000', async () => {
+    const original = readFileSyncSpy.getMockImplementation();
+    readFileSyncSpy.mockImplementation((p) => String(p).includes('brain.json')
+      ? JSON.stringify({ url: 'http://127.0.0.1:3900', layer: 'project', name: 'ssss' }) : original(p));
+    vi.spyOn(fs, 'statSync').mockReturnValue({ size: 100, mtime: new Date(), mtimeMs: 1 });
+    await statusCmd(['--json']);
+    const health = fetchSpy.mock.calls.map(([url]) => String(url)).filter((url) => url.includes('/health'));
+    expect(health).toEqual(['http://127.0.0.1:3900/health']);
+    expect(JSON.parse(logSpy.mock.calls[0][0]).server.status).toBe('healthy');
+  });
+
+  it('names the server as the owner of a daemon it runs from another install, in JSON and text', async () => {
+    const entry = '/srv/checkout/src/core/daemon-loop.mjs';
+    getDaemonObservation.mockReturnValue({ status: 'conflict', reason: 'foreign-pid', pid: 41, entry,
+      expected_entry: '/own/daemon-loop.mjs', source: 'local-pid' });
+    const existing = fetchSpy.getMockImplementation();
+    fetchSpy.mockImplementation(async (url, options) => String(url).includes('/health')
+      ? { ok: true, json: async () => ({ status: 'degraded', uptime_seconds: 5,
+        daemon_observation: { status: 'running', pid: 41, entry, expected_entry: entry, source: 'local-pid' } }) }
+      : existing(url, options));
+    vi.spyOn(fs, 'statSync').mockReturnValue({ size: 100, mtime: new Date(), mtimeMs: 1 });
+    await statusCmd(['--json']);
+    const report = JSON.parse(logSpy.mock.calls[0][0]);
+    expect(report.daemon).toBe('running');
+    expect(report.daemon_observation).toMatchObject({ status: 'running', pid: 41, entry, expected_entry: entry,
+      cli_expected_entry: '/own/daemon-loop.mjs', verified_by: 'local-server-health' });
+    logSpy.mockClear();
+    await statusCmd([]);
+    const logs = logSpy.mock.calls.flat().join('\n');
+    expect(logs).toContain('Daemon Status:    🟢 Running');
+    expect(logs).toContain(`Daemon owner:     this host's server, from its own install (${entry})`);
+    expect(logs).not.toContain('foreign-pid');
+  });
+
   it('accepts the server markdown instructions response', async () => {
     vi.spyOn(fs, 'statSync').mockReturnValue({
       size: 100,

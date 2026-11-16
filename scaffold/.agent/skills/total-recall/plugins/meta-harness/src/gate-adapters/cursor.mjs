@@ -6,9 +6,14 @@ import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 
-import { gateCommand, readJsonFile, readJsonQuietly, writeJsonFile } from './hook-files.mjs';
+import { gateBinary, gateLauncherScript, writeGateLauncher, readJsonFile, readJsonQuietly, writeJsonFile, LAUNCHER_HOOK_TIMEOUT_SECONDS } from './hook-files.mjs';
 
 const ACK_COMMAND = 'total-recall tr-preflight --ack --task "<task>" --action read,edit,test';
+
+const GATE = 'preflight gate --harness cursor';
+/** Named like the command, and outside its package, so an update cannot remove what the hook runs. */
+export const launcherPath = (home = os.homedir()) => path.join(home, '.cursor', 'hooks', 'total-recall');
+const isGate = (row) => String(row?.command || '').includes(GATE);
 
 export const cursorAdapter = {
   id: 'cursor',
@@ -26,7 +31,8 @@ export const cursorAdapter = {
   },
   limits: [
     'Cursor defaults to fail-open unless failClosed: true is set',
-    'User-level hooks apply across workspaces; requires failClosed flag'
+    'User-level hooks apply across workspaces; requires failClosed flag',
+    'A failClosed hook whose command is missing blocks every call, so the hook runs a launcher outside the Total Recall package'
   ],
 
   parse(input = {}) {
@@ -90,18 +96,24 @@ export const cursorAdapter = {
     return this.emit(decision, parsed.event, parsed.cwd);
   },
 
-  install({ home = os.homedir(), dryRun = false, remove = false, off = false } = {}) {
+  install({ home = os.homedir(), dryRun = false, remove = false, off = false, env = process.env } = {}) {
     const hooksPath = path.join(home, '.cursor', 'hooks.json');
+    const launcher = launcherPath(home);
     const config = readJsonFile(hooksPath, {});
     const added = [];
     const removed = [];
     if (remove || off) {
       const gates = config.hooks?.preToolUse;
-      const kept = Array.isArray(gates) ? gates.filter((row) => !String(row?.command || '').includes('preflight gate --harness cursor')) : [];
+      const kept = Array.isArray(gates) ? gates.filter((row) => !isGate(row)) : [];
       if (Array.isArray(gates) && kept.length !== gates.length) {
         config.hooks.preToolUse = kept;
         removed.push('managed gate');
         if (!dryRun) writeJsonFile(hooksPath, config);
+      }
+      // Only after the hook line is gone: a line left pointing at a deleted launcher blocks every call.
+      if (fs.existsSync(launcher)) {
+        if (!dryRun) fs.rmSync(launcher);
+        removed.push('gate launcher');
       }
       return { settings: hooksPath, added, removed };
     }
@@ -109,22 +121,36 @@ export const cursorAdapter = {
     // failClosed is a field on each hook, not on the file.
     if ('failClosed' in config) { delete config.failClosed; removed.push('file-level failClosed, which Cursor does not read'); }
     config.hooks = config.hooks || {};
-    const command = gateCommand('cursor');
+    // The launcher goes in before the hook line that names it.
+    const wrote = writeGateLauncher(launcher, gateLauncherScript(gateBinary('cursor', env),
+      (message) => ({ permission: 'deny', user_message: message, agent_message: message })), { dryRun });
+    if (wrote) added.push(wrote);
+    const command = `${launcher} ${GATE}`;
     const list = config.hooks.preToolUse = config.hooks.preToolUse || [];
-    const entry = list.find((row) => String(row?.command || '').includes('preflight gate --harness cursor'));
+    const entry = list.find(isGate);
     if (!entry) {
-      list.push({ command, matcher: '*', timeout: 10, failClosed: true });
+      list.push({ command, matcher: '*', timeout: LAUNCHER_HOOK_TIMEOUT_SECONDS, failClosed: true });
       added.push('managed preToolUse gate (failClosed: true)');
-    } else if (entry.failClosed !== true) {
-      entry.failClosed = true;
-      added.push('failClosed on the managed gate');
+    } else {
+      if (entry.failClosed !== true) {
+        entry.failClosed = true;
+        added.push('failClosed on the managed gate');
+      }
+      // An entry that runs the command directly is the one an update breaks.
+      if (entry.command !== command) {
+        entry.command = command;
+        entry.timeout = LAUNCHER_HOOK_TIMEOUT_SECONDS;
+        added.push('managed gate (now runs through the launcher)');
+      }
     }
     if (!dryRun && (added.length || removed.length)) writeJsonFile(hooksPath, config);
     return { settings: hooksPath, added, removed };
   },
 
   verify({ home = os.homedir() } = {}) {
-    const installed = (readJsonQuietly(path.join(home, '.cursor', 'hooks.json')).hooks?.preToolUse || []).some((row) => String(row?.command || '').includes('preflight gate --harness cursor') && row.failClosed === true);
+    // A hook line that names a launcher which is not there blocks every call, so it is not installed.
+    const installed = (readJsonQuietly(path.join(home, '.cursor', 'hooks.json')).hooks?.preToolUse || []).some((row) => isGate(row) && row.failClosed === true
+      && (!String(row.command).includes(launcherPath(home)) || fs.existsSync(launcherPath(home))));
     const out = this.emit({ decision: 'deny', reason: 'receipt missing', fix: ACK_COMMAND }, 'preToolUse', '/nonexistent-directory-without-receipt');
     return {
       installed,

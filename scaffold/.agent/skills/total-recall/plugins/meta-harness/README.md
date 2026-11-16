@@ -100,7 +100,11 @@ daemon's plugin task, attempting every stale adapter per run. Failed pages remai
 visible as failures and cannot certify complete coverage; successful cached
 content remains readable. `setup --node <recorded-node>` selects maintenance
 placement for `maintenance`, `maintenance --models` and `alerts check` without
-creating a second scheduler. Each maintenance step reports its failures. A failed
+creating a second scheduler. `maintenance --harnesses` runs daily on the same node and updates each installed
+harness with that harness's own update command; `--dry-run` reports what is waiting and changes
+nothing. Hermes is asked first, because its update restarts the gateway; pi, cline, openclaw and DSH wait
+while a copy is running. The Hermes and Cursor gates run through a launcher outside the Total Recall
+package, so an update of Total Recall cannot leave their fail-closed hooks without a command. Each maintenance step reports its failures. A failed
 setup or gate install does not prevent documentation refresh for other harnesses.
 
 Standalone Total Recall owner for CLI-agent discovery and explicit mesh command execution. Install with `total-recall plugin install <path-or-private-git-url>`. Installation rebuilds the plugin inventory, CLI library and connected instruction surfaces. No model account is created or selected automatically.

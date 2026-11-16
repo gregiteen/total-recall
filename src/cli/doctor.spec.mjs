@@ -102,7 +102,8 @@ describe('doctor command', () => {
     // Clean exitCode state before run
     process.exitCode = undefined;
  
-    await doctor();
+    // Nothing answers as Total Recall on the taken port, so it is another service's.
+    await doctor([], { observe: async () => ({ status: 'none' }) });
  
     expect(process.exitCode).toBe(1);
  
@@ -123,6 +124,64 @@ describe('doctor command', () => {
     expect(process.exitCode).toBe(1);
     expect(logSpy.mock.calls.flat().join('\n')).toContain('Required auth plugin is missing');
     process.exitCode = undefined;
+  });
+});
+
+describe('doctor checks the port this host\'s server is configured on', () => {
+  let logSpy, origEnv, agentDir;
+  const taken = () => vi.spyOn(net, 'createServer').mockImplementation(() => {
+    const server = { close: vi.fn(), once: vi.fn((event, callback) => { server[event] = callback; }),
+      listen: vi.fn(() => setTimeout(() => server.error({ code: 'EADDRINUSE' }), 0)) };
+    return server;
+  });
+  beforeEach(() => {
+    origEnv = { ...process.env };
+    agentDir = fs.mkdtempSync(path.join(os.tmpdir(), 'tr-doctor-port-'));
+    fs.mkdirSync(path.join(agentDir, 'skills', 'total-recall', 'config'), { recursive: true });
+    process.env.AGENT_DIR = agentDir;
+    logSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    vi.spyOn(child_process, 'execFileSync').mockReturnValue('');
+    vi.spyOn(child_process, 'execSync').mockReturnValue('');
+    vi.spyOn(startupHealth, 'processIdentity').mockReturnValue({ status: 'conflict', reason: 'foreign-pid' });
+  });
+  afterEach(() => {
+    process.env = origEnv;
+    process.exitCode = undefined;
+    vi.restoreAllMocks();
+    fs.rmSync(agentDir, { recursive: true, force: true });
+  });
+  const brain = (url) => fs.writeFileSync(path.join(agentDir, 'skills', 'total-recall', 'config', 'brain.json'), JSON.stringify({ url }));
+  const logged = () => logSpy.mock.calls.map((c) => String(c[0])).join('\n');
+
+  it('accepts a server from another install that answers /health on the configured port, and never fails port 3000', async () => {
+    brain('http://127.0.0.1:3900');
+    taken();
+    const observe = vi.fn(async () => ({ status: 'running', url: 'http://127.0.0.1:3900', version: '9.9.9' }));
+    await doctor([], { observe });
+    expect(observe).toHaveBeenCalledWith({ url: 'http://127.0.0.1:3900', timeoutMs: 5000 });
+    const out = logged();
+    expect(out).toContain('Port 3900 : In use by the Total Recall server answering /health there (version 9.9.9)');
+    expect(out).not.toContain('Port 3000');
+    expect(out).not.toContain('CONFLICT');
+  });
+
+  it('still fails when something else holds the configured port', async () => {
+    brain('http://127.0.0.1:3900');
+    taken();
+    await doctor([], { observe: async () => ({ status: 'unknown', reason: '/health answered HTTP 404' }) });
+    expect(logged()).toContain('Port 3900 : CONFLICT — Already bound by another service');
+    expect(process.exitCode).toBe(1);
+  });
+
+  it('needs no local port when the brain is served from another host', async () => {
+    brain('https://brain.example');
+    taken();
+    const observe = vi.fn();
+    await doctor([], { observe });
+    expect(observe).not.toHaveBeenCalled();
+    expect(logged()).toContain('this brain is served from another host');
+    expect(logged()).not.toContain('CONFLICT');
   });
 });
 

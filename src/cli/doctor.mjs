@@ -19,6 +19,7 @@ import { getGlobalBrainDir } from './agent-dir.mjs';
 import { processIdentity, verifyListener } from '../core/startup-health.mjs';
 import { loadKnownRepoRoots } from '../core/skills-registry.mjs';
 import { inspectRequiredPlugins } from '../core/required-plugins.mjs';
+import { localServerUrl, observeRunningServer } from '../core/running-server.mjs';
 
 // ─── Formatting & UI Helpers ────────────────────────────────────────────────
 function log(msg)     { console.log(`  ${msg}`); }
@@ -82,7 +83,7 @@ export async function isOwnedServerPort(port, { brainDir = getGlobalBrainDir(), 
 }
 
 // ─── Main Doctor Routine ─────────────────────────────────────────────────────
-export default async function doctor(args = []) {
+export default async function doctor(args = [], { observe = observeRunningServer } = {}) {
   if (args.includes('--help') || args.includes('-h')) {
     console.log(`
   total-recall doctor — Diagnose this machine's Total Recall runtime
@@ -175,8 +176,13 @@ export default async function doctor(args = []) {
   hr();
   logInfo('3. NETWORKING PORT AVAILABILITY');
 
+  // The port this host's server is configured on. Checking 3000 on every host failed a machine
+  // whose server answers elsewhere and whose port 3000 belongs to something unrelated.
+  const serverUrl = localServerUrl({ brainDir: getGlobalBrainDir() });
+  const serverPort = serverUrl ? Number(new URL(serverUrl).port) || 80 : null;
+  if (!serverUrl) logOk('Total Recall API Server: this brain is served from another host, so no local port is needed');
   const ports = [
-    { num: 3000, desc: 'Total Recall API Server', critical: true },
+    ...(serverPort ? [{ num: serverPort, desc: 'Total Recall API Server', critical: true }] : []),
     { num: 8888, desc: 'SearXNG Web Search Engine', critical: false },
     { num: 80, desc: 'HTTP Caddy redirection (Let\'s Encrypt)', critical: false },
     { num: 443, desc: 'HTTPS Caddy TLS ingress', critical: false },
@@ -187,8 +193,13 @@ export default async function doctor(args = []) {
     if (free) {
       logOk(`Port ${String(port.num).padEnd(5)}: Free (${port.desc})`);
     } else {
-      if (port.critical && await isOwnedServerPort(port.num)) {
+      // A server started from another install (the checkout a system service runs) is not this
+      // command's own process, but it is still Total Recall when it answers /health as one.
+      const served = port.critical && !await isOwnedServerPort(port.num) ? await observe({ url: serverUrl, timeoutMs: 5000 }) : null;
+      if (port.critical && !served) {
         logOk(`Port ${String(port.num).padEnd(5)}: In use by verified Total Recall server (${port.desc})`);
+      } else if (served?.status === 'running') {
+        logOk(`Port ${String(port.num).padEnd(5)}: In use by the Total Recall server answering /health there (version ${served.version})`);
       } else if (port.critical) {
         logFail(`Port ${String(port.num).padEnd(5)}: CONFLICT — Already bound by another service (${port.desc})`);
         failures++;

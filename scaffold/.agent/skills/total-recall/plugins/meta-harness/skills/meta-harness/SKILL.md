@@ -20,6 +20,7 @@ Coordinates coding agent harnesses across mesh nodes. `cli-agents` is an alias o
 - `status`, `inspect --node <id>`, `upstream`, `changelog <agent>`, `catalog`, `nodes`: what is installed, signed in and current.
 - `quota [--node <id>]`: readiness, measured usage and walls, OpenRouter balance, and memory across the fleet.
 - `benchmarks`: pricing, Artificial Analysis indices, SWE-bench Pro, and pass rates from this machine's receipts. Refresh with `maintenance --models`.
+- `maintenance --harnesses [--agent <id>] [--dry-run]`: update each installed harness with its own update command (claude, codex, agy, grok, cursor, hermes, pi, cline, openclaw; dsh through npm, forward only), daily on the maintenance node. Hermes is asked first with `hermes update --check`, because its update restarts the gateway. pi, cline, openclaw and dsh wait while a copy is running (`busy`), and a pinned runtime is left to its installer (`managed`).
 - `route "<task>" [--jev] [--execute [--gate] [--tier fast|full|remote] [--background]]`: pick a harness; with `--execute`, run it and escalate on failure.
 - `coordinate "<task>" --mode pipeline|council|race [--execute] [--gate] [--auto-review] [--allow-same-family] [--background]`: without `--execute` it only reports the plan and its blockers.
 - `decompose "<task>"`: the stages and which ready harness takes each.

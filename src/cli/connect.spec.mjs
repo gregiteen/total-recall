@@ -398,3 +398,56 @@ describe('connect --token-stdin', () => {
     expect(() => readTokenStdin({ token: 'tr_argv' }, () => 'x', false)).toThrow(/not both/);
   });
 });
+
+describe('connect repairs a link that no longer reaches the compiled surface', () => {
+  // At home the surface is compiled into the agent dir. A link to a copy beside it froze what a
+  // harness started in the home directory read, and `status` named connect as a repair that
+  // answered "exists" and changed nothing.
+  const atHome = () => {
+    process.env.HOME = process.cwd();
+    fs.writeFileSync(path.join(tmpAgentDir, 'INSTRUCTIONS.md'), '# Compiled today\n', 'utf8');
+    fs.writeFileSync(path.join(tmpProject, 'INSTRUCTIONS.md'), '# Frozen copy\n', 'utf8');
+  };
+
+  it('relinks AGENTS.md at home to the surface compile writes, without --force', async () => {
+    atHome();
+    fs.symlinkSync('INSTRUCTIONS.md', path.join(tmpProject, 'AGENTS.md'));
+    const log = vi.spyOn(console, 'log').mockImplementation(() => {});
+    try {
+      await runConnect(['hermes']);
+      expect(log.mock.calls.flat().join('\n')).toContain('Projection: relinked AGENTS.md');
+    } finally { log.mockRestore(); }
+    expect(fs.readFileSync(path.join(tmpProject, 'AGENTS.md'), 'utf8')).toBe('# Compiled today\n');
+    expect(fs.realpathSync(path.join(tmpProject, 'AGENTS.md'))).toBe(fs.realpathSync(path.join(tmpAgentDir, 'INSTRUCTIONS.md')));
+    // A second run finds it right and leaves it.
+    const before = fs.lstatSync(path.join(tmpProject, 'AGENTS.md')).ino;
+    await runConnect(['hermes']);
+    expect(fs.lstatSync(path.join(tmpProject, 'AGENTS.md')).ino).toBe(before);
+  });
+
+  it('leaves a file or a link of the operator\'s own alone', async () => {
+    atHome();
+    fs.writeFileSync(path.join(tmpProject, 'OWN.md'), '# Mine\n', 'utf8');
+    fs.symlinkSync('OWN.md', path.join(tmpProject, 'AGENTS.md'));
+    await runConnect(['hermes']);
+    expect(fs.readlinkSync(path.join(tmpProject, 'AGENTS.md'))).toBe('OWN.md');
+    fs.rmSync(path.join(tmpProject, 'AGENTS.md'));
+    fs.writeFileSync(path.join(tmpProject, 'AGENTS.md'), '# Hand written\n', 'utf8');
+    await runConnect(['hermes']);
+    expect(fs.readFileSync(path.join(tmpProject, 'AGENTS.md'), 'utf8')).toBe('# Hand written\n');
+  });
+
+  it('keeps linking beside the project surface outside the home directory', async () => {
+    fs.writeFileSync(path.join(tmpAgentDir, 'INSTRUCTIONS.md'), '# Agent dir copy\n', 'utf8');
+    await runConnect(['codex']);
+    expect(fs.readlinkSync(path.join(tmpProject, 'AGENTS.md'))).toBe('INSTRUCTIONS.md');
+  });
+});
+
+describe('connect refuses an option it would otherwise ignore', () => {
+  it('stops before changing anything when given --dry-run', async () => {
+    await expect(runConnect(['codex', '--dry-run'])).rejects.toThrow('Unknown option for connect: --dry-run. Nothing was changed.');
+    expect(fs.existsSync(path.join(tmpProject, 'AGENTS.md'))).toBe(false);
+    expect(fs.existsSync(path.join(tmpAgentDir, 'skills', 'total-recall', 'config', 'clients.json'))).toBe(false);
+  });
+});

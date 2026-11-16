@@ -221,3 +221,34 @@ describe('startup health truth and boundaries', () => {
     expect(report.ready).toBe(true);
   });
 });
+
+describe('a daemon started by this host\'s server from another install', () => {
+  const foreign = { status: 'conflict', reason: 'foreign-pid', pid: 41, entry: '/srv/checkout/src/core/daemon-loop.mjs',
+    expected_entry: '/opt/pkg/src/core/daemon-loop.mjs', source: 'local-pid' };
+  const served = { status: 'running', pid: 41, entry: '/srv/checkout/src/core/daemon-loop.mjs',
+    expected_entry: '/srv/checkout/src/core/daemon-loop.mjs', source: 'local-pid' };
+
+  it('is reported as running and names both installs when the server claims the same process', async () => {
+    const { daemonOwnedByLocalServer } = await import('./startup-health.mjs');
+    for (const health of [{ daemon_observation: served }, { daemon_observation: { ...served, local: served, placement: { mode: 'unknown' } } }]) {
+      expect(daemonOwnedByLocalServer(foreign, health)).toEqual({ status: 'running', pid: 41, source: 'local-pid',
+        entry: served.entry, expected_entry: served.entry, cli_expected_entry: foreign.expected_entry, verified_by: 'local-server-health' });
+    }
+    const delegated = daemonOwnedByLocalServer({ ...foreign, local: foreign, placement: { mode: 'unknown' } }, { daemon_observation: served });
+    expect(delegated.status).toBe('running');
+    expect(delegated.local.status).toBe('running');
+  });
+
+  it('stays a conflict unless the server reports that exact process as its own running daemon', async () => {
+    const { daemonOwnedByLocalServer } = await import('./startup-health.mjs');
+    const cases = [null, {}, { daemon_observation: { ...served, pid: 42 } }, { daemon_observation: { ...served, entry: '/elsewhere/daemon-loop.mjs' } },
+      { daemon_observation: { ...served, status: 'conflict' } }, { daemon_observation: { ...served, source: 'configured-leader-health' } }];
+    for (const health of cases) expect(daemonOwnedByLocalServer(foreign, health)).toEqual(foreign);
+    // Other verdicts are never upgraded, whatever the server says.
+    for (const status of ['unknown', 'stopped', 'not-started']) {
+      const observation = { ...foreign, status };
+      expect(daemonOwnedByLocalServer(observation, { daemon_observation: served })).toEqual(observation);
+    }
+    expect(daemonOwnedByLocalServer({ ...foreign, entry: undefined }, { daemon_observation: served }).status).toBe('conflict');
+  });
+});

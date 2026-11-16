@@ -264,6 +264,30 @@ export async function observeRuntimeDaemon(brainDir, { identity = processIdentit
   return { ...result, ...entry.verdict, observed_at: new Date(entry.at).toISOString(), cached: false, age_ms: 0 };
 }
 
+/**
+ * Whose daemon a status report is looking at, when the command line and the server are two installs.
+ *
+ * On a systemd host they always are: server-release requires the unit to run from a checkout apart
+ * from the installed package. The server starts its daemon from that checkout, so the installed
+ * command saw a healthy daemon as a foreign program and reported a conflict on every run, and an
+ * agent reading that report offered to stop it. When the server on this host reports the same PID
+ * and entry as its own running daemon, the daemon is that server's, and status says so.
+ * For display only. Lifecycle reads the strict observation and still refuses another install's daemon.
+ */
+export function daemonOwnedByLocalServer(observation, health) {
+  const served = health?.daemon_observation?.local ?? health?.daemon_observation;
+  const local = observation?.local ? daemonOwnedByLocalServer(observation.local, health) : undefined;
+  const nested = local ? { local } : {};
+  if (observation?.status !== 'conflict' || observation.reason !== 'foreign-pid' || !observation.entry
+      || served?.status !== 'running' || served.source !== 'local-pid'
+      || served.pid !== observation.pid || served.entry !== observation.entry) {
+    return local ? { ...observation, ...nested } : observation;
+  }
+  const { reason: _reason, ...rest } = observation;
+  return { ...rest, ...nested, status: 'running', expected_entry: served.entry,
+    cli_expected_entry: observation.expected_entry, verified_by: 'local-server-health' };
+}
+
 export function daemonStatusString({ status }) {
   return status === 'not-started' ? 'not_started' : status === 'stopped' ? 'dead' : status;
 }

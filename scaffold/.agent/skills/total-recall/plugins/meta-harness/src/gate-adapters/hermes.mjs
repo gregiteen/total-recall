@@ -6,21 +6,34 @@ import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 
-import { gateCommandWithPath, removeDeadGateFile } from './hook-files.mjs';
+import { gateBinary, gateLauncherScript, writeGateLauncher, removeDeadGateFile, LAUNCHER_HOOK_TIMEOUT_SECONDS } from './hook-files.mjs';
 
 const ACK_COMMAND = 'total-recall tr-preflight --ack --task "<task>" --action read,edit,test';
 
 const GATE = 'preflight gate --harness hermes';
+const HOOK_TIMEOUT_SECONDS = LAUNCHER_HOOK_TIMEOUT_SECONDS;
 const ENTRY = (command) => `    - matcher: ".*"
       command: "${command}"
-      timeout: 10
+      timeout: ${HOOK_TIMEOUT_SECONDS}
       fail_closed: true
 `;
-const ENTRY_LINES = new RegExp(`    - matcher: ".*"\\n      command: "[^"\\n]*${GATE}"\\n      timeout: 10\\n      fail_closed: true\\n`);
+const ENTRY_LINES = new RegExp(`    - matcher: ".*"\\n      command: "[^"\\n]*${GATE}"\\n      timeout: \\d+\\n      fail_closed: true\\n`);
+
+/**
+ * The launcher sits outside the Total Recall package and is named like the command, so the hook
+ * line still reads `total-recall preflight gate --harness hermes` to everything that looks for it.
+ */
+export const launcherPath = (home = os.homedir()) => path.join(home, '.hermes', 'agent-hooks', 'total-recall');
+
+/** What the hook runs: the shared launcher, answering in Hermes's own block shape. */
+export const launcherScript = (cli) => gateLauncherScript(cli, (message) => ({ action: 'block', message }));
+
+/** The hook line: the launcher, then the gate arguments it passes on. */
+const hookCommand = (home) => `${launcherPath(home)} ${GATE}`;
 
 /** Hermes reads shell hooks from config.yaml, so the gate goes there, beside any others. */
-function withGate(text) {
-  const entry = ENTRY(gateCommandWithPath('hermes'));
+function withGate(text, command) {
+  const entry = ENTRY(command);
   if (/^  pre_tool_call:[ \t]*\n/m.test(text)) return text.replace(/^  pre_tool_call:[ \t]*\n/m, (line) => `${line}${entry}`);
   if (/^hooks:[ \t]*\n/m.test(text)) return text.replace(/^hooks:[ \t]*\n/m, (line) => `${line}  pre_tool_call:\n${entry}`);
   if (/^hooks:/m.test(text)) throw new Error('config.yaml sets hooks: on one line; expand it before installing the gate');
@@ -69,7 +82,8 @@ export const hermesAdapter = {
   },
   limits: [
     'Hermes plugin callbacks fail closed on timeout',
-    'Pre-tool hook returns {"action":"block","message":...} with exit 2'
+    'Pre-tool hook returns {"action":"block","message":...} with exit 2',
+    'Hermes reports a missing hook command only as "command not found", so the hook runs a launcher outside the Total Recall package'
   ],
 
   parse(input = {}) {
@@ -135,9 +149,10 @@ export const hermesAdapter = {
     return this.emit(decision, parsed.event, parsed.cwd);
   },
 
-  install({ home = os.homedir(), dryRun = false, remove = false, off = false } = {}) {
+  install({ home = os.homedir(), dryRun = false, remove = false, off = false, env = process.env } = {}) {
     const hermesDir = path.join(home, '.hermes');
     const configPath = path.join(hermesDir, 'config.yaml');
+    const launcher = launcherPath(home);
     const removed = removeDeadGateFile(path.join(hermesDir, 'hooks.json'), 'hermes', { dryRun });
     const added = [];
     const text = fs.existsSync(configPath) ? fs.readFileSync(configPath, 'utf8') : '';
@@ -149,21 +164,37 @@ export const hermesAdapter = {
         if (!dryRun) fs.writeFileSync(configPath, next);
         removed.push('managed pre_tool_call gate');
       }
+      // Only after the hook line is gone: a line left pointing at a deleted launcher blocks every call.
+      if (fs.existsSync(launcher)) {
+        if (!dryRun) fs.rmSync(launcher);
+        removed.push('gate launcher');
+      }
       return { settings: configPath, added, removed };
     }
-    if (!present) {
+    // The launcher goes in before the hook line that names it, and is rewritten when it differs.
+    const wrote = writeGateLauncher(launcher, launcherScript(gateBinary('hermes', env)), { dryRun });
+    if (wrote) added.push(wrote);
+    const command = hookCommand(home);
+    const wired = text.includes(command);
+    if (!wired) {
+      // An entry that runs the command directly is replaced: it is the one an update breaks.
+      const base = present ? withoutGate(text) : text;
+      if (base.includes(GATE)) throw new Error(`could not replace the gate in ${configPath}; remove the pre_tool_call entry that runs "${GATE}" by hand`);
       if (!dryRun) {
         fs.mkdirSync(hermesDir, { recursive: true });
         if (text) fs.copyFileSync(configPath, `${configPath}.bak-total-recall`);
-        fs.writeFileSync(configPath, withGate(text));
+        fs.writeFileSync(configPath, withGate(base, command));
       }
-      added.push('managed pre_tool_call gate');
+      added.push(present ? 'managed pre_tool_call gate (now runs through the launcher)' : 'managed pre_tool_call gate');
     }
-    return { settings: configPath, added, removed, note: 'Hermes asks to approve a new hook on first use, unless hooks_auto_accept is on.' };
+    return { settings: configPath, added, removed, note: 'Hermes asks to approve a new hook on first use, unless hooks_auto_accept is on. A running gateway keeps the hooks it started with until it restarts.' };
   },
 
   verify({ home = os.homedir() } = {}) {
-    const installed = fs.existsSync(path.join(home, '.hermes', 'config.yaml')) && fs.readFileSync(path.join(home, '.hermes', 'config.yaml'), 'utf8').includes(GATE);
+    const configPath = path.join(home, '.hermes', 'config.yaml');
+    const text = fs.existsSync(configPath) ? fs.readFileSync(configPath, 'utf8') : '';
+    // A hook line that names a launcher which is not there blocks every call, so it is not installed.
+    const installed = text.includes(GATE) && (!text.includes(launcherPath(home)) || fs.existsSync(launcherPath(home)));
     const out = this.emit({ decision: 'deny', reason: 'receipt missing', fix: ACK_COMMAND }, 'pre_tool_call', '/nonexistent-directory-without-receipt');
     return {
       installed,

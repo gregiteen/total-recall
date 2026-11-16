@@ -1,7 +1,7 @@
 {
   "id": "meta-harness",
   "name": "Metaharness",
-  "version": "0.4.8",
+  "version": "0.5.0",
   "description": "Discover, configure, document, track, and run coding agent harnesses through Total Recall across mesh nodes.",
   "gate": {
     "tasks": ["Run work in another agent harness", "Choose which harness takes a task", "Check harness versions, sign-in and quota", "Read a harness's official documentation"],
@@ -420,7 +420,7 @@
       },
       {
         "name": "maintenance",
-        "description": "Daemon maintenance: official documentation and integration surfaces, or the model catalog with --models",
+        "description": "Daemon maintenance: official documentation and integration surfaces, the model catalog with --models, or each harness's own update with --harnesses",
         "effect": "write",
         "output": "json",
         "args": [
@@ -429,6 +429,24 @@
             "flag": "--models",
             "type": "boolean",
             "label": "Refresh the model and benchmark catalog"
+          },
+          {
+            "name": "harnesses",
+            "flag": "--harnesses",
+            "type": "boolean",
+            "label": "Update each installed harness with its own update command"
+          },
+          {
+            "name": "dryRun",
+            "flag": "--dry-run",
+            "type": "boolean",
+            "label": "With --harnesses: report what would be updated and change nothing"
+          },
+          {
+            "name": "agent",
+            "flag": "--agent",
+            "type": "string",
+            "label": "Limit the run to one harness"
           }
         ],
         "timeout_ms": 600000
@@ -930,6 +948,13 @@
       "command": "maintenance --models",
       "placement": "selected-node",
       "timeout_ms": 300000
+    },
+    {
+      "intent": "Keep each installed agent harness on its own latest release",
+      "schedule": "30 3 * * *",
+      "command": "maintenance --harnesses",
+      "placement": "selected-node",
+      "timeout_ms": 600000
     },
     {
       "intent": "Report quota walls and measured usage to the operator",

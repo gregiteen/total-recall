@@ -1,4 +1,5 @@
-import { fetchStartup, observeRuntimeDaemon, daemonStatusString } from '../core/startup-health.mjs';
+import { fetchStartup, observeRuntimeDaemon, daemonStatusString, daemonOwnedByLocalServer } from '../core/startup-health.mjs';
+import { localServerUrl } from '../core/running-server.mjs';
 /**
  * total-recall status
  *
@@ -70,13 +71,16 @@ function loadClientsRegistry(clientsRegistryPath) {
   catch { return {}; }
 }
 
-function projectionsStatus(clients, instructionsMtime) {
+function projectionsStatus(clients, instructionsMtime, instructionsFile) {
   return Object.entries(clients).map(([name, info]) => {
     let fresh = null;
     if (info.projectionPath && instructionsMtime) {
       try {
         const projMtime = fs.statSync(info.projectionPath).mtimeMs;
-        fresh = projMtime >= instructionsMtime;
+        // The same bytes are fresh whatever the clock says: a compile that changes nothing still
+        // rewrites the surface, and a link to it carries that file's own time.
+        fresh = projMtime >= instructionsMtime
+          || fs.readFileSync(info.projectionPath, 'utf8') === fs.readFileSync(instructionsFile, 'utf8');
       } catch { fresh = false; }
     }
     return {
@@ -108,6 +112,10 @@ export function serverBrainId(brainDir, brainConfig, registryPath = path.join(gl
   } catch {
     return null;
   }
+}
+
+function isLoopback(url) {
+  try { return ['localhost', '127.0.0.1', '[::1]'].includes(new URL(url).hostname); } catch { return false; }
 }
 
 function sha256(buf) {
@@ -190,17 +198,26 @@ export default async function statusCmd(args) {
   }
 
   // Live server /health check
+  // Asked where this host's server is configured to answer. Asking port 3000 whatever the
+  // configuration said reported a healthy server on any other port as offline, and on a host
+  // where another service holds 3000 it read that service's answer instead.
   let serverHealth = 'offline';
   let serverUptime = null;
+  let localHealth = null;
   try {
-    let healthPort = 3000;
-    try {
-      const { default: cfg } = await import('../core/config.mjs');
-      if (cfg.port) healthPort = cfg.port;
-    } catch {}
-    const res = await fetchStartup(`http://localhost:${healthPort}/health`);
+    let healthBase = isLoopback(brainUrl) ? brainUrl : localServerUrl({ brainDir: globalBrainDir });
+    if (!healthBase) {
+      let healthPort = 3000;
+      try {
+        const { default: cfg } = await import('../core/config.mjs');
+        if (cfg.port) healthPort = cfg.port;
+      } catch {}
+      healthBase = `http://localhost:${healthPort}`;
+    }
+    const res = await fetchStartup(new URL('/health', healthBase));
     if (res.ok) {
       const hData = await res.json();
+      localHealth = hData;
       serverHealth = hData.status || 'healthy';
       serverUptime = hData.uptime_seconds || null;
     }
@@ -211,7 +228,8 @@ export default async function statusCmd(args) {
   let daemonObservation = { status: 'unknown', reason: 'observation-unavailable' };
   try {
     const { getDaemonObservation } = await import('../core/daemon-control.mjs');
-    daemonObservation = await observeRuntimeDaemon(globalBrainDir, { localObservation: getDaemonObservation() });
+    daemonObservation = daemonOwnedByLocalServer(
+      await observeRuntimeDaemon(globalBrainDir, { localObservation: getDaemonObservation() }), localHealth);
     daemonStatus = daemonStatusString(daemonObservation);
   } catch {}
 
@@ -238,7 +256,7 @@ export default async function statusCmd(args) {
   const instructionsMtime = localInstructions
     ? fs.statSync(instructionsFile).mtimeMs
     : null;
-  const clientProjections = projectionsStatus(clientsRegistry, instructionsMtime);
+  const clientProjections = projectionsStatus(clientsRegistry, instructionsMtime, instructionsFile);
 
   const report = {
     server: {
@@ -302,6 +320,7 @@ export default async function statusCmd(args) {
   console.log(`  Tunnel Process:   ${tunnelPid ? (tunnelAlive ? `🟢 Active (PID ${tunnelPid})` : '🔴 Stale PID file') : '⚪ Inactive'}`);
   console.log(`  Daemon Status:    ${daemonStatus === 'running' ? '🟢 Running' : daemonStatus === 'dead' ? '🔴 Dead' : daemonStatus === 'not_started' ? '⚪ Not Running' : `⚠️ ${daemonStatus} (${daemonObservation.reason || 'unverified'})`}`);
   if (daemonObservation.owner_url) console.log(`  Worker owner:     ${daemonObservation.owner_url} (${daemonObservation.scope})`);
+  if (daemonObservation.verified_by === 'local-server-health') console.log(`  Daemon owner:     this host's server, from its own install (${daemonObservation.entry})`);
   if (daemonObservation.local) console.log(`  Local daemon:     ${daemonObservation.local.status}${daemonObservation.local.reason ? ` (${daemonObservation.local.reason})` : ''}`);
   if (['conflict', 'unknown'].includes(daemonStatus)) {
     if (daemonObservation.expected_entry) console.log(`  Expected daemon:  ${daemonObservation.expected_entry}`);
@@ -324,7 +343,9 @@ export default async function statusCmd(args) {
     for (const c of clientProjections) {
       let freshnessTag = '';
       if (c.mode === 'file' || c.mode === 'symlink') {
-        freshnessTag = c.fresh === null ? '  (no projection)' : c.fresh ? '  ✅ fresh' : '  ⚠️  stale — run: total-recall connect ' + c.name;
+        // A generated file is only rewritten with --force; a link is repaired without it.
+        const repair = `total-recall connect ${c.name}${c.mode === 'file' ? ' --force' : ''}`;
+        freshnessTag = c.fresh === null ? '  (no projection)' : c.fresh ? '  ✅ fresh' : `  ⚠️  stale — run: ${repair}`;
       }
       const enfTag = c.enforcement ? ` [${c.enforcement}]` : '';
       console.log(`    ${c.label.padEnd(18)} [${c.mode}]${enfTag}${freshnessTag}`);

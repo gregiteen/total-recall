@@ -335,6 +335,9 @@ async function runOperation(argv) {
       if (has('--models')) {
         const { syncModelCatalog } = await import('./src/model-catalog.mjs');
         result = await syncModelCatalog();
+      } else if (has('--harnesses')) {
+        const { updateHarnesses } = await import('./src/harness-updates.mjs');
+        result = await updateHarnesses({ only: options.agent || null, dryRun: has('--dry-run') });
       } else {
         result=await maintainIntegrations(options);
       }

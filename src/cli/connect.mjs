@@ -235,7 +235,8 @@ function parseArgs(args) {
     vault: null,
     force: false,
     json: false,
-    help: false
+    help: false,
+    unknown: []
   };
 
   for (let i = opts.client ? 1 : 0; i < args.length; i++) {
@@ -250,6 +251,8 @@ function parseArgs(args) {
       case '-h':
         opts.help = true;
         break;
+      default:
+        opts.unknown.push(args[i]);
     }
   }
 
@@ -419,15 +422,35 @@ function writeFileProjection(cwd, preset, instructions, opts) {
   return { targetPath, action: existed ? 'written' : 'created' };
 }
 
-function writeSymlinkProjection(cwd, preset, opts) {
-  const instructionsPath = path.join(cwd, 'INSTRUCTIONS.md');
+/**
+ * True for a link this command made that no longer reaches the surface: it names an
+ * INSTRUCTIONS.md, and that file is missing or is not the one compile writes. A regular file,
+ * or a link to anything else, is someone's own and is left alone.
+ */
+function isStaleSurfaceLink(targetPath, instructionsPath) {
+  try {
+    if (!fs.lstatSync(targetPath).isSymbolicLink()) return false;
+    if (path.basename(fs.readlinkSync(targetPath)) !== 'INSTRUCTIONS.md') return false;
+  } catch { return false; }
+  try { return fs.realpathSync(targetPath) !== fs.realpathSync(instructionsPath); } catch { return true; }
+}
+
+function writeSymlinkProjection(cwd, preset, opts, { agentDir = null, isHome = false } = {}) {
+  // In the home directory the surface is compiled into the agent dir (resolveSurfaceDir), not
+  // beside the link. Linking to a copy in the home directory itself froze what a harness started
+  // there reads at the day it was connected, and `status` then named this command as the repair
+  // while it answered "exists" and changed nothing.
+  const compiledAtHome = isHome && agentDir ? path.join(agentDir, 'INSTRUCTIONS.md') : null;
+  const instructionsPath = compiledAtHome && pathExists(compiledAtHome) ? compiledAtHome : path.join(cwd, 'INSTRUCTIONS.md');
   if (!pathExists(instructionsPath)) {
     throw new Error(`Cannot create ${preset.target}: ${instructionsPath} does not exist. Run npx total-recall init or compile first.`);
   }
 
   const targetPath = path.join(cwd, preset.target);
+  let relink = false;
   if (pathExists(targetPath)) {
-    if (!opts.force) return { targetPath, action: 'exists' };
+    relink = isStaleSurfaceLink(targetPath, instructionsPath);
+    if (!opts.force && !relink) return { targetPath, action: 'exists' };
     try {
       fs.unlinkSync(targetPath);
     } catch {
@@ -440,7 +463,7 @@ function writeSymlinkProjection(cwd, preset, opts) {
   fs.mkdirSync(path.dirname(targetPath), { recursive: true });
   const linkTarget = path.relative(path.dirname(targetPath), instructionsPath);
   fs.symlinkSync(linkTarget, targetPath);
-  return { targetPath, action: 'symlinked' };
+  return { targetPath, action: relink && !opts.force ? 'relinked' : 'symlinked' };
 }
 
 function apiDetails(opts) {
@@ -691,6 +714,12 @@ export default async function connect(args) {
     printHelp();
     return;
   }
+  // An option this command does not know used to be dropped, so `connect <client> --dry-run`
+  // ran for real. Connecting writes files, so nothing runs past an argument it cannot honor.
+  if (opts.unknown.length) {
+    // Thrown, not exited: init and setup call this in-process and report a failure for one client.
+    throw new Error(`Unknown option for connect: ${opts.unknown.join(' ')}. Nothing was changed. connect has no dry run; see: total-recall connect --help`);
+  }
   // Consumed before any other work, so no later subprocess can take it and a bad input stops here.
   if (opts.tokenStdin) opts.token = readTokenStdin(opts);
   // Only a token the operator supplied is saved; one resolved from Auth or a legacy file is never copied.
@@ -819,7 +848,7 @@ export default async function connect(args) {
     }
     result.projection = writeFileProjection(cwd, preset, instructions, opts);
   } else if (preset.mode === 'symlink') {
-    result.projection = writeSymlinkProjection(cwd, preset, opts);
+    result.projection = writeSymlinkProjection(cwd, preset, opts, { agentDir, isHome });
   } else if (preset.mode === 'global-symlink') {
     // Pi: symlink ~/.pi/agent/AGENTS.md → compiled INSTRUCTIONS.md
     const instructionsPath = path.join(cwd, 'INSTRUCTIONS.md');
