@@ -197,22 +197,56 @@ function cachedPeerObservation(url, options) {
   return { ...hit.verdict, cached: true, ...seen };
 }
 
+const placementObservations = new Map();
+const placementInflight = new Map();
+
+/**
+ * Resolve the configured placement off the request path. Discovery loads plugin
+ * modules and reads Mesh state, which can wait on the network on a cold start, so
+ * it starts after the current request has been answered and fills a cache.
+ */
+function startPlacementRefresh(key, { placement, brainDir, cwd, now, placements, placementPending }) {
+  if (placementPending.has(key)) return;
+  const pending = new Promise(resolve => setImmediate(resolve))
+    .then(() => placement(brainDir, { cwd }))
+    .catch(() => ({ mode: 'unknown', reason: 'daemon-placement-unavailable' }))
+    .then(value => { placements.set(key, { at: now(), value }); })
+    .finally(() => placementPending.delete(key));
+  placementPending.set(key, pending);
+}
+
 /**
  * Effective worker readiness, separate from the strict local lock observation.
  * Used only by startup/status/health; never authorizes local process lifecycle.
- * The local process is always read live. By default the configured peer is read
- * live too (startup check, status). A long-running server passes
- * `nonBlocking` so a slow or dead peer can never hold up its own /health.
+ * The local process is always read live and synchronously. By default placement
+ * and the peer are read live too (startup check, status). A long-running server
+ * passes `nonBlocking`: placement discovery and the peer probe both run in the
+ * background, so a slow Mesh or peer can never hold up its own /health. Until
+ * placement is known, the report is the strict local observation, marked
+ * `warming`; a conflicting or unidentifiable local process is never hidden.
  */
 export async function observeRuntimeDaemon(brainDir, { identity = processIdentity, localObservation,
   placement = configuredDaemonPlacement, fetchImpl = fetch, cwd = process.cwd(),
   peerTimeoutMs = PEER_PROBE_TIMEOUT_MS, nonBlocking = false, now = Date.now,
   refreshAfterMs = PEER_REFRESH_AFTER_MS, maxAgeMs = PEER_OBSERVATION_MAX_AGE_MS,
-  cache = peerObservations, inflight = peerInflight } = {}) {
+  cache = peerObservations, inflight = peerInflight,
+  placements = placementObservations, placementPending = placementInflight } = {}) {
   const local = localObservation ?? observeDaemon(brainDir, { identity });
   let owner;
-  try { owner = await placement(brainDir, { cwd }); }
-  catch { owner = { mode: 'unknown', reason: 'daemon-placement-unavailable' }; }
+  if (nonBlocking) {
+    const key = `${brainDir}\0${cwd}`;
+    const hit = placements.get(key);
+    const age = hit ? now() - hit.at : null;
+    if (!hit || age >= refreshAfterMs) startPlacementRefresh(key, { placement, brainDir, cwd, now, placements, placementPending });
+    if (!hit || age > maxAgeMs) {
+      return { ...local, local, placement: { mode: 'unknown' }, warming: !hit, stale: Boolean(hit),
+        placement_reason: hit ? 'daemon-placement-stale' : 'daemon-placement-warming' };
+    }
+    owner = hit.value;
+  } else {
+    try { owner = await placement(brainDir, { cwd }); }
+    catch { owner = { mode: 'unknown', reason: 'daemon-placement-unavailable' }; }
+  }
   if (owner?.mode === 'local') return local;
   const result = { status: 'unknown', source: 'configured-leader-health',
     scope: 'configured-background-worker-only; no cross-brain synchronization verified', local,

@@ -7,7 +7,7 @@ import { readDrawer, readDrawerHistory, restoreDrawer, saveDrawer } from './work
 const config = { html: '', chunks: [], panels: [], shortcuts: [] }
 beforeEach(() => {
   apiFetch.mockReset()
-  apiFetch.mockResolvedValue(new Response(JSON.stringify({ config, version: null, history: [] }), { headers: { 'content-type': 'application/json' } }))
+  apiFetch.mockImplementation(async () => new Response(JSON.stringify({ config, version: null, history: [] }), { headers: { 'content-type': 'application/json' } }))
 })
 
 it('sends the named brain on every drawer read and write, never an implicit global one', async () => {

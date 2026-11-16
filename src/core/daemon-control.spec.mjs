@@ -208,9 +208,13 @@ describe('daemon-control', () => {
       const { getRuntimeDaemonObservation } = await import('./daemon-control.mjs');
       const fetchImpl = vi.fn(() => new Promise(() => {}));
       const started = Date.now();
-      const result = await getRuntimeDaemonObservation({ placement: remote, fetchImpl, cache: new Map(), inflight: new Map() });
+      const options = { placement: remote, fetchImpl, cache: new Map(), inflight: new Map(), placements: new Map(), placementPending: new Map() };
+      const result = await getRuntimeDaemonObservation(options);
       expect(Date.now() - started).toBeLessThan(1000);
-      expect(result).toMatchObject({ status: 'unknown', reason: 'leader-observation-warming', warming: true, local: { status: 'not-started' } });
+      expect(result).toMatchObject({ status: 'not-started', warming: true, placement: { mode: 'unknown' }, local: { status: 'not-started' } });
+      for (let i = 0; i < 3; i++) await new Promise(resolve => setTimeout(resolve, 10));
+      const peer = await getRuntimeDaemonObservation(options);
+      expect(peer).toMatchObject({ status: 'unknown', reason: 'leader-observation-warming', warming: true, local: { status: 'not-started' } });
       expect(fetchImpl).toHaveBeenCalledTimes(1);
     });
   });

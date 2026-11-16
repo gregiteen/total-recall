@@ -237,6 +237,10 @@ const embeddingCoverageSnapshot = () => coverageCache.snapshot();
 
 // Warm it at boot so the first probe already has a real answer.
 embeddingCoverageSnapshot();
+// Start placement discovery, then the first peer observation, now and off any request.
+const warmDaemonObservation = () => { void Promise.resolve().then(() => getRuntimeDaemonObservation()).catch(() => {}); };
+warmDaemonObservation();
+setTimeout(warmDaemonObservation, 3000).unref();
 
 // Identity only, for a deploy telling one instance from another. /health forks and reads
 // the disk, so it can take seconds under load; this does neither.

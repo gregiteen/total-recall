@@ -122,14 +122,64 @@ describe('runtime daemon observation', () => {
   });
 });
 
-describe('non-blocking peer observation on the /health request path', () => {
-  const fresh = () => ({ cache: new Map(), inflight: new Map() });
+describe('non-blocking placement and peer observation on the /health request path', () => {
+  const fresh = () => ({ cache: new Map(), inflight: new Map(), placements: new Map(), placementPending: new Map() });
   const never = () => new Promise(() => {});
   const clock = start => { let at = start; return { now: () => at, tick: ms => { at += ms; } }; };
   const settle = async () => { for (let i = 0; i < 4; i++) await new Promise(resolve => setTimeout(resolve, 10)); };
+  // The first request only starts placement discovery; once it has landed the peer is observed.
+  const warm = async (options, calls = 2) => { for (let i = 0; i < calls; i++) { await observeRuntimeDaemon('/brain', options); await settle(); } };
 
   it('keeps the WAN probe deadline at 10 s and never answers readiness from a probe it did not finish', () => {
     expect(PEER_PROBE_TIMEOUT_MS).toBeGreaterThanOrEqual(10000);
+  });
+
+  it('answers at once while placement discovery itself is stuck, reporting the strict local observation as warming', async () => {
+    const state = fresh();
+    const stuck = vi.fn(never);
+    const fetchImpl = vi.fn();
+    const started = Date.now();
+    const first = await observeRuntimeDaemon('/brain', { localObservation: absent, placement: stuck, fetchImpl, nonBlocking: true, ...state });
+    expect(Date.now() - started).toBeLessThan(500);
+    // Discovery starts after the request has been answered, never inside it.
+    expect(stuck).not.toHaveBeenCalled();
+    expect(first).toMatchObject({ ...absent, local: absent, warming: true, placement: { mode: 'unknown' }, placement_reason: 'daemon-placement-warming' });
+    expect(runtimeHealthFields(first, true)).toMatchObject({ status: 'degraded', server_ready: true, daemon: 'not_started' });
+    await settle();
+    expect(stuck).toHaveBeenCalledTimes(1);
+    // Still stuck: a second request neither waits nor starts a second discovery.
+    await observeRuntimeDaemon('/brain', { localObservation: absent, placement: stuck, fetchImpl, nonBlocking: true, ...state });
+    expect(stuck).toHaveBeenCalledTimes(1);
+    expect(fetchImpl).not.toHaveBeenCalled();
+  });
+
+  it('never hides a conflicting or unidentifiable local process while placement is unknown, cached or stale', async () => {
+    for (const status of ['conflict', 'unknown']) {
+      const state = fresh(), time = clock(0);
+      const local = { ...absent, status, reason: 'foreign-pid', pid: 123, entry: '/other/daemon-loop.mjs' };
+      const fetchImpl = vi.fn(async () => json(health));
+      const options = { localObservation: local, placement, fetchImpl, nonBlocking: true, now: time.now, ...state };
+      expect(await observeRuntimeDaemon('/brain', options)).toMatchObject({ ...local, warming: true });
+      await settle();
+      expect(await observeRuntimeDaemon('/brain', options)).toMatchObject(local);
+      time.tick(31000);
+      expect(await observeRuntimeDaemon('/brain', options)).toMatchObject({ ...local, stale: true });
+      expect(fetchImpl).not.toHaveBeenCalled();
+    }
+  });
+
+  it('keeps the strict local answer for an unpinned node once placement is known, and expires placement that is too old', async () => {
+    const state = fresh(), time = clock(0);
+    const resolve = vi.fn(async () => ({ mode: 'local' }));
+    const options = { localObservation: absent, placement: resolve, nonBlocking: true, now: time.now, fetchImpl: vi.fn(), ...state };
+    await warm(options, 1);
+    expect(await observeRuntimeDaemon('/brain', options)).toEqual(absent);
+    time.tick(6000);
+    expect(await observeRuntimeDaemon('/brain', options)).toEqual(absent);
+    await settle();
+    expect(resolve).toHaveBeenCalledTimes(2);
+    resolve.mockImplementation(never); time.tick(31000);
+    expect(await observeRuntimeDaemon('/brain', options)).toMatchObject({ ...absent, stale: true, placement_reason: 'daemon-placement-stale' });
   });
 
   it('answers at once while the peer is slow, reporting warming, then serves the real observation', async () => {
@@ -137,6 +187,7 @@ describe('non-blocking peer observation on the /health request path', () => {
     let release;
     const fetchImpl = vi.fn(() => new Promise(resolve => { release = () => resolve(json(health)); }));
     const options = { localObservation: absent, placement, fetchImpl, nonBlocking: true, now: time.now, ...state };
+    await warm(options, 1);
     const first = await observeRuntimeDaemon('/brain', options);
     expect(first).toMatchObject({ status: 'unknown', reason: 'leader-observation-warming', warming: true, local: absent, placement: endpoint });
     expect(runtimeHealthFields(first, true)).toMatchObject({ status: 'degraded', server_ready: true, daemon: 'unknown' });
@@ -156,7 +207,8 @@ describe('non-blocking peer observation on the /health request path', () => {
     const fetchImpl = vi.fn(async () => json({ ...health, daemon }));
     const options = { localObservation: absent, placement, fetchImpl, nonBlocking: true, now: time.now,
       refreshAfterMs: 5000, maxAgeMs: 30000, ...state };
-    await observeRuntimeDaemon('/brain', options); await settle();
+    await warm(options, 2);
+    expect(await observeRuntimeDaemon('/brain', options)).toMatchObject({ status: 'running', cached: true });
     time.tick(4000);
     expect((await observeRuntimeDaemon('/brain', options)).cached).toBe(true);
     expect(fetchImpl).toHaveBeenCalledTimes(1);
@@ -167,16 +219,17 @@ describe('non-blocking peer observation on the /health request path', () => {
     expect(fetchImpl).toHaveBeenCalledTimes(2);
     expect(await observeRuntimeDaemon('/brain', options)).toMatchObject({ status: 'failed', reason: 'leader-daemon-not-running' });
     // A peer that stops answering is never served as a stale success.
-    fetchImpl.mockImplementation(never); time.tick(31000);
+    fetchImpl.mockImplementation(never);
+    for (let i = 0; i < 6; i++) { time.tick(6000); await observeRuntimeDaemon('/brain', options); await settle(); }
     const expired = await observeRuntimeDaemon('/brain', options);
-    expect(expired).toMatchObject({ status: 'unknown', reason: 'leader-observation-stale', stale: true, last_status: 'failed' });
+    expect(expired).toMatchObject({ status: 'unknown', reason: 'leader-observation-stale', stale: true, last_status: 'failed', placement: endpoint });
   });
 
   it('caches an unreachable peer as an error instead of probing on every request', async () => {
     const state = fresh(), time = clock(0);
     const fetchImpl = vi.fn(async () => { throw new Error('offline'); });
     const options = { localObservation: absent, placement, fetchImpl, nonBlocking: true, now: time.now, ...state };
-    await observeRuntimeDaemon('/brain', options); await settle();
+    await warm(options, 2);
     const calls = fetchImpl.mock.calls.length;
     const reported = await observeRuntimeDaemon('/brain', options);
     expect(reported).toMatchObject({ status: 'offline', reason: 'leader-health-unreachable', cached: true });
@@ -184,19 +237,10 @@ describe('non-blocking peer observation on the /health request path', () => {
     expect(runtimeHealthFields(reported, true)).toMatchObject({ status: 'degraded', server_ready: true, daemon: 'offline' });
   });
 
-  it('keeps a strictly local conflict ahead of any cached or pending peer result', async () => {
-    const state = fresh();
-    const local = { ...absent, status: 'conflict', reason: 'foreign-pid' };
-    const fetchImpl = vi.fn(async () => json(health));
-    expect(await observeRuntimeDaemon('/brain', { localObservation: local, placement, fetchImpl, nonBlocking: true, ...state })).toMatchObject(local);
-    expect(fetchImpl).not.toHaveBeenCalled();
-  });
-
   it('sends no credentials and does not follow redirects when probing in the background', async () => {
     const state = fresh();
     const fetchImpl = vi.fn(async () => json(health));
-    await observeRuntimeDaemon('/brain', { localObservation: absent, placement, fetchImpl, nonBlocking: true, ...state });
-    await settle();
+    await warm({ localObservation: absent, placement, fetchImpl, nonBlocking: true, ...state }, 2);
     const [, options] = fetchImpl.mock.calls[0];
     expect(options).toMatchObject({ redirect: 'error', credentials: 'omit', headers: { [PEER_PROBE_HEADER]: 'peer' } });
     expect(JSON.stringify(options)).not.toMatch(/authorization|cookie/i);
@@ -204,10 +248,7 @@ describe('non-blocking peer observation on the /health request path', () => {
 
   it('breaks reciprocal delegation: two nodes pinned to each other never chain probes', async () => {
     const sent = [];
-    const make = name => {
-      const node = { name, cache: new Map(), inflight: new Map(), local: { ...absent, status: 'not-started', expected_entry: `/${name}/daemon-loop.mjs` } };
-      return node;
-    };
+    const make = name => ({ name, ...fresh(), local: { ...absent, status: 'not-started', expected_entry: `/${name}/daemon-loop.mjs` } });
     const a = make('a'), b = make('b');
     const serve = (node, peer) => async (_url, options = {}) => {
       sent.push([node.name, options.headers?.[PEER_PROBE_HEADER] ?? null]);
@@ -215,24 +256,22 @@ describe('non-blocking peer observation on the /health request path', () => {
       // A probed node answers from its own process; an ordinary request observes its own leader.
       const observation = probed ? node.local
         : await observeRuntimeDaemon(`/${node.name}`, { localObservation: node.local, placement, nonBlocking: true,
-          fetchImpl: peer(), cache: node.cache, inflight: node.inflight });
+          fetchImpl: peer(), cache: node.cache, inflight: node.inflight, placements: node.placements, placementPending: node.placementPending });
       return json({ ...health, ...runtimeHealthFields(observation, true), daemon: observation.status === 'running' ? 'running' : 'not_started' });
     };
     const toA = () => serve(a, () => toB());
     const toB = () => serve(b, () => toA());
-    const first = await toA()('http://a/health', {});
-    await settle();
-    // A's ordinary request warmed; its background probe reached B with the marker and B did not probe back.
-    expect(first.ok).toBe(true);
+    for (let i = 0; i < 2; i++) { await toA()('http://a/health', {}); await settle(); }
+    // A's background probe reached B with the marker and B did not probe back.
     expect(sent.filter(([name]) => name === 'b')).toEqual([['b', 'peer']]);
     expect(sent.some(([name, marker]) => name === 'a' && marker === 'peer')).toBe(false);
-    const second = await (await toA()('http://a/health', {})).json();
-    expect(second.daemon_observation).toMatchObject({ status: 'degraded', reason: 'leader-reports-degraded', cached: true });
-    expect(second.status).toBe('degraded');
+    const third = await (await toA()('http://a/health', {})).json();
+    expect(third.daemon_observation).toMatchObject({ status: 'degraded', reason: 'leader-reports-degraded', cached: true });
+    expect(third.status).toBe('degraded');
   });
 
   it('terminates against a peer that predates the marker because its own observation is non-blocking too', async () => {
-    const old = { cache: new Map(), inflight: new Map() };
+    const old = fresh();
     let calls = 0;
     const legacyPeer = async () => {
       calls++;
@@ -242,14 +281,13 @@ describe('non-blocking peer observation on the /health request path', () => {
       return json({ ...health, ...runtimeHealthFields(observation, true) });
     };
     const state = fresh();
-    await observeRuntimeDaemon('/brain', { localObservation: absent, placement, fetchImpl: legacyPeer, nonBlocking: true, ...state });
-    await settle();
+    const options = { localObservation: absent, placement, fetchImpl: legacyPeer, nonBlocking: true, ...state };
+    await warm(options, 2);
     expect(calls).toBe(1);
-    expect(await observeRuntimeDaemon('/brain', { localObservation: absent, placement, fetchImpl: legacyPeer, nonBlocking: true, ...state }))
-      .toMatchObject({ status: 'degraded', reason: 'leader-reports-degraded', cached: true });
+    expect(await observeRuntimeDaemon('/brain', options)).toMatchObject({ status: 'degraded', reason: 'leader-reports-degraded', cached: true });
   });
 
-  it('startup and status read the peer live, so the check reflects the peer right now', async () => {
+  it('startup and status read placement and the peer live, so the check reflects them right now', async () => {
     const state = fresh();
     let daemon = 'running';
     const fetchImpl = vi.fn(async () => json({ ...health, daemon }));

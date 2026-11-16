@@ -86,8 +86,7 @@ export function WorkspaceDrawers({ edge, onChange, plugins, activeBrainId }: {
   plugins: PluginInfo[] | null
   activeBrainId: string
 }) {
-  const brainId = !activeBrainId.includes(',') && (activeBrainId === 'global' || activeBrainId.startsWith('project:'))
-    ? activeBrainId : undefined
+  const brainId = activeBrainId === 'global' || /^project:[^,]+$/.test(activeBrainId) ? activeBrainId : undefined
   return <>
     <EdgeDrawer side="right" title="Help" open={edge === 'right'} onChange={onChange}><HelpDrawer plugins={plugins} brainId={brainId} /></EdgeDrawer>
     <EdgeDrawer side="bottom" title="Tools" open={edge === 'bottom'} onChange={onChange}>
