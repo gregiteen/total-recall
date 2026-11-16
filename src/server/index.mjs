@@ -439,9 +439,6 @@ try {
 
 
 
-// API misses must not become a successful dashboard HTML response.
-app.use('/api', (_req, res) => res.status(404).json({ error: 'API route unavailable' }));
-
 // ─── Static Frontend (SPA catch-all) ────────────────────────────────────────────
 
 const frontendDist = path.join(ROOT, 'frontend', 'dist');
@@ -449,6 +446,9 @@ const frontendDist = path.join(ROOT, 'frontend', 'dist');
 // Live refresh for the memory page on this port (the /stream monitor listens on 127.0.0.1 only).
 const { memoryEventsHandler } = await import('./memory-events.mjs');
 app.get('/api/memory-events', requireAuth, memoryEventsHandler(logEvents));
+
+// Register real API streams before denying misses; never serve SPA HTML for an API URL.
+app.use('/api', (_req, res) => res.status(404).json({ error: 'API route unavailable' }));
 
 // Keep the served dashboard as new as its sources. A missing or stale bundle is
 // rebuilt in the background while the current one keeps serving; express.static
