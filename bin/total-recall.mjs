@@ -1,4 +1,6 @@
 #!/usr/bin/env node
+// First: a systemd unit or timer may start the CLI without HOME (see process-home.mjs).
+import '../src/core/process-home.mjs';
 import fs from 'node:fs';
 
 /**

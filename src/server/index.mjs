@@ -1,3 +1,5 @@
+// First: a systemd unit may start the server without HOME (see process-home.mjs).
+import '../core/process-home.mjs';
 import { loadPluginModule as __loadOwnedPlugin } from '../core/plugin-runtime.mjs';
 /**
  * Total Recall — Unified Server Entry

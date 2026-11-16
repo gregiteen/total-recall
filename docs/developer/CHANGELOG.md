@@ -1,6 +1,8 @@
-## [3.49.2] — 2026-11-16
+## 3.49.3 — 2026-11-16
 
-### Fixed
+- The server and CLI now set `HOME` from the account's home directory when they start without it, as a systemd system unit with no `User=` does. The cloud server's daemon had no `HOME`, so git could not find its config and gh credential helper. Every hourly check of a private plugin repository failed with "could not read Username".
+
+## 3.49.2 — 2026-11-16
 
 - Automatic brain updates no longer walk into old plugin release snapshots (`skills/total-recall/plugin-releases`), which made every cloud update report a failure and silently rewrote old snapshots.
 
