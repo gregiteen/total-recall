@@ -271,7 +271,9 @@ export function daemonStatusString({ status }) {
 /** Keep the server's own readiness separate from overall worker readiness. */
 export function runtimeHealthFields(daemonObservation, serverReady) {
   const daemon = daemonStatusString(daemonObservation);
-  return { status: serverReady && daemon === 'running' ? 'healthy' : 'degraded',
+  const placementKnown = daemonObservation.placement?.mode !== 'unknown'
+    && !daemonObservation.warming && !daemonObservation.stale;
+  return { status: serverReady && daemon === 'running' && placementKnown ? 'healthy' : 'degraded',
     server_ready: serverReady, daemon, daemon_observation: daemonObservation };
 }
 

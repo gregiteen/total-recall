@@ -153,6 +153,14 @@ describe('non-blocking placement and peer observation on the /health request pat
     expect(fetchImpl).not.toHaveBeenCalled();
   });
 
+  it('does not claim healthy from a running local process while its configured worker placement is unknown', async () => {
+    const local = { ...absent, status: 'running', pid: 123 };
+    const observation = await observeRuntimeDaemon('/brain', { localObservation: local,
+      placement: never, nonBlocking: true, ...fresh() });
+    expect(observation.local).toEqual(local);
+    expect(runtimeHealthFields(observation, true)).toMatchObject({ status: 'degraded', server_ready: true });
+  });
+
   it('never hides a conflicting or unidentifiable local process while placement is unknown, cached or stale', async () => {
     for (const status of ['conflict', 'unknown']) {
       const state = fresh(), time = clock(0);
