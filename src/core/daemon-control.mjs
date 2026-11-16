@@ -67,15 +67,19 @@ export function getDaemonStatus() {
  * clear, so the server reported `dead` and `degraded` for good. Only a lock whose process
  * is verified gone is removed: a live process or one that cannot be identified keeps it.
  *
- * Known limit, not closed here: the compare and the unlink are two steps, and POSIX has no
- * atomic remove-if-unchanged. The only writer of this lock, daemon-loop acquirePidLock, takes
- * it with a plain overwrite (no exclusive create), so a daemon that overwrites the lock in
- * the microseconds between the compare and the unlink loses its lock file, and a renamed-away
- * lock would be lost the same way. A safe takeover needs the writer to create the lock
- * exclusively, which is a change to the daemon's own lock protocol, not to this reader.
- * This runs once at boot of a server told to run no daemon, so the window is a single
- * start-up race, and a live daemon that loses its lock restores it on its next heartbeat
- * (daemon-loop reassertPidLock). The limit is documented rather than hidden behind a rename.
+ * Known limit, existing and not introduced by the platform-lock work: the compare and the
+ * unlink are two steps, and POSIX has no atomic remove-if-unchanged. The writer is
+ * daemon-loop acquirePidLock, which takes the lock with a plain overwrite (no exclusive
+ * create) after its own non-atomic liveness check, so the daemon side has the same class of
+ * race. A reader-side rename or unlink cannot make this safe: it can still move or delete a
+ * lock a starting daemon wrote in between. A proven takeover needs the writer to create its
+ * lock exclusively (as the platform refresh lock now does with generation files), which
+ * changes the lock format every running daemon, server and supervisor reads. That protocol
+ * change is deliberately not made here, so no safe takeover is claimed.
+ * Bounded effect: this runs once at boot of a server told to run no daemon. If it deletes a
+ * lock a daemon just wrote, status reads not_started, and the daemon restores its lock on
+ * its next heartbeat while a duplicate that finds a live holder stops (daemon-loop
+ * reassertPidLock). The deletion path itself only fires for a lock whose pid is verified gone.
  * @returns {boolean} True if a lock was removed.
  */
 export function clearStaleDaemonLock({ observe = getDaemonObservation } = {}) {

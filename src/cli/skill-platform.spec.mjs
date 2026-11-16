@@ -108,8 +108,14 @@ it('pins the configured agent alias to its physical skills anchor before strict 
     fs.writeFileSync(path.join(other, 'SKILL.md'), 'other authored wrapper');
     const plan = runPlatformRefresh(['total-recall', '--global'], { globalAgentDir: () => alias });
     const readdir = fs.readdirSync;
+    // The refresh's own lock directory is the only directory it may list; no authored or private tree is walked.
+    const ownLockDir = path.join(target, '.platform-refresh');
+    const listed = [];
     vi.spyOn(fs, 'readdirSync').mockImplementation((dir, ...args) => {
-      if (path.resolve(String(dir)).startsWith(path.dirname(target))) throw new Error('private-state walk');
+      if (path.resolve(String(dir)).startsWith(path.dirname(target))) {
+        if (path.resolve(String(dir)) !== ownLockDir) throw new Error('private-state walk');
+        listed.push(path.resolve(String(dir)));
+      }
       return readdir(dir, ...args);
     });
     const done = runPlatformRefresh(['total-recall', '--global', '--apply', '--source-hash', plan.source.hash], {
@@ -122,6 +128,8 @@ it('pins the configured agent alias to its physical skills anchor before strict 
       },
     });
     expect(done.target).toBe(target);
+    expect(listed.length).toBeGreaterThan(0);
+    expect(new Set(listed)).toEqual(new Set([ownLockDir]));
     expect(fs.readFileSync(path.join(other, 'SKILL.md'), 'utf8')).toBe('other authored wrapper');
     vi.restoreAllMocks();
     // An authorized root alias still cannot alias the shipped source itself.
