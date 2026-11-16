@@ -149,4 +149,20 @@ describe('imported plugin runtime', () => {
     expect(JSON.parse(out.trim().split('\n').pop())).toMatchObject({ ok: true, result: { content: [{ text: 'said:{"b":2}' }] } });
     expect(await invokeFromArgv(vault, ['mcp:demo', '--trust-source'])).toMatchObject({ ok: true });
   }, 90000);
+
+  it('runs a composed command through its real owner from a relocated package root whose path has spaces', async () => {
+    const vault = await vaultOf(stdioFiles, { format: 'mcp' });
+    const project = fs.realpathSync(temp());
+    fs.mkdirSync(path.join(project, '.agent/skills/total-recall'), { recursive: true });
+    expect(await composeImportedPlugin(vault, 'moved', { projectRoot: project })).toEqual({ ok: true, name: 'moved' });
+    // Relocate (not upgrade in place): a second package copy at a path with spaces and characters that URL-encode.
+    const repo = path.resolve(import.meta.dirname, '../..');
+    const moved = path.join(fs.realpathSync(temp()), 'moved package %20 root');
+    fs.mkdirSync(moved);
+    for (const entry of ['bin', 'src', 'scaffold', 'package.json']) fs.cpSync(path.join(repo, entry), path.join(moved, entry), { recursive: true });
+    fs.symlinkSync(path.join(repo, 'node_modules'), path.join(moved, 'node_modules'), 'dir');
+    const env = Object.fromEntries(Object.entries(process.env).filter(([k]) => !['_TR_TEST_AGENT_DIR', 'AGENT_DIR', 'TR_PACKAGE_ROOT'].includes(k)));
+    const out = execFileSync(process.execPath, [path.join(moved, 'bin/total-recall.mjs'), 'moved', 'mcp:demo', '--trust-source', '--input', '{"tool":"echo","arguments":{"c":3}}'], { cwd: project, encoding: 'utf8', timeout: 60000, env });
+    expect(JSON.parse(out.trim().split('\n').pop())).toMatchObject({ ok: true, result: { content: [{ text: 'said:{"c":3}' }] } });
+  }, 120000);
 });

@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { discoverPlugins, resolvePluginFile, globalPluginsDir, PACKAGE_ROOT } from './plugin-loader.mjs';
+import { discoverPlugins, resolvePluginFile, globalPluginsDir, validatePluginManifest, PACKAGE_ROOT } from './plugin-loader.mjs';
 import { pluginActivation } from './plugin-state.mjs';
 import { logger } from './logger.mjs';
 
@@ -62,77 +62,129 @@ export async function loadPluginModule(id, name, { activeRequired = false, requi
   return import(pathToFileURL(file).href);
 }
 
-const statStamp = (file, { content = true } = {}) => {
+const statStamp = (file) => {
   try {
     const stat = fs.statSync(file);
-    return content ? `${stat.dev}:${stat.ino}:${stat.size}:${stat.mtimeMs}:${stat.ctimeMs}` : `${stat.dev}:${stat.ino}`;
+    return `${stat.dev}:${stat.ino}:${stat.size}:${stat.mtimeMs}:${stat.ctimeMs}`;
   } catch { return 'absent'; }
 };
+const realOf = (file) => { try { return fs.realpathSync(file); } catch { return null; } };
+const pluginKey = plugin => `${plugin.scope}:${plugin.id}:${plugin.dir}`;
+/** A bundled copy is shadowed by a shared-folder install, so that folder's identity is part of its owner check. */
+const shadowStamp = plugin => plugin.scope === 'scaffold'
+  ? `${statStamp(globalPluginsDir())}|${statStamp(path.join(globalPluginsDir(), plugin.id, 'plugin.json'))}`
+  : '';
 
-/** Cheap identity of one discovered plugin: its manifest, its directory and, for a bundled copy, the shared folder that can shadow it. */
-function pluginStamp(plugin) {
-  const shadow = plugin.scope === 'scaffold' ? statStamp(globalPluginsDir(), { content: true }) : '';
-  return `${statStamp(plugin.manifestPath)}|${statStamp(plugin.dir, { content: false })}|${shadow}`;
+/** Rebuild one owner record from the bytes of its single pinned manifest; null when absent, unreadable or invalid. */
+function pinOwner(plugin, shadow) {
+  let bytes;
+  try { bytes = fs.readFileSync(plugin.manifestPath); } catch { return null; }
+  let manifest;
+  try { manifest = JSON.parse(bytes.toString('utf8')); } catch { return null; }
+  const validation = validatePluginManifest(manifest);
+  if (!validation.valid || (manifest.id || path.basename(plugin.dir)) !== plugin.id) return null;
+  const real = realOf(plugin.dir);
+  if (!real) return null;
+  return { bytes, real, shadow, record: { ...plugin, manifest, valid: true, errors: [], warnings: validation.warnings || [] } };
 }
 
 /**
- * Re-resolve one plugin's current installation without scanning every plugin.
- * An unchanged stamp keeps the discovered record; any change (removal, new
- * owner directory, edited manifest, shadowing install) triggers one full
- * discovery whose answer is remembered against the new stamp, so a removed or
- * replaced plugin is denied immediately and costs no repeated scans.
+ * Authoritative per-owner resolution without scanning the catalog.
+ * Every call re-reads the one pinned manifest and compares its bytes with the
+ * bytes the owner record was built from, plus the real directory and, for a
+ * bundled copy, the shared folder that can shadow it. Equal evidence keeps the
+ * record; any difference (removal, edited declaration, replaced or retargeted
+ * directory, shadowing install) runs one full discovery and rebuilds the record
+ * from the manifest bytes read after it. The denial for a given piece of
+ * evidence is remembered, so a removed or replaced owner costs no repeated
+ * scans while any new evidence is re-judged. Nothing is authorized from a
+ * timestamp or a previously discovered object alone.
  */
-export function createPluginLocator({ projectRoot, discover = discoverPlugins } = {}) {
-  const cheap = discover === discoverPlugins;
+export function createPluginLocator({ projectRoot, discover = discoverPlugins, authoritative = discover === discoverPlugins } = {}) {
   const find = plugin => discover(projectRoot).find(item => item.id === plugin.id && item.valid && item.dir === plugin.dir) || null;
-  const states = new WeakMap();
-  const prime = plugin => {
-    if (cheap && plugin.manifestPath && !states.has(plugin)) states.set(plugin, { stamp: pluginStamp(plugin), plugin });
-    return plugin;
+  const pins = new Map();
+  const denied = new Map();
+  const evidence = (plugin, shadow) => {
+    let bytes = null;
+    try { bytes = fs.readFileSync(plugin.manifestPath); } catch { /* absent */ }
+    return { bytes, real: realOf(plugin.dir), shadow };
   };
-  const current = plugin => {
-    if (!cheap || !plugin.manifestPath) return find(plugin);
-    const state = states.get(plugin) || prime(plugin) && states.get(plugin);
-    const stamp = pluginStamp(plugin);
-    if (stamp !== state.stamp) { state.stamp = stamp; state.plugin = find(plugin); }
-    return state.plugin;
+  /** Fresh discovery whose owner records are pinned from manifest bytes read after the shared-folder stamp was taken. */
+  const discoverFresh = () => {
+    const globalBefore = statStamp(globalPluginsDir());
+    const found = discover(projectRoot);
+    if (!authoritative) return found;
+    const stable = globalBefore === statStamp(globalPluginsDir());
+    return found.map((plugin) => {
+      if (!plugin.valid || !plugin.manifestPath) return plugin;
+      // A shared-folder change during discovery can change which copy wins; leave bundled owners to their first authoritative check.
+      if (plugin.scope === 'scaffold' && !stable) return plugin;
+      const shadow = plugin.scope === 'scaffold' ? `${globalBefore}|${statStamp(path.join(globalPluginsDir(), plugin.id, 'plugin.json'))}` : '';
+      const pinned = pinOwner(plugin, shadow);
+      if (!pinned) return { ...plugin, valid: false, errors: ['Manifest changed during discovery'] };
+      pins.set(pluginKey(plugin), pinned);
+      return pinned.record;
+    });
   };
-  return { prime, current };
+  const current = (plugin) => {
+    if (!authoritative || !plugin.manifestPath) return find(plugin);
+    const key = pluginKey(plugin);
+    const pinned = pins.get(key);
+    const shadow = shadowStamp(plugin);
+    const seen = evidence(plugin, shadow);
+    if (pinned && seen.bytes && seen.bytes.equals(pinned.bytes) && seen.real === pinned.real && seen.shadow === pinned.shadow) return pinned.record;
+    const token = `${seen.bytes ? seen.bytes.toString('base64') : 'absent'}|${seen.real}|${seen.shadow}`;
+    if (denied.get(key) === token) return null;
+    const found = find(plugin);
+    if (shadowStamp(plugin) !== shadow) return null; // the shared folder changed while judging; fail closed and judge again next time
+    const repinned = found && pinOwner(found, shadow);
+    if (repinned) { pins.set(key, repinned); denied.delete(key); return repinned.record; }
+    pins.delete(key); denied.set(key, token);
+    return null;
+  };
+  return { current, discover: discoverFresh };
 }
 
 const ROUTER_RETRY_MS = 30_000;
 const ROUTER_FAILED = Symbol('router-failed');
+const declaresRouter = (plugin, relative) => !!plugin?.valid && (plugin.manifest.runtime?.routers || []).includes(relative);
 
 /**
  * One guarded Express middleware per declared plugin router. Only an enabled
- * plugin's code is imported (at start when already enabled, otherwise on its
- * first enabled request); a failing plugin is logged and isolated, never
- * stopping the other plugins or the REST API. Installation and activation are
- * checked on every request through the plugin's own cheap stamp.
+ * plugin that currently declares this exact router is imported (at start when
+ * already enabled, otherwise on its first enabled request); a failing plugin
+ * is logged and isolated, never stopping the other plugins or the REST API.
+ * Installation, activation, the declaration and the imported source are
+ * rechecked on every request and again after every awaited import, so a
+ * plugin disabled, removed, redeclared or edited during the import never runs.
  */
 function createGuardedRouter({ plugin, relative, projectRoot, locator, activation, now, load }) {
   let module = null;
+  let source = null;
   let loading = null;
   let failedAt = 0;
-  const guarded = function router(req, res, next) {
-    let current = null;
-    let enabled = false;
+  const resolve = () => {
     try {
-      current = locator.current(plugin);
-      enabled = !!current && activation(current, { projectRoot }).enabled;
-    } catch { /* unreadable activation state is inactive */ }
+      const current = locator.current(plugin);
+      return current && declaresRouter(current, relative) && activation(current, { projectRoot }).enabled ? current : null;
+    } catch { return null; }
+  };
+  const guarded = function router(req, res, next) {
     const ownsPath = () => module?.default.stack?.some(layer => layer.route && layer.match(req.path));
-    if (!enabled) {
-      if (module && ownsPath()) return res.status(503).json({ error: `Plugin ${plugin.id} is unavailable or inactive` });
-      return next();
-    }
-    if (module) return module.default(req, res, next);
+    const deny = () => (ownsPath() ? res.status(503).json({ error: `Plugin ${plugin.id} is unavailable or inactive` }) : next());
+    const run = (current) => {
+      if (source && statStamp(source.file) !== source.stamp) return res.status(503).json({ error: `Plugin ${plugin.id} router source changed; restart to load it` });
+      return module.default(req, res, next);
+    };
+    const current = resolve();
+    if (!current) return deny();
+    if (module) return run(current);
     if (failedAt && now() - failedAt < ROUTER_RETRY_MS) return next();
     loading ||= load(current, relative).finally(() => { loading = null; });
     return loading.then((loaded) => {
       if (loaded === ROUTER_FAILED) { failedAt = now(); return next(); }
-      module = loaded; guarded.stack = module.default.stack; failedAt = 0;
-      return module.default(req, res, next);
+      module = loaded.module; source = { file: loaded.file, stamp: loaded.stamp }; guarded.stack = module.default.stack; failedAt = 0;
+      return resolve() ? run() : deny();
     }, next);
   };
   guarded.stack = [];
@@ -140,7 +192,7 @@ function createGuardedRouter({ plugin, relative, projectRoot, locator, activatio
   guarded.preload = async (current) => {
     const loaded = await load(current, relative);
     if (loaded === ROUTER_FAILED) { failedAt = now(); return; }
-    module = loaded; guarded.stack = module.default.stack;
+    module = loaded.module; source = { file: loaded.file, stamp: loaded.stamp }; guarded.stack = module.default.stack;
   };
   return guarded;
 }
@@ -150,17 +202,18 @@ export async function loadPluginRouters({ projectRoot = process.cwd(), discover 
   const load = async (plugin, relative) => {
     try {
       process.env.TR_PACKAGE_ROOT = PACKAGE_ROOT;
-      const module = await importModule(pathToFileURL(resolvePluginFile(plugin.dir, relative)).href);
+      const file = resolvePluginFile(plugin.dir, relative);
+      const stamp = statStamp(file);
+      const module = await importModule(pathToFileURL(file).href);
       if (typeof module.default !== 'function') throw new Error('router must export middleware');
-      return module;
+      return { module, file, stamp };
     } catch (error) {
       logger.warn('plugin-runtime', `Plugin ${plugin.id} router unavailable: ${error.message}`);
       return ROUTER_FAILED;
     }
   };
   const routers = [];
-  for (const plugin of discover(projectRoot).filter(item => item.valid)) {
-    locator.prime(plugin);
+  for (const plugin of locator.discover().filter(item => item.valid)) {
     let enabled = false;
     try { enabled = activation(plugin, { projectRoot }).enabled; } catch { /* inactive */ }
     for (const relative of plugin.manifest.runtime?.routers || []) {
@@ -195,9 +248,8 @@ export function createPluginUpgradeHandler({ projectRoot = process.cwd(), discov
     const stamp = directoriesStamp();
     if (index && index.stamp === stamp && now() - index.at < ttlMs) return index.paths;
     const paths = new Map();
-    for (const plugin of discover(projectRoot).filter(item => item.valid)) {
+    for (const plugin of locator.discover().filter(item => item.valid)) {
       for (const entry of plugin.manifest.runtime?.upgrades || []) {
-        locator.prime(plugin);
         paths.set(entry.path, [...(paths.get(entry.path) || []), { plugin, entry }]);
       }
     }

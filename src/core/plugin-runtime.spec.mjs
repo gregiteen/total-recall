@@ -152,33 +152,105 @@ describe('bounded plugin router and upgrade resolution', () => {
     fs.rmSync(root, { recursive: true, force: true });
   });
 
-  it('never imports an inactive plugin router and isolates a failing one', async () => {
-    const imported = [];
-    const plugin = (id, enabled) => ({ id, valid: true, dir: `/p/${id}`, manifest: { runtime: { routers: ['http.mjs'] } }, enabled });
-    const plugins = [plugin('off', false), plugin('bad', true), plugin('good', true)];
-    const { loadPluginRouters } = await import('./plugin-runtime.mjs');
-    const routers = await loadPluginRouters({
-      discover: () => plugins,
-      activation: item => ({ enabled: plugins.find(p => p.id === item.id).enabled }),
-      importModule: async (href) => { imported.push(href); if (href.includes('/bad/')) throw new Error('boom'); return { default: express() }; },
-    });
-    // resolvePluginFile needs real directories, so only the injected importer's calls are checked below.
-    expect(routers).toHaveLength(3);
-    expect(imported.some(href => href.includes('/off/'))).toBe(false);
-  });
-
-  it('serves an unchanged plugin from its cheap stamp and denies a removed one immediately', async () => {
-    const dir = add('owner', { modules: {}, routers: ['http.mjs'] });
+  const manifestFile = id => path.join(pluginsDir(), id, 'plugin.json');
+  const rewrite = (id, edit, { keepTimes = false } = {}) => {
+    const file = manifestFile(id);
+    const times = fs.statSync(file);
+    fs.writeFileSync(file, edit(fs.readFileSync(file, 'utf8')));
+    if (keepTimes) fs.utimesSync(file, times.atime, times.mtime);
+  };
+  const boot = async (state, { gate } = {}) => {
     const { loadPluginRouters } = await import('./plugin-runtime.mjs');
     const imports = [];
-    const routers = await loadPluginRouters({ projectRoot: root, importModule: async (href) => { imports.push(href); return { default: express() }; } });
-    const router = routers.find(item => item.pluginId === 'owner');
-    expect(router.stack).toHaveLength(1); // route discovery metadata is kept for an enabled plugin
-    expect((await call(router)).next).toBe(false);
-    fs.rmSync(dir, { recursive: true, force: true });
-    const denied = await call(router);
+    const routers = await loadPluginRouters({
+      projectRoot: root,
+      activation: () => ({ enabled: state.enabled }),
+      importModule: async (href) => { imports.push(href); if (gate) await gate; return { default: Object.assign((req, res) => { state.ran = (state.ran || 0) + 1; res.status(200); }, { stack: express().stack }) }; },
+    });
+    return { routers: routers.filter(item => item.pluginId === 'owner'), imports: () => imports.filter(href => href.includes('/owner/')) };
+  };
+
+  it('never imports an inactive plugin router until it is enabled', async () => {
+    add('owner', { modules: {}, routers: ['http.mjs'] });
+    const state = { enabled: false };
+    const { routers, imports } = await boot(state);
+    expect(imports()).toEqual([]);
+    expect((await call(routers[0])).next).toBe(true);
+    expect(imports()).toEqual([]);
+    state.enabled = true;
+    await call(routers[0]);
+    expect(imports()).toHaveLength(1);
+    expect(state.ran).toBe(1);
+  });
+
+  it('isolates a router that fails to import without stopping the others', async () => {
+    add('owner', { modules: {}, routers: ['http.mjs'] });
+    add('sibling', { modules: {}, routers: ['http.mjs'] });
+    const { loadPluginRouters } = await import('./plugin-runtime.mjs');
+    const routers = await loadPluginRouters({ projectRoot: root, activation: () => ({ enabled: true }), importModule: async (href) => { if (href.includes('/owner/')) throw new Error('boom'); return { default: express() }; } });
+    expect(routers.filter(item => ['owner', 'sibling'].includes(item.pluginId))).toHaveLength(2);
+    expect(routers.find(item => item.pluginId === 'sibling').stack).toHaveLength(1);
+    expect((await call(routers.find(item => item.pluginId === 'owner'))).next).toBe(true);
+  });
+
+  it('does not run middleware when the owner is disabled while its lazy import is still pending', async () => {
+    add('owner', { modules: {}, routers: ['http.mjs'] });
+    const state = { enabled: false };
+    let release; const gate = new Promise(resolve => { release = resolve; });
+    const { routers } = await boot(state, { gate });
+    state.enabled = true;
+    const pending = call(routers[0]);
+    state.enabled = false; // disabled during the awaited import
+    release();
+    const result = await pending;
+    expect(state.ran).toBeUndefined();
+    expect(result.next === true || result.res.code === 503).toBe(true);
+  });
+
+  it('denies a loaded router immediately when the same-directory manifest stops declaring it, even with the same size and mtime', async () => {
+    add('owner', { modules: {}, routers: ['http.mjs'] });
+    const state = { enabled: true };
+    const { routers } = await boot(state);
+    expect((await call(routers[0])).next).toBe(false);
+    expect(state.ran).toBe(1);
+    rewrite('owner', text => text.replace('"http.mjs"', '"htty.mjs"'), { keepTimes: true });
+    const denied = await call(routers[0]);
     expect(denied.res.code).toBe(503);
-    expect(denied.res.body.error).toMatch(/unavailable or inactive/);
+    expect(state.ran).toBe(1);
+    rewrite('owner', text => text.replace('"htty.mjs"', '"http.mjs"'), { keepTimes: true });
+    expect((await call(routers[0])).next).toBe(false);
+    expect(state.ran).toBe(2);
+  });
+
+  it('fails closed with a restart message when a loaded router source file changes', async () => {
+    const dir = add('owner', { modules: {}, routers: ['http.mjs'] });
+    const state = { enabled: true };
+    const { routers } = await boot(state);
+    fs.writeFileSync(path.join(dir, 'http.mjs'), 'export default () => { throw new Error("replaced"); };');
+    const result = await call(routers[0]);
+    expect(result.res.code).toBe(503);
+    expect(result.res.body.error).toMatch(/source changed/);
+    expect(state.ran).toBeUndefined();
+  });
+
+  it('keeps cheap-path discovery counts separate: none while unchanged, one per changed owner state', async () => {
+    const dir = add('owner', { modules: {}, routers: ['http.mjs'] });
+    const loader = await import('./plugin-loader.mjs');
+    const { createPluginLocator } = await import('./plugin-runtime.mjs');
+    let scans = 0;
+    const locator = createPluginLocator({ projectRoot: root, authoritative: true, discover: (...args) => { scans++; return loader.discoverPlugins(...args); } });
+    const plugin = locator.discover().find(item => item.id === 'owner');
+    expect(scans).toBe(1);
+    for (let i = 0; i < 50; i++) expect(locator.current(plugin)?.id).toBe('owner');
+    expect(scans).toBe(1);
+    rewrite('owner', text => text.replace('Router fixture', 'Router fixtur2'), { keepTimes: true });
+    expect(locator.current(plugin)?.manifest.description).toBe('Router fixtur2');
+    expect(scans).toBe(2);
+    for (let i = 0; i < 50; i++) locator.current(plugin);
+    expect(scans).toBe(2);
+    fs.rmSync(dir, { recursive: true, force: true });
+    for (let i = 0; i < 50; i++) expect(locator.current(plugin)).toBeNull();
+    expect(scans).toBe(3);
   });
 
   it('answers unknown upgrade paths from one index and bounds pending owner loads', async () => {

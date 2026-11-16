@@ -155,13 +155,12 @@ describe('plugin-bundle', () => {
     expect(fs.readdirSync(plugins)).toEqual([]);
   });
 
-  it('keeps execute bits only for interpreter scripts because the content hash does not cover modes', () => {
-    const entries = [['bin/tool.sh', '#!/bin/sh\n'], ['plugin.json', '{}'], ['payload.bin', 'MZ']].map(([file, text]) => ({ path: file, data: Buffer.from(text), mode: 0o755 }));
+  it('preserves requested modes (masked to 0o755) because the v1 hash covers paths and bytes, not modes', () => {
+    const entries = [['bin/tool', '\x7fELF'], ['plugin.json', '{}']].map(([file, text]) => ({ path: file, data: Buffer.from(text), mode: 0o777 }));
     const hash = crypto.createHash('sha256');
     for (const e of [...entries].sort((a, b) => (a.path < b.path ? -1 : 1))) hash.update(e.path).update('\0').update(String(e.data.length)).update('\0').update(e.data);
     const decoded = decodeBundle({ format: BUNDLE_FORMAT, id: 'demo', version: '1.0.0', sha256: hash.digest('hex'),
       files: entries.map(e => ({ path: e.path, mode: e.mode, data_b64: e.data.toString('base64') })) });
-    const modes = Object.fromEntries(decoded.entries.map(e => [e.path, e.mode]));
-    expect(modes).toEqual({ 'bin/tool.sh': 0o755, 'payload.bin': 0o644, 'plugin.json': 0o644 });
+    expect(Object.fromEntries(decoded.entries.map(e => [e.path, e.mode]))).toEqual({ 'bin/tool': 0o755, 'plugin.json': 0o755 });
   });
 });
