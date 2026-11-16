@@ -7,7 +7,7 @@ import { globalBrainDirFor, isBrainEnabled } from '../core/brain-registry.mjs';
 import { GATE_MODES, gateConfigPath, projectBrainDir, readGateLayers, resolveGateMode, writeGateMode } from '../core/gate-mode.mjs';
 import { installHarnessHooks, loadGateAdapters } from '../core/harness-hooks.mjs';
 import { ackDirectory, capsuleVerb, decide, gatePackageBroken, isAckCommand, isCheckCommand, isRouteCommand, isSubagentPayload, nativeToolOf, sessionOf, SWEEP_CONSULT_MS, whenGateFails } from '../core/preflight-gate.mjs';
-import { ACK_COMMAND, acknowledge, checkAgentReceipt, checkAnyReceipt, findRoot, forgetCapsuleDeliveries, lastArrivalMs, lastCapsuleDelivery, lastConsultMs, lastRoutedMs, lastRouteSelection, lastRouteWarnedMs, lastSessionAck, markArrival, markDelegated, markRouted, markRouteSelection, markRouteWarned, markSessionAck, noteCaller, recordDecision, sessionHasStanding, sessionKey, readDecisions, takeCaller } from '../core/preflight-receipt.mjs';
+import { ACK_COMMAND, CAPSULE_REFRESH_MS, acknowledge, canKeepStamps, checkAgentReceipt, checkAnyReceipt, findRoot, forgetCapsuleDeliveries, lastArrivalMs, lastCapsuleDelivery, lastConsultMs, lastRoutedMs, lastRouteSelection, lastRouteWarnedMs, lastSessionAck, lastPromptMs, markArrival, markDelegated, markPrompt, markRouted, markRouteSelection, markRouteWarned, markSessionAck, noteCaller, recordDecision, sessionHasStanding, sessionKey, readDecisions, takeCaller, voidSessionAck } from '../core/preflight-receipt.mjs';
 
 const USAGE = `Usage: total-recall preflight <command>
   ack --task "<task>" [--action read,edit,test] [--json]   Record a receipt after context ready:true and rules verify, and print the capsule.
@@ -16,8 +16,8 @@ const USAGE = `Usage: total-recall preflight <command>
   check [--json]                                            Exit 1 unless a fresh receipt covers this agent, wherever it acknowledged.
                                                             Run by hand, it reports this directory's receipt
   gate [--harness <id>]                                     Hook entry: read a call on stdin, answer allow or deny (exit 2 on deny)
-  remind [--json]                                           Prompt-hook entry: advisory text when the receipt is missing; always exits 0
-  session-start                                             Session-hook entry: after compaction or clear, the next ack prints the capsule; always exits 0
+  remind [--json]                                           Prompt-hook entry: records the new instruction, so the next tool call needs a new ack; always exits 0
+  session-start                                             Session-hook entry: compaction or clear voids the session's ack, and the next ack prints the capsule; always exits 0
   install [--harness <id>|--all] [--dry-run]                Install the gate for a harness, or for every harness here. Install and update do this. No off switch.
   mode [enforce] [--plugin <id>|--router] [--repo] [--json]
                                                             Show gate enforcement status. All plugin and routing gates are permanently
@@ -26,6 +26,7 @@ const USAGE = `Usage: total-recall preflight <command>
   verify | report                                           Harness adapters, owned by the cli-agents plugin
 Aliases: total-recall tr-preflight --ack | --check. A receipt lasts 30 minutes (config preflight_max_age_minutes).
 Each session acknowledges for itself where the harness sends a session id, and that goes with it between repositories.
+A new instruction from the user needs a new acknowledgement. Under another project brain, working tools wait for that brain's context.
 With no session id, each directory needs its own receipt. A repository with no skills of its own uses the machine's shared ones.`;
 
 /** An explicit override only. The configured window is read once, by `ack`, and recorded in the receipt. */
@@ -447,7 +448,7 @@ function judge(call, { harness, readablePaths, session = null, subagent = false,
   // Delegated work answers to whoever started it, and nothing here can say who that was.
   const delegated = runByRouter || subagent;
   const own = session ? lastSessionAck(session) : null;
-  const ownAck = own?.at || 0;
+  const ownAck = own?.voided ? 0 : (own?.at || 0);
   const check = () => (delegated ? checkAnyReceipt(root, { maxAgeMs: limit }) : checkAgentReceipt(root, session, { maxAgeMs: limit }));
   const working = own && !delegated ? rootOfWork(call, root) : null;
   let arrivedAt = null;
@@ -462,13 +463,20 @@ function judge(call, { harness, readablePaths, session = null, subagent = false,
     routeWarned: (receipt) => lastRouteWarnedMs(root, { session }) >= ackedAt(receipt),
     sessionAcknowledged: (result) => runByRouter || subagent || sessionHasStanding(root, session, { limitMs: limit ?? result.limitMs }),
     // Asked only once standing has failed, so an acknowledgement on record means it has expired.
-    sessionLapsed: () => Boolean(ownAck),
+    sessionLapsed: () => (own?.voided ? 'compacted' : Boolean(ownAck)),
+    // The user's new instruction is newer than what this session acknowledged for.
+    // If no stamp can be kept, a new acknowledgement could never be recorded, so it is not required.
+    promptPending: () => Boolean(session && !delegated && ownAck && lastPromptMs(session) > ownAck) && canKeepStamps(),
     arrival: () => {
       if (!working || working === own.root) return null;
       const brain = projectBrainRoot(working);
-      if (!brain || brain === projectBrainRoot(own.root) || lastCapsuleDelivery(brain, session) || lastArrivalMs(brain, session)) return null;
+      if (!brain || brain === projectBrainRoot(own.root)) return null;
+      const delivered = lastCapsuleDelivery(brain, session);
+      if (delivered && Date.now() - delivered.at < CAPSULE_REFRESH_MS) return null;
+      // What clears this is a record, so it is not required where none can be kept.
+      if (!canKeepStamps()) return null;
       arrivedAt = brain;
-      return `Total Recall note: this session is now working under the brain at ${brain}, which has its own rules and skills, and it has not received them. They come from \`cd ${brain} && total-recall context "<task>" --action read,edit,test\`.`;
+      return { brain, told: Boolean(lastArrivalMs(brain, session)), use: `cd ${brain} && total-recall context "<task>" --action read,edit,test` };
     },
     mode: (kind, plugin) => {
       layers ??= readGateLayers({ globalBrainDir: globalBrainDirFor(), root });
@@ -533,14 +541,22 @@ function remind(args) {
     const root = findRoot(call.cwd || process.cwd());
     const session = sessionOf(call);
     const result = checkAgentReceipt(root, session, { maxAgeMs: envMaxAgeMs() });
-    const standing = !result.ok || isSubagentPayload(call) || sessionHasStanding(root, session, { limitMs: result.limitMs });
+    const subagent = isSubagentPayload(call);
+    const before = session && !subagent ? lastSessionAck(session) : null;
+    // Recorded on every path, so the gate holds the next tool call until this session acknowledges for the new work.
+    if (session && !subagent) markPrompt(session);
+    const standing = !result.ok || subagent || sessionHasStanding(root, session, { limitMs: result.limitMs });
     if (result.ok && !standing) {
       result.ok = false;
       result.problems = [lastSessionAck(session)
         ? `this session's acknowledgement lapsed after ${Math.round(result.limitMs / 60000)} minutes, and a newer receipt from another agent does not renew it`
         : 'this session has not acknowledged, and a receipt from another agent does not count'];
     }
-    const text = result.ok ? null : `TR-PREFLIGHT FAILED for ${root}: ${result.problems[0]}. Every tool call except the preflight, context and recall commands will be denied until it passes. Run this on its own, with nothing piped, chained or redirected, and read everything it prints: ${ACK_COMMAND}`;
+    const text = !result.ok
+      ? `TR-PREFLIGHT FAILED for ${root}: ${result.problems[0]}. Every tool call except the preflight, context and recall commands will be denied until it passes. Run this on its own, with nothing piped, chained or redirected, and read everything it prints: ${ACK_COMMAND}`
+      : (before && !before.voided
+        ? `TR-PREFLIGHT: this is a new instruction, and the earlier acknowledgement was for earlier work. If answering it needs any tool, first run this on its own, naming the new task, and read everything it prints: ${ACK_COMMAND}`
+        : null);
     if (args.includes('--json')) console.log(JSON.stringify({ reminder: text }));
     else if (text) console.log(text);
   } catch { /* advisory only */ }
@@ -555,7 +571,10 @@ function sessionStart() {
   try {
     const call = JSON.parse(readStdin() || '{}');
     const session = sessionOf(call);
-    if (session && ['compact', 'clear'].includes(call.source)) forgetCapsuleDeliveries(session);
+    if (session && ['compact', 'clear'].includes(call.source)) {
+      forgetCapsuleDeliveries(session);
+      voidSessionAck(session, call.source);
+    }
   } catch { /* the 2-hour ceiling still applies */ }
   process.exitCode = 0;
 }

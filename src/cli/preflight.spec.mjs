@@ -587,6 +587,9 @@ describe('an agent is not bound to one repo', () => {
     return { code: r.status, answer: JSON.parse(r.stdout.trim().split('\n').pop()), err: r.stderr };
   };
   const WORK = { tool: 'write', path: 'a' };
+  const READ = { tool: 'read', path: 'a' };
+  const receive = (brain, session, now = Date.now()) => recordCapsuleDelivery(brain, session, { rulesHash: 'a', skills: {} }, { home, now });
+  const remind = (cwd, payload) => JSON.parse(spawnSync(process.execPath, [BIN, 'preflight', 'remind', '--json'], { cwd, input: JSON.stringify({ cwd, ...payload }), encoding: 'utf8', env: env() }).stdout.trim().split('\n').pop()).reminder;
   const ACK = 'total-recall tr-preflight --ack --task "spec" --action read';
   const ready = (args) => (args[0] === 'context' ? { ok: true, out: 'ready:true tokens:1 version:aa rules_hash:bb', err: '', code: 0 } : { ok: true, out: '', err: '', code: 0 });
   const ackIn = (cwd, session) => {
@@ -614,6 +617,7 @@ describe('an agent is not bound to one repo', () => {
 
   it('keeps working in another repository after acknowledging in one', () => {
     ackIn(first, 'mover');
+    receive(other, 'mover');
     for (const repo of [other, noSkills, first]) {
       const answer = gate(repo, { ...WORK, session_id: 'mover' });
       expect(answer.code, repo).toBe(0);
@@ -653,8 +657,10 @@ describe('an agent is not bound to one repo', () => {
     const lapsed = gate(other, { ...WORK, session_id: 'lapsing' });
     expect(lapsed.code).toBe(2);
     expect(lapsed.answer.reason).toContain('lapsed');
-    ackIn(withSkills(), 'lapsing');
-    expect(gate(other, { ...WORK, session_id: 'lapsing' }).code).toBe(0);
+    const again = withSkills();
+    ackIn(again, 'lapsing');
+    expect(gate(again, { ...WORK, session_id: 'lapsing' }).code).toBe(0);
+    expect(gate(other, { ...WORK, session_id: 'lapsing' }).answer.rule).toBe('arrival');
   });
   it('answers check and the prompt hook for the agent, not the folder it moved into', () => {
     ackIn(first, 'asker');
@@ -662,8 +668,9 @@ describe('an agent is not bound to one repo', () => {
     expect(gate(other, { tool: 'shell', command: 'total-recall tr-preflight --check', session_id: 'asker' }).code).toBe(0);
     expect(check().status).toBe(0);
     expect(check().status).toBe(1);
-    const prompt = spawnSync(process.execPath, [BIN, 'preflight', 'remind', '--json'], { cwd: other, input: JSON.stringify({ cwd: other, session_id: 'asker' }), encoding: 'utf8', env: env() });
-    expect(JSON.parse(prompt.stdout.trim().split('\n').pop()).reminder).toBeNull();
+    const reminder = remind(other, { session_id: 'asker' });
+    expect(reminder).toContain('new instruction');
+    expect(reminder).not.toContain('FAILED');
   });
   describe('telling a session about a brain it has not received', () => {
     const nestedIn = (parent) => {
@@ -676,12 +683,13 @@ describe('an agent is not bound to one repo', () => {
       const parent = withSkills();
       const child = nestedIn(parent);
       ackIn(first, 'borrower');
-      const told = gate(child, { ...WORK, session_id: 'borrower' });
+      const told = gate(child, { ...READ, session_id: 'borrower' });
       expect(told.code).toBe(0);
       expect(told.answer.warned).toEqual(['arrival']);
       expect(told.answer.warning).toContain(`cd ${parent} && total-recall context`);
-      expect(gate(child, { ...WORK, session_id: 'borrower' }).answer.warned).toBeUndefined();
-      expect(gate(parent, { ...WORK, session_id: 'borrower' }).answer.warned).toBeUndefined();
+      expect(gate(child, { ...READ, session_id: 'borrower' }).answer.warned).toBeUndefined();
+      expect(gate(parent, { ...READ, session_id: 'borrower' }).answer.warned).toBeUndefined();
+      expect(gate(child, { ...WORK, session_id: 'borrower' }).answer.rule).toBe('arrival');
     });
     it('says nothing when a nested folder uses the brain the session acknowledged under', () => {
       const parent = withSkills();
@@ -694,9 +702,11 @@ describe('an agent is not bound to one repo', () => {
       const globalBrainDir = path.join(home, '.agent', 'skills', 'total-recall');
       ackIn(first, 'switched');
       setBrainEnabled(brainDir, false, { globalBrainDir });
-      expect(gate(off, { ...WORK, session_id: 'switched' }).answer.warned).toBeUndefined();
+      const open = gate(off, { ...WORK, session_id: 'switched' });
+      expect(open.code).toBe(0);
+      expect(open.answer.warned).toBeUndefined();
       setBrainEnabled(brainDir, true, { globalBrainDir });
-      expect(gate(off, { ...WORK, session_id: 'switched' }).answer.warned).toEqual(['arrival']);
+      expect(gate(off, { ...WORK, session_id: 'switched' }).answer.rule).toBe('arrival');
     });
     it("counts a capsule fetched from a nested folder as that brain's", () => {
       const parent = withSkills();
@@ -706,20 +716,49 @@ describe('an agent is not bound to one repo', () => {
       try { recordCapsuleDelivery(child, 'fetched', { rulesHash: 'a', skills: {} }, { home }); } finally { vi.unstubAllEnvs(); }
       expect(gate(parent, { ...WORK, session_id: 'fetched' }).answer.warned).toBeUndefined();
     });
-    it('tells it once, and how to get them', () => {
+    it('tells a reader once, and how to get them', () => {
       ackIn(first, 'visitor');
-      const told = gate(other, { ...WORK, session_id: 'visitor' });
+      const told = gate(other, { ...READ, session_id: 'visitor' });
       expect(told.code).toBe(0);
       expect(told.answer.warned).toEqual(['arrival']);
       expect(told.answer.warning).toContain(other);
       expect(told.answer.warning).toContain(`cd ${other} && total-recall context`);
-      expect(gate(other, { ...WORK, session_id: 'visitor' }).answer.warned).toBeUndefined();
+      expect(gate(other, { ...READ, session_id: 'visitor' }).answer.warned).toBeUndefined();
+    });
+    it('denies working tools there until the session has that brain\'s capsule, however often it was told', () => {
+      ackIn(first, 'worker');
+      const use = `cd ${other} && total-recall context "spec" --action read,edit,test`;
+      for (const call of [WORK, { tool: 'shell', command: `cd ${other} && ls` }, { tool: 'mcp' }, WORK]) {
+        const denied = gate(other, { ...call, session_id: 'worker' });
+        expect(denied.code, JSON.stringify(call)).toBe(2);
+        expect(denied.answer.rule).toBe('arrival');
+        expect(denied.answer.reason).toContain(`cd ${other} && total-recall context`);
+        expect(denied.err).toContain(`cd ${other} && total-recall context`);
+      }
+      // What clears it is never denied, and neither is reading or looking things up.
+      expect(gate(first, { tool: 'shell', command: use, session_id: 'worker' }).code).toBe(0);
+      expect(gate(other, { tool: 'shell', command: 'total-recall recall "spec" --local', session_id: 'worker' }).code).toBe(0);
+      expect(gate(other, { ...READ, session_id: 'worker' }).code).toBe(0);
+      receive(other, 'worker');
+      expect(gate(other, { ...WORK, session_id: 'worker' }).code).toBe(0);
+      expect(gate(first, { ...WORK, session_id: 'worker' }).code).toBe(0);
+    });
+    it('clears when the session acknowledges under that brain instead', () => {
+      ackIn(first, 'reacker');
+      expect(gate(other, { ...WORK, session_id: 'reacker' }).answer.rule).toBe('arrival');
+      ackIn(other, 'reacker');
+      expect(gate(other, { ...WORK, session_id: 'reacker' }).code).toBe(0);
+    });
+    it('does not count a capsule the session received too long ago to still have', () => {
+      ackIn(first, 'old-capsule');
+      receive(other, 'old-capsule', Date.now() - 3 * 60 * 60 * 1000);
+      expect(gate(other, { ...WORK, session_id: 'old-capsule' }).answer.rule).toBe('arrival');
     });
     it('notices a file in another repository, and a command that changes into one', () => {
       ackIn(first, 'by-path');
-      expect(gate(first, { tool: 'write', path: path.join(other, 'x.mjs'), session_id: 'by-path' }).answer.warned).toEqual(['arrival']);
+      expect(gate(first, { tool: 'write', path: path.join(other, 'x.mjs'), session_id: 'by-path' }).answer.rule).toBe('arrival');
       ackIn(first, 'by-cd');
-      expect(gate(first, { tool: 'shell', command: `cd ${other} && ls`, session_id: 'by-cd' }).answer.warned).toEqual(['arrival']);
+      expect(gate(first, { tool: 'shell', command: `cd ${other} && ls`, session_id: 'by-cd' }).answer.rule).toBe('arrival');
     });
     it('says nothing where there is nothing to tell', () => {
       ackIn(first, 'quiet');
@@ -732,13 +771,102 @@ describe('an agent is not bound to one repo', () => {
     it('leaves a subagent out of it, without using up the note', () => {
       ackIn(first, 'parent');
       expect(gate(other, { ...WORK, session_id: 'parent', agent_id: 'kid' }).answer.warned).toBeUndefined();
-      expect(gate(other, { ...WORK, session_id: 'parent' }).answer.warned).toEqual(['arrival']);
+      expect(gate(other, { ...READ, session_id: 'parent' }).answer.warned).toEqual(['arrival']);
     });
     it('tells it again after compaction, which lost what it was told', () => {
       ackIn(first, 'compacted');
-      expect(gate(other, { ...WORK, session_id: 'compacted' }).answer.warned).toEqual(['arrival']);
+      expect(gate(other, { ...READ, session_id: 'compacted' }).answer.warned).toEqual(['arrival']);
       spawnSync(process.execPath, [BIN, 'preflight', 'session-start'], { cwd: other, input: JSON.stringify({ session_id: 'compacted', source: 'compact', cwd: other }), encoding: 'utf8', env: env() });
-      expect(gate(other, { ...WORK, session_id: 'compacted' }).answer.warned).toEqual(['arrival']);
+      ackIn(first, 'compacted');
+      expect(gate(other, { ...READ, session_id: 'compacted' }).answer.warned).toEqual(['arrival']);
+    });
+  });
+  describe('an acknowledgement is for the work it named', () => {
+    const start = (source, session, cwd = first) => spawnSync(process.execPath, [BIN, 'preflight', 'session-start'], { cwd, input: JSON.stringify({ session_id: session, source, cwd }), encoding: 'utf8', env: env() });
+    it('needs a new one once the user sends a new instruction, and says how', () => {
+      ackIn(first, 'prompted');
+      expect(gate(first, { ...WORK, session_id: 'prompted' }).code).toBe(0);
+      expect(remind(first, { session_id: 'prompted' })).toContain('tr-preflight --ack');
+      for (const call of [WORK, READ, { tool: 'shell', command: 'ls' }]) {
+        const denied = gate(first, { ...call, session_id: 'prompted' });
+        expect(denied.code, JSON.stringify(call)).toBe(2);
+        expect(denied.answer.rule).toBe('receipt:prompt');
+        expect(denied.answer.reason).toContain('new instruction');
+        expect(denied.err).toContain('tr-preflight --ack');
+      }
+      ackIn(first, 'prompted');
+      expect(gate(first, { ...WORK, session_id: 'prompted' }).code).toBe(0);
+    });
+    it('keeps the commands that satisfy it, skill files and subagents open after a new instruction', () => {
+      ackIn(first, 'prompted-open');
+      remind(first, { session_id: 'prompted-open' });
+      expect(gate(first, { tool: 'shell', command: 'total-recall context "spec" --action read', session_id: 'prompted-open' }).code).toBe(0);
+      expect(gate(first, { tool: 'read', path: path.join(first, SKILLS[0]), session_id: 'prompted-open' }).code).toBe(0);
+      expect(gate(first, { ...WORK, session_id: 'prompted-open', agent_id: 'kid' }).code).toBe(0);
+      expect(gate(first, { ...WORK, session_id: 'prompted-open' }, { TR_META_HARNESS_RUN: '1' }).code).toBe(0);
+    });
+    it('does not count a prompt hook fired for a subagent, or one with no session', () => {
+      ackIn(first, 'prompt-kid');
+      remind(first, { session_id: 'prompt-kid', agent_id: 'kid' });
+      remind(first, {});
+      expect(gate(first, { ...WORK, session_id: 'prompt-kid' }).code).toBe(0);
+    });
+    it('is void after compaction or clear, for that session only', () => {
+      for (const source of ['compact', 'clear']) {
+        const session = `lost-${source}`;
+        ackIn(first, session);
+        ackIn(first, 'bystander');
+        start(source, session);
+        const denied = gate(first, { ...WORK, session_id: session });
+        expect(denied.code).toBe(2);
+        expect(denied.answer.rule).toBe('receipt:session');
+        expect(denied.answer.reason).toContain('compacted or cleared');
+        expect(gate(first, { ...WORK, session_id: 'bystander' }).code).toBe(0);
+        ackIn(first, session);
+        expect(gate(first, { ...WORK, session_id: session }).code).toBe(0);
+      }
+    });
+    it('is not voided by an ordinary session start', () => {
+      ackIn(first, 'resumed');
+      start('resume', 'resumed');
+      start('startup', 'resumed');
+      expect(gate(first, { ...WORK, session_id: 'resumed' }).code).toBe(0);
+    });
+    it('records the new acknowledgement in the temp folder when the state folder refuses writes', () => {
+      const stateDir = path.join(home, '.agent', 'tr-preflight');
+      ackIn(first, 'prompt-sandboxed');
+      fs.chmodSync(stateDir, 0o500);
+      try {
+        remind(first, { session_id: 'prompt-sandboxed' });
+        expect(gate(first, { ...WORK, session_id: 'prompt-sandboxed' }).answer.rule).toBe('receipt:prompt');
+        expect(gate(first, { tool: 'shell', command: ACK, session_id: 'prompt-sandboxed' }).code).toBe(0);
+        expect(gate(first, { ...WORK, session_id: 'prompt-sandboxed' }).code).toBe(0);
+      } finally { fs.chmodSync(stateDir, 0o700); }
+    });
+    it('holds no session to a record nothing can keep', () => {
+      const stateDir = path.join(home, '.agent', 'tr-preflight');
+      ackIn(first, 'prompt-nowhere');
+      remind(first, { session_id: 'prompt-nowhere' });
+      ackIn(first, 'arrive-nowhere');
+      ackIn(first, 'void-nowhere');
+      start('compact', 'void-nowhere');
+      expect(gate(first, { ...WORK, session_id: 'prompt-nowhere' }).code).toBe(2);
+      expect(gate(other, { ...WORK, session_id: 'arrive-nowhere' }).code).toBe(2);
+      expect(gate(first, { ...WORK, session_id: 'void-nowhere' }).code).toBe(2);
+      // An earlier sandboxed run may have left the temp copy's folder behind, which would still take a stamp.
+      const closed = [stateDir, tmp, ...fs.readdirSync(tmp).filter((name) => name.startsWith('tr-preflight-')).map((name) => path.join(tmp, name))];
+      for (const dir of closed) fs.chmodSync(dir, 0o500);
+      try {
+        expect(gate(first, { ...WORK, session_id: 'prompt-nowhere' }).code).toBe(0);
+        expect(gate(other, { ...WORK, session_id: 'arrive-nowhere' }).code).toBe(0);
+        expect(gate(first, { ...WORK, session_id: 'void-nowhere' }).code).toBe(0);
+      } finally { for (const dir of closed) fs.chmodSync(dir, 0o700); }
+    });
+    it('is not covered by a subagent window once voided', () => {
+      ackIn(first, 'voided-parent');
+      expect(gate(first, { tool: 'agent', session_id: 'voided-parent' }).code).toBe(0);
+      start('compact', 'voided-parent');
+      expect(gate(first, { ...WORK, session_id: 'voided-parent' }).answer.rule).toBe('receipt:session');
     });
   });
   it('keeps what repairs the gate open when the gate itself fails', () => {

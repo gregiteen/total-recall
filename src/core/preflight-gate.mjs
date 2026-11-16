@@ -15,6 +15,11 @@
  *      session must have acknowledged. Another agent's receipt does not count. An agent is not
  *      bound to one repository: its acknowledgement goes with it, and it is told once about each
  *      other project brain it starts working under, including one a folder borrows from a parent.
+ *      Until it has that brain's capsule, working tools there are denied: reading, searching and
+ *      plain Total Recall commands stay open, so one `context` command clears it.
+ *      An acknowledgement is for the work the user had asked for. When the user sends a new
+ *      instruction, the session acknowledges again before any tool call, naming the new task.
+ *      Compaction or clear voids the acknowledgement, because the session no longer has its capsule.
  *      With no session id there is no agent to follow, so the directory needs its own receipt. Subagents and runs Metaharness started are
  *      delegated, so they never stop to acknowledge.
  *   5. With a receipt, a repository-wide source sweep still needs a recent
@@ -295,7 +300,7 @@ export function whenGateFails(call, err) {
 
 /**
  * @param {{ tool: string, command?: string, path?: string, cwd?: string }} call
- * @param {{ check: () => { ok: boolean, problems: string[], ageMs?: number|null, limitMs?: number }, recentConsult?: () => boolean, readablePaths?: RegExp[], ownedCommands?: () => { plugin: string, pattern: string, use: string }[], router?: () => ({ plugin: string, pattern: string, use: string } | null), routed?: (receipt: object) => boolean, routeWarned?: (receipt: object) => boolean, sessionAcknowledged?: (receipt: object) => boolean, sessionLapsed?: () => boolean, arrival?: () => (string | null), dispatched?: boolean, harness?: string|null, routerRun?: boolean, selection?: (receipt: object) => ({ harness: string|null, at: number } | null), mode?: (kind: 'router'|'owned', plugin: string) => string, ownerHealthy?: (plugin: string, use: string) => boolean }} deps
+ * @param {{ check: () => { ok: boolean, problems: string[], ageMs?: number|null, limitMs?: number }, recentConsult?: () => boolean, readablePaths?: RegExp[], ownedCommands?: () => { plugin: string, pattern: string, use: string }[], router?: () => ({ plugin: string, pattern: string, use: string } | null), routed?: (receipt: object) => boolean, routeWarned?: (receipt: object) => boolean, sessionAcknowledged?: (receipt: object) => boolean, sessionLapsed?: () => (boolean | 'compacted'), arrival?: () => ({ brain: string, use: string, told: boolean } | null), promptPending?: () => boolean, dispatched?: boolean, harness?: string|null, routerRun?: boolean, selection?: (receipt: object) => ({ harness: string|null, at: number } | null), mode?: (kind: 'router'|'owned', plugin: string) => string, ownerHealthy?: (plugin: string, use: string) => boolean }} deps
  */
 export function decide(call, deps) {
   try {
@@ -316,10 +321,15 @@ export function decide(call, deps) {
     }
     if (tool !== 'agent' && deps.sessionAcknowledged && !deps.sessionAcknowledged(receipt)) {
       const lapsed = deps.sessionLapsed ? deps.sessionLapsed() : false;
-      const state = lapsed
+      const state = lapsed === 'compacted'
+        ? `this session was compacted or cleared, so it no longer has the rules it acknowledged (directory: ${call.cwd || 'unknown'}).`
+        : lapsed
         ? `this session's acknowledgement lapsed${receipt.limitMs ? ` after ${minutes(receipt.limitMs)} minutes` : ''} (directory: ${call.cwd || 'unknown'}). A newer receipt from another agent does not renew it.`
         : `this session has not acknowledged (directory: ${call.cwd || 'unknown'}). A receipt from another agent does not count.`;
       return deny('receipt:session', `TR-PREFLIGHT gate: ${state} ${nextStep(call)}`);
+    }
+    if (tool !== 'agent' && deps.promptPending && deps.promptPending()) {
+      return deny('receipt:prompt', `TR-PREFLIGHT gate: the user sent a new instruction after this session's acknowledgement, which was for earlier work (directory: ${call.cwd || 'unknown'}). Acknowledge for the new task before any tool call. ${nextStep(call)}`);
     }
     if (tool === 'shell' && isBlockedGrep(call.command)) {
       return deny('grep', 'TR-PREFLIGHT gate: `grep`/`rg`/`ag` is blocked. Use Total Recall OpenWiki (`total-recall openwiki` / `openwiki/`) or `total-recall recall "<topic>" --local` instead.',
@@ -340,7 +350,15 @@ export function decide(call, deps) {
     }
     const notes = [];
     const arrival = deps.arrival ? deps.arrival() : null;
-    if (arrival) notes.push({ name: 'arrival', warning: arrival });
+    if (arrival) {
+      const open = ['read', 'search', 'web', 'agent'].includes(tool) || (tool === 'shell' && isPlainTotalRecall(call.command));
+      if (!open) {
+        return deny('arrival', `TR-PREFLIGHT gate: this session is working under the brain at ${arrival.brain}, which has its own rules and skills, and it has not received them. Run this on its own, with nothing piped, chained or redirected, and read everything it prints: ${arrival.use} An acknowledgement made there clears it too.`, arrival.use);
+      }
+      if (!arrival.told) {
+        notes.push({ name: 'arrival', warning: `Total Recall note: this session is now working under the brain at ${arrival.brain}, which has its own rules and skills, and it has not received them. Reading stays open; every other tool there is denied until it runs \`${arrival.use}\`.` });
+      }
+    }
     if (router && !deps.dispatched) {
       const open = ['read', 'search', 'web', 'agent'].includes(tool) || (tool === 'shell' && isPlainTotalRecall(call.command));
       if (!open && !(deps.routed ? deps.routed(receipt.receipt) : false)) {

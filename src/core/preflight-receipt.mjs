@@ -363,6 +363,27 @@ export function lastSessionAck(session, { home = os.homedir() } = {}) {
   return newestRecord(sessionAckPath(session, home));
 }
 
+/**
+ * The session lost what it acknowledged, because the harness compacted or cleared it. The record
+ * stays, marked void, so the gate can say why and no other agent's standing covers for it.
+ */
+export function voidSessionAck(session, reason, { home = os.homedir(), now = Date.now() } = {}) {
+  const last = lastSessionAck(session, { home });
+  if (!last) return;
+  writeBookkeeping(sessionAckPath(session, home), (target) => fs.writeFileSync(target, JSON.stringify({ at: now, root: last.root, voided: reason }), { mode: 0o600 }));
+}
+
+const promptPath = (session, home) => path.join(stateDir(home), `prompt-${sessionKey(session)}.stamp`);
+
+/** The user has just given this session an instruction. What it acknowledged before was for other work. */
+export function markPrompt(session, { home = os.homedir(), now = Date.now() } = {}) {
+  writeStamp(promptPath(session, home), now);
+}
+
+export function lastPromptMs(session, { home = os.homedir() } = {}) {
+  return readStamp(promptPath(session, home));
+}
+
 /** An acknowledged session started a subagent here. */
 export function markDelegated(root, { home = os.homedir(), now = Date.now() } = {}) {
   writeStamp(delegatedPath(root, home), now);
@@ -392,18 +413,22 @@ export function canKeepStamps({ home = os.homedir(), now = Date.now() } = {}) {
  * - Some harnesses give a subagent its own session with no link to its parent. A session that has
  *   never acknowledged counts as delegated while an acknowledged session's subagent window is open.
  *   An unrelated agent starting here in that window also passes; keeping subagents unblocked wins.
+ * - A session whose acknowledgement was voided by compaction or clear has no standing until it acknowledges again.
  * - If no stamp can be kept, the acknowledgement could never be recorded, so it is not required.
  */
 export function sessionHasStanding(root, session, { limitMs = DEFAULT_MAX_AGE_MS, home = os.homedir(), now = Date.now() } = {}) {
   if (!session) return true;
-  const own = lastSessionAck(session, { home })?.at;
+  const record = lastSessionAck(session, { home });
+  // A voided acknowledgement is this session's own loss, so a subagent window cannot cover it.
+  if (record?.voided) return !canKeepStamps({ home, now });
+  const own = record?.at;
   if (own) { if (now - own < limitMs) return true; } else if (now - lastDelegatedMs(root, { home }) < limitMs) return true;
   return !canKeepStamps({ home, now });
 }
 
 /** Session stamps are one small file per session, so old ones go when anyone acknowledges. */
 function pruneSessionStamps(home, now, keepMs = 7 * 24 * 60 * 60 * 1000) {
-  const pattern = /^((session-ack|route|route-warned)-[0-9a-f]{16}|(session-ack|route|route-warned|capsule|arrival)-[0-9a-f]+-[0-9a-f]{16}|caller-(ack|context|check)-[0-9a-f]+)\.stamp$/;
+  const pattern = /^((session-ack|route|route-warned|prompt)-[0-9a-f]{16}|(session-ack|route|route-warned|capsule|arrival)-[0-9a-f]+-[0-9a-f]{16}|caller-(ack|context|check)-[0-9a-f]+)\.stamp$/;
   for (const dir of stateDirs(home)) {
     let names = [];
     try { names = fs.readdirSync(dir); } catch { continue; }

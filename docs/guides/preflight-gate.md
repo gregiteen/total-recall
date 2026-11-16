@@ -39,6 +39,18 @@ The install marker is `node_modules/.total-recall-install.json`. Modern Yarn PnP
 
 Each session has to do this for itself. Where the harness sends a session id, another agent's receipt in the same repository does not count. Subagents and runs started by Metaharness are treated as delegated and are not stopped. In a harness that gives a subagent its own unlinked session, a new session counts as delegated for one receipt window after an acknowledged session starts a subagent, so an unrelated agent starting in that repository during the window also passes.
 
+## What an acknowledgement covers
+
+An acknowledgement is for the work it named, in the session that made it. Three things end it early. Each denial names the one command that clears it.
+
+| What happened | What the gate does | What clears it |
+| --- | --- | --- |
+| The user sent a new instruction | Denies every tool call from that session. The prompt hook says so and never blocks the user. | A new acknowledgement that names the new task. Routing is then due again. |
+| The session started working under another project brain | Denies working tools there. Reading, searching, the web, starting a subagent and plain Total Recall commands stay open. | `cd <brain> && total-recall context "<task>" --action read,edit,test`, or an acknowledgement there. A capsule counts for 2 hours. |
+| The harness compacted or cleared the session | Voids that session's acknowledgement, because it no longer has the rules it read. | A new acknowledgement, which prints the full capsule. |
+
+Subagents and runs started by Metaharness are delegated and are not stopped by any of these. A harness that sends no session id keeps the directory rule. A harness with no prompt hook or session hook cannot report those events, so only the receipt's age ends its acknowledgement.
+
 ## When work goes around a plugin
 
 Two more checks steer work toward the plugin that owns it:
