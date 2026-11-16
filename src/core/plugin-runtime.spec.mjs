@@ -167,12 +167,9 @@ describe('bounded plugin router and upgrade resolution', () => {
     expect(imported.some(href => href.includes('/off/'))).toBe(false);
   });
 
-  it('keeps cheap stamps per request: no discovery for an unchanged plugin, immediate denial after removal', async () => {
+  it('serves an unchanged plugin from its cheap stamp and denies a removed one immediately', async () => {
     const dir = add('owner', { modules: {}, routers: ['http.mjs'] });
     const { loadPluginRouters } = await import('./plugin-runtime.mjs');
-    const loader = await import('./plugin-loader.mjs');
-    let discoveries = 0;
-    const counting = Object.assign((...args) => { discoveries++; return loader.discoverPlugins(...args); });
     const imports = [];
     const routers = await loadPluginRouters({ projectRoot: root, importModule: async (href) => { imports.push(href); return { default: express() }; } });
     const router = routers.find(item => item.pluginId === 'owner');
@@ -182,8 +179,6 @@ describe('bounded plugin router and upgrade resolution', () => {
     const denied = await call(router);
     expect(denied.res.code).toBe(503);
     expect(denied.res.body.error).toMatch(/unavailable or inactive/);
-    expect(discoveries).toBe(0);
-    expect(counting).toBeTypeOf('function');
   });
 
   it('answers unknown upgrade paths from one index and bounds pending owner loads', async () => {
