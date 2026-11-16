@@ -1,5 +1,14 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 vi.mock('../core/startup-health.mjs', () => ({ startupHealth: vi.fn(async () => ({ ready: true, server: {status:'ready'},brain:{status:'ready'},daemon:{status:'running'},ssss:{status:'available'},app:{status:'not-declared'},actions:[] })) }));
+const conn = vi.hoisted(() => ({ resolve: vi.fn(async () => ({ token: null, source: null, reason: 'no-saved-token' })), brain: '', global: '' }));
+vi.mock('../core/connection-token.mjs', () => ({ resolveConnectionToken: conn.resolve }));
+vi.mock('./agent-dir.mjs', async importOriginal => {
+  const actual = await importOriginal();
+  return { ...actual, resolveBrainDir: () => conn.brain || actual.resolveBrainDir(), getGlobalBrainDir: () => conn.global || actual.getGlobalBrainDir() };
+});
 import startup, { inspectStartup, startupFindings } from './startup.mjs';
 import { startupHealth } from '../core/startup-health.mjs';
 describe('startup CLI contract', () => {
@@ -31,5 +40,54 @@ describe('startup findings', () => {
   });
   it('is silent when everything is current', () => {
     expect(startupFindings({ dashboard: { status: 'current' }, plugin_checks: [{ command: 'git unmerged', status: 'ok', outstanding: 0, summary: 'none' }] })).toEqual([]);
+  });
+});
+
+describe('startup saved credential', () => {
+  let root;
+  const saved = { pat: process.env.TR_PAT, tok: process.env.TOTAL_RECALL_TOKEN, brain: process.env.TR_BRAIN };
+  beforeEach(() => {
+    vi.clearAllMocks();
+    delete process.env.TR_PAT; delete process.env.TOTAL_RECALL_TOKEN; delete process.env.TR_BRAIN;
+    root = fs.mkdtempSync(path.join(os.tmpdir(), 'tr-startup-'));
+    conn.brain = path.join(root, 'project'); conn.global = path.join(root, 'global');
+    for (const dir of [conn.brain, conn.global]) fs.mkdirSync(path.join(dir, 'config'), { recursive: true });
+    fs.writeFileSync(path.join(conn.brain, 'config', 'brain.json'), JSON.stringify({ url: 'https://brain.test', token: 'legacy-file-token-canary', layer: 'project', name: 'demo' }));
+    conn.resolve.mockImplementation(async () => ({ token: null, source: null, reason: 'no-saved-token' }));
+  });
+  afterEach(() => {
+    conn.brain = ''; conn.global = ''; fs.rmSync(root, { recursive: true, force: true });
+    for (const [k, v] of [['TR_PAT', saved.pat], ['TOTAL_RECALL_TOKEN', saved.tok], ['TR_BRAIN', saved.brain]]) { if (v === undefined) delete process.env[k]; else process.env[k] = v; }
+  });
+
+  it('asks the Auth owner with the endpoint and explicit legacy context, and sends only its token', async () => {
+    conn.resolve.mockResolvedValue({ token: 'owner-token', source: 'auth' });
+    await inspectStartup();
+    expect(conn.resolve).toHaveBeenCalledWith({ url: 'https://brain.test', legacyBrainJson: [path.join(conn.brain, 'config', 'brain.json'), path.join(conn.global, 'config', 'brain.json')] });
+    expect(startupHealth.mock.calls[0][0]).toMatchObject({ brainUrl: 'https://brain.test', token: 'owner-token' });
+  });
+
+  it('checks without a token and reports the credential unavailable when Auth fails, never using the file token', async () => {
+    conn.resolve.mockRejectedValue(new Error('Unlock auth to read the encrypted credential store'));
+    const report = await inspectStartup();
+    expect(startupHealth.mock.calls[0][0].token).toBeNull();
+    expect(JSON.stringify(startupHealth.mock.calls)).not.toContain('legacy-file-token-canary');
+    expect(report.credential).toEqual({ status: 'unavailable', reason: 'Unlock auth to read the encrypted credential store' });
+    expect(startupFindings(report).join('\n')).toMatch(/Credential: unavailable \(Unlock auth/);
+  });
+
+  it('does not forward a saved token to a TR_BRAIN on another origin', async () => {
+    process.env.TR_BRAIN = 'https://other.example';
+    conn.resolve.mockImplementation(async ({ url }) => url === 'https://brain.test' ? { token: 'owner-token', source: 'auth' } : { token: null, source: null, reason: 'origin-mismatch' });
+    await inspectStartup();
+    expect(conn.resolve.mock.calls[0][0].url).toBe('https://other.example');
+    expect(startupHealth.mock.calls[0][0].token).toBeNull();
+  });
+
+  it('keeps an explicit environment token without calling the owner', async () => {
+    process.env.TR_PAT = 'operator-env-token';
+    await inspectStartup();
+    expect(conn.resolve).not.toHaveBeenCalled();
+    expect(startupHealth.mock.calls[0][0].token).toBe('operator-env-token');
   });
 });

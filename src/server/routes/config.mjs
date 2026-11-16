@@ -133,17 +133,23 @@ function redactDeep(value) {
   return Object.fromEntries(Object.entries(value).map(([k, v]) => [k, CREDENTIAL_KEY.test(k) ? '[redacted]' : redactDeep(v)]));
 }
 
-const SECRET_KEYS = [
-  'google_api_key',
-  'anthropic_api_key',
-  'openai_api_key',
-  'openrouter_api_key',
-  'tavily_api_key',
-  'brave_api_key',
-  'exa_api_key',
-  'serper_api_key',
-  'github_token',
-];
+/**
+ * The public lowercase settings fields and the exact canonical Auth keys they are stored under.
+ * Auth's runtimeConfiguration reads only the canonical keys, so a lowercase literal key would be
+ * reported as saved but never consumed. Lowercase keys already in a store are neither read nor copied.
+ */
+const SECRET_KEYS = Object.freeze({
+  google_api_key: 'GOOGLE_API_KEY',
+  anthropic_api_key: 'ANTHROPIC_API_KEY',
+  openai_api_key: 'OPENAI_API_KEY',
+  openrouter_api_key: 'OPENROUTER_API_KEY',
+  tavily_api_key: 'TAVILY_API_KEY',
+  brave_api_key: 'BRAVE_SEARCH_API_KEY',
+  exa_api_key: 'EXA_API_KEY',
+  serper_api_key: 'SERPER_API_KEY',
+  github_token: 'GITHUB_TOKEN',
+});
+const ALIAS_BY_CANONICAL = new Map(Object.entries(SECRET_KEYS).map(([alias, canonical]) => [canonical, alias]));
 
 function readYaml(file) {
   if (!fs.existsSync(file)) return {};
@@ -205,10 +211,11 @@ router.get('/api/config-json', requireAuth, requireScope('config:read'), async (
           hasToken ||= row.set;
           continue;
         }
-        if (!SECRET_KEYS.includes(row.key)) continue;
+        const alias = ALIAS_BY_CANONICAL.get(row.key);
+        if (!alias) continue;
         if (typeof row.set !== 'boolean') throw new Error('Invalid Auth metadata');
         // Mask only — Settings/Secrets UIs use presence indicators, not values.
-        safeSecrets[row.key] = row.set ? '••••••••' : '';
+        safeSecrets[alias] = row.set ? '••••••••' : '';
       }
     } catch {
       return res.status(503).json({ error: 'Auth credential metadata is unavailable.' });
@@ -251,22 +258,22 @@ router.post('/api/config-json', requireAuth, requireScope('config:write'), async
     ];
     if (secrets !== undefined && !isPlain(secrets)) invalid.push('secrets');
     for (const key of Object.keys(isPlain(secrets) ? secrets : {})) {
-      if (!SECRET_KEYS.includes(key)) invalid.push(`secrets.${key}`);
+      if (!Object.hasOwn(SECRET_KEYS, key)) invalid.push(`secrets.${key}`);
     }
     if (invalid.length) return res.status(400).json({ error: `Unsupported or invalid config fields: ${invalid.join(', ')}. Nothing was changed.` });
 
     // Only real secret values reach Auth; masked placeholders from GET are ignored.
     const secretOps = [];
-    for (const key of SECRET_KEYS) {
-      if (!isPlain(secrets) || secrets[key] === undefined) continue;
-      const value = secrets[key];
-      if (value === '' || value == null) { secretOps.push({ key, remove: true }); continue; }
+    for (const [alias, key] of Object.entries(SECRET_KEYS)) {
+      if (!isPlain(secrets) || secrets[alias] === undefined) continue;
+      const value = secrets[alias];
+      if (value === '' || value == null) { secretOps.push({ alias, key, remove: true }); continue; }
       if (typeof value === 'string' && (value.includes('•') || value === '[redacted]')) continue;
-      secretOps.push({ key, value: String(value) });
+      secretOps.push({ alias, key, value: String(value) });
     }
 
     // An explicit backend credential goes to the Auth owner under its canonical key, never into brain.json.
-    if (brainToken !== undefined) secretOps.push({ key: BACKEND_TOKEN_KEY, value: brainToken });
+    if (brainToken !== undefined) secretOps.push({ alias: 'brain.token', key: BACKEND_TOKEN_KEY, value: brainToken });
 
     const plan = [];
     if (secretOps.length) plan.push('secrets');
@@ -290,7 +297,7 @@ router.post('/api/config-json', requireAuth, requireScope('config:write'), async
         for (const op of secretOps) {
           if (op.remove) await deleteSecret(BRAIN_DIR, op.key, { action: 'delete', actor: 'settings-config' });
           else await setSecret(BRAIN_DIR, op.key, op.value, { action: 'set', actor: 'settings-config' });
-          appliedKeys.push(op.key);
+          appliedKeys.push(op.alias);
         }
         applied.push('secrets');
       } catch {

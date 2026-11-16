@@ -92,14 +92,16 @@ describe('Config Router', () => {
   it('reads only allowed credential presence from Auth metadata', async () => {
     vi.spyOn(fs, 'existsSync').mockReturnValue(false);
     authOwner.listSecretsMeta.mockResolvedValue([
-      { key: 'openai_api_key', set: true, value: 'fixture-owner-value' },
-      { key: 'google_api_key', set: false },
+      { key: 'OPENAI_API_KEY', set: true, value: 'fixture-owner-value' },
+      { key: 'GOOGLE_API_KEY', set: false },
+      { key: 'google_api_key', set: true, value: 'legacy-lowercase-value' },
       { key: 'unrelated-key', set: true },
     ]);
     const res = await request(app).get('/api/config-json');
     expect(res.status).toBe(200);
     expect(res.body.secrets).toEqual({ openai_api_key: '••••••••', google_api_key: '' });
     expect(JSON.stringify(res.body)).not.toContain('fixture-owner-value');
+    expect(JSON.stringify(res.body)).not.toContain('legacy-lowercase-value');
     expect(authOwner.listSecretsMeta).toHaveBeenCalledWith('/tmp/mock-brain');
   });
 
@@ -114,7 +116,7 @@ describe('Config Router', () => {
     read.mockRestore();
   });
 
-  it.each([null, {}, [{ key: 'openai_api_key', set: 'unknown' }], [null]])('rejects malformed Auth metadata: %j', async meta => {
+  it.each([null, {}, [{ key: 'OPENAI_API_KEY', set: 'unknown' }], [null]])('rejects malformed Auth metadata: %j', async meta => {
     vi.spyOn(fs, 'existsSync').mockReturnValue(false);
     authOwner.listSecretsMeta.mockResolvedValue(meta);
     const res = await request(app).get('/api/config-json');
@@ -128,7 +130,7 @@ describe('Config Router', () => {
     const res = await request(app).post('/api/config-json').send({ secrets: { openai_api_key: '' } });
     expect(res.status).toBe(503);
     expect(res.body).toEqual({ error: 'Auth credential update did not complete; verify the stored state before retrying.', applied: [], failed: 'secrets', not_attempted: [] });
-    expect(authOwner.deleteSecret).toHaveBeenCalledWith('/tmp/mock-brain', 'openai_api_key', { action: 'delete', actor: 'settings-config' });
+    expect(authOwner.deleteSecret).toHaveBeenCalledWith('/tmp/mock-brain', 'OPENAI_API_KEY', { action: 'delete', actor: 'settings-config' });
     expect(authOwner.setSecret).not.toHaveBeenCalled();
   });
 
@@ -136,7 +138,7 @@ describe('Config Router', () => {
     vi.spyOn(fs, 'existsSync').mockReturnValue(true);
     const res = await request(app).post('/api/config-json').send({ secrets: { openai_api_key: '[redacted]', google_api_key: 'fixture-value' } });
     expect(res.status).toBe(200);
-    expect(authOwner.setSecret).toHaveBeenCalledExactlyOnceWith('/tmp/mock-brain', 'google_api_key', 'fixture-value', { action: 'set', actor: 'settings-config' });
+    expect(authOwner.setSecret).toHaveBeenCalledExactlyOnceWith('/tmp/mock-brain', 'GOOGLE_API_KEY', 'fixture-value', { action: 'set', actor: 'settings-config' });
     expect(authOwner.deleteSecret).not.toHaveBeenCalled();
     expect(JSON.stringify(res.body)).not.toContain('fixture-value');
   });

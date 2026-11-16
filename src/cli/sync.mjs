@@ -4,7 +4,7 @@ import path from 'node:path';
 import os from 'node:os';
 import matter from '../core/frontmatter.mjs';
 import { protectIDEInstructions } from '../core/protect-instructions.mjs';
-import { totalRecallToken } from '../core/config.mjs';
+import { resolveConnectionToken } from '../core/connection-token.mjs';
 
 const INJECTION_BEGIN = '<!-- BEGIN INJECTED MEMORY: do not edit by hand; rebuilt by total-recall surface -->';
 const INJECTION_END = '<!-- END INJECTED MEMORY -->';
@@ -54,7 +54,7 @@ function printHelp() {
  
   Options:
     --brain <url>       Brain base URL. Defaults to .agent/config/brain.json
-    --token <token>     Bearer PAT. Defaults to the Auth TOTAL_RECALL_TOKEN, then brain.json
+    --token <token>     Bearer PAT. Defaults to the saved token for the configured brain origin (Auth-resolved)
     --watch             Keep syncing on an interval
     --interval <sec>    Watch interval in seconds (default: 60)
     --push              Back up vault to your GitHub fork (git add -f + push)
@@ -177,7 +177,8 @@ async function runOnce(opts) {
   const agentDir = workspaceAgentDir(cwd);
   const brainConfig = loadBrainConfig(agentDir);
   const brainUrl = opts.brain || brainConfig?.url;
-  const token = opts.token || totalRecallToken || brainConfig?.token;
+  const token = (await resolveConnectionToken({ explicit: opts.token, url: brainUrl,
+    legacyBrainJson: [path.join(agentDir, 'skills', 'total-recall', 'config', 'brain.json'), path.join(os.homedir(), '.agent', 'skills', 'total-recall', 'config', 'brain.json')] })).token || undefined;
 
   if (!brainUrl) {
     throw new Error('No brain URL configured. Pass --brain <url> or create .agent/config/brain.json.');

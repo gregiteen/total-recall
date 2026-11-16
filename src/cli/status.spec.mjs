@@ -5,10 +5,12 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import fs from 'node:fs';
 import path from 'node:path';
 import statusCmd from './status.mjs';
+// The Auth configuration owner is faked at its real contract; binding itself is tested in the owner repo and by connection-token.spec.
+const authOwner = vi.hoisted(() => ({ connectionToken: vi.fn(), runtimeConfiguration: () => ({}) }));
 vi.mock('../core/daemon-control.mjs', () => ({ getDaemonObservation: vi.fn() }));
 vi.mock('../core/plugin-runtime.mjs', async importOriginal => {
   const actual = await importOriginal();
-  return { ...actual, loadPluginModule: vi.fn(async (id, ...args) => id === 'mesh'
+  return { ...actual, loadPluginModule: vi.fn(async (id, ...args) => id === 'auth' ? authOwner : id === 'mesh'
     ? { leaderPin: () => null } : actual.loadPluginModule(id, ...args)) };
 });
 import { getDaemonObservation } from '../core/daemon-control.mjs';
@@ -21,7 +23,10 @@ describe('status command', () => {
   let fetchSpy;
 
   beforeEach(() => {
-    loadPluginModule.mockImplementation(async () => ({ leaderPin: () => null }));
+    loadPluginModule.mockImplementation(async (id) => id === 'auth' ? authOwner : { leaderPin: () => null });
+    authOwner.connectionToken.mockReset().mockImplementation(({ url }) => url === 'http://localhost:3000'
+      ? { token: 'saved-auth-token', source: 'auth', origin: 'http://localhost:3000' }
+      : { token: null, source: null, origin: 'http://localhost:3000', reason: 'origin-mismatch' });
     getDaemonObservation.mockReturnValue({ status: 'not-started', source: 'local-pid', expected_entry: '/own/daemon-loop.mjs' });
     logSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
     
@@ -102,6 +107,50 @@ describe('status command', () => {
     expect(fetchSpy.mock.calls.some(([url]) => String(url).includes('brain=project%3Assss'))).toBe(true);
   });
 
+  describe('saved token and origin binding', () => {
+    const instructionsCalls = () => fetchSpy.mock.calls.filter(([url]) => String(url).includes('/api/instructions'));
+    const auth = call => call[1]?.headers?.Authorization;
+    beforeEach(() => { vi.spyOn(fs, 'statSync').mockReturnValue({ size: 100, mtime: new Date('2026-05-25T00:00:00Z'), mtimeMs: 1 }); });
+
+    it('asks the Auth owner for the configured endpoint and sends its token', async () => {
+      await statusCmd([]);
+      expect(authOwner.connectionToken).toHaveBeenCalledOnce();
+      const arg = authOwner.connectionToken.mock.calls[0][0];
+      expect(arg.url).toBe('http://localhost:3000');
+      expect(arg.legacyBrainJson).toHaveLength(1);
+      expect(arg.legacyBrainJson[0]).toMatch(/config\/brain\.json$/);
+      expect(auth(instructionsCalls()[0])).toBe('Bearer saved-auth-token');
+    });
+
+    it('does not forward the saved token to a --brain on another origin', async () => {
+      await statusCmd(['--brain', 'https://other.example']);
+      expect(authOwner.connectionToken.mock.calls[0][0].url).toBe('https://other.example');
+      const calls = instructionsCalls();
+      expect(calls.length).toBeGreaterThan(0);
+      for (const call of calls) expect(auth(call)).toBeUndefined();
+      expect(JSON.stringify(fetchSpy.mock.calls)).not.toMatch(/saved-auth-token|test-token/);
+    });
+
+    it('keeps an explicit --token for any origin without asking the owner', async () => {
+      await statusCmd(['--brain', 'https://other.example', '--token', 'operator-token']);
+      expect(authOwner.connectionToken).not.toHaveBeenCalled();
+      expect(auth(instructionsCalls()[0])).toBe('Bearer operator-token');
+    });
+
+    it('stops when Auth fails and never sends the legacy brain.json token', async () => {
+      authOwner.connectionToken.mockImplementation(() => { throw new Error('Unlock auth to read the encrypted credential store'); });
+      await expect(statusCmd([])).rejects.toThrow(/Unlock auth/);
+      expect(JSON.stringify(fetchSpy.mock.calls)).not.toContain('test-token');
+      expect(fetchSpy.mock.calls.some(([url]) => String(url).includes('/api/instructions'))).toBe(false);
+    });
+
+    it('stops when the installed Auth owner lacks the contract', async () => {
+      loadPluginModule.mockImplementation(async (id) => id === 'auth' ? { runtimeConfiguration: () => ({}) } : { leaderPin: () => null });
+      await expect(statusCmd([])).rejects.toThrow(/no connectionToken contract/);
+      expect(JSON.stringify(fetchSpy.mock.calls)).not.toContain('test-token');
+    });
+  });
+
   it('supports JSON output formatting', async () => {
     vi.spyOn(fs, 'statSync').mockReturnValue({
       size: 100,
@@ -145,7 +194,7 @@ describe('status command', () => {
   });
 
   it('reports verified delegated work and local absence consistently in JSON and text', async () => {
-    loadPluginModule.mockImplementation(async (_id, module) => module === 'mesh'
+    loadPluginModule.mockImplementation(async (id, module) => id === 'auth' ? authOwner : module === 'mesh'
       ? { getMeshSelf: () => ({ ip: '100.64.0.20' }) }
       : { leaderPin: () => '100.64.0.10', leaderPort: () => 3900,
         getLeaderInfo: async () => ({ ip: '100.64.0.10', port: 3900, strategy: 'pinned-mesh-ip' }) });
@@ -204,4 +253,5 @@ describe('serverBrainId', () => {
       fs.rmSync(dir, { recursive: true, force: true });
     }
   });
+
 });

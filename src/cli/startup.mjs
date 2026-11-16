@@ -10,13 +10,26 @@ export async function inspectStartup(options = {}) {
   try { cfg = JSON.parse(fs.readFileSync(path.join(resolveBrainDir(), 'config', 'brain.json'), 'utf8')); } catch {}
   if (!cfg.url) try { cfg = JSON.parse(fs.readFileSync(path.join(globalBrain, 'config', 'brain.json'), 'utf8')); } catch {}
   const url = process.env.TR_BRAIN || cfg.url || null;
-  let sameOrigin = !process.env.TR_BRAIN;
-  try { sameOrigin ||= new URL(url).origin === new URL(cfg.url).origin; } catch {}
-  let authToken = null;
-  // The Auth-owned credential is the primary source; a legacy brain.json token is the fallback.
-  try { authToken = (await import('../core/config.mjs')).totalRecallToken || null; } catch { /* Auth unavailable: fall back */ }
-  const token = process.env.TR_PAT || process.env.TOTAL_RECALL_TOKEN || (sameOrigin ? (authToken || cfg.token) : null);
-  return startupHealth({ brainDir: globalBrain, brainUrl: url, token, brainId: cfg.layer === 'project' && cfg.name ? `project:${cfg.name}` : null, ...options });
+  // The saved token comes from the Auth owner, bound to the configured origin. When Auth is
+  // unavailable the check still runs unauthenticated and says so; a legacy file token is never used.
+  let credential = { status: 'none' };
+  let token = process.env.TR_PAT || process.env.TOTAL_RECALL_TOKEN || null;
+  if (token) credential = { status: 'environment' };
+  else {
+    try {
+      const { resolveConnectionToken } = await import('../core/connection-token.mjs');
+      const saved = await resolveConnectionToken({ url, legacyBrainJson: [
+        path.join(resolveBrainDir(), 'config', 'brain.json'), path.join(globalBrain, 'config', 'brain.json'),
+      ] });
+      token = saved.token || null;
+      credential = token ? { status: 'available', source: saved.source } : { status: 'none', reason: saved.reason || 'no-saved-token' };
+    } catch (err) {
+      credential = { status: 'unavailable', reason: err.message };
+    }
+  }
+  const report = await startupHealth({ brainDir: globalBrain, brainUrl: url, token, brainId: cfg.layer === 'project' && cfg.name ? `project:${cfg.name}` : null, ...options });
+  // Only a failed credential source is added to the report; it is never silently replaced.
+  return credential.status === 'unavailable' ? { ...report, credential } : report;
 }
 
 /**
@@ -25,6 +38,7 @@ export async function inspectStartup(options = {}) {
  */
 export function startupFindings(report) {
   const lines = [];
+  if (report.credential?.status === 'unavailable') lines.push(`Credential: unavailable (${report.credential.reason}); the brain was checked without a saved token.`);
   const dashboard = report.dashboard;
   if (dashboard && ['stale', 'missing'].includes(dashboard.status)) {
     lines.push(`Dashboard: bundle ${dashboard.status}${dashboard.newer_source ? ` (${dashboard.newer_source} is newer)` : ''}; the server rebuilds it, see /health dashboard.`);

@@ -31,7 +31,8 @@ import crypto from 'node:crypto';
 import { spawn, spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { resolveAgentDir } from './agent-dir.mjs';
-import { agentDir as configAgentDir, brainDir as configBrainDir, totalRecallToken } from '../core/config.mjs';
+import { agentDir as configAgentDir, brainDir as configBrainDir } from '../core/config.mjs';
+import { resolveConnectionToken } from '../core/connection-token.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.join(__dirname, '..', '..');
@@ -49,9 +50,9 @@ function brainUrl(config) {
   return (config?.url || 'http://localhost:3000').replace(/\/$/, '');
 }
 
-function brainHeaders(config) {
+/** The token comes from the Auth owner (origin-bound); the caller resolves it. */
+function brainHeaders(token) {
   const h = { 'Content-Type': 'application/json' };
-  const token = totalRecallToken || config?.token;
   if (token) h['Authorization'] = `Bearer ${token}`;
   return h;
 }
@@ -187,7 +188,8 @@ async function runScan(agentDir, { verbose = false } = {}) {
   }
 
   const base = brainUrl(config);
-  const headers = brainHeaders(config);
+  const { token } = await resolveConnectionToken({ url: brainUrl(config), legacyBrainJson: [path.join(agentDir, 'config', 'brain.json')] });
+  const headers = brainHeaders(token);
   const state = loadState(agentDir);
   const sources = getSources();
 
@@ -480,7 +482,12 @@ export default async function relay(args) {
       const config = loadBrainConfig(brDir);
       if (config) {
         console.log(`  Brain: ${brainUrl(config)}`);
-        console.log(`  Auth:  ${totalRecallToken || config.token ? 'PAT configured' : 'no token'}`);
+        try {
+          const { token } = await resolveConnectionToken({ url: brainUrl(config), legacyBrainJson: [path.join(brDir, 'config', 'brain.json')] });
+          console.log(`  Auth:  ${token ? 'PAT configured' : 'no token'}`);
+        } catch (err) {
+          console.log(`  Auth:  unavailable (${err.message})`);
+        }
       } else {
         console.log('  Brain: not configured (run: npx total-recall connect --brain <url> --token <pat>)');
       }

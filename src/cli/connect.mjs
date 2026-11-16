@@ -1,7 +1,8 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { agentDir as configAgentDir, brainDir as configBrainDir, xdgConfigHome, trBrain, trPat, totalRecallToken } from '../core/config.mjs';
+import { agentDir as configAgentDir, brainDir as configBrainDir, xdgConfigHome, trBrain, trPat } from '../core/config.mjs';
+import { resolveConnectionToken } from '../core/connection-token.mjs';
 import { fileURLToPath } from 'node:url';
 import { resolveAgentDir, getBothBrains, detectProjectBrain } from './agent-dir.mjs';
 import { discoverRepoSkills, projectSkillsAsCommands } from './skill-projection.mjs';
@@ -743,27 +744,16 @@ export default async function connect(args) {
   }
 
   if (!opts.token) {
-    if (trPat || totalRecallToken) {
-      opts.token = trPat || totalRecallToken;
+    if (trPat) {
+      opts.token = trPat;
     } else {
-      const globalAgentDir = path.join(os.homedir(), '.agent');
-      const candidateConfigDirs = [
-        path.join(brainDir, 'config'),
-        path.join(globalAgentDir, 'skills', 'total-recall', 'config')
-      ];
-
-      for (const dir of candidateConfigDirs) {
-        const brainJsonPath = path.join(dir, 'brain.json');
-        if (fs.existsSync(brainJsonPath)) {
-          try {
-            const cfg = JSON.parse(fs.readFileSync(brainJsonPath, 'utf8'));
-            if (cfg.token) {
-              opts.token = cfg.token;
-              break;
-            }
-          } catch { /* ignore */ }
-        }
-      }
+      // The Auth owner returns the saved token only for the configured brain origin, and reads a
+      // legacy brain.json in place when an old install still needs it.
+      const saved = await resolveConnectionToken({ url: opts.brain, legacyBrainJson: [
+        path.join(brainDir, 'config', 'brain.json'),
+        path.join(os.homedir(), '.agent', 'skills', 'total-recall', 'config', 'brain.json'),
+      ] });
+      if (saved.token) opts.token = saved.token;
     }
   }
 

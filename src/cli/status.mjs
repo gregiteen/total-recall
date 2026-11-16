@@ -21,7 +21,8 @@ import fs from 'node:fs';
 import crypto from 'node:crypto';
 import { loadQueue } from '../core/research-queue.mjs';
 
-import { totalRecallToken, globalBrainDir } from '../core/config.mjs';
+import { globalBrainDir } from '../core/config.mjs';
+import { resolveConnectionToken } from '../core/connection-token.mjs';
 import { resolveBrainDir, resolveSurfaceDir } from './agent-dir.mjs';
 
 function parseArgs(args) {
@@ -155,8 +156,9 @@ export default async function statusCmd(args) {
   const syncState = loadSyncState(path.join(brainDir, 'config', 'sync-state.json'));
   const clientsRegistry = loadClientsRegistry(path.join(brainDir, 'config', 'clients.json'));
   const brainUrl = opts.brain || brainConfig?.url || null;
-  // The Auth-owned credential wins over a legacy brain.json copy, which is only a fallback.
-  const token = opts.token || totalRecallToken || brainConfig?.token || null;
+  // The Auth owner resolves the saved token and binds it to the configured origin, so a --brain on
+  // another origin gets none. An explicit --token is the operator's own and is used as given.
+  const token = (await resolveConnectionToken({ explicit: opts.token, url: brainUrl, legacyBrainJson: [path.join(brainDir, 'config', 'brain.json')] })).token;
 
   const wizardConfigPath = path.join(brainDir, 'config', 'wizard-config.json');
   let deployMode = 'unknown';
