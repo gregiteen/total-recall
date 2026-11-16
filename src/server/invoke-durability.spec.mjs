@@ -97,7 +97,9 @@ describe('fixed host durability broker', () => {
     const pending = brokerConfinedFact({ content: 'interrupted before event commit', timeoutMs: mode === 'timeout' ? 1800 : 10000 }, context);
     // Attach rejection handling immediately while waiting for the real worker.
     const observed = pending.catch(error => error);
-    await vi.waitFor(() => expect(fs.readdirSync(path.join(brain, 'memory-vault/facts'))).toHaveLength(1), { timeout: 1500 });
+    // Atomic writes expose a temporary entry before rename; abort only after the real fact exists.
+    await vi.waitFor(() => expect(fs.readdirSync(path.join(brain, 'memory-vault/facts'))
+      .filter(name => /^fact-[0-9a-f-]{36}\.md$/.test(name))).toHaveLength(1), { timeout: 1500 });
     if (mode === 'abort') controller.abort();
     const error = await observed;
     expect(error).toMatchObject({ code: mode === 'timeout' ? 'timeout' : 'authority-ended', result: { committed: 'unknown', indexed: false } });
