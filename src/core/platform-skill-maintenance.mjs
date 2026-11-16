@@ -169,10 +169,36 @@ function publish(target, relative, data, expected) {
   } finally { fs.rmSync(tmp, { force: true }); }
 }
 
-function inspectLock(target) {
-  const file = regularPath(target, LOCK);
+/* Lock ownership.
+ *
+ * POSIX has no atomic "remove this path only if it still holds the inode I
+ * inspected". A reclaimer that checks a dead lock and then unlinks the path can
+ * delete a live lock that another reclaimer created in between, and both then
+ * run (reproduced with two real processes in the spec). Renaming the path away
+ * does not help: it can move that live lock just the same.
+ *
+ * So nothing here ever removes a lock to take over. Each acquisition creates a
+ * new generation, `.platform-refresh/lock-<n>`, with an exclusive link, which is
+ * atomic and fails if the name exists. It then verifies from its own file that
+ * no other lock is live. Two simultaneous reclaimers target the same name and
+ * only one creates it; any other interleaving finds the other's live file and
+ * yields. A false conflict only makes a caller retry; a second live holder
+ * cannot pass the verification. Dead files are removed only by a holder, and a
+ * removal that races a late creator is harmless because that creator verifies
+ * against the holder and withdraws. A lock whose pid is alive but whose command
+ * line is not its owner's (a reused pid) is dead. The pre-generation path
+ * `.platform-refresh.lock` is read as generation zero and removed once dead.
+ * Releases only delete the exact bytes their own acquisition wrote.
+ * Mixed use with a release that predates generations is unsupported.
+ */
+const LOCK_NAME = /^lock-([1-9]\d{0,14})$/;
+const lockRelative = generation => `${LOCAL}/lock-${generation}`;
+
+function lockEntry(target, generation, relative) {
+  const file = regularPath(target, relative);
   if (!stat(file)) return null;
-  const bytes = readRegular(target, LOCK), entry = stat(file);
+  let bytes;
+  try { bytes = readRegular(target, relative); } catch (error) { if (error.code === 'ENOENT') return null; throw error; }
   let owner;
   try { owner = JSON.parse(bytes); } catch { throw new Error('EEXIST: Unknown platform refresh lock'); }
   if (owner.schema !== 1 || !Number.isInteger(owner.pid) || owner.pid < 1 ||
@@ -181,26 +207,57 @@ function inspectLock(target) {
   }
   const verdict = shouldHonorPidLock(owner.pid, { entryHint: owner.command, readCommand: readProcessCommand,
     isAlive: pid => { try { process.kill(pid, 0); return true; } catch (error) { if (error.code === 'ESRCH') return false; throw error; } } });
-  return { bytes, entry, dead: verdict.reason === 'dead' };
+  return { generation, relative, bytes, dead: !verdict.honor };
+}
+
+function readLocks(target) {
+  const locks = [lockEntry(target, 0, LOCK)];
+  const directory = regularPath(target, LOCAL, { directory: true });
+  if (stat(directory)) {
+    for (const name of fs.readdirSync(directory)) {
+      const match = LOCK_NAME.exec(name);
+      if (match) locks.push(lockEntry(target, Number(match[1]), `${LOCAL}/${name}`));
+    }
+  }
+  return locks.filter(Boolean).sort((a, b) => a.generation - b.generation);
+}
+
+function inspectLock(target) {
+  const locks = readLocks(target);
+  return locks.length ? { locks, dead: locks.every(lock => lock.dead) } : null;
 }
 
 function acquireLock(target) {
-  const previous = inspectLock(target);
-  if (previous) {
-    if (!previous.dead || stat(path.join(target, LOCK))?.ino !== previous.entry.ino ||
-        !readRegular(target, LOCK).equals(previous.bytes)) throw new Error('EEXIST: Platform refresh lock is held or changed');
-    fs.unlinkSync(path.join(target, LOCK));
-  }
+  const found = readLocks(target);
+  if (found.some(lock => !lock.dead)) throw new Error('EEXIST: Platform refresh lock is held');
   const command = readProcessCommand(process.pid);
   if (!command) throw new Error('Cannot verify platform refresh process identity');
   const bytes = Buffer.from(JSON.stringify({ schema: 1, pid: process.pid, command, token: crypto.randomUUID() }));
+  const relative = lockRelative((found.at(-1)?.generation ?? 0) + 1);
   const tmp = writeTemporary(target, bytes);
-  try { fs.linkSync(tmp, regularPath(target, LOCK)); }
-  finally { fs.unlinkSync(tmp); }
-  return () => {
-    // Never unlink a replacement lock belonging to another process.
-    if (stat(regularPath(target, LOCK)) && readRegular(target, LOCK).equals(bytes)) fs.unlinkSync(path.join(target, LOCK));
+  try { fs.linkSync(tmp, regularPath(target, relative)); }
+  catch (error) {
+    if (error.code === 'EEXIST') throw new Error('EEXIST: Platform refresh lock was taken by another process');
+    throw error;
+  } finally { fs.unlinkSync(tmp); }
+  const owned = () => {
+    try { return readRegular(target, relative).equals(bytes); } catch (error) { if (error.code === 'ENOENT') return false; throw error; }
   };
+  const release = () => { if (owned()) fs.unlinkSync(path.join(target, relative)); };
+  try {
+    const others = readLocks(target).filter(lock => lock.relative !== relative);
+    if (!owned() || others.some(lock => !lock.dead)) throw new Error('EEXIST: Platform refresh lock is held or changed');
+    for (const lock of others) {
+      // Holder-only cleanup of abandoned files; bytes are re-read, never assumed.
+      try {
+        if (readRegular(target, lock.relative).equals(lock.bytes)) fs.unlinkSync(path.join(target, lock.relative));
+      } catch (error) { if (error.code !== 'ENOENT') throw error; }
+    }
+  } catch (error) {
+    release();
+    throw error;
+  }
+  return release;
 }
 
 /** The CLI supplies only its own package root; distributionRoot is a test seam.

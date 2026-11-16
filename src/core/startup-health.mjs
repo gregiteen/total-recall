@@ -129,12 +129,86 @@ export async function configuredDaemonPlacement(brainDir, { cwd = process.cwd(),
   } catch { return { mode: 'unknown', reason: 'daemon-placement-unavailable' }; }
 }
 
+export const PEER_PROBE_HEADER = 'x-total-recall-health-probe';
+// Mesh peers can be a WAN hop away: anything under 10 s reported a reachable
+// cloud peer as down. The deadline stays; only the request path stops waiting.
+export const PEER_PROBE_TIMEOUT_MS = 10000;
+export const PEER_REFRESH_AFTER_MS = 5000;
+export const PEER_OBSERVATION_MAX_AGE_MS = 30000;
+const peerObservations = new Map();
+const peerInflight = new Map();
+
+/**
+ * One credential-free look at the configured leader's /health. The marker
+ * header asks a peer that understands it to answer from its own process only,
+ * so a probed node never probes its own leader. A peer that predates the marker
+ * simply ignores it; its observation of this node is non-blocking too, so a
+ * reciprocal pin still cannot chain requests.
+ */
+async function probeLeader(url, fetchImpl, timeoutMs) {
+  const failure = (status, reason) => ({ status, reason });
+  try {
+    // Never send this brain's PAT, cookies or any other credential to a peer,
+    // and never follow redirects.
+    const response = await fetchStartup(url, { redirect: 'error', credentials: 'omit',
+      headers: { [PEER_PROBE_HEADER]: 'peer' } }, fetchImpl, timeoutMs);
+    if (!response.ok) return failure('failed', 'leader-health-http-failure');
+    let body;
+    try { body = await response.json(); }
+    catch { return failure('unknown', 'unrecognized-leader-health'); }
+    const verdict = healthVerdict(body);
+    if (verdict.status !== 'ready' || body.status !== 'healthy') {
+      return failure(verdict.status === 'ready' ? 'degraded' : verdict.status, verdict.reason || 'leader-reports-degraded');
+    }
+    // A peer's own delegated report cannot prove this endpoint runs the worker.
+    if (body.daemon_observation && (body.daemon_observation.source !== 'local-pid' || body.daemon_observation.status !== 'running')) {
+      return failure('unknown', 'leader-daemon-unverified');
+    }
+    return body.daemon === 'running' ? { status: 'running' } : failure('failed', 'leader-daemon-not-running');
+  } catch { return failure('offline', 'leader-health-unreachable'); }
+}
+
+function startPeerRefresh(url, { fetchImpl, timeoutMs, now, cache, inflight }) {
+  const key = url.origin;
+  if (inflight.has(key)) return inflight.get(key);
+  const pending = probeLeader(url, fetchImpl, timeoutMs).then(verdict => {
+    const entry = { at: now(), verdict };
+    cache.set(key, entry);
+    return entry;
+  }).finally(() => inflight.delete(key));
+  inflight.set(key, pending);
+  return pending;
+}
+
+/**
+ * Peer observation for a request path that must not wait on the network.
+ * It answers at once from the last real observation and refreshes in the
+ * background. With no observation yet it says so (warming); once an observation
+ * is too old to trust it says that too. It never serves a stale success.
+ */
+function cachedPeerObservation(url, options) {
+  const { now, cache, refreshAfterMs, maxAgeMs } = options;
+  const hit = cache.get(url.origin);
+  const age = hit ? now() - hit.at : null;
+  if (!hit || age >= refreshAfterMs) void startPeerRefresh(url, options);
+  if (!hit) return { status: 'unknown', reason: 'leader-observation-warming', warming: true };
+  const seen = { observed_at: new Date(hit.at).toISOString(), age_ms: age };
+  if (age > maxAgeMs) return { status: 'unknown', reason: 'leader-observation-stale', stale: true, last_status: hit.verdict.status, ...seen };
+  return { ...hit.verdict, cached: true, ...seen };
+}
+
 /**
  * Effective worker readiness, separate from the strict local lock observation.
  * Used only by startup/status/health; never authorizes local process lifecycle.
+ * The local process is always read live. By default the configured peer is read
+ * live too (startup check, status). A long-running server passes
+ * `nonBlocking` so a slow or dead peer can never hold up its own /health.
  */
 export async function observeRuntimeDaemon(brainDir, { identity = processIdentity, localObservation,
-  placement = configuredDaemonPlacement, fetchImpl = fetch, cwd = process.cwd() } = {}) {
+  placement = configuredDaemonPlacement, fetchImpl = fetch, cwd = process.cwd(),
+  peerTimeoutMs = PEER_PROBE_TIMEOUT_MS, nonBlocking = false, now = Date.now,
+  refreshAfterMs = PEER_REFRESH_AFTER_MS, maxAgeMs = PEER_OBSERVATION_MAX_AGE_MS,
+  cache = peerObservations, inflight = peerInflight } = {}) {
   const local = localObservation ?? observeDaemon(brainDir, { identity });
   let owner;
   try { owner = await placement(brainDir, { cwd }); }
@@ -150,24 +224,10 @@ export async function observeRuntimeDaemon(brainDir, { identity = processIdentit
   }
   const url = new URL(`http://${owner.ip}:${owner.port}/health`);
   result.owner_url = url.origin;
-  try {
-    // /health is available to admitted mesh peers. Never send this brain's PAT,
-    // cookies, or any other credentials to a peer, and never follow redirects.
-    const response = await fetchStartup(url, { redirect: 'error', credentials: 'omit' }, fetchImpl);
-    if (!response.ok) return { ...result, status: 'failed', reason: 'leader-health-http-failure' };
-    let body;
-    try { body = await response.json(); }
-    catch { return { ...result, reason: 'unrecognized-leader-health' }; }
-    const verdict = healthVerdict(body);
-    if (verdict.status !== 'ready' || body.status !== 'healthy') return { ...result, reason: verdict.reason || 'leader-reports-degraded', status: verdict.status === 'ready' ? 'degraded' : verdict.status };
-    // A peer's own delegated report cannot prove this endpoint runs the worker.
-    if (body.daemon_observation && (body.daemon_observation.source !== 'local-pid' || body.daemon_observation.status !== 'running')) {
-      return { ...result, reason: 'leader-daemon-unverified' };
-    }
-    return body.daemon === 'running'
-      ? { ...result, status: 'running' }
-      : { ...result, status: 'failed', reason: 'leader-daemon-not-running' };
-  } catch { return { ...result, status: 'offline', reason: 'leader-health-unreachable' }; }
+  const options = { fetchImpl, timeoutMs: peerTimeoutMs, now, cache, inflight, refreshAfterMs, maxAgeMs };
+  if (nonBlocking) return { ...result, ...cachedPeerObservation(url, options) };
+  const entry = await startPeerRefresh(url, options);
+  return { ...result, ...entry.verdict, observed_at: new Date(entry.at).toISOString(), cached: false, age_ms: 0 };
 }
 
 export function daemonStatusString({ status }) {
@@ -220,9 +280,9 @@ function projectCommand(cwd, name) {
 }
 
 // Retry only transport failures, once. HTTP/auth failures are returned unchanged.
-export async function fetchStartup(url, options = {}, fetchImpl = fetch) {
+export async function fetchStartup(url, options = {}, fetchImpl = fetch, timeoutMs = 10000) {
   for (let attempt = 0; attempt < 2; attempt++) {
-    try { return await fetchImpl(url, { ...options, signal: AbortSignal.timeout(10000) }); }
+    try { return await fetchImpl(url, { ...options, signal: AbortSignal.timeout(timeoutMs) }); }
     catch (error) { if (attempt === 1) throw error; }
   }
 }

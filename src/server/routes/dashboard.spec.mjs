@@ -95,3 +95,26 @@ it('returns curated errors without leaking corrupt history content or paths', as
     expect(JSON.stringify(response.body)).not.toMatch(/private-history-marker|\.ssss|tr-drawer-routes/);
   }
 });
+
+it('never falls back to the global brain when the selected brain is missing or ambiguous', async () => {
+  const global = path.join(fixture, 'agent/skills/total-recall');
+  const requests = [
+    () => request(app).get(endpoint),
+    () => request(app).get(endpoint + '/history'),
+    () => request(app).get(endpoint).query({ brain: '' }),
+    () => request(app).get(endpoint).query({ brain: ['global', brainId] }),
+    () => request(app).get(endpoint).query({ brain: `global,${brainId}` }),
+    () => request(app).put(endpoint).send({ config: { html: 'Unscoped' }, version: null }),
+    () => request(app).put(endpoint).send({ brainId: ['global', brainId], config: { html: 'Many' }, version: null }),
+    () => request(app).put(endpoint).send({ brainId: `global,${brainId}`, config: { html: 'Joined' }, version: null }),
+    () => request(app).put(endpoint).send({ brainId: null, config: { html: 'Null' }, version: null }),
+    () => request(app).post(endpoint + '/restore').send({ revision: 'a'.repeat(64), version: null }),
+    () => request(app).post(endpoint + '/restore').send({ brainId: [brainId], revision: 'a'.repeat(64), version: null }),
+  ];
+  for (const send of requests) expect((await send()).status).toBe(400);
+  const store = new PluginStateStore(path.join(global, 'config/workspace-drawer-right.json'), 'workspace-ui');
+  expect(fs.existsSync(store.documentPath)).toBe(false);
+  // A selected brain, including an explicit global selection, still works.
+  expect((await request(app).put(endpoint).send({ brainId: 'global', config: { html: 'Global on purpose' }, version: null })).status).toBe(200);
+  expect(fs.existsSync(store.documentPath)).toBe(true);
+});

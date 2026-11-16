@@ -35,7 +35,7 @@ import { createCoverageCache } from './health-coverage.mjs';
 import { drainActiveEmbeddings } from './routes/sessions.mjs';
 import { agentDir as configAgentDir, brainDir as configBrainDir, port as configPort, host as configHost, nodeEnv, instructionsFilePath } from '../core/config.mjs';
 import { getDaemonStatus, getRuntimeDaemonObservation, ensureDaemonRunning, clearStaleDaemonLock } from '../core/daemon-control.mjs';
-import { runtimeHealthFields } from '../core/startup-health.mjs';
+import { runtimeHealthFields, PEER_PROBE_HEADER } from '../core/startup-health.mjs';
 import { deploymentHealth } from '../core/running-server.mjs';
 
 
@@ -282,7 +282,7 @@ app.get('/health', requireAuthOrLocal, async (req, res) => {
   } catch { /* non-fatal */ }
 
   // Check daemon status
-  const daemonObservation = await getRuntimeDaemonObservation();
+  const daemonObservation = await getRuntimeDaemonObservation({ peerProbe: req.get(PEER_PROBE_HEADER) === 'peer' });
 
   // Embedding coverage per brain, served from the background cache above.
   //

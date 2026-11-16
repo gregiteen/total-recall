@@ -192,6 +192,29 @@ describe('daemon-control', () => {
     });
   });
 
+  describe('getRuntimeDaemonObservation', () => {
+    const remote = async () => ({ mode: 'remote', ip: '100.64.0.10', port: 3900 });
+    it('answers another node\'s health probe from its own process only, so pinned peers cannot chain', async () => {
+      const { getRuntimeDaemonObservation } = await import('./daemon-control.mjs');
+      const placement = vi.fn(remote);
+      const fetchImpl = vi.fn();
+      expect(await getRuntimeDaemonObservation({ peerProbe: true, placement, fetchImpl }))
+        .toMatchObject({ source: 'local-pid', status: 'not-started' });
+      expect(placement).not.toHaveBeenCalled();
+      expect(fetchImpl).not.toHaveBeenCalled();
+    });
+
+    it('never waits for the network on an ordinary request and reports the warming peer as unknown', async () => {
+      const { getRuntimeDaemonObservation } = await import('./daemon-control.mjs');
+      const fetchImpl = vi.fn(() => new Promise(() => {}));
+      const started = Date.now();
+      const result = await getRuntimeDaemonObservation({ placement: remote, fetchImpl, cache: new Map(), inflight: new Map() });
+      expect(Date.now() - started).toBeLessThan(1000);
+      expect(result).toMatchObject({ status: 'unknown', reason: 'leader-observation-warming', warming: true, local: { status: 'not-started' } });
+      expect(fetchImpl).toHaveBeenCalledTimes(1);
+    });
+  });
+
   // ---------------------------------------------------------------------------
   // startDaemon
   // ---------------------------------------------------------------------------

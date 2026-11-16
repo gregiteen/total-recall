@@ -153,7 +153,7 @@ describe('status command', () => {
     const existing = fetchSpy.getMockImplementation();
     fetchSpy.mockImplementation(async (url, options) => {
       if (String(url).startsWith('http://100.64.0.10:3900/health')) {
-        expect(options.headers).toBeUndefined();
+        expect(options.headers).toEqual({ 'x-total-recall-health-probe': 'peer' });
         return { ok: true, json: async () => ({ status: 'healthy', version: '1', uptime_seconds: 1,
           embedding_coverage: [], daemon: 'running', vfs: { exists: true, skill_exists: true } }) };
       }

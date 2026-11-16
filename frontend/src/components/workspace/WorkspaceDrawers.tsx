@@ -73,7 +73,8 @@ function ToolsDrawer({ plugins, activeBrainId, brainId }: { plugins: PluginInfo[
       : <p className="drawer-note">Select one local brain to open {section}.</p>)}
     {section === 'Chat' && (plugins ? <DrawerChat plugin={plugins.find(plugin => plugin.id === 'meta-harness')}
       activeBrainId={activeBrainId} /> : <p role="status">Loading Metaharness…</p>)}
-    {section === 'Shortcuts' && <DrawerLayout side="bottom" view="shortcuts" plugins={plugins} brainId={brainId} />}
+    {section === 'Shortcuts' && (brainId ? <DrawerLayout key={brainId} side="bottom" view="shortcuts" plugins={plugins} brainId={brainId} />
+      : <p className="drawer-note">Select one local brain to open shortcuts.</p>)}
     {section === 'Custom' && (brainId ? <DrawerLayout key={brainId} side="bottom" view="custom" plugins={plugins} brainId={brainId} />
       : <p className="drawer-note">Select one local brain to open custom tools.</p>)}
   </>

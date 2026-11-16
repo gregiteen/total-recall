@@ -28,9 +28,18 @@ export function readPid() {
 
 export function getDaemonObservation() { return observeDaemon(brainDir); }
 
-/** Readiness only. Lifecycle remains governed by the strict local observation. */
-export async function getRuntimeDaemonObservation() {
-  return observeRuntimeDaemon(brainDir, { localObservation: getHealthDaemonObservation() });
+/**
+ * Readiness only. Lifecycle remains governed by the strict local observation.
+ * The local process is always read live. A configured peer is never awaited on
+ * this request path: its last real observation is served and refreshed in the
+ * background, and a missing or expired one reads as unknown. A server answering
+ * another node's health probe (`peerProbe`) reports only its own process, so two
+ * nodes pinned to each other cannot probe each other in a chain.
+ */
+export async function getRuntimeDaemonObservation({ peerProbe = false, ...options } = {}) {
+  const localObservation = getHealthDaemonObservation();
+  return peerProbe ? localObservation
+    : observeRuntimeDaemon(brainDir, { nonBlocking: true, ...options, localObservation });
 }
 
 /** Preserve the existing explicit supervisor contract for health only. */
@@ -57,6 +66,16 @@ export function getDaemonStatus() {
  * calls it. A daemon that went down with the machine left a lock nothing would ever
  * clear, so the server reported `dead` and `degraded` for good. Only a lock whose process
  * is verified gone is removed: a live process or one that cannot be identified keeps it.
+ *
+ * Known limit, not closed here: the compare and the unlink are two steps, and POSIX has no
+ * atomic remove-if-unchanged. The only writer of this lock, daemon-loop acquirePidLock, takes
+ * it with a plain overwrite (no exclusive create), so a daemon that overwrites the lock in
+ * the microseconds between the compare and the unlink loses its lock file, and a renamed-away
+ * lock would be lost the same way. A safe takeover needs the writer to create the lock
+ * exclusively, which is a change to the daemon's own lock protocol, not to this reader.
+ * This runs once at boot of a server told to run no daemon, so the window is a single
+ * start-up race, and a live daemon that loses its lock restores it on its next heartbeat
+ * (daemon-loop reassertPidLock). The limit is documented rather than hidden behind a rename.
  * @returns {boolean} True if a lock was removed.
  */
 export function clearStaleDaemonLock({ observe = getDaemonObservation } = {}) {

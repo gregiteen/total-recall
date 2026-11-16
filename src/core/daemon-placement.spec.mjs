@@ -1,6 +1,6 @@
 // @vitest-environment node
 import { describe, it, expect, vi } from 'vitest';
-import { configuredDaemonPlacement, observeRuntimeDaemon, startupHealth, healthVerdict, runtimeHealthFields } from './startup-health.mjs';
+import { configuredDaemonPlacement, observeRuntimeDaemon, startupHealth, healthVerdict, runtimeHealthFields, PEER_PROBE_HEADER, PEER_PROBE_TIMEOUT_MS } from './startup-health.mjs';
 
 vi.mock('./required-plugins.mjs', () => ({ inspectRequiredPlugins: () => ({ status: 'ready', errors: [] }) }));
 
@@ -64,7 +64,8 @@ describe('runtime daemon observation', () => {
     const [url, options] = fetchImpl.mock.calls[0];
     expect(String(url)).toBe('http://100.64.0.10:3900/health');
     expect(options).toMatchObject({ redirect: 'error', credentials: 'omit' });
-    expect(options.headers).toBeUndefined();
+    // Only the marker that asks the peer to answer locally; never a credential.
+    expect(options.headers).toEqual({ [PEER_PROBE_HEADER]: 'peer' });
     expect(options.signal).toBeInstanceOf(AbortSignal);
   });
 
@@ -118,6 +119,144 @@ describe('runtime daemon observation', () => {
     for (const status of ['conflict', 'unknown', 'offline', 'failed', 'stopped']) {
       expect(runtimeHealthFields({ status }, true).status).toBe('degraded');
     }
+  });
+});
+
+describe('non-blocking peer observation on the /health request path', () => {
+  const fresh = () => ({ cache: new Map(), inflight: new Map() });
+  const never = () => new Promise(() => {});
+  const clock = start => { let at = start; return { now: () => at, tick: ms => { at += ms; } }; };
+  const settle = async () => { for (let i = 0; i < 4; i++) await new Promise(resolve => setTimeout(resolve, 10)); };
+
+  it('keeps the WAN probe deadline at 10 s and never answers readiness from a probe it did not finish', () => {
+    expect(PEER_PROBE_TIMEOUT_MS).toBeGreaterThanOrEqual(10000);
+  });
+
+  it('answers at once while the peer is slow, reporting warming, then serves the real observation', async () => {
+    const state = fresh(), time = clock(1_000);
+    let release;
+    const fetchImpl = vi.fn(() => new Promise(resolve => { release = () => resolve(json(health)); }));
+    const options = { localObservation: absent, placement, fetchImpl, nonBlocking: true, now: time.now, ...state };
+    const first = await observeRuntimeDaemon('/brain', options);
+    expect(first).toMatchObject({ status: 'unknown', reason: 'leader-observation-warming', warming: true, local: absent, placement: endpoint });
+    expect(runtimeHealthFields(first, true)).toMatchObject({ status: 'degraded', server_ready: true, daemon: 'unknown' });
+    // A second request during the same slow probe starts no second probe and still answers at once.
+    expect((await observeRuntimeDaemon('/brain', options)).reason).toBe('leader-observation-warming');
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+    release(); await settle();
+    const warmed = await observeRuntimeDaemon('/brain', options);
+    expect(warmed).toMatchObject({ status: 'running', cached: true, age_ms: 0, observed_at: new Date(1_000).toISOString() });
+    expect(runtimeHealthFields(warmed, true)).toMatchObject({ status: 'healthy', daemon: 'running' });
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+  });
+
+  it('refreshes in the background after the refresh age and expires an observation too old to trust', async () => {
+    const state = fresh(), time = clock(0);
+    let daemon = 'running';
+    const fetchImpl = vi.fn(async () => json({ ...health, daemon }));
+    const options = { localObservation: absent, placement, fetchImpl, nonBlocking: true, now: time.now,
+      refreshAfterMs: 5000, maxAgeMs: 30000, ...state };
+    await observeRuntimeDaemon('/brain', options); await settle();
+    time.tick(4000);
+    expect((await observeRuntimeDaemon('/brain', options)).cached).toBe(true);
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+    daemon = 'not_started'; time.tick(2000);
+    // Older than the refresh age: still the last real observation, honestly dated, and a refresh starts.
+    expect(await observeRuntimeDaemon('/brain', options)).toMatchObject({ status: 'running', cached: true, age_ms: 6000 });
+    await settle();
+    expect(fetchImpl).toHaveBeenCalledTimes(2);
+    expect(await observeRuntimeDaemon('/brain', options)).toMatchObject({ status: 'failed', reason: 'leader-daemon-not-running' });
+    // A peer that stops answering is never served as a stale success.
+    fetchImpl.mockImplementation(never); time.tick(31000);
+    const expired = await observeRuntimeDaemon('/brain', options);
+    expect(expired).toMatchObject({ status: 'unknown', reason: 'leader-observation-stale', stale: true, last_status: 'failed' });
+  });
+
+  it('caches an unreachable peer as an error instead of probing on every request', async () => {
+    const state = fresh(), time = clock(0);
+    const fetchImpl = vi.fn(async () => { throw new Error('offline'); });
+    const options = { localObservation: absent, placement, fetchImpl, nonBlocking: true, now: time.now, ...state };
+    await observeRuntimeDaemon('/brain', options); await settle();
+    const calls = fetchImpl.mock.calls.length;
+    const reported = await observeRuntimeDaemon('/brain', options);
+    expect(reported).toMatchObject({ status: 'offline', reason: 'leader-health-unreachable', cached: true });
+    expect(fetchImpl).toHaveBeenCalledTimes(calls);
+    expect(runtimeHealthFields(reported, true)).toMatchObject({ status: 'degraded', server_ready: true, daemon: 'offline' });
+  });
+
+  it('keeps a strictly local conflict ahead of any cached or pending peer result', async () => {
+    const state = fresh();
+    const local = { ...absent, status: 'conflict', reason: 'foreign-pid' };
+    const fetchImpl = vi.fn(async () => json(health));
+    expect(await observeRuntimeDaemon('/brain', { localObservation: local, placement, fetchImpl, nonBlocking: true, ...state })).toMatchObject(local);
+    expect(fetchImpl).not.toHaveBeenCalled();
+  });
+
+  it('sends no credentials and does not follow redirects when probing in the background', async () => {
+    const state = fresh();
+    const fetchImpl = vi.fn(async () => json(health));
+    await observeRuntimeDaemon('/brain', { localObservation: absent, placement, fetchImpl, nonBlocking: true, ...state });
+    await settle();
+    const [, options] = fetchImpl.mock.calls[0];
+    expect(options).toMatchObject({ redirect: 'error', credentials: 'omit', headers: { [PEER_PROBE_HEADER]: 'peer' } });
+    expect(JSON.stringify(options)).not.toMatch(/authorization|cookie/i);
+  });
+
+  it('breaks reciprocal delegation: two nodes pinned to each other never chain probes', async () => {
+    const sent = [];
+    const make = name => {
+      const node = { name, cache: new Map(), inflight: new Map(), local: { ...absent, status: 'not-started', expected_entry: `/${name}/daemon-loop.mjs` } };
+      return node;
+    };
+    const a = make('a'), b = make('b');
+    const serve = (node, peer) => async (_url, options = {}) => {
+      sent.push([node.name, options.headers?.[PEER_PROBE_HEADER] ?? null]);
+      const probed = options.headers?.[PEER_PROBE_HEADER] === 'peer';
+      // A probed node answers from its own process; an ordinary request observes its own leader.
+      const observation = probed ? node.local
+        : await observeRuntimeDaemon(`/${node.name}`, { localObservation: node.local, placement, nonBlocking: true,
+          fetchImpl: peer(), cache: node.cache, inflight: node.inflight });
+      return json({ ...health, ...runtimeHealthFields(observation, true), daemon: observation.status === 'running' ? 'running' : 'not_started' });
+    };
+    const toA = () => serve(a, () => toB());
+    const toB = () => serve(b, () => toA());
+    const first = await toA()('http://a/health', {});
+    await settle();
+    // A's ordinary request warmed; its background probe reached B with the marker and B did not probe back.
+    expect(first.ok).toBe(true);
+    expect(sent.filter(([name]) => name === 'b')).toEqual([['b', 'peer']]);
+    expect(sent.some(([name, marker]) => name === 'a' && marker === 'peer')).toBe(false);
+    const second = await (await toA()('http://a/health', {})).json();
+    expect(second.daemon_observation).toMatchObject({ status: 'degraded', reason: 'leader-reports-degraded', cached: true });
+    expect(second.status).toBe('degraded');
+  });
+
+  it('terminates against a peer that predates the marker because its own observation is non-blocking too', async () => {
+    const old = { cache: new Map(), inflight: new Map() };
+    let calls = 0;
+    const legacyPeer = async () => {
+      calls++;
+      // An older peer ignores the marker and observes its own leader; the reply is immediate (warming).
+      const observation = await observeRuntimeDaemon('/old', { localObservation: absent, placement, nonBlocking: true,
+        fetchImpl: () => never(), ...old });
+      return json({ ...health, ...runtimeHealthFields(observation, true) });
+    };
+    const state = fresh();
+    await observeRuntimeDaemon('/brain', { localObservation: absent, placement, fetchImpl: legacyPeer, nonBlocking: true, ...state });
+    await settle();
+    expect(calls).toBe(1);
+    expect(await observeRuntimeDaemon('/brain', { localObservation: absent, placement, fetchImpl: legacyPeer, nonBlocking: true, ...state }))
+      .toMatchObject({ status: 'degraded', reason: 'leader-reports-degraded', cached: true });
+  });
+
+  it('startup and status read the peer live, so the check reflects the peer right now', async () => {
+    const state = fresh();
+    let daemon = 'running';
+    const fetchImpl = vi.fn(async () => json({ ...health, daemon }));
+    const options = { localObservation: absent, placement, fetchImpl, ...state };
+    expect(await observeRuntimeDaemon('/brain', options)).toMatchObject({ status: 'running', cached: false });
+    daemon = 'not_started';
+    expect(await observeRuntimeDaemon('/brain', options)).toMatchObject({ status: 'failed', reason: 'leader-daemon-not-running' });
   });
 });
 

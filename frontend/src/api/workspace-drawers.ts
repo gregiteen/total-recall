@@ -57,21 +57,22 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
   return data as T
 }
 
-export function readDrawer(side: DrawerSide, signal?: AbortSignal, brainId = 'global') {
+// Drawer layouts are private per brain; every call names one brain explicitly.
+export function readDrawer(side: DrawerSide, signal: AbortSignal | undefined, brainId: string) {
   return request<DrawerRevision>(`/api/dashboard/drawers/${side}?brain=${encodeURIComponent(brainId)}`, { signal })
 }
 
-export function saveDrawer(side: DrawerSide, revision: DrawerRevision, brainId = 'global') {
+export function saveDrawer(side: DrawerSide, revision: DrawerRevision, brainId: string) {
   return request<DrawerRevision>(`/api/dashboard/drawers/${side}`, {
     method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...revision, brainId }),
   })
 }
 
-export function readDrawerHistory(side: DrawerSide, signal?: AbortSignal, brainId = 'global') {
+export function readDrawerHistory(side: DrawerSide, signal: AbortSignal | undefined, brainId: string) {
   return request<DrawerHistory>(`/api/dashboard/drawers/${side}/history?brain=${encodeURIComponent(brainId)}`, { signal })
 }
 
-export function restoreDrawer(side: DrawerSide, revision: string, version: string | null, brainId = 'global') {
+export function restoreDrawer(side: DrawerSide, revision: string, version: string | null, brainId: string) {
   return request<DrawerRevision>(`/api/dashboard/drawers/${side}/restore`, {
     method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ revision, version, brainId }),
   })

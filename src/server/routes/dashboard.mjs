@@ -20,6 +20,13 @@ const router = Router();
 // (breaks on Windows and on paths with encoded characters).
 const ROOT = process.env.TR_ROOT || SHARED_ROOT || path.join(path.dirname(fileURLToPath(import.meta.url)), '..', '..', '..');
 
+// Drawer layouts are private per brain: a missing or ambiguous selection never
+// falls back to the global brain, because that would silently write its chrome.
+function drawerBrain(value, auth) {
+  if (typeof value !== 'string' || !value) throw new DrawerInputError('Select one brain for the drawer.');
+  return resolvePluginBrainTargets([value], auth)[0];
+}
+
 function drawerError(res, error) {
   if (error instanceof DrawerInputError) return res.status(400).json({ error: error.message });
   if ([400, 403, 404, 409, 503].includes(error.status)) return res.status(error.status).json({ error: error.message });
@@ -33,7 +40,7 @@ for (const history of [false, true]) {
   router.get('/api/dashboard/drawers/:edge' + (history ? '/history' : ''), requireAuth, requireScope('config:read'), (req, res) => {
     res.set('Cache-Control', 'private, no-store');
     try {
-      const { brainDir } = resolvePluginBrainTargets([req.query.brain ?? 'global'], req.auth)[0];
+      const { brainDir } = drawerBrain(req.query.brain, req.auth);
       return res.json((history ? readDrawerHistory : readDrawerConfig)(brainDir, req.params.edge));
     } catch (error) { return drawerError(res, error); }
   });
@@ -43,7 +50,7 @@ router.put('/api/dashboard/drawers/:edge', requireAuth, requireScope('config:wri
   res.set('Cache-Control', 'private, no-store');
   if (!req.is('application/json')) return res.status(415).json({ error: 'Use JSON to save the drawer.' });
   try {
-    const { brainDir } = resolvePluginBrainTargets([req.body?.brainId ?? 'global'], req.auth)[0];
+    const { brainDir } = drawerBrain(req.body?.brainId, req.auth);
     if (Object.keys(req.body ?? {}).some(key => !['brainId', 'config', 'version'].includes(key))) throw new DrawerInputError('Invalid drawer save request.');
     return res.json(await writeDrawerConfig(brainDir, req.params.edge, req.body?.config, req.body?.version));
   } catch (error) {
@@ -55,7 +62,7 @@ router.post('/api/dashboard/drawers/:edge/restore', requireAuth, requireScope('c
   res.set('Cache-Control', 'private, no-store');
   if (!req.is('application/json')) return res.status(415).json({ error: 'Use JSON to restore the drawer.' });
   try {
-    const { brainDir } = resolvePluginBrainTargets([req.body?.brainId ?? 'global'], req.auth)[0];
+    const { brainDir } = drawerBrain(req.body?.brainId, req.auth);
     if (Object.keys(req.body ?? {}).some(key => !['brainId', 'revision', 'version'].includes(key))) throw new DrawerInputError('Invalid drawer restore request.');
     return res.json(await restoreDrawerConfig(brainDir, req.params.edge, req.body?.revision, req.body?.version));
   } catch (error) { return drawerError(res, error); }

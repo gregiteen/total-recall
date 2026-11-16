@@ -145,14 +145,14 @@ function LayoutEditor({ side, draft, onChange, plugins, brainId }: {
 }
 
 export function DrawerLayout(props: {
-  side: DrawerSide; view: 'custom' | 'shortcuts'; plugins: PluginInfo[] | null; brainId?: string
+  side: DrawerSide; view: 'custom' | 'shortcuts'; plugins: PluginInfo[] | null; brainId: string
 }) {
   // Remount editing and history state on a scope change, including in-flight saves.
   return <ScopedDrawerLayout key={`${props.brainId}:${props.side}`} {...props} />
 }
 
 function ScopedDrawerLayout({ side, view, plugins, brainId }: {
-  side: DrawerSide; view: 'custom' | 'shortcuts'; plugins: PluginInfo[] | null; brainId?: string
+  side: DrawerSide; view: 'custom' | 'shortcuts'; plugins: PluginInfo[] | null; brainId: string
 }) {
   const [revision, setRevision] = useState<DrawerRevision | null>(null)
   const [draft, setDraft] = useState<DrawerConfig | null>(null)

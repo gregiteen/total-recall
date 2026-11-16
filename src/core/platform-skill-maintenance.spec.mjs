@@ -4,8 +4,11 @@ import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 import crypto from 'node:crypto';
-import { spawnSync } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
+import { once } from 'node:events';
 import { refreshPlatformSkill } from './platform-skill-maintenance.mjs';
+// The reproduction can be pointed at another revision of the module to prove it fails there.
+const MODULE_UNDER_TEST = process.env.TR_PLATFORM_MODULE_UNDER_TEST || new URL('./platform-skill-maintenance.mjs', import.meta.url).href;
 import { deploySkill, registerSkill, skillPackageFiles, hashSkillContent, copySkillDir, skillPackageExcludedPath } from './skills-registry.mjs';
 import { isBrainState, rsyncExcludes } from './brain-state.mjs';
 
@@ -349,6 +352,103 @@ describe('distribution platform refresh', () => {
     expect(plan().current).toBe(false);
     apply();
     expect(plan().current).toBe(true);
+  });
+
+  describe('lock ownership', () => {
+    const deadOwner = () => {
+      const exited = spawnSync(process.execPath, ['-e', '']);
+      return exited.pid;
+    };
+    const lockOwner = (pid, command) => JSON.stringify({ schema: 1, pid, command, token: crypto.randomUUID() });
+    const lockFiles = () => {
+      const dir = path.join(target, '.platform-refresh');
+      return [fs.existsSync(path.join(target, '.platform-refresh.lock')) ? '.platform-refresh.lock' : null,
+        ...(fs.existsSync(dir) ? fs.readdirSync(dir).filter(name => /^lock-\d+$/.test(name)) : [])].filter(Boolean);
+    };
+
+    it('reclaims a lock whose pid now belongs to an unrelated live process, but never a live owner', () => {
+      // The recorded pid is alive, yet its command line is not the refresher that wrote the lock.
+      put(path.join(target, '.platform-refresh.lock'), lockOwner(process.pid, 'a program that is not this process'));
+      expect(plan().lock).toBe('abandoned');
+      expect(apply().success).toBe(true);
+      expect(lockFiles()).toEqual([]);
+      // A live owner whose command matches is honored, and its lock is left byte for byte.
+      const live = lockOwner(process.pid, spawnSync('ps', ['-o', 'command=', '-p', String(process.pid)], { encoding: 'utf8' }).stdout.trim());
+      put(path.join(target, '.platform-refresh.lock'), live);
+      expect(plan().lock).toBe('active');
+      put(path.join(source, 'references/contract.md'), 'next version');
+      expect(() => apply()).toThrow(/EEXIST/);
+      expect(get(path.join(target, '.platform-refresh.lock'))).toBe(live);
+    });
+
+    it('lets exactly one of two reclaimers of the same dead lock proceed', async () => {
+      // Reproduces the stale-lock race with real processes. Reclaimer B reads the dead lock and
+      // stops just before it would take over. Holder A then takes over and enters its critical
+      // section. B resumes. A takeover that removes whatever sits at the lock path deletes A's
+      // live lock and lets B in beside A.
+      put(path.join(target, '.platform-refresh.lock'), lockOwner(deadOwner(), 'node dead-refresher'));
+      const barrier = path.join(root, 'barrier');
+      fs.mkdirSync(barrier);
+      const script = `import fs from 'node:fs';
+        const [moduleUrl, role, optionsJson, dir] = process.argv.slice(1);
+        const nap = new Int32Array(new SharedArrayBuffer(4));
+        const wait = file => { const end = Date.now() + 15000; while (!fs.existsSync(file)) { if (Date.now() > end) process.exit(3); Atomics.wait(nap, 0, 0, 10); } };
+        const lockPath = file => /\\.platform-refresh\\.lock$|\\.platform-refresh\\/lock-\\d+$/.test(String(file));
+        const unlink = fs.unlinkSync, link = fs.linkSync, write = fs.writeFileSync;
+        let stopped = false;
+        if (role === 'reclaimer') {
+          const stop = () => { if (!stopped) { stopped = true; write(dir + '/reclaimer-ready', '1'); wait(dir + '/reclaimer-go'); } };
+          fs.unlinkSync = (file, ...rest) => { if (lockPath(file)) stop(); return unlink(file, ...rest); };
+          fs.linkSync = (from, to, ...rest) => { if (lockPath(to)) stop(); return link(from, to, ...rest); };
+        } else {
+          fs.writeFileSync = (file, ...rest) => {
+            if (!stopped && String(file).includes('/core/distributions/')) { stopped = true; write(dir + '/holder-inside', '1'); wait(dir + '/reclaimer-result.json'); }
+            return write(file, ...rest);
+          };
+        }
+        const api = await import(moduleUrl);
+        const options = JSON.parse(optionsJson);
+        let outcome;
+        try { api.refreshPlatformSkill({ ...options, apply: true, expectedSourceHash: api.refreshPlatformSkill(options).source.hash }); outcome = { ok: true }; }
+        catch (error) { outcome = { ok: false, message: error.message }; }
+        write(dir + '/' + role + '-result.json', JSON.stringify(outcome));`;
+      const start = role => spawn(process.execPath, ['--input-type=module', '-e', script, MODULE_UNDER_TEST, role, JSON.stringify(options()), barrier],
+        { stdio: ['ignore', 'ignore', 'pipe'] });
+      const until = async file => { for (let i = 0; i < 1500 && !fs.existsSync(path.join(barrier, file)); i++) await new Promise(resolve => setTimeout(resolve, 10)); expect(fs.existsSync(path.join(barrier, file)), file).toBe(true); };
+      const reclaimer = start('reclaimer');
+      await until('reclaimer-ready');
+      const holder = start('holder');
+      await until('holder-inside');
+      const lockBefore = lockFiles().map(name => [name, get(name === '.platform-refresh.lock' ? path.join(target, name) : path.join(target, '.platform-refresh', name))]);
+      fs.writeFileSync(path.join(barrier, 'reclaimer-go'), '1');
+      await Promise.all([once(reclaimer, 'exit'), once(holder, 'exit')]);
+      const result = role => JSON.parse(get(path.join(barrier, `${role}-result.json`)));
+      expect(result('reclaimer')).toMatchObject({ ok: false });
+      expect(result('reclaimer').message).toMatch(/EEXIST/);
+      expect(result('holder')).toEqual({ ok: true });
+      expect(lockBefore.length).toBeGreaterThan(0);
+      expect(lockFiles()).toEqual([]);
+      expect(plan()).toMatchObject({ current: true, pending: null, lock: 'absent' });
+    }, 60000);
+
+    it('never leaves a second live lock when a reclaimer loses, and releases only its own file', () => {
+      put(path.join(target, '.platform-refresh.lock'), lockOwner(deadOwner(), 'node dead-refresher'));
+      const write = fs.writeFileSync;
+      let intruded = false;
+      vi.spyOn(fs, 'writeFileSync').mockImplementation((file, ...rest) => {
+        if (!intruded && String(file).includes('/core/distributions/')) {
+          intruded = true;
+          // Another process replaces our lock file while we work: release must not delete it.
+          const mine = path.join(target, '.platform-refresh', fs.readdirSync(path.join(target, '.platform-refresh')).find(name => /^lock-\d+$/.test(name)));
+          fs.rmSync(mine);
+          put(mine, lockOwner(process.pid, 'someone else entirely'));
+        }
+        return write(file, ...rest);
+      });
+      apply();
+      vi.restoreAllMocks();
+      expect(lockFiles().map(name => get(path.join(target, '.platform-refresh', name)))).toEqual([expect.stringContaining('someone else entirely')]);
+    });
   });
 
   it('excludes host-local receipts, pending state, lock and temporary authored bytes at every depth while exporting the immutable portable core', () => {
