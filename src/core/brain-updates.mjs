@@ -82,7 +82,8 @@ export function installedBrainPackage(root, key) {
 }
 
 /**
- * Never traverse dependency trees, managed scaffolds, archives or directory links.
+ * Never traverse dependency trees, managed scaffolds, superseded plugin release
+ * snapshots (skills/total-recall/plugin-releases), archives or directory links.
  *
  * `installedPlugins` lists real paths of plugin checkouts that are only installed on
  * this machine, not developed here. An installed plugin runs under the shared Total
@@ -92,6 +93,7 @@ export function installedBrainPackage(root, key) {
 export function discoverBrainConsumers(roots, { onError, installedPlugins = new Set() } = {}) {
   const seen = new Set();
   const consumers = [];
+  const rootReals = new Set(roots.flatMap(root => { try { return [fs.realpathSync(root)]; } catch { return []; } }));
   function walk(dir, inherited = false) {
     const real = fs.realpathSync(dir);
     if (seen.has(real)) return;
@@ -99,6 +101,14 @@ export function discoverBrainConsumers(roots, { onError, installedPlugins = new 
     const segments = real.split(path.sep);
     if (segments.some((segment, index) => segment === 'scaffolds'
       && segments[index - 1] === 'total-recall' && segments[index - 2] === 'skills')) return;
+    // Superseded plugin release snapshots are archives, except for explicitly
+    // walked roots and active installed plugins. An active installed plugin inside
+    // a snapshot is reached because the caller passes it as a root (as
+    // updateAllBrains does); installedPlugins keeps it from being skipped here.
+    if (segments.some((segment, index) => segment === 'plugin-releases'
+      && segments[index - 1] === 'total-recall' && segments[index - 2] === 'skills')
+      && !rootReals.has(real)
+      && !installedPlugins.has(real)) return;
     const file = path.join(real, 'package.json');
     let runtimeOnly = inherited || installedPlugins.has(real);
     if (fs.existsSync(file)) {

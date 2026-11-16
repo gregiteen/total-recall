@@ -70,6 +70,51 @@ describe('uniform brain updates', () => {
     expect(discoverBrainConsumers([source]).map(({ root }) => fs.realpathSync(root))).toEqual([fs.realpathSync(nested)]);
   });
 
+  describe('superseded plugin release snapshots', () => {
+    const pkg = { devDependencies: { 'total-recall-brain': '3.0.0' }, dependencies: { '@gregiteen/ssss-cli': '0.14.0' } };
+    function fixture() {
+      const root = manifest(path.join(tmp, 'app'), {});
+      const snapshot = manifest(path.join(root, '.agent/skills/total-recall/plugin-releases/x/0.1.0-abc/plugin'), pkg);
+      const plugin = manifest(path.join(root, '.agent/skills/total-recall/plugins/y'), pkg);
+      fs.writeFileSync(path.join(plugin, 'plugin.json'), '{}');
+      return { root, snapshot, plugin };
+    }
+
+    it('skips them unless their real path is an explicit root', () => {
+      const { root, snapshot, plugin } = fixture();
+      const found = discoverBrainConsumers([root]);
+      expect(found.map(({ root: r }) => r)).toEqual([plugin]);
+      expect(found.some(({ root: r }) => r === snapshot)).toBe(false);
+      const explicit = discoverBrainConsumers([root, snapshot]).find(consumer => consumer.root === snapshot);
+      expect(explicit.runtimeOnly).toBe(false);
+      expect(explicit.deps.map(dep => dep.section)).toEqual(['dependencies', 'devDependencies']);
+    });
+
+    it('keeps an installed-folder plugin as a runtime-only consumer', () => {
+      const { root, plugin } = fixture();
+      const found = discoverBrainConsumers([root]).find(consumer => consumer.root === plugin);
+      expect(found.runtimeOnly).toBe(true);
+      expect(found.deps).toMatchObject([
+        { section: 'dependencies', key: '@gregiteen/ssss-cli', declared: '0.14.0' },
+      ]);
+    });
+
+    it('still discovers one that is an active linked plugin', () => {
+      const { root, snapshot } = fixture();
+      // Finding the active plugin must not process its archived ancestors or siblings.
+      const archive = manifest(path.dirname(snapshot), pkg);
+      manifest(path.join(archive, 'orphan'), pkg);
+      // Mirror updateAllBrains: installed plugins are pushed into the roots as well.
+      const found = discoverBrainConsumers([root, snapshot], { installedPlugins: new Set([snapshot]) });
+      expect(found.map(({ root: r }) => r)).toContain(snapshot);
+      expect(found.some(consumer => consumer.root === archive || consumer.root === path.join(archive, 'orphan'))).toBe(false);
+      expect(found.find(consumer => consumer.root === snapshot)).toMatchObject({
+        runtimeOnly: true,
+        deps: [{ section: 'dependencies', key: '@gregiteen/ssss-cli', declared: '0.14.0' }],
+      });
+    });
+  });
+
   it('excludes managed scaffold assets without hiding real nested consumers', () => {
     const root = manifest(path.join(tmp, 'app'), {});
     const dependency = { dependencies: { '@gregiteen/ssss-cli': '0.11.0' } };

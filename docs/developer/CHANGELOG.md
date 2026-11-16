@@ -1,3 +1,9 @@
+## [3.49.2] — 2026-11-16
+
+### Fixed
+
+- Automatic brain updates no longer walk into old plugin release snapshots (`skills/total-recall/plugin-releases`), which made every cloud update report a failure and silently rewrote old snapshots.
+
 ## 3.49.1 — 2026-11-16
 
 - Bundle Metaharness 0.4.8, which brings these fixes:
