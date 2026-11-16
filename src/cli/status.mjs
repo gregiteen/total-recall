@@ -1,4 +1,4 @@
-import { fetchStartup } from '../core/startup-health.mjs';
+import { fetchStartup, observeRuntimeDaemon, daemonStatusString } from '../core/startup-health.mjs';
 /**
  * total-recall status
  *
@@ -208,8 +208,8 @@ export default async function statusCmd(args) {
   let daemonObservation = { status: 'unknown', reason: 'observation-unavailable' };
   try {
     const { getDaemonObservation } = await import('../core/daemon-control.mjs');
-    daemonObservation = getDaemonObservation();
-    daemonStatus = daemonObservation.status === 'not-started' ? 'not_started' : daemonObservation.status === 'stopped' ? 'dead' : daemonObservation.status;
+    daemonObservation = await observeRuntimeDaemon(globalBrainDir, { localObservation: getDaemonObservation() });
+    daemonStatus = daemonStatusString(daemonObservation);
   } catch {}
 
   let localInstructions = null;
@@ -298,6 +298,8 @@ export default async function statusCmd(args) {
   console.log(`  Remote Brain:     ${report.brain.url || '(none)'}`);
   console.log(`  Tunnel Process:   ${tunnelPid ? (tunnelAlive ? `🟢 Active (PID ${tunnelPid})` : '🔴 Stale PID file') : '⚪ Inactive'}`);
   console.log(`  Daemon Status:    ${daemonStatus === 'running' ? '🟢 Running' : daemonStatus === 'dead' ? '🔴 Dead' : daemonStatus === 'not_started' ? '⚪ Not Running' : `⚠️ ${daemonStatus} (${daemonObservation.reason || 'unverified'})`}`);
+  if (daemonObservation.owner_url) console.log(`  Worker owner:     ${daemonObservation.owner_url} (${daemonObservation.scope})`);
+  if (daemonObservation.local) console.log(`  Local daemon:     ${daemonObservation.local.status}${daemonObservation.local.reason ? ` (${daemonObservation.local.reason})` : ''}`);
   if (['conflict', 'unknown'].includes(daemonStatus)) {
     if (daemonObservation.expected_entry) console.log(`  Expected daemon:  ${daemonObservation.expected_entry}`);
     if (daemonObservation.entry) console.log(`  Observed daemon:  ${daemonObservation.entry}`);

@@ -87,6 +87,7 @@ describe('daemon-control', () => {
   });
 
   afterEach(() => {
+    vi.unstubAllEnvs();
     if (killSpy && killSpy.mockRestore) {
       killSpy.mockRestore();
     }
@@ -139,6 +140,22 @@ describe('daemon-control', () => {
   // getDaemonStatus
   // ---------------------------------------------------------------------------
   describe('getDaemonStatus', () => {
+    it('preserves an explicitly supervised health entry and the separate strict installation conflict', async () => {
+      const { getHealthDaemonObservation, getDaemonObservation } = await import('./daemon-control.mjs');
+      vi.stubEnv('DISABLE_DAEMON', 'true');
+      vi.stubEnv('TR_SUPERVISED_DAEMON_ENTRY', '/supervised/src/core/daemon-loop.mjs');
+      fs.readFileSync.mockReturnValue('9876');
+      child_process.spawnSync.mockReturnValue({ status: 0, stdout: 'node /supervised/src/core/daemon-loop.mjs' });
+      expect(getHealthDaemonObservation()).toMatchObject({ status: 'running', source: 'local-pid',
+        expected_entry: '/supervised/src/core/daemon-loop.mjs', entry: '/supervised/src/core/daemon-loop.mjs',
+        installation: { status: 'conflict', reason: 'foreign-pid' } });
+      expect(getDaemonStatus()).toBe('running');
+      expect(getDaemonObservation().status).toBe('conflict');
+      expect(() => startDaemon()).toThrow('refused');
+      expect(child_process.spawn).not.toHaveBeenCalled();
+      child_process.spawnSync.mockReturnValue({ status: 0, stdout: 'node /other/src/core/daemon-loop.mjs' });
+      expect(getHealthDaemonObservation().status).toBe('conflict');
+    });
     it('retains unknown for an unreadable lock', () => {
       fs.readFileSync.mockImplementation(() => { throw Object.assign(new Error('denied'), { code: 'EACCES' }); });
       expect(getDaemonStatus()).toBe('unknown');

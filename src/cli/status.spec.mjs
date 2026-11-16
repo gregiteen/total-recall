@@ -6,7 +6,13 @@ import fs from 'node:fs';
 import path from 'node:path';
 import statusCmd from './status.mjs';
 vi.mock('../core/daemon-control.mjs', () => ({ getDaemonObservation: vi.fn() }));
+vi.mock('../core/plugin-runtime.mjs', async importOriginal => {
+  const actual = await importOriginal();
+  return { ...actual, loadPluginModule: vi.fn(async (id, ...args) => id === 'mesh'
+    ? { leaderPin: () => null } : actual.loadPluginModule(id, ...args)) };
+});
 import { getDaemonObservation } from '../core/daemon-control.mjs';
+import { loadPluginModule } from '../core/plugin-runtime.mjs';
 
 describe('status command', () => {
   let logSpy;
@@ -15,6 +21,7 @@ describe('status command', () => {
   let fetchSpy;
 
   beforeEach(() => {
+    loadPluginModule.mockImplementation(async () => ({ leaderPin: () => null }));
     getDaemonObservation.mockReturnValue({ status: 'not-started', source: 'local-pid', expected_entry: '/own/daemon-loop.mjs' });
     logSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
     
@@ -135,6 +142,32 @@ describe('status command', () => {
     expect(logs).toContain('/own/daemon-loop.mjs');
     expect(logs).toContain('/other/daemon-loop.mjs');
     expect(logs).not.toContain('⚪ Not Running');
+  });
+
+  it('reports verified delegated work and local absence consistently in JSON and text', async () => {
+    loadPluginModule.mockImplementation(async (_id, module) => module === 'mesh'
+      ? { getMeshSelf: () => ({ ip: '100.64.0.20' }) }
+      : { leaderPin: () => '100.64.0.10', leaderPort: () => 3900,
+        getLeaderInfo: async () => ({ ip: '100.64.0.10', port: 3900, strategy: 'pinned-mesh-ip' }) });
+    vi.spyOn(fs, 'statSync').mockReturnValue({ size: 100, mtime: new Date(), mtimeMs: 1 });
+    const existing = fetchSpy.getMockImplementation();
+    fetchSpy.mockImplementation(async (url, options) => {
+      if (String(url).startsWith('http://100.64.0.10:3900/health')) {
+        expect(options.headers).toBeUndefined();
+        return { ok: true, json: async () => ({ status: 'healthy', version: '1', uptime_seconds: 1,
+          embedding_coverage: [], daemon: 'running', vfs: { exists: true, skill_exists: true } }) };
+      }
+      return existing(url, options);
+    });
+    await statusCmd(['--json']);
+    const report = JSON.parse(logSpy.mock.calls[0][0]);
+    expect(report.daemon).toBe('running');
+    expect(report.daemon_observation).toMatchObject({ source: 'configured-leader-health', local: { status: 'not-started' } });
+    logSpy.mockClear();
+    await statusCmd([]);
+    const logs = logSpy.mock.calls.flat().join('\n');
+    expect(logs).toContain('Worker owner:     http://100.64.0.10:3900');
+    expect(logs).toContain('Local daemon:     not-started');
   });
 
   it('accepts the server markdown instructions response', async () => {

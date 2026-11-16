@@ -5,7 +5,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { logger } from './logger.mjs';
 import { agentDir, brainDir } from './config.mjs';
-import { observeDaemon } from './startup-health.mjs';
+import { observeDaemon, observeRuntimeDaemon, daemonStatusString } from './startup-health.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.join(__dirname, '..', '..');
@@ -28,17 +28,26 @@ export function readPid() {
 
 export function getDaemonObservation() { return observeDaemon(brainDir); }
 
+/** Readiness only. Lifecycle remains governed by the strict local observation. */
+export async function getRuntimeDaemonObservation() {
+  return observeRuntimeDaemon(brainDir, { localObservation: getHealthDaemonObservation() });
+}
+
+/** Preserve the existing explicit supervisor contract for health only. */
+export function getHealthDaemonObservation() {
+  const installation = getDaemonObservation();
+  const entry = process.env.TR_SUPERVISED_DAEMON_ENTRY;
+  return process.env.DISABLE_DAEMON === 'true' && entry && path.isAbsolute(entry)
+    ? { ...observeDaemon(brainDir, { expectedEntry: entry }), installation }
+    : installation;
+}
+
 /**
  * Returns the status of the daemon process.
  * @returns {'running'|'dead'|'not_started'|'conflict'|'unknown'}
  */
 export function getDaemonStatus() {
-  // A supervised daemon can run from a different verified installation than the server.
-  const entry = process.env.TR_SUPERVISED_DAEMON_ENTRY;
-  const { status } = process.env.DISABLE_DAEMON === 'true' && entry && path.isAbsolute(entry)
-    ? observeDaemon(brainDir, { expectedEntry: entry })
-    : getDaemonObservation();
-  return status === 'not-started' ? 'not_started' : status === 'stopped' ? 'dead' : status;
+  return daemonStatusString(getHealthDaemonObservation());
 }
 
 /**

@@ -34,7 +34,8 @@ import { readProcessCommand, entryPathHint, shouldHonorPidLock } from '../core/p
 import { createCoverageCache } from './health-coverage.mjs';
 import { drainActiveEmbeddings } from './routes/sessions.mjs';
 import { agentDir as configAgentDir, brainDir as configBrainDir, port as configPort, host as configHost, nodeEnv, instructionsFilePath } from '../core/config.mjs';
-import { getDaemonStatus, ensureDaemonRunning, clearStaleDaemonLock } from '../core/daemon-control.mjs';
+import { getDaemonStatus, getRuntimeDaemonObservation, ensureDaemonRunning, clearStaleDaemonLock } from '../core/daemon-control.mjs';
+import { runtimeHealthFields } from '../core/startup-health.mjs';
 import { deploymentHealth } from '../core/running-server.mjs';
 
 
@@ -281,7 +282,7 @@ app.get('/health', requireAuthOrLocal, async (req, res) => {
   } catch { /* non-fatal */ }
 
   // Check daemon status
-  const daemonStatus = getDaemonStatus();
+  const daemonObservation = await getRuntimeDaemonObservation();
 
   // Embedding coverage per brain, served from the background cache above.
   //
@@ -303,8 +304,7 @@ app.get('/health', requireAuthOrLocal, async (req, res) => {
   // No agent CLIs on PATH is normal for a headless server brain (a droplet has
   // none), so it is reported in cli_agents but does not make the brain
   // "degraded" — that status is for things that break memory itself.
-  const hasCriticalIssue = emergencyAlerts.length > 0 || ['dead', 'conflict', 'unknown'].includes(daemonStatus)
-    || unembeddedBrains.length > 0;
+  const serverReady = emergencyAlerts.length === 0 && unembeddedBrains.length === 0 && vaultExists && skillExists;
 
   // Check Caddy and Cloudflare status
   let caddyStatus = 'inactive';
@@ -332,13 +332,12 @@ app.get('/health', requireAuthOrLocal, async (req, res) => {
   }
 
   res.json({
-    status: hasCriticalIssue ? 'degraded' : 'healthy',
+    ...runtimeHealthFields(daemonObservation, serverReady),
     version: PACKAGE_VERSION,
     uptime_seconds: Math.floor(process.uptime()),
     timestamp: new Date().toISOString(),
     disk,
     cli_agents: cliAgents,
-    daemon: daemonStatus,
     embedding_coverage: embeddingCoverage,
     // When this reading was taken. Null means the first computation has not
     // landed yet, so the coverage field is unknown rather than clean.

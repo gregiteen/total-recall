@@ -2,6 +2,7 @@ import { describe, it, expect, vi, afterAll } from 'vitest';
 vi.mock('./required-plugins.mjs', () => ({ inspectRequiredPlugins: vi.fn(() => ({ status: 'ready', errors: [] })) }));
 // Plugin startup checks and the dashboard check read this machine's plugins and checkout; keep these specs hermetic.
 vi.mock('./plugin-startup-checks.mjs', () => ({ runPluginStartupChecks: vi.fn(async () => []) }));
+vi.mock('./plugin-runtime.mjs', () => ({ loadPluginModule: vi.fn(async () => ({ leaderPin: () => null })) }));
 import { inspectRequiredPlugins } from './required-plugins.mjs';
 import fs from 'node:fs';
 import os from 'node:os';

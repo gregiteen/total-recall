@@ -4,6 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { spawn, spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
+import { isIP } from 'node:net';
 import { readProcessCommand } from './pid-lock.mjs';
 import { CLI_COMMANDS } from './cli-commands.mjs';
 
@@ -103,13 +104,93 @@ export function observeDaemon(brainDir, { identity = processIdentity, expectedEn
   return { ...identity(path.join(brainDir, 'daemon.pid'), expected_entry), expected_entry, source: 'local-pid' };
 }
 
+/** Read Mesh's existing explicit placement, never infer delegation from election alone. */
+export async function configuredDaemonPlacement(brainDir, { cwd = process.cwd(), load } = {}) {
+  try {
+    load ||= (await import('./plugin-runtime.mjs')).loadPluginModule;
+    const owner = await load('mesh', 'leader-election', { projectRoot: cwd });
+    const pin = owner.leaderPin(brainDir);
+    if (!pin) return { mode: 'local' };
+    if (isIP(pin) !== 4) return { mode: 'unknown', reason: 'invalid-leader-pin' };
+    const mesh = await load('mesh', 'mesh', { projectRoot: cwd });
+    const self = mesh.getMeshSelf();
+    if (!self?.ip) return { mode: 'unknown', reason: 'mesh-self-unverified' };
+    if (self.ip === pin) return { mode: 'local' };
+    // getLeaderInfo is scoped by the owner runtime. Require it to agree with
+    // this caller's explicit brain pin AND port, so another root cannot delegate
+    // this brain's work through its own configuration.
+    const port = owner.leaderPort(brainDir);
+    const leader = await owner.getLeaderInfo();
+    if (!Number.isInteger(port) || port < 1 || port > 65535
+        || leader?.strategy !== 'pinned-mesh-ip' || leader.ip !== pin || leader.port !== port) {
+      return { mode: 'unknown', reason: 'configured-leader-unverified' };
+    }
+    return { mode: 'remote', ip: pin, port };
+  } catch { return { mode: 'unknown', reason: 'daemon-placement-unavailable' }; }
+}
+
+/**
+ * Effective worker readiness, separate from the strict local lock observation.
+ * Used only by startup/status/health; never authorizes local process lifecycle.
+ */
+export async function observeRuntimeDaemon(brainDir, { identity = processIdentity, localObservation,
+  placement = configuredDaemonPlacement, fetchImpl = fetch, cwd = process.cwd() } = {}) {
+  const local = localObservation ?? observeDaemon(brainDir, { identity });
+  let owner;
+  try { owner = await placement(brainDir, { cwd }); }
+  catch { owner = { mode: 'unknown', reason: 'daemon-placement-unavailable' }; }
+  if (owner?.mode === 'local') return local;
+  const result = { status: 'unknown', source: 'configured-leader-health',
+    scope: 'configured-background-worker-only; no cross-brain synchronization verified', local,
+    placement: owner?.mode === 'remote' ? { mode: 'remote', ip: owner.ip, port: owner.port } : { mode: 'unknown' } };
+  // Delegation never conceals a live foreign or unidentifiable local process.
+  if (['conflict', 'unknown'].includes(local.status)) return { ...local, local, placement: result.placement };
+  if (owner?.mode !== 'remote' || isIP(owner.ip) !== 4 || !Number.isInteger(owner.port) || owner.port < 1 || owner.port > 65535) {
+    return { ...result, reason: owner?.reason || 'configured-leader-unverified' };
+  }
+  const url = new URL(`http://${owner.ip}:${owner.port}/health`);
+  result.owner_url = url.origin;
+  try {
+    // /health is available to admitted mesh peers. Never send this brain's PAT,
+    // cookies, or any other credentials to a peer, and never follow redirects.
+    const response = await fetchStartup(url, { redirect: 'error', credentials: 'omit' }, fetchImpl);
+    if (!response.ok) return { ...result, status: 'failed', reason: 'leader-health-http-failure' };
+    let body;
+    try { body = await response.json(); }
+    catch { return { ...result, reason: 'unrecognized-leader-health' }; }
+    const verdict = healthVerdict(body);
+    if (verdict.status !== 'ready' || body.status !== 'healthy') return { ...result, reason: verdict.reason || 'leader-reports-degraded', status: verdict.status === 'ready' ? 'degraded' : verdict.status };
+    // A peer's own delegated report cannot prove this endpoint runs the worker.
+    if (body.daemon_observation && (body.daemon_observation.source !== 'local-pid' || body.daemon_observation.status !== 'running')) {
+      return { ...result, reason: 'leader-daemon-unverified' };
+    }
+    return body.daemon === 'running'
+      ? { ...result, status: 'running' }
+      : { ...result, status: 'failed', reason: 'leader-daemon-not-running' };
+  } catch { return { ...result, status: 'offline', reason: 'leader-health-unreachable' }; }
+}
+
+export function daemonStatusString({ status }) {
+  return status === 'not-started' ? 'not_started' : status === 'stopped' ? 'dead' : status;
+}
+
+/** Keep the server's own readiness separate from overall worker readiness. */
+export function runtimeHealthFields(daemonObservation, serverReady) {
+  const daemon = daemonStatusString(daemonObservation);
+  return { status: serverReady && daemon === 'running' ? 'healthy' : 'degraded',
+    server_ready: serverReady, daemon, daemon_observation: daemonObservation };
+}
+
 export function healthVerdict(body) {
   if (!body || typeof body.version !== 'string' || !Number.isFinite(body.uptime_seconds)
       || !Object.hasOwn(body, 'embedding_coverage') || !Object.hasOwn(body, 'daemon') || !body.vfs) {
     return { status: 'unknown', reason: 'unrecognized-health-response' };
   }
   if (body.vfs.exists !== true || body.vfs.skill_exists !== true) return { status: 'degraded', reason: 'vfs-unavailable' };
-  if (body.status !== 'healthy') return { status: 'degraded', reason: 'server-reports-degraded' };
+  // New health responses distinguish a usable server from missing worker
+  // readiness, so ensure can recover a stopped local daemon without concealing
+  // unrelated server failures. Older degraded responses stay failures.
+  if (body.status !== 'healthy' && !(body.status === 'degraded' && body.server_ready === true)) return { status: 'degraded', reason: 'server-reports-degraded' };
   return { status: 'ready', version: body.version };
 }
 
@@ -148,7 +229,7 @@ export async function fetchStartup(url, options = {}, fetchImpl = fetch) {
 
 export async function startupHealth({ cwd = process.cwd(), brainDir, brainUrl = null, token = null, brainId = null, ensure = false,
   appCheck = null, appStart = null, run = runBounded, fetchImpl = fetch, onDiskVersion = packageVersionOnDisk, listener = verifyListener, platform = process.platform, home = os.homedir(), identity = processIdentity,
-  dashboardCheck = null, pluginChecks = null } = {}) {
+  dashboardCheck = null, pluginChecks = null, daemonPlacement = configuredDaemonPlacement } = {}) {
   const actions = [];
   const serverFile = path.join(brainDir, 'server.pid');
   const report = { checked_at: new Date().toISOString(), server: { status: 'not-configured' }, brain: { status: 'unknown' }, daemon: { status: 'unknown' },
@@ -179,7 +260,8 @@ export async function startupHealth({ cwd = process.cwd(), brainDir, brainUrl = 
     } catch { return { status: 'offline', reason: 'health-unreachable' }; }
   };
   report.server = await probeServer();
-  report.daemon = local ? observeDaemon(brainDir, { identity }) : remoteDaemon;
+  const probeDaemon = () => observeRuntimeDaemon(brainDir, { identity, placement: daemonPlacement, fetchImpl, cwd });
+  report.daemon = local ? await probeDaemon() : remoteDaemon;
   const serverIdentity = local ? identity(serverFile, path.join(packageRoot, 'src', 'server', 'index.mjs')) : null;
   if (ensure && local && report.server.status === 'offline' && ['not-started', 'stopped'].includes(serverIdentity.status)) {
     const plist = path.join(home, 'Library', 'LaunchAgents', 'com.totalrecall.server.plist');
@@ -193,14 +275,14 @@ export async function startupHealth({ cwd = process.cwd(), brainDir, brainUrl = 
       }
     } else actions.push({ component: 'server', action: 'not-started', reason: 'no-existing-user-service' });
   }
-  if (ensure && local && report.server.status === 'ready' && ['not-started', 'stopped'].includes(report.daemon.status)) {
+  if (ensure && local && report.server.status === 'ready' && report.daemon.source === 'local-pid' && !report.daemon.placement && ['not-started', 'stopped'].includes(report.daemon.status)) {
     // Delegate lifecycle to the existing CLI. Never restart a live/unknown process.
     if (platform === 'linux' && fs.existsSync('/run/systemd/system')) actions.push({ component: 'daemon', action: 'not-started', reason: 'system-service-needs-owning-deploy' });
     else {
       const result = await run(process.execPath, [cliEntry, 'daemon', 'start'], { cwd });
       actions.push({ component: 'daemon', action: 'cli-start', accepted: result.code === 0 && !result.reason });
       for (let i = 0; i < 10; i++) {
-        report.daemon = observeDaemon(brainDir, { identity }); if (report.daemon.status === 'running') break;
+        report.daemon = await probeDaemon(); if (report.daemon.status === 'running') break;
         await new Promise(resolve => setTimeout(resolve, 200));
       }
     }
