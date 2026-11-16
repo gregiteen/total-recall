@@ -12,7 +12,10 @@ export async function inspectStartup(options = {}) {
   const url = process.env.TR_BRAIN || cfg.url || null;
   let sameOrigin = !process.env.TR_BRAIN;
   try { sameOrigin ||= new URL(url).origin === new URL(cfg.url).origin; } catch {}
-  const token = process.env.TR_PAT || process.env.TOTAL_RECALL_TOKEN || (sameOrigin ? cfg.token : null);
+  let authToken = null;
+  // The Auth-owned credential is the primary source; a legacy brain.json token is the fallback.
+  try { authToken = (await import('../core/config.mjs')).totalRecallToken || null; } catch { /* Auth unavailable: fall back */ }
+  const token = process.env.TR_PAT || process.env.TOTAL_RECALL_TOKEN || (sameOrigin ? (authToken || cfg.token) : null);
   return startupHealth({ brainDir: globalBrain, brainUrl: url, token, brainId: cfg.layer === 'project' && cfg.name ? `project:${cfg.name}` : null, ...options });
 }
 

@@ -54,7 +54,7 @@ function printHelp() {
  
   Options:
     --brain <url>       Brain base URL. Defaults to .agent/config/brain.json
-    --token <token>     Bearer PAT. Defaults to brain.json or TOTAL_RECALL_TOKEN
+    --token <token>     Bearer PAT. Defaults to the Auth TOTAL_RECALL_TOKEN, then brain.json
     --watch             Keep syncing on an interval
     --interval <sec>    Watch interval in seconds (default: 60)
     --push              Back up vault to your GitHub fork (git add -f + push)
@@ -177,7 +177,7 @@ async function runOnce(opts) {
   const agentDir = workspaceAgentDir(cwd);
   const brainConfig = loadBrainConfig(agentDir);
   const brainUrl = opts.brain || brainConfig?.url;
-  const token = opts.token || brainConfig?.token || totalRecallToken;
+  const token = opts.token || totalRecallToken || brainConfig?.token;
 
   if (!brainUrl) {
     throw new Error('No brain URL configured. Pass --brain <url> or create .agent/config/brain.json.');

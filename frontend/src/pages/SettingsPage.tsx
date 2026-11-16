@@ -39,6 +39,7 @@ export default function SettingsPage({ activeBrainId }: { activeBrainId?: string
   const [loadError, setLoadError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
+  const [saveDetail, setSaveDetail] = useState<string | null>(null);
   const [sandboxLog, setSandboxLog] = useState('');
 
 
@@ -239,12 +240,17 @@ export default function SettingsPage({ activeBrainId }: { activeBrainId?: string
         payload.secrets = cleaned;
       }
       await saveConfigJson(payload);
+      setSaveDetail(null);
+      // The backend token now lives in Auth: never keep the typed value, and show it as set.
+      setConfigData(prev => prev && prev.brain?.token
+        ? { ...prev, brain: { ...prev.brain, token: '', has_token: true } } : prev);
       setSaveStatus('saved');
       setTimeout(() => setSaveStatus('idle'), 2500);
     } catch (err) {
       console.error(err);
+      setSaveDetail(err instanceof Error ? err.message : null);
       setSaveStatus('error');
-      setTimeout(() => setSaveStatus('idle'), 3000);
+      setTimeout(() => setSaveStatus('idle'), 8000);
     }
   };
 
@@ -599,7 +605,7 @@ export default function SettingsPage({ activeBrainId }: { activeBrainId?: string
         </div>
         <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
           {saveStatus === 'saved' && <span style={{ color: '#34d399', fontSize: 14, fontWeight: 600 }}>✓ Saved successfully</span>}
-          {saveStatus === 'error' && <span style={{ color: '#ef4444', fontSize: 14, fontWeight: 600 }}>✗ Save failed</span>}
+          {saveStatus === 'error' && <span data-testid="save-error" style={{ color: '#ef4444', fontSize: 14, fontWeight: 600 }}>✗ Save failed{saveDetail ? `: ${saveDetail}` : ''}</span>}
           <button className="btn-primary" onClick={handleSaveVisual} disabled={saveStatus === 'saving'}>
             {saveStatus === 'saving' ? 'Saving...' : 'Save Configuration'}
           </button>

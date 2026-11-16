@@ -155,7 +155,8 @@ export default async function statusCmd(args) {
   const syncState = loadSyncState(path.join(brainDir, 'config', 'sync-state.json'));
   const clientsRegistry = loadClientsRegistry(path.join(brainDir, 'config', 'clients.json'));
   const brainUrl = opts.brain || brainConfig?.url || null;
-  const token = opts.token || brainConfig?.token || totalRecallToken || null;
+  // The Auth-owned credential wins over a legacy brain.json copy, which is only a fallback.
+  const token = opts.token || totalRecallToken || brainConfig?.token || null;
 
   const wizardConfigPath = path.join(brainDir, 'config', 'wizard-config.json');
   let deployMode = 'unknown';

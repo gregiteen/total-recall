@@ -31,7 +31,7 @@ import crypto from 'node:crypto';
 import { spawn, spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { resolveAgentDir } from './agent-dir.mjs';
-import { agentDir as configAgentDir, brainDir as configBrainDir } from '../core/config.mjs';
+import { agentDir as configAgentDir, brainDir as configBrainDir, totalRecallToken } from '../core/config.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.join(__dirname, '..', '..');
@@ -51,7 +51,8 @@ function brainUrl(config) {
 
 function brainHeaders(config) {
   const h = { 'Content-Type': 'application/json' };
-  if (config?.token) h['Authorization'] = `Bearer ${config.token}`;
+  const token = totalRecallToken || config?.token;
+  if (token) h['Authorization'] = `Bearer ${token}`;
   return h;
 }
 
@@ -479,7 +480,7 @@ export default async function relay(args) {
       const config = loadBrainConfig(brDir);
       if (config) {
         console.log(`  Brain: ${brainUrl(config)}`);
-        console.log(`  Auth:  ${config.token ? 'PAT configured' : 'no token'}`);
+        console.log(`  Auth:  ${totalRecallToken || config.token ? 'PAT configured' : 'no token'}`);
       } else {
         console.log('  Brain: not configured (run: npx total-recall connect --brain <url> --token <pat>)');
       }

@@ -189,12 +189,11 @@ describe('Config Router', () => {
       expect(write).not.toHaveBeenCalled();
     });
 
-    it('PUT /api/config/DESIGN.md still writes the documented public file and validates content', async () => {
-      const write = vi.spyOn(fs, 'writeFileSync').mockImplementation(() => {});
+    it('PUT /api/config/DESIGN.md validates content before touching the filesystem (real writes: config-public-file.spec)', async () => {
+      const open = vi.spyOn(fs, 'openSync');
       vi.spyOn(fs, 'existsSync').mockReturnValue(true);
-      expect((await request(app).put('/api/config/DESIGN.md').send({ content: '# Mine' })).status).toBe(200);
-      expect(write).toHaveBeenCalledWith('/tmp/mock-brain/config/DESIGN.md', '# Mine', 'utf8');
       expect((await request(app).put('/api/config/DESIGN.md').send({})).status).toBe(400);
+      expect(open).not.toHaveBeenCalled();
     });
 
     it('GET /api/config-json returns no static PATs, hashes, brain token or unlisted fields', async () => {
@@ -204,7 +203,7 @@ describe('Config Router', () => {
       const text = JSON.stringify(res.body);
       for (const canary of [SECRET_PAT, HASH, BRAIN_TOKEN, 'nested-canary', 'internal', '"pats"', 'password_hash']) expect(text).not.toContain(canary);
       expect(res.body.security).toEqual({ api: { allow_static_pats: true }, dashboard: { session_ttl_hours: 12 }, network: { require_https: true } });
-      expect(res.body.brain).toEqual({ url: 'https://x.test', project_id: 'p-1', has_token: true });
+      expect(res.body.brain).toEqual({ url: 'https://x.test', has_token: true });
     });
 
     it('GET /api/config applies the same projection and redacts nested runtime credentials', async () => {
@@ -224,6 +223,8 @@ describe('Config Router', () => {
       [{ security: { dashboard: { password_hash: 'h' } } }, 'security.dashboard.password_hash'],
       [{ security: { bind: { port: 'abc' } } }, 'security.bind.port'],
       [{ brain: { secret: 'x' } }, 'brain.secret'],
+      [{ brain: { project_id: 'other' } }, 'brain.project_id'],
+      [{ brain: { token: 5 } }, 'brain.token'],
       [{ secrets: { unrelated_key: 'x' } }, 'secrets.unrelated_key'],
     ])('POST /api/config-json rejects %j before writing anything', async (body, field) => {
       stubFiles();
@@ -269,6 +270,70 @@ describe('Config Router', () => {
       expect(res.body).toMatchObject({ applied: ['secrets:google_api_key'], failed: 'secrets', not_attempted: ['security'] });
       expect(JSON.stringify(res.body)).not.toContain('auth-canary');
       expect(writes.writeFileSecure).not.toHaveBeenCalled();
+    });
+
+    describe('backend credential under Auth', () => {
+      const NEW_TOKEN = 'tr_new_backend_token_canary_55';
+
+      it('sends an explicit token to Auth under the canonical key and never writes it to brain.json', async () => {
+        stubFiles();
+        const res = await request(app).post('/api/config-json').send({ brain: { name: 'n', token: NEW_TOKEN, has_token: true } });
+        expect(res.status).toBe(200);
+        expect(res.body).toEqual({ success: true, applied: ['secrets', 'brain'] });
+        expect(authOwner.setSecret).toHaveBeenCalledExactlyOnceWith('/tmp/mock-brain', 'TOTAL_RECALL_TOKEN', NEW_TOKEN, { action: 'set', actor: 'settings-config' });
+        const written = writes.writeFileSecure.mock.calls.map(c => c[1]).join('\n');
+        expect(written).not.toContain(NEW_TOKEN);
+        // The legacy file token is preserved in place: not copied, exposed or migrated.
+        expect(JSON.parse(writes.writeFileSecure.mock.calls[0][1])).toMatchObject({ token: BRAIN_TOKEN, name: 'n' });
+        expect(JSON.stringify(res.body)).not.toContain(NEW_TOKEN);
+        expect(authOwner.setSecret).not.toHaveBeenCalledWith(expect.anything(), expect.anything(), BRAIN_TOKEN, expect.anything());
+      });
+
+      it('a token-only save touches no config file', async () => {
+        stubFiles();
+        const res = await request(app).post('/api/config-json').send({ brain: { token: NEW_TOKEN } });
+        expect(res.status).toBe(200);
+        expect(res.body).toEqual({ success: true, applied: ['secrets'] });
+        expect(writes.writeFileSecure).not.toHaveBeenCalled();
+      });
+
+      it('a blank token keeps the stored credential and calls Auth for nothing', async () => {
+        stubFiles();
+        const res = await request(app).post('/api/config-json').send({ brain: { token: '', has_token: true } });
+        expect(res.status).toBe(200);
+        expect(authOwner.setSecret).not.toHaveBeenCalled();
+        expect(authOwner.deleteSecret).not.toHaveBeenCalled();
+        expect(writes.writeFileSecure).not.toHaveBeenCalled();
+      });
+
+      it('a failed Auth write is reported with files untouched and no diagnostics', async () => {
+        stubFiles();
+        authOwner.setSecret.mockRejectedValue(new Error('auth-canary'));
+        const res = await request(app).post('/api/config-json').send({ brain: { name: 'n', token: NEW_TOKEN } });
+        expect(res.status).toBe(503);
+        expect(res.body).toMatchObject({ applied: [], failed: 'secrets', not_attempted: ['brain'] });
+        expect(JSON.stringify(res.body)).not.toMatch(/auth-canary|tr_new_backend/);
+        expect(writes.writeFileSecure).not.toHaveBeenCalled();
+      });
+
+      it('GET reports the credential as set from Auth even when brain.json holds none', async () => {
+        vi.spyOn(fs, 'existsSync').mockReturnValue(true);
+        vi.spyOn(fs, 'readFileSync').mockImplementation(file => String(file).endsWith('brain.json') ? JSON.stringify({ url: 'https://x.test' }) : '');
+        authOwner.listSecretsMeta.mockResolvedValue([{ key: 'TOTAL_RECALL_TOKEN', set: true, value: NEW_TOKEN }]);
+        const res = await request(app).get('/api/config-json');
+        expect(res.status).toBe(200);
+        expect(res.body.brain).toEqual({ url: 'https://x.test', has_token: true });
+        expect(res.body.secrets).toEqual({});
+        expect(JSON.stringify(res.body)).not.toContain(NEW_TOKEN);
+      });
+
+      it('GET reports unset when neither brain.json nor Auth holds a token', async () => {
+        vi.spyOn(fs, 'existsSync').mockReturnValue(true);
+        vi.spyOn(fs, 'readFileSync').mockImplementation(file => String(file).endsWith('brain.json') ? JSON.stringify({ url: 'u' }) : '');
+        authOwner.listSecretsMeta.mockResolvedValue([{ key: 'TOTAL_RECALL_TOKEN', set: false }]);
+        const res = await request(app).get('/api/config-json');
+        expect(res.body.brain).toEqual({ url: 'u' });
+      });
     });
 
     it('does not replace a damaged security file with defaults', async () => {

@@ -12,6 +12,7 @@ import { loadPluginModule as __loadOwnedPlugin } from '../../core/plugin-runtime
 import { Router } from 'express';
 import fs from 'node:fs';
 import path from 'node:path';
+import crypto from 'node:crypto';
 import yaml from 'yaml';
 import { requireAuth, requireScope, loadSecurityConfig } from '../auth.mjs';
 import { BRAIN_DIR, CONFIG_DIR, serverError, badRequest } from './_shared.mjs';
@@ -29,6 +30,42 @@ const PUBLIC_CONFIG_FILES = new Set(['DESIGN.md']);
 
 function publicConfigPath(name) {
   return typeof name === 'string' && PUBLIC_CONFIG_FILES.has(name) ? path.join(CONFIG_DIR, name) : null;
+}
+
+class NotRegularFile extends Error {}
+
+/** Read a public file only when it is a standalone regular file; an alias to a private file is refused. */
+function readPublicFile(file) {
+  let fd;
+  try { fd = fs.openSync(file, fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW); }
+  catch (err) {
+    if (err.code === 'ENOENT') return null;
+    if (err.code === 'ELOOP') throw new NotRegularFile();
+    throw err;
+  }
+  try {
+    const stat = fs.fstatSync(fd);
+    if (!stat.isFile() || stat.nlink !== 1) throw new NotRegularFile();
+    return fs.readFileSync(fd, 'utf8');
+  } finally { fs.closeSync(fd); }
+}
+
+/** Replace a public file through a fresh inode so no existing alias is written through. */
+function writePublicFile(file, content) {
+  let existing = null;
+  try { existing = fs.lstatSync(file); } catch (err) { if (err.code !== 'ENOENT') throw err; }
+  if (existing && (!existing.isFile() || existing.nlink !== 1)) throw new NotRegularFile();
+  const tmp = path.join(path.dirname(file), `.${path.basename(file)}.${crypto.randomBytes(8).toString('hex')}.tmp`);
+  const fd = fs.openSync(tmp, fs.constants.O_WRONLY | fs.constants.O_CREAT | fs.constants.O_EXCL, 0o600);
+  try {
+    fs.writeFileSync(fd, content, 'utf8');
+    fs.fsyncSync(fd);
+  } catch (err) {
+    fs.closeSync(fd); fs.rmSync(tmp, { force: true });
+    throw err;
+  }
+  fs.closeSync(fd);
+  try { fs.renameSync(tmp, file); } catch (err) { fs.rmSync(tmp, { force: true }); throw err; }
 }
 
 const isPlain = v => v !== null && typeof v === 'object' && !Array.isArray(v);
@@ -49,7 +86,10 @@ const SECURITY_FIELDS = {
   network: { require_https: isBool, public_health: isBool, allowed_origins: isStrList, trusted_proxies: isStrList },
   sandbox: { enabled: isBool },
 };
-const BRAIN_FIELDS = { url: isStr, name: isStr, role: isStr, layer: isStr, tags: isStrList, full_brain: isBool, preferred_agent: isStr, project_id: isStr };
+// Exactly the fields the Settings form edits. Identity fields such as project_id have no caller and stay unwritable.
+const BRAIN_FIELDS = { url: isStr, name: isStr, role: isStr, layer: isStr, tags: isStrList, full_brain: isBool, preferred_agent: isStr };
+/** The backend credential's canonical Auth key; runtimeConfiguration exposes it as totalRecallToken. */
+const BACKEND_TOKEN_KEY = 'TOTAL_RECALL_TOKEN';
 const BUDGET_FIELDS = { budget: { enabled: isBool, daily_cap_usd: isNum, weekly_cap_usd: isNum } };
 
 /** Copy only allowlisted leaves with the right type. */
@@ -149,7 +189,8 @@ router.get('/api/config-json', requireAuth, requireScope('config:read'), async (
       try { existingBrain = JSON.parse(fs.readFileSync(brainPath, 'utf8')) || {}; } catch {}
     }
     const brain = project(existingBrain, BRAIN_FIELDS);
-    if (existingBrain.token) brain.has_token = true;
+    // A legacy brain.json token still counts as set; it is never copied, exposed or migrated here.
+    let hasToken = Boolean(existingBrain.token);
 
     // Prefer brain secrets store (AES). Never return raw secret values to the dashboard.
     const safeSecrets = {};
@@ -159,6 +200,11 @@ router.get('/api/config-json', requireAuth, requireScope('config:read'), async (
       if (!Array.isArray(meta)) throw new Error('Invalid Auth metadata');
       for (const row of meta) {
         if (!row || typeof row !== 'object') throw new Error('Invalid Auth metadata');
+        if (row.key === BACKEND_TOKEN_KEY) {
+          if (typeof row.set !== 'boolean') throw new Error('Invalid Auth metadata');
+          hasToken ||= row.set;
+          continue;
+        }
         if (!SECRET_KEYS.includes(row.key)) continue;
         if (typeof row.set !== 'boolean') throw new Error('Invalid Auth metadata');
         // Mask only — Settings/Secrets UIs use presence indicators, not values.
@@ -168,6 +214,7 @@ router.get('/api/config-json', requireAuth, requireScope('config:read'), async (
       return res.status(503).json({ error: 'Auth credential metadata is unavailable.' });
     }
 
+    if (hasToken) brain.has_token = true;
     res.json({ security, budget, brain, secrets: safeSecrets });
   } catch (err) { serverError(res, err); }
 });
@@ -193,6 +240,7 @@ router.post('/api/config-json', requireAuth, requireScope('config:write'), async
     if (isPlain(brainPatch) && Object.hasOwn(brainPatch, 'token')) {
       const { token, ...rest } = brainPatch;
       if (token !== undefined && token !== '' && typeof token !== 'string') return badRequest(res, 'Invalid config field: brain.token');
+      // A blank token keeps the stored credential; only a non-empty value is sent to Auth.
       brainToken = token || undefined;
       brainFields = rest;
     }
@@ -217,11 +265,14 @@ router.post('/api/config-json', requireAuth, requireScope('config:write'), async
       secretOps.push({ key, value: String(value) });
     }
 
+    // An explicit backend credential goes to the Auth owner under its canonical key, never into brain.json.
+    if (brainToken !== undefined) secretOps.push({ key: BACKEND_TOKEN_KEY, value: brainToken });
+
     const plan = [];
     if (secretOps.length) plan.push('secrets');
     if (isPlain(security)) plan.push('security');
     if (isPlain(budget)) plan.push('budget');
-    if (isPlain(brainFields) || brainToken !== undefined) plan.push('brain');
+    if (isPlain(brainFields) && Object.keys(brainFields).length) plan.push('brain');
     const applied = [];
     let failed = null;
 
@@ -263,8 +314,6 @@ router.post('/api/config-json', requireAuth, requireScope('config:write'), async
       let existingBrain = {};
       if (fs.existsSync(brainPath)) existingBrain = JSON.parse(fs.readFileSync(brainPath, 'utf8')) || {};
       const nextBrain = { ...existingBrain, ...(isPlain(brainFields) ? brainFields : {}) };
-      // A blank token keeps the stored one; only a non-empty value replaces it.
-      if (brainToken !== undefined) nextBrain.token = brainToken;
       delete nextBrain.has_token;
       writeFileSecure(brainPath, JSON.stringify(nextBrain, null, 2), { encoding: 'utf8', mode: 0o600 });
     });
@@ -293,20 +342,23 @@ router.get('/api/config/:name', requireAuth, requireScope('config:read'), (req, 
   try {
     const filePath = publicConfigPath(req.params.name);
     if (!filePath) return badRequest(res, 'Invalid config name');
-    if (!fs.existsSync(filePath)) {
+    const content = readPublicFile(filePath);
+    if (content === null) {
       if (req.params.name === 'DESIGN.md') {
         return res.json({ content: '# Design System\n\nPreview your markdown here.' });
       }
       return res.json({ content: '' });
     }
-    const content = fs.readFileSync(filePath, 'utf8');
     res.json({ content });
-  } catch (err) { serverError(res, err); }
+  } catch (err) {
+    if (err instanceof NotRegularFile) return res.status(409).json({ error: 'Config file is not a standalone regular file.' });
+    serverError(res, err);
+  }
 });
 
 /**
  * PUT /api/config/:name
- * Write a documented public config file to CONFIG_DIR.
+ * Write a documented public config file to CONFIG_DIR through a fresh inode.
  */
 router.put('/api/config/:name', requireAuth, requireScope('config:write'), (req, res) => {
   try {
@@ -316,9 +368,12 @@ router.put('/api/config/:name', requireAuth, requireScope('config:write'), (req,
     if (!fs.existsSync(CONFIG_DIR)) {
       fs.mkdirSync(CONFIG_DIR, { recursive: true });
     }
-    fs.writeFileSync(filePath, req.body.content, 'utf8');
+    writePublicFile(filePath, req.body.content);
     res.json({ success: true });
-  } catch (err) { serverError(res, err); }
+  } catch (err) {
+    if (err instanceof NotRegularFile) return res.status(409).json({ error: 'Config file is not a standalone regular file.' });
+    serverError(res, err);
+  }
 });
 
 export default router;

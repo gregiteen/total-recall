@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { agentDir as configAgentDir, brainDir as configBrainDir, xdgConfigHome, trBrain, trPat } from '../core/config.mjs';
+import { agentDir as configAgentDir, brainDir as configBrainDir, xdgConfigHome, trBrain, trPat, totalRecallToken } from '../core/config.mjs';
 import { fileURLToPath } from 'node:url';
 import { resolveAgentDir, getBothBrains, detectProjectBrain } from './agent-dir.mjs';
 import { discoverRepoSkills, projectSkillsAsCommands } from './skill-projection.mjs';
@@ -743,8 +743,8 @@ export default async function connect(args) {
   }
 
   if (!opts.token) {
-    if (trPat) {
-      opts.token = trPat;
+    if (trPat || totalRecallToken) {
+      opts.token = trPat || totalRecallToken;
     } else {
       const globalAgentDir = path.join(os.homedir(), '.agent');
       const candidateConfigDirs = [

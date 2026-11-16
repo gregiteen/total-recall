@@ -1,11 +1,14 @@
-import { describe, it, expect, afterEach } from 'vitest';
+import { describe, it, expect, afterEach, beforeAll, afterAll } from 'vitest';
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 import { spawnSync } from 'node:child_process';
-import { provisionRemoteCustody, runRemoteTotalRecallDeploy, wizardSecretKeys, remoteExecPrefix, localPackageVersion, readDashboardPasswordStdin, _resetStdinPasswordGuard, retrieveRemoteAccessToken, remoteDeployExtraArgs, assertSshTarget, REMOTE_PAT_SCOPES } from './deploy.mjs';
+import { provisionRemoteCustody, runRemoteTotalRecallDeploy, wizardSecretKeys, remoteExecPrefix, localPackageVersion, authBrainDir, readDashboardPasswordStdin, _resetStdinPasswordGuard, retrieveRemoteAccessToken, remoteDeployExtraArgs, assertSshTarget, REMOTE_PAT_SCOPES } from './deploy.mjs';
 
 const CANARY = 'CANARY-core-deploy-9d41';
+let BRAIN;
+beforeAll(() => { BRAIN = fs.mkdtempSync(path.join(os.tmpdir(), 'tr-deploy-brain-')); });
+afterAll(() => fs.rmSync(BRAIN, { recursive: true, force: true }));
 
 // Fake Auth owner: records what core asks and never sees a store.
 function fakeOwner({ provision, run } = {}) {
@@ -30,14 +33,14 @@ describe.each(Object.entries(paths))('remote custody: %s wizard path', (_name, p
 
   it('names explicit keys only and never passes wizard values to the owner', async () => {
     const { load, seen } = fakeOwner();
-    await provisionRemoteCustody({ target: p.target, wizardOpts, load, log() {}, warn() {} });
+    await provisionRemoteCustody({ brainDir: BRAIN, target: p.target, wizardOpts, load, log() {}, warn() {} });
     expect(seen.provision[0].opts.keys).toEqual(['GOOGLE_API_KEY', 'OPENAI_API_KEY']);
     expect(JSON.stringify(seen.provision)).not.toContain(CANARY);
   });
 
   it('propagates a fail-closed outcome as a thrown error', async () => {
     const { load } = fakeOwner({ provision: { ok: false, code: 'keys-missing', message: 'Credential(s) not in the Auth store: GOOGLE_API_KEY.', action: 'Store each with: total-recall auth secret set <KEY>.' } });
-    await expect(provisionRemoteCustody({ target: p.target, wizardOpts, load })).rejects.toThrow(/keys-missing.*auth secret set/);
+    await expect(provisionRemoteCustody({ brainDir: BRAIN, target: p.target, wizardOpts, load })).rejects.toThrow(/keys-missing.*auth secret set/);
   });
 
   it('puts the dashboard password on stdin, not in the remote command', async () => {
@@ -61,7 +64,7 @@ describe('remote custody wiring', () => {
   it('warns instead of silently skipping when no keys are selected', async () => {
     const warnings = [];
     const { load } = fakeOwner({ provision: { ok: true, provisioned: false, code: 'no-keys-selected', message: 'No keys.', action: 'Name them.' } });
-    await provisionRemoteCustody({ target: paths.vm.target, wizardOpts: {}, load, warn: (m) => warnings.push(m) });
+    await provisionRemoteCustody({ brainDir: BRAIN, target: paths.vm.target, wizardOpts: {}, load, warn: (m) => warnings.push(m) });
     expect(warnings[0]).toMatch(/No keys/);
     expect(wizardSecretKeys({})).toEqual([]);
   });
@@ -145,10 +148,10 @@ describe('pinned remote package and explicit project path', () => {
 
   it('passes only an explicit absolute project path to the owner, never the cwd', async () => {
     const a = fakeOwner();
-    await provisionRemoteCustody({ target: paths.vm.target, wizardOpts: { googleApiKey: 'x', projectPaths: ['relative', '/work/repo'] }, load: a.load, log() {}, warn() {} });
+    await provisionRemoteCustody({ brainDir: BRAIN, target: paths.vm.target, wizardOpts: { googleApiKey: 'x', projectPaths: ['relative', '/work/repo'] }, load: a.load, log() {}, warn() {} });
     expect(a.seen.provision[0].opts.projectPath).toBe('/work/repo');
     const b = fakeOwner();
-    await provisionRemoteCustody({ target: paths.vm.target, wizardOpts: { googleApiKey: 'x' }, load: b.load, log() {}, warn() {} });
+    await provisionRemoteCustody({ brainDir: BRAIN, target: paths.vm.target, wizardOpts: { googleApiKey: 'x' }, load: b.load, log() {}, warn() {} });
     expect(b.seen.provision[0].opts.projectPath).toBeUndefined();
   });
 
@@ -177,10 +180,10 @@ describe('remote access token through Auth (A309)', () => {
   it('asks the owner for a pinned, read-only token and reports only the key name and id', async () => {
     const { load, seen } = owner({ ok: true, stored: true, key: 'TR_REMOTE_PAT_10_0_0_5', id: 'abc-123' });
     const said = [];
-    const out = await retrieveRemoteAccessToken({ target, prefix: 'export X=1;', load, version: '9.8.7', log: (m) => said.push(m) });
+    const out = await retrieveRemoteAccessToken({ brainDir: BRAIN, target, prefix: 'export X=1;', load, version: '9.8.7', log: (m) => said.push(m) });
     expect(out).toMatchObject({ ok: true, key: 'TR_REMOTE_PAT_10_0_0_5' });
     expect(seen[0].cmd).toBe(`export X=1; npm exec --yes --package=total-recall-brain@9.8.7 -- total-recall generate-pat --name deploy-wizard --scope ${REMOTE_PAT_SCOPES}`);
-    expect(seen[0].brain).toBe('/fake/brain');
+    expect(seen[0].brain).toBe(BRAIN);
     expect(said.join(' ')).toMatch(/TR_REMOTE_PAT_10_0_0_5.*abc-123/);
     expect(JSON.stringify([said, out])).not.toContain(TOKEN);
   });
@@ -190,7 +193,7 @@ describe('remote access token through Auth (A309)', () => {
     [{ ok: false, code: 'pat-store-failed', message: 'could not be stored.', action: 'revoke by id', id: 'abc-123' }, /pat-store-failed/],
   ])('stops with an explicit error instead of reporting success: %j', async (result, pattern) => {
     const { load } = owner(result);
-    await expect(retrieveRemoteAccessToken({ target, prefix: 'p;', load, version: '1.2.3', log() {} })).rejects.toThrow(pattern);
+    await expect(retrieveRemoteAccessToken({ brainDir: BRAIN, target, prefix: 'p;', load, version: '1.2.3', log() {} })).rejects.toThrow(pattern);
   });
 
   it('forwards only the operator-selected HTTPS flags and never a credential', () => {
@@ -256,5 +259,59 @@ describe('remote probe under a real POSIX shell', () => {
   it('reports the exit-96 cause distinctly to the caller', async () => {
     const load = async () => ({ runRemoteWithStdin: () => ({ ok: false, status: 96, message: 'Remote command exited with 96.' }) });
     await expect(runRemoteTotalRecallDeploy({ target: { host: 'h' }, prefix: 'p;', wizardOpts: { dashboardPassword: PASSWORD }, load, version: '1.2.3' })).rejects.toThrow(/could not run \(Node, npm or registry access\)/);
+  });
+});
+
+describe('Auth brain directory selection', () => {
+  const URL_BRAIN = 'http://brain.test:3000';
+  const tmp = () => fs.mkdtempSync(path.join(os.tmpdir(), 'tr-authdir-'));
+
+  it('never reads TR_BRAIN: it is a brain URL for the startup CLI', () => {
+    const fallback = tmp();
+    try {
+      expect(authBrainDir(undefined, { TR_BRAIN: URL_BRAIN }, fallback)).toBe(fallback);
+      expect(authBrainDir(undefined, { TR_BRAIN: '/some/dir/that/must/not/win' }, fallback)).toBe(fallback);
+    } finally { fs.rmSync(fallback, { recursive: true, force: true }); }
+  });
+
+  it('prefers the selected secrets brain over the global brain', () => {
+    const selected = tmp(); const fallback = tmp();
+    try { expect(authBrainDir(undefined, { TR_SECRETS_BRAIN: selected }, fallback)).toBe(selected); }
+    finally { fs.rmSync(selected, { recursive: true, force: true }); fs.rmSync(fallback, { recursive: true, force: true }); }
+  });
+
+  it.each([[URL_BRAIN], ['relative/dir'], ['/definitely/not/here/tr-brain'], [''], [42], ['/tmp/\0x']])('refuses an invalid explicit directory %j', bad => {
+    expect(() => authBrainDir(bad, {}, '/tmp')).toThrow(/Auth brain directory/);
+  });
+
+  it('refuses a regular file as the directory', () => {
+    const dir = tmp(); const file = path.join(dir, 'f');
+    fs.writeFileSync(file, 'x');
+    try { expect(() => authBrainDir(file, {}, dir)).toThrow(/not a directory/); }
+    finally { fs.rmSync(dir, { recursive: true, force: true }); }
+  });
+
+  it('hands the owner the validated directory even when TR_BRAIN is a URL', async () => {
+    const seen = [];
+    const load = async () => ({ provisionDeployTarget: async (brain) => { seen.push(brain); return { ok: true, provisioned: true, keys: [], count: 0 }; },
+      retrieveRemotePat: async (brain) => { seen.push(brain); return { ok: true, key: 'K', id: 'i' }; } });
+    const prev = process.env.TR_BRAIN; const prevSel = process.env.TR_SECRETS_BRAIN;
+    process.env.TR_BRAIN = URL_BRAIN; process.env.TR_SECRETS_BRAIN = BRAIN;
+    try {
+      await provisionRemoteCustody({ target: { host: 'h' }, wizardOpts: {}, load, log() {}, warn() {} });
+      await retrieveRemoteAccessToken({ target: { host: 'h' }, prefix: 'p;', load, version: '1.2.3', log() {} });
+    } finally {
+      if (prev === undefined) delete process.env.TR_BRAIN; else process.env.TR_BRAIN = prev;
+      if (prevSel === undefined) delete process.env.TR_SECRETS_BRAIN; else process.env.TR_SECRETS_BRAIN = prevSel;
+    }
+    expect(seen).toEqual([BRAIN, BRAIN]);
+  });
+
+  it('rejects before any owner call when the explicit directory is invalid', async () => {
+    let called = false;
+    const load = async () => ({ provisionDeployTarget: async () => { called = true; return { ok: true }; }, retrieveRemotePat: async () => { called = true; return { ok: true }; } });
+    await expect(provisionRemoteCustody({ brainDir: URL_BRAIN, target: { host: 'h' }, wizardOpts: {}, load })).rejects.toThrow(/Auth brain directory/);
+    await expect(retrieveRemoteAccessToken({ brainDir: 'relative', target: { host: 'h' }, prefix: 'p;', load, version: '1.2.3' })).rejects.toThrow(/Auth brain directory/);
+    expect(called).toBe(false);
   });
 });

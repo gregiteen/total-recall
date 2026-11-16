@@ -45,6 +45,7 @@ import yaml from 'yaml';
 import crypto from 'node:crypto';
 import { loadPluginModule } from '../core/plugin-runtime.mjs';
 import { writeFileSecure } from '../core/secure-file.mjs';
+import { globalBrainDir } from '../core/local-config.mjs';
 
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -119,13 +120,28 @@ export function wizardSecretKeys(wizardOpts = {}) {
   return Object.entries(WIZARD_KEY_NAMES).filter(([opt]) => wizardOpts[opt]).map(([, name]) => name);
 }
 
+/**
+ * The Auth store's brain directory: an explicit, validated path, else the selected secrets brain or
+ * the global brain. TR_BRAIN is never used: the startup CLI reads it as a brain URL, not a directory.
+ */
+export function authBrainDir(explicit, env = process.env, fallback = globalBrainDir) {
+  const candidate = explicit !== undefined ? explicit : (env.TR_SECRETS_BRAIN || fallback);
+  if (typeof candidate !== 'string' || !candidate || candidate.includes('\0') || /^[A-Za-z][A-Za-z0-9+.-]*:\/\//.test(candidate) || !path.isAbsolute(candidate)) {
+    throw new Error('The Auth brain directory must be an absolute local path.');
+  }
+  let stat;
+  try { stat = fs.statSync(candidate); } catch { throw new Error('The Auth brain directory does not exist.'); }
+  if (!stat.isDirectory()) throw new Error('The Auth brain directory is not a directory.');
+  return candidate;
+}
+
 export async function provisionRemoteCustody({ target, wizardOpts = {}, load = __loadOwnedPlugin, brainDir, log: say = log, warn = logWarn }) {
   const { provisionDeployTarget } = await load('auth', 'secrets-deploy-custody');
-  const { defaultBrainDir } = await load('auth', 'secrets-store');
+  const authDir = authBrainDir(brainDir);
   // The project path is explicit; the process cwd never decides which repository's keys are eligible.
   const projectPath = [wizardOpts.projectPath, ...(Array.isArray(wizardOpts.projectPaths) ? wizardOpts.projectPaths : [])]
     .find((v) => typeof v === 'string' && path.isAbsolute(v));
-  const outcome = await provisionDeployTarget(brainDir || process.env.TR_BRAIN || defaultBrainDir(), target, { keys: wizardSecretKeys(wizardOpts), projectPath });
+  const outcome = await provisionDeployTarget(authDir, target, { keys: wizardSecretKeys(wizardOpts), projectPath });
   if (!outcome.ok) throw new Error(`Credential provisioning stopped (${outcome.code}): ${outcome.message} ${outcome.action}`);
   if (!outcome.provisioned) warn(`${outcome.message} ${outcome.action}`);
   else say(`Provisioned ${outcome.count} credential key(s) to the remote .env: ${outcome.keys.join(', ')}`);
@@ -182,9 +198,9 @@ export const REMOTE_PAT_SCOPES = 'health:read,memory:read,ssss:read';
  */
 export async function retrieveRemoteAccessToken({ target, prefix, load = __loadOwnedPlugin, brainDir, version = localPackageVersion(), log: say = log }) {
   const { retrieveRemotePat } = await load('auth', 'secrets-deploy-custody');
-  const { defaultBrainDir } = await load('auth', 'secrets-store');
+  const authDir = authBrainDir(brainDir);
   const command = `${prefix} ${remoteExecPrefix(version)} generate-pat --name deploy-wizard --scope ${REMOTE_PAT_SCOPES}`;
-  const outcome = await retrieveRemotePat(brainDir || process.env.TR_BRAIN || defaultBrainDir(), target, command);
+  const outcome = await retrieveRemotePat(authDir, target, command);
   if (!outcome.ok) throw new Error(`Remote access token was not stored (${outcome.code}): ${outcome.message} ${outcome.action}`);
   say(`Stored the remote access token in the Auth store as ${outcome.key}${outcome.id ? ` (token id ${outcome.id})` : ''}.`);
   return outcome;
