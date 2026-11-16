@@ -70,6 +70,32 @@ describe('uniform brain updates', () => {
     expect(discoverBrainConsumers([source]).map(({ root }) => fs.realpathSync(root))).toEqual([fs.realpathSync(nested)]);
   });
 
+  describe('superseded plugin release snapshots', () => {
+    const pkg = { devDependencies: { 'total-recall-brain': '3.0.0' }, dependencies: { '@gregiteen/ssss-cli': '0.14.0' } };
+    function fixture() {
+      const root = manifest(path.join(tmp, 'app'), {});
+      const snapshot = manifest(path.join(root, '.agent/skills/total-recall/plugin-releases/x/0.1.0-abc/plugin'), pkg);
+      const plugin = manifest(path.join(root, '.agent/skills/total-recall/plugins/y'), pkg);
+      fs.writeFileSync(path.join(plugin, 'plugin.json'), '{}');
+      return { root, snapshot, plugin };
+    }
+
+    it('skips them, while an installed-folder plugin stays a runtime-only consumer', () => {
+      const { root, snapshot, plugin } = fixture();
+      const found = discoverBrainConsumers([root]);
+      expect(found.map(({ root: r }) => r)).toEqual([plugin]);
+      expect(found[0].runtimeOnly).toBe(true);
+      expect(found[0].deps.some(dep => dep.section === 'devDependencies')).toBe(false);
+      expect(found.some(({ root: r }) => r === snapshot)).toBe(false);
+    });
+
+    it('still discovers one that is an active linked plugin', () => {
+      const { root, snapshot } = fixture();
+      const found = discoverBrainConsumers([root], { installedPlugins: new Set([snapshot]) });
+      expect(found.map(({ root: r }) => r)).toContain(snapshot);
+    });
+  });
+
   it('excludes managed scaffold assets without hiding real nested consumers', () => {
     const root = manifest(path.join(tmp, 'app'), {});
     const dependency = { dependencies: { '@gregiteen/ssss-cli': '0.11.0' } };
