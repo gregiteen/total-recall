@@ -284,7 +284,7 @@ export class EmbeddingsHome extends HTMLElement {
         h1 { margin: 0; font-size: 18px; }
         h1 + p { margin: 2px 0 0; color: var(--colors-muted, #67e8f9); font-size: var(--typography-label-font-size, 11px); }
         h2 { margin: 0 0 var(--spacing-md, 12px); font-size: var(--typography-label-font-size, 11px); font-weight: var(--typography-label-font-weight, 700); letter-spacing: 0.05em; text-transform: uppercase; color: var(--colors-muted, #67e8f9); }
-        .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: var(--spacing-md, 12px); }
+        .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(300px, 100%), 1fr)); gap: var(--spacing-md, 12px); }
         section { background: var(--colors-surface, #0e2a35); border: 1px solid var(--colors-line, #164e63); border-radius: var(--rounded-md, 6px); padding: var(--spacing-md, 12px); min-width: 0; }
         .mono { font-family: var(--typography-mono-font-family, 'JetBrains Mono', 'Fira Code', monospace); font-size: var(--typography-mono-font-size, 12px); overflow-wrap: anywhere; }
         .verdict { display: flex; align-items: center; gap: var(--spacing-sm, 8px); flex-wrap: wrap; margin-bottom: var(--spacing-md, 12px); }
@@ -298,7 +298,8 @@ export class EmbeddingsHome extends HTMLElement {
         .facts { display: grid; gap: var(--spacing-xs, 4px); margin: 0; }
         .facts div { display: flex; justify-content: space-between; gap: var(--spacing-md, 12px); }
         dt { color: var(--colors-muted, #67e8f9); }
-        dd { margin: 0; text-align: right; }
+        dt, dd { min-width: 0; }
+        dd { margin: 0; text-align: right; overflow-wrap: anywhere; }
         .notice { margin: var(--spacing-sm, 8px) 0 0; padding: var(--spacing-sm, 8px); background: var(--colors-background, #07171d); border-radius: var(--rounded-sm, 4px); }
         .attempts, .counts, .models { list-style: none; margin: var(--spacing-sm, 8px) 0 0; padding: 0; display: grid; gap: var(--spacing-xs, 4px); }
         .coverage { display: flex; align-items: baseline; gap: var(--spacing-md, 12px); flex-wrap: wrap; margin-bottom: var(--spacing-sm, 8px); }
