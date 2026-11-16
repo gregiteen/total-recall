@@ -193,6 +193,17 @@ describe('bounded plugin router and upgrade resolution', () => {
     expect((await call(routers.find(item => item.pluginId === 'owner'))).next).toBe(true);
   });
 
+  it('finishes router startup when an owner import never settles', async () => {
+    add('owner', { modules: {}, routers: ['http.mjs'] });
+    add('sibling', { modules: {}, routers: ['http.mjs'] });
+    const { loadPluginRouters } = await import('./plugin-runtime.mjs');
+    const routers = await loadPluginRouters({ projectRoot: root, loadTimeoutMs: 20,
+      activation: () => ({ enabled: true }), importModule: href => href.includes('/owner/')
+        ? new Promise(() => {}) : Promise.resolve({ default: express() }) });
+    expect(routers.find(item => item.pluginId === 'sibling').stack).toHaveLength(1);
+    expect((await call(routers.find(item => item.pluginId === 'owner'))).next).toBe(true);
+  }, 500);
+
   it('does not run middleware when the owner is disabled while its lazy import is still pending', async () => {
     add('owner', { modules: {}, routers: ['http.mjs'] });
     const state = { enabled: false };

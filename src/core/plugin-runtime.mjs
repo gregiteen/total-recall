@@ -197,20 +197,24 @@ function createGuardedRouter({ plugin, relative, projectRoot, locator, activatio
   return guarded;
 }
 
-export async function loadPluginRouters({ projectRoot = process.cwd(), discover = discoverPlugins, activation = pluginActivation, now = Date.now, importModule = href => import(href) } = {}) {
+export async function loadPluginRouters({ projectRoot = process.cwd(), discover = discoverPlugins, activation = pluginActivation, now = Date.now, importModule = href => import(href), loadTimeoutMs = 5000 } = {}) {
   const locator = createPluginLocator({ projectRoot, discover });
   const load = async (plugin, relative) => {
+    let timer;
     try {
       process.env.TR_PACKAGE_ROOT = PACKAGE_ROOT;
       const file = resolvePluginFile(plugin.dir, relative);
       const stamp = statStamp(file);
-      const module = await importModule(pathToFileURL(file).href);
+      const module = await Promise.race([
+        importModule(pathToFileURL(file).href),
+        new Promise((_, reject) => { timer = setTimeout(() => reject(new Error('Plugin router module load timed out')), loadTimeoutMs); }),
+      ]);
       if (typeof module.default !== 'function') throw new Error('router must export middleware');
       return { module, file, stamp };
-    } catch (error) {
-      logger.warn('plugin-runtime', `Plugin ${plugin.id} router unavailable: ${error.message}`);
+    } catch {
+      logger.warn('plugin-runtime', `Plugin ${plugin.id} router unavailable`);
       return ROUTER_FAILED;
-    }
+    } finally { clearTimeout(timer); }
   };
   const routers = [];
   for (const plugin of locator.discover().filter(item => item.valid)) {
