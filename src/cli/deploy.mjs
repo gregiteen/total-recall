@@ -142,15 +142,52 @@ export async function runRemoteTotalRecallDeploy({ target, prefix, wizardOpts = 
   for (const a of extraArgs) cmd += ` ${a}`;
   // A remote CLI too old to know the stdin flag would ignore the password. Probe its help in the same
   // session and stop before the deploy runs; the probe never reads stdin, so the deploy reads it once.
+  // Exit 96 means the pinned CLI could not run at all; exit 97 means it ran and lacks the flag.
   const probe = wizardOpts.dashboardPassword
-    ? `if ! ${exec} deploy --help 2>&1 | grep -q -e '--dashboard-password-stdin'; then echo 'Remote total-recall does not support --dashboard-password-stdin; update it and rerun.' >&2; exit 97; fi && `
+    ? `if ! HELP=$(${exec} deploy --help 2>&1); then echo 'The pinned remote total-recall could not run; check Node, npm and registry access.' >&2; exit 96; fi && ` +
+      `case "$HELP" in *--dashboard-password-stdin*) ;; *) echo 'Remote total-recall does not support --dashboard-password-stdin; update it and rerun.' >&2; exit 97;; esac && `
     : '';
   const result = runRemoteWithStdin(target, `${prefix} ${probe}${cmd}`, { stdin: wizardOpts.dashboardPassword ? `${wizardOpts.dashboardPassword}\n` : '' });
   if (!result.ok) {
-    const why = result.status === 97 ? 'the remote total-recall does not support --dashboard-password-stdin; update it and rerun' : result.message;
+    const why = result.status === 97 ? 'the remote total-recall does not support --dashboard-password-stdin; update it and rerun'
+      : result.status === 96 ? 'the pinned remote total-recall could not run (Node, npm or registry access)' : result.message;
     throw new Error(`Remote Total Recall deployment failed: ${why}`);
   }
   return result;
+}
+
+const SSH_HOST = /^(?!-)[A-Za-z0-9.-]{1,253}$|^[0-9A-Fa-f:]{2,45}$/;
+const SSH_USER = /^[a-z_][a-z0-9_-]{0,31}$/;
+
+/** Refuse a wizard-supplied host or user that could be read as an option or carry shell syntax. */
+export function assertSshTarget(user, host) {
+  if (typeof host !== 'string' || !SSH_HOST.test(host)) throw new Error('Refusing the remote host: it is not a plain host name or address.');
+  if (typeof user !== 'string' || !SSH_USER.test(user)) throw new Error('Refusing the remote user: it is not a plain account name.');
+}
+
+/** Extra remote deploy flags the wizard's HTTPS choice implies. No credential ever travels in argv. */
+export function remoteDeployExtraArgs(wizardOpts = {}) {
+  if (wizardOpts.httpsMethod === 'cloudflare-quick') return ['--cloudflare-quick'];
+  // The remote refuses an insecure deploy unless the operator's local-only choice is forwarded.
+  if (wizardOpts.httpsMethod === 'local') return ['--allow-insecure-http'];
+  return [];
+}
+
+/** Read-only scopes for the token the deploy leaves behind; broader keys are issued explicitly. */
+export const REMOTE_PAT_SCOPES = 'health:read,memory:read,ssss:read';
+
+/**
+ * Generate a remote access token and keep it in the local Auth store.
+ * The token never reaches this process's output; failure stops the deploy.
+ */
+export async function retrieveRemoteAccessToken({ target, prefix, load = __loadOwnedPlugin, brainDir, version = localPackageVersion(), log: say = log }) {
+  const { retrieveRemotePat } = await load('auth', 'secrets-deploy-custody');
+  const { defaultBrainDir } = await load('auth', 'secrets-store');
+  const command = `${prefix} ${remoteExecPrefix(version)} generate-pat --name deploy-wizard --scope ${REMOTE_PAT_SCOPES}`;
+  const outcome = await retrieveRemotePat(brainDir || process.env.TR_BRAIN || defaultBrainDir(), target, command);
+  if (!outcome.ok) throw new Error(`Remote access token was not stored (${outcome.code}): ${outcome.message} ${outcome.action}`);
+  say(`Stored the remote access token in the Auth store as ${outcome.key}${outcome.id ? ` (token id ${outcome.id})` : ''}.`);
+  return outcome;
 }
 
 let _stdinPasswordRead = false;
@@ -498,6 +535,9 @@ export default async function deploy(args) {
   const opts = parseArgs(args);
   if (opts.help) { printHelp(); return; }
 
+  // The password is consumed and validated before any subprocess or side effect can touch stdin or the host.
+  if (opts.dashboardPasswordStdin) opts.dashboardPassword = readDashboardPasswordStdin(opts);
+
   const arch = detectArch();
   const platform = detectPlatform();
 
@@ -548,6 +588,7 @@ export default async function deploy(args) {
       if (wizardOpts.deployTarget === 'localnet') {
         const ip = wizardOpts.localnetHost;
         const user = wizardOpts.localnetUser || 'root';
+        assertSshTarget(user, ip);
         logStep('1/3', `Connecting to remote host ${user}@${ip}...`);
 
         const check = spawnSync('ssh', [
@@ -579,15 +620,11 @@ export default async function deploy(args) {
         logStep('3/3', 'Deploying Total Recall remotely...');
         await runRemoteTotalRecallDeploy({
           target: localTarget, prefix: cmdPrefix, wizardOpts,
-          extraArgs: wizardOpts.httpsMethod === 'cloudflare-quick' ? ['--cloudflare-quick'] : [],
+          extraArgs: remoteDeployExtraArgs(wizardOpts),
         });
 
         logStep('Done', 'Generating access token & discovering endpoints...');
-        const pat = spawnSync('ssh', [
-          '-o', 'StrictHostKeyChecking=accept-new',
-          `${user}@${ip}`,
-          `${cmdPrefix} ${remoteExecPrefix(localPackageVersion())} generate-pat --quiet`
-        ], { encoding: 'utf8' }).stdout?.toString().trim();
+        await retrieveRemoteAccessToken({ target: localTarget, prefix: cmdPrefix });
 
         let publicUrl = `http://${ip}:3000`;
         if (wizardOpts.httpsMethod === 'cloudflare-quick') {
@@ -610,9 +647,6 @@ export default async function deploy(args) {
         }
 
         logOk(`Remote setup complete! Brain is running.`);
-        if (pat) {
-          logOk(`Access token generated successfully.`);
-        }
 
         const { finishDeployUI: finishUI } = await import('./deploy-ui.mjs');
         finishUI({
@@ -1033,10 +1067,10 @@ export default async function deploy(args) {
 
         logStep('6/6', 'Activating Cloudflare Quick Tunnel and secure HTTPS links...');
 
-        let pat = spawnSync('ssh', [
-          ...sshArgs,
-          `export NVM_DIR="$HOME/.nvm" && [ -s "$NVM_DIR/nvm.sh" ] && \\. "$NVM_DIR/nvm.sh" && ${remoteExecPrefix(localPackageVersion())} generate-pat --quiet`
-        ], { encoding: 'utf8' }).stdout?.toString().trim();
+        await retrieveRemoteAccessToken({
+          target: vmTarget,
+          prefix: 'export NVM_DIR="$HOME/.nvm" && [ -s "$NVM_DIR/nvm.sh" ] && \\. "$NVM_DIR/nvm.sh" &&',
+        });
 
         let publicUrl = `http://${ip}:3000`;
         log('⏳ Fetching remote Cloudflare Quick Tunnel URL...');
@@ -1056,9 +1090,6 @@ export default async function deploy(args) {
         }
 
         logOk(`Cloud VM provisioning and deployment complete!`);
-        if (pat) {
-          logOk(`Access token generated successfully.`);
-        }
 
         // Persist to local wizard-config.json
         try {
@@ -1095,7 +1126,8 @@ export default async function deploy(args) {
       if (_uiEmit) {
         _uiEmit('error', e.message);
       }
-      return;
+      // The UI shows the failure, and the command must still exit nonzero.
+      throw e;
     }
   }
 
@@ -1263,7 +1295,6 @@ ${fmtLine('Target VFS:   ', '~/.agent/')}
 
   // ── Step 7: Copy default config ──
   copyDefaultConfig(opts.dryRun);
-  if (opts.dashboardPasswordStdin) opts.dashboardPassword = readDashboardPasswordStdin(opts);
   await hardenSecurityConfig(opts.dryRun, opts.dashboardPassword);
 
   // ── Step 7: Install Reverse Proxy / Tunnel ──

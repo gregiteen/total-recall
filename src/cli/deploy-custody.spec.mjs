@@ -1,7 +1,9 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, afterEach } from 'vitest';
 import fs from 'node:fs';
 import path from 'node:path';
-import { provisionRemoteCustody, runRemoteTotalRecallDeploy, wizardSecretKeys, remoteExecPrefix, localPackageVersion, readDashboardPasswordStdin, _resetStdinPasswordGuard } from './deploy.mjs';
+import os from 'node:os';
+import { spawnSync } from 'node:child_process';
+import { provisionRemoteCustody, runRemoteTotalRecallDeploy, wizardSecretKeys, remoteExecPrefix, localPackageVersion, readDashboardPasswordStdin, _resetStdinPasswordGuard, retrieveRemoteAccessToken, remoteDeployExtraArgs, assertSshTarget, REMOTE_PAT_SCOPES } from './deploy.mjs';
 
 const CANARY = 'CANARY-core-deploy-9d41';
 
@@ -150,9 +152,109 @@ describe('pinned remote package and explicit project path', () => {
     expect(b.seen.provision[0].opts.projectPath).toBeUndefined();
   });
 
-  it('keeps generate-pat off the wrong npm package', () => {
+  it('keeps generate-pat off the wrong npm package and off the terminal', () => {
     const src = fs.readFileSync(path.resolve(process.cwd(), 'src/cli/deploy.mjs'), 'utf8');
     expect(src).not.toMatch(/npx total-recall generate-pat/);
-    expect((src.match(/remoteExecPrefix\(localPackageVersion\(\)\)\} generate-pat/g) || []).length).toBe(2);
+    expect((src.match(/remoteExecPrefix\(version\)\} generate-pat/g) || []).length).toBe(1);
+    // The token is retrieved by the Auth owner on a private pipe; core never spawns ssh for it.
+    expect(src).not.toMatch(/generate-pat --quiet/);
+    expect((src.match(/await retrieveRemoteAccessToken\(/g) || []).length).toBe(2);
+  });
+});
+
+describe('remote access token through Auth (A309)', () => {
+  const TOKEN = 'tr_PATCANARY0123456789abcdefABCDEF';
+  const target = { host: '10.0.0.5', user: 'me', remoteDir: '.agent/skills/total-recall' };
+
+  function owner(result) {
+    const seen = [];
+    const load = async (_id, name) => name === 'secrets-store'
+      ? { defaultBrainDir: () => '/fake/brain' }
+      : { retrieveRemotePat: async (brain, tgt, cmd, opts) => { seen.push({ brain, tgt, cmd, opts }); return result; } };
+    return { load, seen };
+  }
+
+  it('asks the owner for a pinned, read-only token and reports only the key name and id', async () => {
+    const { load, seen } = owner({ ok: true, stored: true, key: 'TR_REMOTE_PAT_10_0_0_5', id: 'abc-123' });
+    const said = [];
+    const out = await retrieveRemoteAccessToken({ target, prefix: 'export X=1;', load, version: '9.8.7', log: (m) => said.push(m) });
+    expect(out).toMatchObject({ ok: true, key: 'TR_REMOTE_PAT_10_0_0_5' });
+    expect(seen[0].cmd).toBe(`export X=1; npm exec --yes --package=total-recall-brain@9.8.7 -- total-recall generate-pat --name deploy-wizard --scope ${REMOTE_PAT_SCOPES}`);
+    expect(seen[0].brain).toBe('/fake/brain');
+    expect(said.join(' ')).toMatch(/TR_REMOTE_PAT_10_0_0_5.*abc-123/);
+    expect(JSON.stringify([said, out])).not.toContain(TOKEN);
+  });
+
+  it.each([
+    [{ ok: false, code: 'remote-pat-failed', message: 'Remote token command exited with 1.', action: 'Check it.' }, /remote-pat-failed.*exited with 1/],
+    [{ ok: false, code: 'pat-store-failed', message: 'could not be stored.', action: 'revoke by id', id: 'abc-123' }, /pat-store-failed/],
+  ])('stops with an explicit error instead of reporting success: %j', async (result, pattern) => {
+    const { load } = owner(result);
+    await expect(retrieveRemoteAccessToken({ target, prefix: 'p;', load, version: '1.2.3', log() {} })).rejects.toThrow(pattern);
+  });
+
+  it('forwards only the operator-selected HTTPS flags and never a credential', () => {
+    expect(remoteDeployExtraArgs({ httpsMethod: 'cloudflare-quick' })).toEqual(['--cloudflare-quick']);
+    expect(remoteDeployExtraArgs({ httpsMethod: 'local' })).toEqual(['--allow-insecure-http']);
+    expect(remoteDeployExtraArgs({ httpsMethod: 'cloudflare-tunnel', cloudflareToken: TOKEN, duckdnsToken: TOKEN })).toEqual([]);
+    expect(remoteDeployExtraArgs()).toEqual([]);
+  });
+
+  it('refuses hosts and users that could be read as ssh options', () => {
+    expect(() => assertSshTarget('me', '10.0.0.5')).not.toThrow();
+    expect(() => assertSshTarget('root', 'host.example')).not.toThrow();
+    expect(() => assertSshTarget('me', '-oProxyCommand=touch')).toThrow(/remote host/);
+    expect(() => assertSshTarget('-oProxyCommand=x', '10.0.0.5')).toThrow(/remote user/);
+    expect(() => assertSshTarget('me', 'a b')).toThrow(/remote host/);
+    expect(() => assertSshTarget('me', undefined)).toThrow(/remote host/);
+  });
+});
+
+describe('remote probe under a real POSIX shell', () => {
+  const PASSWORD = 'PWCANARY-probe-1d9e';
+  let bin;
+  function fakeNpm(body) {
+    bin = fs.mkdtempSync(path.join(os.tmpdir(), 'tr-fake-npm-'));
+    fs.writeFileSync(path.join(bin, 'npm'), `#!/bin/sh\n${body}\n`, { mode: 0o755 });
+  }
+  async function runProbe(prefix) {
+    let command;
+    const load = async () => ({ runRemoteWithStdin: (_t, cmd) => { command = cmd; return { ok: true }; } });
+    await runRemoteTotalRecallDeploy({ target: { host: 'h', user: 'u' }, prefix, wizardOpts: { dashboardPassword: PASSWORD, domain: 'example.test' }, load, version: '1.2.3' });
+    return spawnSync('/bin/sh', ['-c', command], { input: `${PASSWORD}\n`, encoding: 'utf8', env: { PATH: `${bin}:/usr/bin:/bin` } });
+  }
+  afterEach(() => { if (bin) fs.rmSync(bin, { recursive: true, force: true }); });
+
+  const helpWithFlag = 'case "$*" in *--help*) echo "usage: deploy --dashboard-password-stdin";; *) echo "DEPLOY-RAN $*"; read pw; echo "got:$pw";; esac';
+
+  it.each([['semicolon prefix', 'export A=1;'], ['and-and prefix', 'export A=1 &&']])('runs the deploy once when the flag is supported (%s)', async (_n, prefix) => {
+    fakeNpm(helpWithFlag);
+    const r = await runProbe(prefix);
+    expect(r.status).toBe(0);
+    expect(r.stdout).toContain(`got:${PASSWORD}`);
+    expect(r.stdout.match(/DEPLOY-RAN/g)).toHaveLength(1);
+    expect(r.stdout + r.stderr).not.toMatch(/--dashboard-password /);
+  });
+
+  it('exits 97 and never runs the deploy when the remote lacks the flag', async () => {
+    fakeNpm('echo "usage: deploy --domain"');
+    const r = await runProbe('export A=1;');
+    expect(r.status).toBe(97);
+    expect(r.stderr).toMatch(/does not support --dashboard-password-stdin/);
+    expect(r.stdout).not.toContain('DEPLOY-RAN');
+  });
+
+  it('exits 96 with a different diagnostic when the pinned CLI cannot run at all', async () => {
+    fakeNpm('echo "npm error 404" >&2; exit 1');
+    const r = await runProbe('export A=1 &&');
+    expect(r.status).toBe(96);
+    expect(r.stderr).toMatch(/could not run/);
+    expect(r.stderr).not.toMatch(/does not support/);
+    expect(r.stdout).not.toContain('DEPLOY-RAN');
+  });
+
+  it('reports the exit-96 cause distinctly to the caller', async () => {
+    const load = async () => ({ runRemoteWithStdin: () => ({ ok: false, status: 96, message: 'Remote command exited with 96.' }) });
+    await expect(runRemoteTotalRecallDeploy({ target: { host: 'h' }, prefix: 'p;', wizardOpts: { dashboardPassword: PASSWORD }, load, version: '1.2.3' })).rejects.toThrow(/could not run \(Node, npm or registry access\)/);
   });
 });

@@ -7,6 +7,10 @@ import fs from 'node:fs';
 
 let authEnabled = true;
 const authOwner = vi.hoisted(() => ({ listSecretsMeta: vi.fn(), setSecret: vi.fn(), deleteSecret: vi.fn() }));
+const writes = vi.hoisted(() => ({ writeFileSecure: vi.fn() }));
+const fixture = vi.hoisted(() => ({ security: { api: { pats: [] }, rate_limits: {} } }));
+
+vi.mock('../../core/secure-file.mjs', () => ({ writeFileSecure: writes.writeFileSecure }));
 
 vi.mock('../../core/plugin-runtime.mjs', async importOriginal => {
   const actual = await importOriginal();
@@ -22,7 +26,7 @@ vi.mock('../auth.mjs', () => ({
     next();
   },
   requireScope: () => (req, res, next) => next(),
-  loadSecurityConfig: () => ({ api: { pats: [] }, rate_limits: {} }),
+  loadSecurityConfig: () => fixture.security,
 }));
 
 vi.mock('./_shared.mjs', async (importOriginal) => {
@@ -50,7 +54,10 @@ app.use(configRouter);
 describe('Config Router', () => {
   beforeEach(() => {
     authEnabled = true;
+    vi.restoreAllMocks();
     vi.clearAllMocks();
+    writes.writeFileSecure.mockReset();
+    fixture.security = { api: { pats: [] }, rate_limits: {} };
     authOwner.listSecretsMeta.mockReset().mockResolvedValue([]);
     authOwner.deleteSecret.mockReset().mockResolvedValue(false);
     authOwner.setSecret.mockReset().mockResolvedValue(undefined);
@@ -120,7 +127,7 @@ describe('Config Router', () => {
     authOwner.deleteSecret.mockRejectedValue(new Error('fixture-private-diagnostic'));
     const res = await request(app).post('/api/config-json').send({ secrets: { openai_api_key: '' } });
     expect(res.status).toBe(503);
-    expect(res.body).toEqual({ error: 'Auth credential update did not complete; verify the stored state before retrying.' });
+    expect(res.body).toEqual({ error: 'Auth credential update did not complete; verify the stored state before retrying.', applied: [], failed: 'secrets', not_attempted: [] });
     expect(authOwner.deleteSecret).toHaveBeenCalledWith('/tmp/mock-brain', 'openai_api_key', { action: 'delete', actor: 'settings-config' });
     expect(authOwner.setSecret).not.toHaveBeenCalled();
   });
@@ -146,5 +153,131 @@ describe('Config Router', () => {
     const res = await request(app).get('/api/config/DESIGN.md');
     expect(res.status).toBe(200);
     expect(res.body.content).toMatch(/Design System/);
+  });
+
+  describe('credential custody (A308)', () => {
+    const SECRET_PAT = 'tr_static_pat_canary_91ac';
+    const HASH = '$2b$10$passwordhashcanary';
+    const BRAIN_TOKEN = 'brain-token-canary-77';
+    const files = {
+      'security.yml': `api:\n  allow_static_pats: true\n  pats:\n    - ${SECRET_PAT}\ndashboard:\n  password_hash: "${HASH}"\n  session_ttl_hours: 12\nnetwork:\n  require_https: true\n  api_key: nested-canary\n`,
+      'budget.yml': 'budget:\n  enabled: true\n  daily_cap_usd: 5\n',
+      'brain.json': JSON.stringify({ url: 'https://x.test', token: BRAIN_TOKEN, project_id: 'p-1', private_note: 'internal' }),
+    };
+    const stubFiles = () => {
+      vi.spyOn(fs, 'existsSync').mockReturnValue(true);
+      vi.spyOn(fs, 'readFileSync').mockImplementation(file => {
+        const name = String(file).split('/').pop();
+        if (name in files) return files[name];
+        throw new Error(`unexpected read ${file}`);
+      });
+    };
+
+    it.each(['secrets.enc', 'brain.json', 'security.yml', 'keys.jsonl', 'wizard-config.json', 'budget.yml'])('GET /api/config/%s does not read credential or private files', async name => {
+      stubFiles();
+      const res = await request(app).get(`/api/config/${name}`);
+      expect(res.status).toBe(400);
+      expect(JSON.stringify(res.body)).not.toContain(BRAIN_TOKEN);
+      expect(fs.readFileSync).not.toHaveBeenCalled();
+    });
+
+    it.each(['secrets.enc', 'brain.json', 'security.yml', 'keys.jsonl'])('PUT /api/config/%s cannot overwrite credential files', async name => {
+      const write = vi.spyOn(fs, 'writeFileSync').mockImplementation(() => {});
+      vi.spyOn(fs, 'existsSync').mockReturnValue(true);
+      const res = await request(app).put(`/api/config/${name}`).send({ content: 'x' });
+      expect(res.status).toBe(400);
+      expect(write).not.toHaveBeenCalled();
+    });
+
+    it('PUT /api/config/DESIGN.md still writes the documented public file and validates content', async () => {
+      const write = vi.spyOn(fs, 'writeFileSync').mockImplementation(() => {});
+      vi.spyOn(fs, 'existsSync').mockReturnValue(true);
+      expect((await request(app).put('/api/config/DESIGN.md').send({ content: '# Mine' })).status).toBe(200);
+      expect(write).toHaveBeenCalledWith('/tmp/mock-brain/config/DESIGN.md', '# Mine', 'utf8');
+      expect((await request(app).put('/api/config/DESIGN.md').send({})).status).toBe(400);
+    });
+
+    it('GET /api/config-json returns no static PATs, hashes, brain token or unlisted fields', async () => {
+      stubFiles();
+      const res = await request(app).get('/api/config-json');
+      expect(res.status).toBe(200);
+      const text = JSON.stringify(res.body);
+      for (const canary of [SECRET_PAT, HASH, BRAIN_TOKEN, 'nested-canary', 'internal', '"pats"', 'password_hash']) expect(text).not.toContain(canary);
+      expect(res.body.security).toEqual({ api: { allow_static_pats: true }, dashboard: { session_ttl_hours: 12 }, network: { require_https: true } });
+      expect(res.body.brain).toEqual({ url: 'https://x.test', project_id: 'p-1', has_token: true });
+    });
+
+    it('GET /api/config applies the same projection and redacts nested runtime credentials', async () => {
+      fixture.security = { api: { pats: [SECRET_PAT], allow_static_pats: false }, dashboard: { password_hash: HASH }, rate_limits: { api_requests_per_minute: 5 } };
+      vi.spyOn(fs, 'existsSync').mockReturnValue(true);
+      vi.spyOn(fs, 'readFileSync').mockReturnValue('providers:\n  openai:\n    api_key: runtime-canary\nmode: fast\n');
+      const res = await request(app).get('/api/config');
+      expect(res.status).toBe(200);
+      const text = JSON.stringify(res.body);
+      for (const canary of [SECRET_PAT, HASH, 'runtime-canary']) expect(text).not.toContain(canary);
+      expect(res.body.security).toEqual({ api: { allow_static_pats: false }, rate_limits: { api_requests_per_minute: 5 } });
+      expect(res.body.runtime.mode).toBe('fast');
+    });
+
+    it.each([
+      [{ security: { api: { pats: ['tr_x'] } } }, 'security.api.pats'],
+      [{ security: { dashboard: { password_hash: 'h' } } }, 'security.dashboard.password_hash'],
+      [{ security: { bind: { port: 'abc' } } }, 'security.bind.port'],
+      [{ brain: { secret: 'x' } }, 'brain.secret'],
+      [{ secrets: { unrelated_key: 'x' } }, 'secrets.unrelated_key'],
+    ])('POST /api/config-json rejects %j before writing anything', async (body, field) => {
+      stubFiles();
+      const res = await request(app).post('/api/config-json').send({ budget: { budget: { enabled: true } }, ...body });
+      expect(res.status).toBe(400);
+      expect(res.body.error).toContain(field);
+      expect(writes.writeFileSecure).not.toHaveBeenCalled();
+      expect(authOwner.setSecret).not.toHaveBeenCalled();
+    });
+
+    it('POST /api/config-json merges allowlisted fields and preserves stored credential fields', async () => {
+      stubFiles();
+      const res = await request(app).post('/api/config-json').send({ security: { network: { require_https: false }, dashboard: { session_ttl_hours: null } }, brain: { name: 'n', has_token: true, token: '' } });
+      expect(res.status).toBe(200);
+      expect(res.body).toEqual({ success: true, applied: ['security', 'brain'] });
+      const [securityCall, brainCall] = writes.writeFileSecure.mock.calls;
+      expect(securityCall[1]).toContain(SECRET_PAT);
+      expect(securityCall[1]).toContain(HASH);
+      expect(securityCall[1]).toContain('require_https: false');
+      const brain = JSON.parse(brainCall[1]);
+      expect(brain).toMatchObject({ token: BRAIN_TOKEN, name: 'n', private_note: 'internal' });
+      expect(brain).not.toHaveProperty('has_token');
+    });
+
+    it('reports exactly what applied when a later file write fails', async () => {
+      stubFiles();
+      authOwner.setSecret.mockResolvedValue(undefined);
+      writes.writeFileSecure.mockImplementation(file => { if (String(file).endsWith('budget.yml')) throw new Error('disk-canary'); });
+      const res = await request(app).post('/api/config-json').send({
+        secrets: { openai_api_key: 'fixture-value' }, security: { network: { require_https: true } },
+        budget: { budget: { enabled: false } }, brain: { name: 'n' },
+      });
+      expect(res.status).toBe(500);
+      expect(res.body).toEqual({ error: 'Config update did not complete; the listed sections show what was applied.', applied: ['secrets', 'security'], failed: 'budget', not_attempted: ['brain'] });
+      expect(JSON.stringify(res.body)).not.toContain('disk-canary');
+    });
+
+    it('reports applied keys and untouched sections when Auth fails midway', async () => {
+      stubFiles();
+      authOwner.setSecret.mockResolvedValueOnce(undefined).mockRejectedValueOnce(new Error('auth-canary'));
+      const res = await request(app).post('/api/config-json').send({ secrets: { google_api_key: 'a', openai_api_key: 'b' }, security: { network: { require_https: true } } });
+      expect(res.status).toBe(503);
+      expect(res.body).toMatchObject({ applied: ['secrets:google_api_key'], failed: 'secrets', not_attempted: ['security'] });
+      expect(JSON.stringify(res.body)).not.toContain('auth-canary');
+      expect(writes.writeFileSecure).not.toHaveBeenCalled();
+    });
+
+    it('does not replace a damaged security file with defaults', async () => {
+      vi.spyOn(fs, 'existsSync').mockReturnValue(true);
+      vi.spyOn(fs, 'readFileSync').mockReturnValue('{ not: valid: yaml: [');
+      const res = await request(app).post('/api/config-json').send({ security: { network: { require_https: true } } });
+      expect(res.status).toBe(500);
+      expect(res.body).toMatchObject({ applied: [], failed: 'security' });
+      expect(writes.writeFileSecure).not.toHaveBeenCalled();
+    });
   });
 });

@@ -208,6 +208,13 @@ export function startDeployUI(port = 3001) {
             const opts = JSON.parse(body || '{}');
             const name = opts.name || 'default';
             const scope = opts.scope || '*';
+            // Both values are placed in a remote shell command line; accept plain names and scope lists only.
+            if (typeof name !== 'string' || !/^[A-Za-z0-9 _.-]{1,64}$/.test(name)
+              || typeof scope !== 'string' || !/^(\*|[a-z][a-z0-9-]*:(\*|[a-z][a-z0-9-]*))(,(\*|[a-z][a-z0-9-]*:(\*|[a-z][a-z0-9-]*)))*$/.test(scope)) {
+              res.writeHead(400, { 'Content-Type': 'application/json' });
+              res.end(JSON.stringify({ error: 'Invalid key name or scope list.' }));
+              return;
+            }
 
             // Check if it is a remote deploy target
             if (_installOptions && (_installOptions.deployTarget === 'vastai' || _installOptions.deployTarget === 'localnet')) {
@@ -227,6 +234,13 @@ export function startDeployUI(port = 3001) {
                 cmdPrefix = 'export PATH="/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin:$PATH"; export NVM_DIR="$HOME/.nvm"; [ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh";';
               }
 
+              const plainTarget = /^(?!-)[A-Za-z0-9.-]{1,253}$|^[0-9A-Fa-f:]{2,45}$/.test(String(host))
+                && /^[a-z_][a-z0-9_-]{0,31}$/.test(String(user)) && (!port || /^\d{1,5}$/.test(String(port)));
+              if (host && !plainTarget) {
+                res.writeHead(400, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ error: 'Remote host, user or port is not a plain value.' }));
+                return;
+              }
               if (host) {
                 const sshArgs = [];
                 if (port) {
@@ -240,12 +254,12 @@ export function startDeployUI(port = 3001) {
                 const remoteCmd = `${cmdPrefix} if [ -f "$HOME/total-recall/bin/total-recall.mjs" ]; then node "$HOME/total-recall/bin/total-recall.mjs" generate-pat --name "${name}" --scope "${scope}"; else npx --yes total-recall generate-pat --name "${name}" --scope "${scope}"; fi`;
                 sshArgs.push(remoteCmd);
 
-                console.log(`[Proxy generate-pat] SSH command: ssh ${sshArgs.join(' ')}`);
+                console.log('[Proxy generate-pat] Running remote key generation.');
                 const r = spawnSync('ssh', sshArgs, { encoding: 'utf8', timeout: 25000 });
 
                 if (r.status === 0) {
                   const stdout = r.stdout || '';
-                  console.log(`[Proxy generate-pat] SSH Success. Output:\n${stdout}`);
+                  console.log('[Proxy generate-pat] Remote key generation finished.');
                   const match = stdout.match(/Token:\s*(tr_[a-zA-Z0-9_-]+)/);
                   if (match && match[1]) {
                     res.writeHead(200, { 'Content-Type': 'application/json' });
@@ -253,7 +267,7 @@ export function startDeployUI(port = 3001) {
                     return;
                   }
                 } else {
-                  console.error(`[Proxy generate-pat] SSH Failed (exit ${r.status}). Stderr:`, r.stderr);
+                  console.error(`[Proxy generate-pat] SSH failed (exit ${r.status}).`);
                 }
               }
             }
@@ -292,7 +306,7 @@ export function startDeployUI(port = 3001) {
               note: 'Generated in local VFS key registry. Ensure the brain server is configured to use this vault.'
             }));
           } catch (e) {
-            console.error('[Proxy generate-pat] Fallback failed:', e);
+            console.error('[Proxy generate-pat] Key generation failed.');
             res.writeHead(500, { 'Content-Type': 'application/json' });
             res.end(JSON.stringify({ error: e.message }));
           }

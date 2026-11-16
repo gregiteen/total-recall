@@ -12,13 +12,15 @@
  *     content and its own encrypted store untouched;
  *   - targets and SSH options outside a small allow-list are denied;
  *   - outcomes carry fixed messages and key names only: no store, SSH or
- *     remote stderr text, and never a value.
+ *     remote stderr text, and never a value;
+ *   - a remote Personal Access Token is captured on a private pipe and stored
+ *     in the local Auth store; the outcome names the key and token id only.
  */
 
 import fs from 'node:fs';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
-import { resolveSecretsPath, loadSecrets, listSecretsMeta } from './secrets-store.mjs';
+import { resolveSecretsPath, loadSecrets, listSecretsMeta, setSecret } from './secrets-store.mjs';
 import { buildEnvProjection, projectSlugFromPath, secretMatchesTarget } from './secrets-env-export.mjs';
 import { pushProjection, sshBaseArgs, sshDestination } from './secrets-remote-deploy.mjs';
 
@@ -170,4 +172,53 @@ export function runRemoteWithStdin(target, remoteCommand, opts = {}) {
   if (r.error) return fail('remote-run-failed', 'SSH could not run the remote command.', 'Confirm SSH access to the host.');
   if (r.status !== 0) return fail('remote-run-failed', `Remote command exited with ${r.status}.`, 'Read the remote output above and rerun.', { status: r.status });
   return { ok: true, status: 0 };
+}
+
+const PAT_TOKEN = /^Token:[ \t]*(tr_[A-Za-z0-9_-]{20,128})[ \t]*$/m;
+const PAT_ID = /^ID:[ \t]*([0-9A-Fa-f-]{8,64})[ \t]*$/m;
+
+/**
+ * Run a fixed remote token-generation command and keep the token in Auth.
+ *
+ * The command output travels on a private pipe, never to the caller's terminal
+ * or logs. The token is parsed, stored under `secretKey` in the local Auth
+ * store and dropped. The outcome carries the key name and the token id, never
+ * the token. A nonzero exit, unreadable output or a failed local write is an
+ * explicit failure; a stored-write failure names the remote token id so the
+ * operator can revoke it.
+ *
+ * @param {string} brainDir local brain that owns the encrypted store
+ * @param {{ host: string, user?: string, port?: number, sshOpts?: string[] }} target
+ * @param {string} remoteCommand fixed, non-secret command that prints `Token: tr_...`
+ * @param {{ secretKey?: string, timeoutMs?: number }} opts
+ */
+export async function retrieveRemotePat(brainDir, target, remoteCommand, opts = {}) {
+  const unsafe = target && typeof target === 'object' && !target.remoteDir ? unsafeTarget({ ...target, remoteDir: 'x' }) : unsafeTarget(target);
+  if (unsafe) return fail('invalid-target', `Deploy target refused: ${unsafe}.`, 'Use a plain host, user and the supported SSH options.');
+  if (typeof brainDir !== 'string' || !brainDir) return fail('invalid-brain', 'A brain directory is required.', 'Pass the brain that owns the Auth store.');
+  if (typeof remoteCommand !== 'string' || !remoteCommand.trim() || /[\0\r\n]/.test(remoteCommand)) {
+    return fail('invalid-command', 'A single-line remote command is required.', 'Pass the fixed token-generation command.');
+  }
+  const secretKey = opts.secretKey ?? `TR_REMOTE_PAT_${String(target.host).replace(/[^A-Za-z0-9]/g, '_').toUpperCase()}`;
+  if (typeof secretKey !== 'string' || !KEY_NAME.test(secretKey)) {
+    return fail('invalid-key-name', 'The credential key name is not a valid environment variable name.', 'Use an environment-variable style name.');
+  }
+  const timeout = Number.isFinite(opts.timeoutMs) && opts.timeoutMs > 0 ? Math.min(opts.timeoutMs, 600000) : 180000;
+  const args = [...sshBaseArgs({ ...target, user: target.user || 'root' }), sshDestination(target), remoteCommand];
+  const r = spawnSync('ssh', args, { stdio: ['ignore', 'pipe', 'pipe'], encoding: 'utf8', timeout, maxBuffer: 1024 * 1024 });
+  if (r.error) return fail('remote-pat-failed', 'SSH could not run the remote token command.', 'Confirm SSH access to the host, then rerun.');
+  if (r.status !== 0) {
+    return fail('remote-pat-failed', `Remote token command exited with ${r.status}.`, 'Check the remote Total Recall install, then rerun.', { status: r.status });
+  }
+  const out = String(r.stdout || '');
+  const token = PAT_TOKEN.exec(out)?.[1];
+  const id = PAT_ID.exec(out)?.[1] || null;
+  if (!token) return fail('remote-pat-unreadable', 'The remote command succeeded but returned no readable token.', 'Update the remote Total Recall, then rerun.', { id });
+  try {
+    await setSecret(brainDir, secretKey, token, { actor: 'deploy-wizard' });
+  } catch {
+    return fail('pat-store-failed', 'The remote token was generated but could not be stored in the local Auth store.',
+      'Unlock or repair the Auth store, then revoke the remote token by its id and rerun.', { id, key: secretKey });
+  }
+  return { ok: true, stored: true, key: secretKey, id };
 }
