@@ -7,7 +7,11 @@ import path from 'node:path';
 const USAGE = 'Usage: total-recall plugin connection <id> [--brain <global|project:ID>] [--json]';
 const METHODS = { 'api-key': 'API key', oauth: 'OAuth', 'dashboard-session': 'Dashboard session', none: 'None', unknown: 'Unknown' };
 
-/** One owner-reported connection, read from cached evidence only; the same report GET /api/plugins/:id/connection serves. */
+/**
+ * One owner-reported connection, read from cached evidence only. For the same explicit --brain it prints the
+ * report GET /api/plugins/:id/connection serves. Without --brain the scope is explicit rather than inferred from
+ * a path: the project brain of the working directory when one exists there, otherwise the global brain.
+ */
 export async function runPluginConnection(args = []) {
   if (args.includes('--help') || args.includes('-h')) { console.log(USAGE); return; }
   const json = args.includes('--json');
@@ -22,15 +26,17 @@ export async function runPluginConnection(args = []) {
   }
   try {
     // The CLI is the local operator, which the shared resolver treats as a dashboard session.
-    const target = brain === undefined
-      ? (root => ({ brainDir: path.dirname(projectPluginsDir(root)), projectRoot: root }))(detectProjectBrain(process.cwd())?.projectRoot ?? process.cwd())
-      : resolvePluginBrainTargets([brain], { type: 'dashboard_session' })[0];
+    const projectRoot = brain === undefined ? detectProjectBrain(process.cwd())?.projectRoot : undefined;
+    const target = projectRoot
+      ? { brainId: 'project', brainDir: path.dirname(projectPluginsDir(projectRoot)), projectRoot }
+      : resolvePluginBrainTargets([brain ?? 'global'], { type: 'dashboard_session' })[0];
     const plugin = getPluginById(positional[0], target.projectRoot);
     if (!plugin) throw Object.assign(new Error('Plugin unavailable'), { status: 404 });
     const report = await readPluginConnection(plugin, target);
     if (json) { console.log(JSON.stringify(report)); return; }
     if (!report.reported) { console.log(`${report.pluginId}: unreported. ${report.message}`); return; }
     console.log(`${report.pluginId}: ${report.status}${report.lastStatus ? ` (last ${report.lastStatus})` : ''}`);
+    console.log(`  Brain:          ${target.brainId === 'global' ? 'global' : target.brainId}`);
     console.log(`  Authentication: ${METHODS[report.method]}`);
     console.log(`  Last checked:   ${report.checkedAt ?? 'never'}`);
     if (report.failure) console.log(`  Failure:        ${report.failure.message}`);

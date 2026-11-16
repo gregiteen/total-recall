@@ -44,10 +44,23 @@ function plain(value) {
   return proto === Object.prototype || proto === null;
 }
 
+/** Own data properties only: an accessor would run owner code while the host reads the report. */
+function dataProperties(report) {
+  const out = {};
+  for (const key of Reflect.ownKeys(report)) {
+    const descriptor = Object.getOwnPropertyDescriptor(report, key);
+    if (typeof key !== 'string' || !ALLOWED_KEYS.has(key) || !descriptor || !('value' in descriptor) || !descriptor.enumerable) return null;
+    out[key] = descriptor.value;
+  }
+  return out;
+}
+
 /** Accept exactly the documented fields; return a fresh object or null. */
 function validate(report, now) {
-  if (!plain(report) || Object.keys(report).some(key => !ALLOWED_KEYS.has(key))) return null;
-  const { status, method, checkedAt, failure } = report;
+  if (!plain(report)) return null;
+  const fields = dataProperties(report);
+  if (!fields) return null;
+  const { status, method, checkedAt, failure } = fields;
   if (!CONNECTION_STATUSES.includes(status) || !CONNECTION_METHODS.includes(method)) return null;
   if (status === 'unknown') return checkedAt === undefined && failure === undefined ? { status, method } : null;
   if (typeof checkedAt !== 'string' || !ISO_UTC.test(checkedAt)) return null;
@@ -90,7 +103,7 @@ export async function readPluginConnection(plugin, target, { now = Date.now(), l
     return unreported(id, 'owner-unavailable');
   }
   let accepted;
-  try { accepted = validate(report, now); } catch { /* Accessors and proxies are invalid metadata, never public diagnostics. */ }
+  try { accepted = validate(report, now); } catch { /* Proxies that throw are invalid metadata, never public diagnostics. */ }
   if (!accepted) return unreported(id, 'invalid-report');
   if (accepted.status === 'unknown') {
     return { pluginId: id, reported: true, status: 'unknown', method: accepted.method, checkedAt: null, freshness: 'none' };

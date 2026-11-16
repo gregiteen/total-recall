@@ -4,6 +4,7 @@ import express from 'express';
 
 const state = vi.hoisted(() => ({ owner: null, calls: [], plugins: {} }));
 
+vi.mock('../../core/brain-locate.mjs', async original => ({ ...await original(), detectProjectBrain: vi.fn(() => null) }));
 vi.mock('../../server/auth.mjs', () => ({ requireAuth: (req, res, next) => next(), requireScope: () => (req, res, next) => next() }));
 vi.mock('../../server/plugin-brain-targets.mjs', () => ({
   resolvePluginBrainTargets: vi.fn(([id], auth) => {
@@ -53,6 +54,14 @@ describe('plugin connection CLI', () => {
     const fromApi = (await request(app).get('/api/plugins/demo/connection?brain=project:a')).body;
     expect(fromCli).toEqual(fromApi);
     expect(fromCli).toMatchObject({ reported: true, status: 'connected', method: 'api-key' });
+  });
+
+  it('defaults to the explicit global brain outside a project and says so', async () => {
+    const result = await cli(['demo']);
+    expect(result.code).toBeUndefined();
+    expect(result.out).toContain('Brain:          global');
+    expect(state.calls).toHaveLength(1);
+    expect(state.calls[0].options.projectRoot).toBeNull();
   });
 
   it('prints readable text without raw owner data', async () => {

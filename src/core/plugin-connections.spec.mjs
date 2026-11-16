@@ -75,6 +75,8 @@ describe('owner connection reports', () => {
     ['a failure on a connected report', { status: 'connected', method: 'api-key', checkedAt: iso(1000), failure: 'timeout' }],
     ['a time on an unknown report', { status: 'unknown', method: 'api-key', checkedAt: iso(1000) }],
     ['an extra raw field', { status: 'connected', method: 'api-key', checkedAt: iso(1000), endpoint: 'https://CANARY.example', message: 'CANARY' }],
+    ['an accessor property', Object.defineProperty({ method: 'api-key', checkedAt: iso(1000) }, 'status', { get: () => 'connected', enumerable: true })],
+    ['a symbol key', { status: 'connected', method: 'api-key', checkedAt: iso(1000), [Symbol('x')]: 1 }],
     ['an array', [{ status: 'connected' }]],
     ['a string', 'connected'],
     ['nothing', undefined],

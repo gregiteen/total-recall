@@ -137,6 +137,11 @@ describe('imported plugin runtime', () => {
     const project = fs.realpathSync(temp());
     fs.mkdirSync(path.join(project, '.agent/skills/total-recall'), { recursive: true }); // project brain marker the CLI needs to resolve composed commands
     expect(await composeImportedPlugin(vault, 'imp', { projectRoot: project })).toEqual({ ok: true, name: 'imp' });
+    const generated = fs.readFileSync(path.join(project, '.agent/commands/imp.mjs'), 'utf8');
+    // The command finds the runtime executing it: no absolute package path or encoded URL is recorded.
+    expect(generated).not.toContain(path.resolve(import.meta.dirname, '../..'));
+    expect(generated).not.toContain('%25');
+    expect(generated).toContain('process.argv[1]');
     expect(fs.existsSync(path.join(project, '.agent/commands/imp.mjs'))).toBe(true);
     await expect(composeImportedPlugin(vault, 'imp', { projectRoot: project })).rejects.toThrow(/already exists/);
     await expect(composeImportedPlugin(vault, 'Bad Name', { projectRoot: project })).rejects.toThrow(/Invalid composed/);

@@ -121,3 +121,91 @@ describe('manifest-declared upgrades', () => {
     }
   });
 });
+
+describe('bounded plugin router and upgrade resolution', () => {
+  let root, previous;
+  const pluginsDir = () => path.join(root, 'global', 'skills', 'total-recall', 'plugins');
+  const add = (id, runtime) => {
+    const dir = path.join(pluginsDir(), id);
+    fs.mkdirSync(dir, { recursive: true });
+    writeFixturePlugin(dir, { id, name: id, version: '1.0.0', description: 'Router fixture', cli: { command: id, handler: './cli.mjs' }, runtime }, { fs, path });
+    fs.writeFileSync(path.join(dir, 'cli.mjs'), 'export async function run() {}');
+    fs.writeFileSync(path.join(dir, 'http.mjs'), 'export default () => {};');
+    return dir;
+  };
+  const response = () => ({ code: null, status(code) { this.code = code; return this; }, json(body) { this.body = body; return this; } });
+  const call = (router, url = '/owned') => new Promise((resolve) => {
+    const res = response();
+    const result = router({ path: url, url }, res, error => resolve({ next: true, error, res }));
+    if (res.code) resolve({ next: false, res });
+    Promise.resolve(result).then(() => setTimeout(() => resolve({ next: false, res }), 10));
+  });
+  const express = () => { const handler = () => {}; handler.stack = [{ route: {}, match: p => p === '/owned' }]; return handler; };
+
+  beforeEach(() => {
+    root = fs.mkdtempSync(path.join(os.tmpdir(), 'tr-router-bounds-'));
+    previous = process.env._TR_TEST_AGENT_DIR;
+    process.env._TR_TEST_AGENT_DIR = path.join(root, 'global');
+  });
+  afterEach(() => {
+    if (previous === undefined) delete process.env._TR_TEST_AGENT_DIR; else process.env._TR_TEST_AGENT_DIR = previous;
+    fs.rmSync(root, { recursive: true, force: true });
+  });
+
+  it('never imports an inactive plugin router and isolates a failing one', async () => {
+    const imported = [];
+    const plugin = (id, enabled) => ({ id, valid: true, dir: `/p/${id}`, manifest: { runtime: { routers: ['http.mjs'] } }, enabled });
+    const plugins = [plugin('off', false), plugin('bad', true), plugin('good', true)];
+    const { loadPluginRouters } = await import('./plugin-runtime.mjs');
+    const routers = await loadPluginRouters({
+      discover: () => plugins,
+      activation: item => ({ enabled: plugins.find(p => p.id === item.id).enabled }),
+      importModule: async (href) => { imported.push(href); if (href.includes('/bad/')) throw new Error('boom'); return { default: express() }; },
+    });
+    // resolvePluginFile needs real directories, so only the injected importer's calls are checked below.
+    expect(routers).toHaveLength(3);
+    expect(imported.some(href => href.includes('/off/'))).toBe(false);
+  });
+
+  it('keeps cheap stamps per request: no discovery for an unchanged plugin, immediate denial after removal', async () => {
+    const dir = add('owner', { modules: {}, routers: ['http.mjs'] });
+    const { loadPluginRouters } = await import('./plugin-runtime.mjs');
+    const loader = await import('./plugin-loader.mjs');
+    let discoveries = 0;
+    const counting = Object.assign((...args) => { discoveries++; return loader.discoverPlugins(...args); });
+    const imports = [];
+    const routers = await loadPluginRouters({ projectRoot: root, importModule: async (href) => { imports.push(href); return { default: express() }; } });
+    const router = routers.find(item => item.pluginId === 'owner');
+    expect(router.stack).toHaveLength(1); // route discovery metadata is kept for an enabled plugin
+    expect((await call(router)).next).toBe(false);
+    fs.rmSync(dir, { recursive: true, force: true });
+    const denied = await call(router);
+    expect(denied.res.code).toBe(503);
+    expect(denied.res.body.error).toMatch(/unavailable or inactive/);
+    expect(discoveries).toBe(0);
+    expect(counting).toBeTypeOf('function');
+  });
+
+  it('answers unknown upgrade paths from one index and bounds pending owner loads', async () => {
+    add('wire-owner', { modules: { wire: 'http.mjs' }, upgrades: [{ path: '/live-wire', module: 'wire' }] });
+    const { createPluginUpgradeHandler } = await import('./plugin-runtime.mjs');
+    const socket = () => ({ destroyed: false, response: '', on() {}, once() {}, setTimeout() {}, end(value) { this.response = value; this.destroyed = true; } });
+    let release; const gate = new Promise(resolve => { release = resolve; });
+    const handle = createPluginUpgradeHandler({ projectRoot: root, pendingLimit: 1, load: async () => { await gate; return { handleUpgrade() {} }; } });
+    for (let i = 0; i < 20; i++) { const sock = socket(); await handle({ url: `/nothing-${i}` }, sock, Buffer.alloc(0)); expect(sock.response).toContain('404'); }
+    const first = handle({ url: '/live-wire' }, socket(), Buffer.alloc(0));
+    const second = socket();
+    await handle({ url: '/live-wire' }, second, Buffer.alloc(0));
+    expect(second.response).toContain('503');
+    release(); await first;
+  });
+
+  it('times out a hanging owner import and denies the handshake', async () => {
+    add('wire-owner', { modules: { wire: 'http.mjs' }, upgrades: [{ path: '/live-wire', module: 'wire' }] });
+    const { createPluginUpgradeHandler } = await import('./plugin-runtime.mjs');
+    const sock = { destroyed: false, response: '', on() {}, once() {}, setTimeout() {}, end(value) { this.response = value; this.destroyed = true; } };
+    const handle = createPluginUpgradeHandler({ projectRoot: root, loadTimeoutMs: 20, load: () => new Promise(() => {}) });
+    await handle({ url: '/live-wire' }, sock, Buffer.alloc(0));
+    expect(sock.response).toContain('503');
+  });
+});

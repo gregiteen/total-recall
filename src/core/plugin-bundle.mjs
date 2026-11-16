@@ -186,6 +186,15 @@ function assertSafeRelativePath(p) {
 }
 
 /**
+ * The content hash does not cover modes, so a transferred mode is only a request: the execute bits survive
+ * for a file that already declares an interpreter (`#!`), whose content the hash does cover, and nothing else.
+ */
+function installMode(mode, data) {
+  const requested = Number.isInteger(mode) ? mode & 0o755 : 0o644;
+  return data[0] === 0x23 && data[1] === 0x21 ? requested : requested & ~0o111;
+}
+
+/**
  * Decode and check a bundle without touching the filesystem.
  * @returns {{ id: string, version: string, sha256: string, entries: Array<{path:string, mode:number, data:Buffer}> }}
  */
@@ -205,7 +214,7 @@ export function decodeBundle(bundle, { expectedSha256 } = {}) {
     const data = Buffer.from(String(f.data_b64 || ''), 'base64');
     total += data.length;
     if (total > MAX_BUNDLE_BYTES) throw new Error('Bundle exceeds the size limit');
-    return { path: f.path, mode: Number.isInteger(f.mode) ? f.mode & 0o755 : 0o644, data };
+    return { path: f.path, mode: installMode(f.mode, data), data };
   });
   entries.sort((a, b) => (a.path < b.path ? -1 : a.path > b.path ? 1 : 0));
 

@@ -199,8 +199,9 @@ export async function composeImportedPlugin(vault, name, options = {}) {
   ensure(owner?.valid, 'Installed composable-cli owner required');
   const commandFile = path.join(projectRoot, '.agent', 'commands', name + '.mjs');
   ensure(!fs.existsSync(commandFile), 'Composed command already exists');
-  const runtime = pathToFileURL(new URL('./plugin-import-runtime.mjs', import.meta.url).pathname).href;
-  const code = `const {invokeFromArgv}=await import(${JSON.stringify(runtime)});const result=await invokeFromArgv(${JSON.stringify(path.resolve(vault))},args);console.log(JSON.stringify(result));if(!result.ok)process.exitCode=1;return result;`;
+  // The command resolves the Total Recall runtime that is executing it, so relocating or upgrading the
+  // package never leaves a stale absolute path behind; only the operator-owned vault path is recorded.
+  const code = `const fs=await import('node:fs');const path=await import('node:path');const {pathToFileURL}=await import('node:url');const roots=[];if(/^total-recall(?:\\.mjs)?$/.test(path.basename(process.argv[1]||'')))roots.push(path.resolve(path.dirname(fs.realpathSync(process.argv[1])),'..'));if(process.env.TR_PACKAGE_ROOT)roots.push(path.resolve(process.env.TR_PACKAGE_ROOT));const file=roots.map(r=>path.join(r,'src','core','plugin-import-runtime.mjs')).find(f=>fs.existsSync(f));if(!file)throw new Error('Installed Total Recall runtime not found; reinstall Total Recall');const {invokeFromArgv}=await import(pathToFileURL(file).href);const result=await invokeFromArgv(${JSON.stringify(path.resolve(vault))},args);console.log(JSON.stringify(result));if(!result.ok)process.exitCode=1;return result;`;
   const result = await runPluginCommand(owner, { subcommand: 'create', args: [name, code, '--risk', 'write', '--description', 'Invoke an imported plugin capability with explicit source trust'], cwd: projectRoot, projectRoot });
   if (!result.ok) {
     if (fs.existsSync(commandFile)) await runPluginCommand(owner, { subcommand: 'remove', args: [name], cwd: projectRoot, projectRoot });
