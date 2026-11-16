@@ -101,12 +101,12 @@ export function discoverBrainConsumers(roots, { onError, installedPlugins = new 
     const segments = real.split(path.sep);
     if (segments.some((segment, index) => segment === 'scaffolds'
       && segments[index - 1] === 'total-recall' && segments[index - 2] === 'skills')) return;
-    // Superseded plugin release snapshots are orphaned archives. Only an active linked
-    // plugin (or a walked root) inside one is still handled; its ancestors are passed through.
+    // Superseded plugin release snapshots are archives, except for explicitly
+    // walked roots and active linked plugins (walked separately below).
     if (segments.some((segment, index) => segment === 'plugin-releases'
       && segments[index - 1] === 'total-recall' && segments[index - 2] === 'skills')
       && !rootReals.has(real)
-      && ![...installedPlugins].some(plugin => plugin === real || plugin.startsWith(real + path.sep))) return;
+      && !installedPlugins.has(real)) return;
     const file = path.join(real, 'package.json');
     let runtimeOnly = inherited || installedPlugins.has(real);
     if (fs.existsSync(file)) {
@@ -140,7 +140,7 @@ export function discoverBrainConsumers(roots, { onError, installedPlugins = new 
       walk(path.join(real, entry.name), runtimeOnly);
     }
   }
-  for (const root of roots) walk(root);
+  for (const root of new Set([...roots, ...installedPlugins])) walk(root);
   return consumers;
 }
 

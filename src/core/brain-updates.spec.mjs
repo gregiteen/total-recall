@@ -80,19 +80,37 @@ describe('uniform brain updates', () => {
       return { root, snapshot, plugin };
     }
 
-    it('skips them, while an installed-folder plugin stays a runtime-only consumer', () => {
+    it('skips them unless their real path is an explicit root', () => {
       const { root, snapshot, plugin } = fixture();
       const found = discoverBrainConsumers([root]);
       expect(found.map(({ root: r }) => r)).toEqual([plugin]);
-      expect(found[0].runtimeOnly).toBe(true);
-      expect(found[0].deps.some(dep => dep.section === 'devDependencies')).toBe(false);
       expect(found.some(({ root: r }) => r === snapshot)).toBe(false);
+      const explicit = discoverBrainConsumers([root, snapshot]).find(consumer => consumer.root === snapshot);
+      expect(explicit.runtimeOnly).toBe(false);
+      expect(explicit.deps.map(dep => dep.section)).toEqual(['dependencies', 'devDependencies']);
+    });
+
+    it('keeps an installed-folder plugin as a runtime-only consumer', () => {
+      const { root, plugin } = fixture();
+      const found = discoverBrainConsumers([root]).find(consumer => consumer.root === plugin);
+      expect(found.runtimeOnly).toBe(true);
+      expect(found.deps).toMatchObject([
+        { section: 'dependencies', key: '@gregiteen/ssss-cli', declared: '0.14.0' },
+      ]);
     });
 
     it('still discovers one that is an active linked plugin', () => {
       const { root, snapshot } = fixture();
+      // Finding the active plugin must not process its archived ancestors or siblings.
+      const archive = manifest(path.dirname(snapshot), pkg);
+      manifest(path.join(archive, 'orphan'), pkg);
       const found = discoverBrainConsumers([root], { installedPlugins: new Set([snapshot]) });
       expect(found.map(({ root: r }) => r)).toContain(snapshot);
+      expect(found.some(consumer => consumer.root === archive || consumer.root === path.join(archive, 'orphan'))).toBe(false);
+      expect(found.find(consumer => consumer.root === snapshot)).toMatchObject({
+        runtimeOnly: true,
+        deps: [{ section: 'dependencies', key: '@gregiteen/ssss-cli', declared: '0.14.0' }],
+      });
     });
   });
 
