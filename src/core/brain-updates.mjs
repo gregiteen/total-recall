@@ -102,7 +102,9 @@ export function discoverBrainConsumers(roots, { onError, installedPlugins = new 
     if (segments.some((segment, index) => segment === 'scaffolds'
       && segments[index - 1] === 'total-recall' && segments[index - 2] === 'skills')) return;
     // Superseded plugin release snapshots are archives, except for explicitly
-    // walked roots and active linked plugins (walked separately below).
+    // walked roots and active installed plugins. An active installed plugin inside
+    // a snapshot is reached because the caller passes it as a root (as
+    // updateAllBrains does); installedPlugins keeps it from being skipped here.
     if (segments.some((segment, index) => segment === 'plugin-releases'
       && segments[index - 1] === 'total-recall' && segments[index - 2] === 'skills')
       && !rootReals.has(real)
@@ -140,7 +142,7 @@ export function discoverBrainConsumers(roots, { onError, installedPlugins = new 
       walk(path.join(real, entry.name), runtimeOnly);
     }
   }
-  for (const root of new Set([...roots, ...installedPlugins])) walk(root);
+  for (const root of roots) walk(root);
   return consumers;
 }
 

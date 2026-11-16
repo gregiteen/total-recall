@@ -104,7 +104,8 @@ describe('uniform brain updates', () => {
       // Finding the active plugin must not process its archived ancestors or siblings.
       const archive = manifest(path.dirname(snapshot), pkg);
       manifest(path.join(archive, 'orphan'), pkg);
-      const found = discoverBrainConsumers([root], { installedPlugins: new Set([snapshot]) });
+      // Mirror updateAllBrains: installed plugins are pushed into the roots as well.
+      const found = discoverBrainConsumers([root, snapshot], { installedPlugins: new Set([snapshot]) });
       expect(found.map(({ root: r }) => r)).toContain(snapshot);
       expect(found.some(consumer => consumer.root === archive || consumer.root === path.join(archive, 'orphan'))).toBe(false);
       expect(found.find(consumer => consumer.root === snapshot)).toMatchObject({
