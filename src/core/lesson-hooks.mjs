@@ -21,7 +21,9 @@ export function installLessonHooks(row, { dryRun = false, remove = false } = {})
       if (!remove) hooks.push({ command: command(harness, end), timeout: 10 });
       doc.setIn(['hooks', event], hooks);
     }
-    if (!dryRun) atomicWrite(settings, String(doc));
+    // Lines are never rewrapped: at the default 80 columns a long hook command was split in two, and
+    // every reader that looks for its text, the gate installer among them, stopped finding the entry.
+    if (!dryRun) atomicWrite(settings, doc.toString({ lineWidth: 0 }));
     return { status: remove ? 'removed' : dryRun ? 'would-install' : 'installed', settings };
   }
   if (harness === 'pi') {

@@ -4,7 +4,8 @@
 - `status` names the server as the owner of a daemon it started from another install, instead of reporting a foreign-pid conflict. A system service always runs from a checkout apart from the installed command, so every such host showed the conflict, and an agent reading it offered to stop a healthy daemon. Lifecycle commands keep the strict check.
 - `connect <client>` relinks a link of its own that no longer reaches the compiled instructions. In the home directory it now links to the file compile writes; it had linked to a copy that was never rewritten, and `status` named `connect` as a repair that changed nothing.
 - `connect` refuses an option it does not know. `connect <client> --dry-run` had run for real.
-- Bundle Metaharness 0.5.0:
+- Rewriting Hermes's `config.yaml` for the lesson hooks no longer rewraps its lines. A hook command longer than 80 columns was split in two, and the gate installer then stopped recognising its own entry.
+- Bundle Metaharness 0.5.1:
   - **Gate launcher:** the Hermes and Cursor gate hooks run through a launcher outside the Total Recall package. An update removes the command for some seconds, and those fail-closed hooks had blocked every tool call with only "command not found". The launcher waits for the command and otherwise tells the agent what happened and to repeat the call.
   - **Harness updates:** `meta-harness maintenance --harnesses` and a daily task update each installed harness with its own update command (claude, codex, agy, grok, cursor, hermes, pi, cline, openclaw; DSH through npm, forward only).
     - Hermes is asked first, because its update restarts the gateway.

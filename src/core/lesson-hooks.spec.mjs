@@ -29,6 +29,15 @@ it('adds Hermes observers and preserves YAML comments and other settings', () =>
   expect(parse(text).hooks.post_llm_call).toHaveLength(2);
   expect(parse(text).hooks.on_session_finalize[0].command).toContain('lessons session-end');
 });
+it('leaves a long Hermes hook command on one line', () => {
+  const settings = path.join(home, 'config.yaml');
+  const command = '/home/someone-with-a-long-name/.hermes/agent-hooks/total-recall preflight gate --harness hermes';
+  fs.writeFileSync(settings, `hooks:\n  pre_tool_call:\n    - matcher: ".*"\n      command: "${command}"\n      timeout: 30\n      fail_closed: true\n`);
+  installLessonHooks({ harness: 'hermes', settings, status: 'installed' });
+  const text = fs.readFileSync(settings, 'utf8');
+  expect(text).toContain(`command: "${command}"`);
+  expect(parse(text).hooks.pre_tool_call[0].command).toBe(command);
+});
 it('installs a Pi turn-end and shutdown extension through the selected owner path', () => {
   const row = { harness: 'pi', settings: path.join(home, 'total-recall-preflight.ts'), status: 'installed' };
   const installed = installLessonHooks(row);

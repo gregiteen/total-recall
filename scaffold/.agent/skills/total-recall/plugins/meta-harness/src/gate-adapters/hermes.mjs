@@ -12,6 +12,13 @@ const ACK_COMMAND = 'total-recall tr-preflight --ack --task "<task>" --action re
 
 const GATE = 'preflight gate --harness hermes';
 const HOOK_TIMEOUT_SECONDS = LAUNCHER_HOOK_TIMEOUT_SECONDS;
+/**
+ * The gate arguments as they may appear in config.yaml. Another tool that rewrites the file can
+ * wrap a long string at 80 columns: core's lesson hooks did, and split this text over two lines,
+ * so the adapter no longer saw its own entry and added another on every install.
+ */
+const spaced = (text) => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/ +/g, '[\\s\\\\]+');
+const GATE_RE = new RegExp(spaced(GATE));
 const ENTRY = (command) => `    - matcher: ".*"
       command: "${command}"
       timeout: ${HOOK_TIMEOUT_SECONDS}
@@ -46,14 +53,16 @@ function withGate(text, command) {
  * item runs from its `- ` line to the next line indented no deeper than that dash.
  */
 export function withoutGate(text) {
-  if (!text.includes(GATE)) return text;
+  if (!GATE_RE.test(text)) return text;
   const exact = text.replace(ENTRY_LINES, '');
-  if (!exact.includes(GATE)) return exact;
+  if (!GATE_RE.test(exact)) return exact;
   let lines = text.split('\n');
   const indent = (line) => line.match(/^ */)[0].length;
   for (let guard = 0; guard < 50; guard++) {
-    const hit = lines.findIndex((line) => line.includes(GATE));
-    if (hit < 0) break;
+    // The line the gate text starts on; a wrapped entry continues on the next one.
+    const found = GATE_RE.exec(lines.join('\n'));
+    if (!found) break;
+    const hit = lines.join('\n').slice(0, found.index).split('\n').length - 1;
     let start = hit;
     while (start >= 0 && !/^ *- /.test(lines[start])) start--;
     if (start < 0 || indent(lines[start]) > indent(lines[hit])) break;
@@ -156,11 +165,11 @@ export const hermesAdapter = {
     const removed = removeDeadGateFile(path.join(hermesDir, 'hooks.json'), 'hermes', { dryRun });
     const added = [];
     const text = fs.existsSync(configPath) ? fs.readFileSync(configPath, 'utf8') : '';
-    const present = text.includes(GATE);
+    const present = GATE_RE.test(text);
     if (remove || off) {
       if (present) {
         const next = withoutGate(text);
-        if (next.includes(GATE)) throw new Error(`could not remove the gate from ${configPath}; remove the pre_tool_call entry that runs "${GATE}" by hand`);
+        if (GATE_RE.test(next)) throw new Error(`could not remove the gate from ${configPath}; remove the pre_tool_call entry that runs "${GATE}" by hand`);
         if (!dryRun) fs.writeFileSync(configPath, next);
         removed.push('managed pre_tool_call gate');
       }
@@ -175,11 +184,11 @@ export const hermesAdapter = {
     const wrote = writeGateLauncher(launcher, launcherScript(gateBinary('hermes', env)), { dryRun });
     if (wrote) added.push(wrote);
     const command = hookCommand(home);
-    const wired = text.includes(command);
+    const wired = new RegExp(spaced(command)).test(text);
     if (!wired) {
       // An entry that runs the command directly is replaced: it is the one an update breaks.
       const base = present ? withoutGate(text) : text;
-      if (base.includes(GATE)) throw new Error(`could not replace the gate in ${configPath}; remove the pre_tool_call entry that runs "${GATE}" by hand`);
+      if (GATE_RE.test(base)) throw new Error(`could not replace the gate in ${configPath}; remove the pre_tool_call entry that runs "${GATE}" by hand`);
       if (!dryRun) {
         fs.mkdirSync(hermesDir, { recursive: true });
         if (text) fs.copyFileSync(configPath, `${configPath}.bak-total-recall`);
@@ -194,7 +203,7 @@ export const hermesAdapter = {
     const configPath = path.join(home, '.hermes', 'config.yaml');
     const text = fs.existsSync(configPath) ? fs.readFileSync(configPath, 'utf8') : '';
     // A hook line that names a launcher which is not there blocks every call, so it is not installed.
-    const installed = text.includes(GATE) && (!text.includes(launcherPath(home)) || fs.existsSync(launcherPath(home)));
+    const installed = GATE_RE.test(text) && (!text.includes(launcherPath(home)) || fs.existsSync(launcherPath(home)));
     const out = this.emit({ decision: 'deny', reason: 'receipt missing', fix: ACK_COMMAND }, 'pre_tool_call', '/nonexistent-directory-without-receipt');
     return {
       installed,
