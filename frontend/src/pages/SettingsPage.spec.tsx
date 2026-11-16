@@ -130,7 +130,7 @@ describe('SettingsPage', () => {
     });
 
     it('sends a typed token once, then clears it and shows the credential as set', async () => {
-      await open({ ...served(), brain: { url: 'https://brain.test' } });
+      await open({ ...served(), brain: { ...served().brain, has_token: false } });
       vi.mocked(api.saveConfigJson).mockResolvedValue(undefined);
       fireEvent.change(tokenInput(), { target: { value: 'tr_typed_token_value' } });
       await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Save Configuration' })); });
