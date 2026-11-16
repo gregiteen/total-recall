@@ -1,3 +1,13 @@
+## 3.49.1 — 2026-11-16
+
+- Bundle Metaharness 0.4.8, which brings these fixes:
+  - **Claude via Auth:** Claude runs with the subscription token from Total Recall Auth (`CLAUDE_CODE_OAUTH_TOKEN`, bound with `meta-harness included-bind-claude-token`), so no per-machine login is needed. Logins shared across processes had been signing each other out.
+  - **Non-root user:** on Linux, when Metaharness runs as root, Claude runs as a configured non-root agent user (`meta-harness agent-user <name>`), because Claude Code refuses full permissions as root.
+    - The agent user gets access only to the run's checkout, the prompt files and that job's files.
+    - Git metadata is never writable by it, and root refuses to run git on a checkout whose `.git` changed.
+  - **Routing:** a route with no ready harness now selects none and waits for the quota reset, instead of choosing a harness outside the included-usage policy.
+  - **Long tasks:** a task longer than 4,000 characters no longer fails every attempt for its goal length.
+
 ## 3.49.0 — 2026-11-15
 
 - Import native and foreign plugin declarations, MCP configurations and API specifications with provenance, compatibility reports and explicit runtime trust. Keep installed capability inventories private and make declared capabilities available to CLI composition and routing.
