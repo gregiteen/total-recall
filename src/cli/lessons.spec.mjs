@@ -8,7 +8,7 @@ let agent;
 beforeEach(() => { agent = fs.mkdtempSync(path.join(os.tmpdir(), 'lesson-cli-')); });
 afterEach(() => fs.rmSync(agent, { recursive: true, force: true }));
 const run = (args, input = '') => spawnSync(process.execPath, ['bin/total-recall.mjs', 'lessons', ...args], {
-  cwd: process.cwd(), encoding: 'utf8', input, env: { ...process.env, AGENT_DIR: agent }, timeout: 15000,
+  cwd: process.cwd(), encoding: 'utf8', input, env: { ...process.env, AGENT_DIR: agent, TR_META_HARNESS_RUN: '' }, timeout: 15000,
 });
 it('runs actual hook ticks and session-end history through the CLI in a fixture brain', () => {
   const input = JSON.stringify({ session_id: 's', entries: [{ role: 'user', content: 'Use tabs.' }, { role: 'assistant', content: 'Done.' }] });
@@ -19,6 +19,14 @@ it('runs actual hook ticks and session-end history through the CLI in a fixture 
   const queue = path.join(agent, 'skills/total-recall/scheduler/queue');
   expect(listTasks(queue)).toHaveLength(1);
   expect(listTasks(queue)[0].payload).toMatchObject({ fromTurn: 1, toTurn: 1 });
+});
+it('a Metaharness child hook copies and queues nothing', () => {
+  const input = JSON.stringify({ session_id: 's', entries: [{ role: 'user', content: 'Use tabs.' }, { role: 'assistant', content: 'Done.' }] });
+  const child = spawnSync(process.execPath, ['bin/total-recall.mjs', 'lessons', 'session-end', '--harness', 'claude'], {
+    cwd: process.cwd(), encoding: 'utf8', input, env: { ...process.env, AGENT_DIR: agent, TR_META_HARNESS_RUN: '1' }, timeout: 15000 });
+  expect(child.status, child.stderr).toBe(0); expect(child.stdout.trim()).toBe('{}');
+  expect(fs.existsSync(path.join(agent, 'skills/total-recall/sessions'))).toBe(false);
+  expect(listTasks(path.join(agent, 'skills/total-recall/scheduler/queue'))).toHaveLength(0);
 });
 it('prints help offline and fails invalid commands and intervals', () => {
   expect(run(['--help']).status).toBe(0);

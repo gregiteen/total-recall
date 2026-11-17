@@ -10,6 +10,7 @@ import path from 'path';
 import { normalizeTask, FORBIDDEN_CAPABILITIES } from './task-envelope.mjs';
 import { logger } from './logger.mjs';
 import { atomicWrite, safeStringify } from './vault.mjs';
+import { isAutomaticLessonTask, isLessonsPaused } from './internal-sessions.mjs';
 
 /**
  * @typedef {object} ExecutorContext
@@ -566,6 +567,7 @@ async function runLessonReview(task, ctx) {
     fs.mkdirSync(dir, { recursive: true });
     atomicWrite(path.join(dir, `${task.slug}.done`), new Date().toISOString());
   }
+  if (result.skipped === 'internal-job') return { success: true, output: 'Lesson review skipped: internal Total Recall job', executor: 'lesson-review' };
   return { success: true, output: `Lesson review: ${result.patterns?.length || 0} patterns, ${result.facts?.length || 0} facts, ${result.skill_gaps?.length || 0} skill gaps, ${result.violations?.length || 0} violations`, executor: 'lesson-review' };
 }
 
@@ -632,6 +634,10 @@ export async function dispatchTask(task, ctx) {
     return { success: false, error: policy.error, executor: 'policy' };
   }
 
+  // A paused lesson review stays queued; the daemon returns skippedLLM work to pending.
+  if (ctx?.brainDir && isAutomaticLessonTask(normalized) && isLessonsPaused(ctx.brainDir)) {
+    return { success: false, skippedLLM: true, error: 'Lesson reviews are paused', executor: 'lesson-review' };
+  }
   const executor = resolveExecutor(normalized);
   if (!executor) {
     const msg =

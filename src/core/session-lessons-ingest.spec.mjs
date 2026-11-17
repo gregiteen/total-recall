@@ -3,6 +3,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 import { parseCodex, parseClaudeCode, writeSession } from './session-watcher.mjs';
+// These specs exercise ordinary sessions; a Metaharness test runner must not mark them internal.
+delete process.env.TR_META_HARNESS_RUN;
 let dir;
 beforeEach(() => { dir = fs.mkdtempSync(path.join(os.tmpdir(), 'lesson-ingest-')); });
 afterEach(() => fs.rmSync(dir, { recursive: true, force: true }));

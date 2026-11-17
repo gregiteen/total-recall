@@ -4,6 +4,8 @@ import path from 'node:path';
 import os from 'node:os';
 import { parse } from 'yaml';
 import { installLessonHooks } from './lesson-hooks.mjs';
+// These specs exercise ordinary sessions; a Metaharness test runner must not mark them internal.
+delete process.env.TR_META_HARNESS_RUN;
 let home;
 beforeEach(() => { home = fs.mkdtempSync(path.join(os.tmpdir(), 'lesson-hooks-')); });
 afterEach(() => fs.rmSync(home, { recursive: true, force: true }));

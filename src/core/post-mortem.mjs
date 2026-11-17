@@ -11,6 +11,7 @@ import { logger } from './logger.mjs';
 import { readLessonEntries, selectLessonTurns } from './lesson-sessions.mjs';
 import { addTask, getTask } from './task-envelope.mjs';
 import { rememberLessonRule } from './lesson-memory.mjs';
+import { isInternalTranscript } from './internal-sessions.mjs';
 
 /**
  * Total Recall Session Post-Mortem Engine
@@ -149,6 +150,10 @@ export function deriveSessionProject(sessionPath) {
 export async function runPostMortem(sessionPath, { vaultDir, inboxDir, runtimeConfig, fromTurn, toTurn,
   sourceRef, hold = false, rememberRule = rememberLessonRule } = {}) {
   if (!fs.existsSync(sessionPath)) return { error: `Lesson transcript not found: ${sessionPath}` };
+  // Reviewing Total Recall's own reasoning only files reviews of reviews.
+  if (isInternalTranscript(readLessonEntries(sessionPath))) {
+    return { patterns: [], facts: [], skill_gaps: [], violations: [], skipped: 'internal-job' };
+  }
   const transcript = readSessionTranscript(sessionPath, fromTurn ? { fromTurn, toTurn } : undefined);
   if (!transcript.trim()) {
     return { patterns: [], facts: [], skill_gaps: [], violations: [], skipped: 'too-short' };
@@ -368,6 +373,9 @@ Output ONLY valid JSON.`;
  * @returns {object} { compliant, violations, error? }
  */
 export async function runComplianceAudit(sessionPath, { vaultDir, runtimeConfig }) {
+  if (fs.existsSync(sessionPath) && isInternalTranscript(readLessonEntries(sessionPath))) {
+    return { compliant: true, violations: [], skipped: 'internal-job' };
+  }
   const transcript = readSessionTranscript(sessionPath);
   if (!transcript || transcript.length < 50) {
     return { compliant: true, violations: [], skipped: 'too-short' };

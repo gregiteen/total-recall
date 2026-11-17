@@ -5,6 +5,7 @@ import crypto from 'crypto';
 import { atomicWrite } from './vault.mjs';
 import { logger } from './logger.mjs';
 import { readLessonEntries } from './lesson-sessions.mjs';
+import { isInternalTranscript } from './internal-sessions.mjs';
 
 /**
  * Total Recall Session Watcher
@@ -760,6 +761,9 @@ export function scanAndIngest(sessionsDir, opts = {}) {
     for (const file of files) {
       try {
         let entries = source.adapter(file);
+        // Total Recall's own reasoning sessions are never ingested for review. Adapters
+        // truncate long messages, so also read the untruncated native root prompt.
+        if (isInternalTranscript(entries) || (file.endsWith('.jsonl') && isInternalTranscript(readLessonEntries(file)))) continue;
         if (entries.length > 0) {
           // Content-hash dedup: collapse identical facts from multiple sources
           if (derivedDir) {

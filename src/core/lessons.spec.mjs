@@ -5,6 +5,8 @@ import os from 'node:os';
 import { tickLessons, enqueueSessionReviews } from './lessons.mjs';
 import { readLessonEntries } from './lesson-sessions.mjs';
 import { listTasks } from './task-envelope.mjs';
+// These specs exercise ordinary sessions; a Metaharness test runner must not mark them internal.
+delete process.env.TR_META_HARNESS_RUN;
 
 let brain, file;
 beforeEach(() => {

@@ -8,6 +8,7 @@ import { getNodes } from './vault-cache.mjs';
 import { logger } from './logger.mjs';
 import { loadQueue, updateQueueItem } from './research-queue.mjs';
 import { transitionTaskStatus, getTask } from './task-envelope.mjs';
+import { isAutomaticLessonTask, isLessonsPaused } from './internal-sessions.mjs';
 
 /**
  * Total Recall Task Scheduler
@@ -388,7 +389,9 @@ export function createScheduler({ queueDir, vaultDir, sessionsDir, localOnly = f
   const queue = new TaskQueue();
 
   // Load explicit tasks from disk
-  const diskTasks = loadPendingTasks(queueDir);
+  // Paused lesson reviews are never selected, so the loop cannot spin returning them to pending.
+  const lessonsPaused = isLessonsPaused(path.dirname(path.dirname(queueDir)));
+  const diskTasks = loadPendingTasks(queueDir).filter(task => !(lessonsPaused && isAutomaticLessonTask(task)));
   for (const task of diskTasks) {
     queue.enqueue(task);
   }
