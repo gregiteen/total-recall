@@ -8,6 +8,8 @@ import { acquireBrainUpdateLock } from './brain-updates.mjs';
 import { isInternalJobEnv, isInternalTranscript, isLessonsPaused } from './internal-sessions.mjs';
 
 export const DEFAULT_LESSON_INTERVAL = 10;
+// Version of the turn count stored in each cursor. 2 counts only human prompts.
+const TURN_COUNTER = 2;
 const hash = value => crypto.createHash('sha256').update(value).digest('hex').slice(0, 12);
 
 /** A local hook only queues work. It never calls a model or elects a leader. */
@@ -37,7 +39,7 @@ export function tickLessons({ brainDir, sessionId, transcriptPath, event = 'Stop
   const lockFd = acquireBrainUpdateLock(lock, { waitMs: 0 });
   try {
     const stateFile = path.join(root, `${key}.json`);
-    const state = fs.existsSync(stateFile) ? JSON.parse(fs.readFileSync(stateFile, 'utf8')) : { turns: 0, queuedThrough: 0 };
+    const state = fs.existsSync(stateFile) ? JSON.parse(fs.readFileSync(stateFile, 'utf8')) : { turns: 0, queuedThrough: 0, counter: TURN_COUNTER };
     let entries;
     const savedTranscript = path.join(sessionsDir, `${key}.jsonl`);
     if (!transcriptPath && fs.existsSync(savedTranscript)) transcriptPath = savedTranscript;
@@ -49,6 +51,12 @@ export function tickLessons({ brainDir, sessionId, transcriptPath, event = 'Stop
         fs.mkdirSync(sessionsDir, { recursive: true });
         atomicWrite(path.join(sessionsDir, `${key}.jsonl`), entries.map(entry => JSON.stringify(entry)).join('\n') + '\n');
       }
+    }
+    if (turnCount !== undefined && state.counter !== TURN_COUNTER) {
+      // A cursor from the old count (every user-role entry) cannot be mapped onto human prompts.
+      // Rebase it and treat the past as handled, so the change never queues a backlog.
+      if (!Number.isInteger(turnCount) || turnCount < 0) throw new Error('Lesson transcript turn count is invalid');
+      Object.assign(state, { counter: TURN_COUNTER, turns: turnCount, queuedThrough: turnCount });
     }
     if (turnCount !== undefined) {
       if (!Number.isInteger(turnCount) || turnCount < state.turns) throw new Error('Lesson transcript turn count went backwards');

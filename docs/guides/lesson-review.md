@@ -1,8 +1,22 @@
 # Local lesson review
 
-Total Recall queues a review after ten completed user turns and at session end.
+Total Recall queues a review after ten human prompts and at session end.
 The hook only queues work. The daemon runs the post-mortem through the
-Metaharness reasoning runtime. No model name or credential is set by this path.
+Metaharness reasoning runtime. No model name or credential is set by this path:
+the operator chooses the harness, model and usage threshold with
+`total-recall meta-harness reasoning-config`. With nothing chosen, reviews are
+refused rather than sent to a default harness.
+
+A turn is something the person typed. Hook output, `<system-reminder>` text,
+slash-command output, interruption notes, compaction summaries, Codex
+instruction blocks and automatic goal checks are kept as context but never
+count. Each review window is bounded to 32,000 characters: every human prompt
+is kept, and tool output and injected context shrink first.
+
+When the reasoning owner holds a review because Codex usage is at or above the
+threshold, nothing runs and nothing fails. Reviews are held for 30 minutes
+(`heldUntil` in `<brain>/config/lessons.json`, shown by `lessons status`) and
+then tried again.
 
 `total-recall lessons tick` reads hook JSON from stdin. Claude and Codex supply
 `session_id` and `transcript_path`. Hermes supplies conversation history. The Pi

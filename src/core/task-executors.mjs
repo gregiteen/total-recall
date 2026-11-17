@@ -10,7 +10,7 @@ import path from 'path';
 import { normalizeTask, FORBIDDEN_CAPABILITIES } from './task-envelope.mjs';
 import { logger } from './logger.mjs';
 import { atomicWrite, safeStringify } from './vault.mjs';
-import { isAutomaticLessonTask, isLessonsPaused } from './internal-sessions.mjs';
+import { holdLessons, isAutomaticLessonTask, isLessonsPaused, isLessonWorkBlocked, LESSON_HOLD_MS } from './internal-sessions.mjs';
 
 /**
  * @typedef {object} ExecutorContext
@@ -561,6 +561,11 @@ async function runLessonReview(task, ctx) {
     sourceRef: task.payload?.sessionId ? `${task.payload.sessionId}/turns/${task.payload.fromTurn}-${task.payload.toTurn}` : task.slug,
     hold: task.payload?.hold === true,
   });
+  if (result.deferred) {
+    // Nothing ran. Hold all reviews for a while so the loop does not ask again every tick.
+    holdLessons(ctx.brainDir, Date.now() + (Number.isFinite(result.retryAfterMs) && result.retryAfterMs > 0 ? result.retryAfterMs : LESSON_HOLD_MS));
+    return { success: false, skippedLLM: true, error: result.error, executor: 'lesson-review' };
+  }
   if (result.error) return { success: false, error: result.error, executor: 'lesson-review' };
   if (task.slug?.startsWith('lesson-review-')) {
     const dir = path.join(ctx.brainDir, 'lesson-reviews');
@@ -634,9 +639,9 @@ export async function dispatchTask(task, ctx) {
     return { success: false, error: policy.error, executor: 'policy' };
   }
 
-  // A paused lesson review stays queued; the daemon returns skippedLLM work to pending.
-  if (ctx?.brainDir && isAutomaticLessonTask(normalized) && isLessonsPaused(ctx.brainDir)) {
-    return { success: false, skippedLLM: true, error: 'Lesson reviews are paused', executor: 'lesson-review' };
+  // A paused or held lesson review stays queued; the daemon returns skippedLLM work to pending.
+  if (ctx?.brainDir && isAutomaticLessonTask(normalized) && isLessonWorkBlocked(ctx.brainDir)) {
+    return { success: false, skippedLLM: true, error: isLessonsPaused(ctx.brainDir) ? 'Lesson reviews are paused' : 'Lesson reviews are held by the usage threshold', executor: 'lesson-review' };
   }
   const executor = resolveExecutor(normalized);
   if (!executor) {

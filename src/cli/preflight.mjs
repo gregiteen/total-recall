@@ -2,6 +2,7 @@ import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import { ensureDependencies } from '../core/ensure-dependencies.mjs';
+import { isHumanPrompt } from '../core/lesson-sessions.mjs';
 import { detectProjectBrain } from '../core/brain-locate.mjs';
 import { globalBrainDirFor, isBrainEnabled } from '../core/brain-registry.mjs';
 import { GATE_MODES, gateConfigPath, projectBrainDir, readGateLayers, resolveGateMode, writeGateMode } from '../core/gate-mode.mjs';
@@ -550,9 +551,12 @@ function remind(args) {
     const session = sessionOf(call);
     const result = checkAgentReceipt(root, session, { maxAgeMs: envMaxAgeMs() });
     const subagent = isSubagentPayload(call);
-    const before = session && !subagent ? lastSessionAck(session) : null;
+    // A background-job or session notification arrives through the prompt hook, but nobody typed it,
+    // so it is not new work: it must not void the acknowledgement for the task still in progress.
+    const harnessEvent = typeof call.prompt === 'string' && call.prompt.trim() !== '' && !isHumanPrompt(call.prompt);
+    const before = session && !subagent && !harnessEvent ? lastSessionAck(session) : null;
     // Recorded on every path, so the gate holds the next tool call until this session acknowledges for the new work.
-    if (session && !subagent) markPrompt(session);
+    if (session && !subagent && !harnessEvent) markPrompt(session);
     const standing = !result.ok || subagent || sessionHasStanding(root, session, { limitMs: result.limitMs });
     if (result.ok && !standing) {
       result.ok = false;

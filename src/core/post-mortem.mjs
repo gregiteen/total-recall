@@ -27,8 +27,32 @@ import { isInternalTranscript } from './internal-sessions.mjs';
 
 // ─── Constants ──────────────────────────────────────────────────────────────────
 
-const MAX_TRANSCRIPT_CHARS = 12000; // Don't overwhelm the local LLM
+const MAX_TRANSCRIPT_CHARS = 12000; // Legacy whole-session path
 const MAX_ENTRIES_PER_SESSION = 100;
+// A turn-range review: every human prompt survives; tool output and injected context shrink first.
+export const REVIEW_TRANSCRIPT_BUDGET = 32000;
+const REVIEW_LIMITS = [
+  { user: 4000, assistant: 2000, tool: 600, context: 300 },
+  { user: 4000, assistant: 2000, tool: 200, context: 0 },
+  { user: 4000, assistant: 600, tool: 0, context: 0 },
+  { user: 1500, assistant: 300, tool: 0, context: 0 },
+];
+
+/** Render lesson entries for review within a fixed character budget. */
+export function formatLessonTranscript(entries, budget = REVIEW_TRANSCRIPT_BUDGET) {
+  const clip = (value, limit) => value.length <= limit ? value : `${value.slice(0, limit)} …[${value.length - limit} characters omitted]`;
+  const render = limits => entries.filter(entry => limits[entry.role] > 0)
+    .map(entry => `[${entry.role.toUpperCase()}]: ${clip(String(entry.content), limits[entry.role])}`).join('\n\n');
+  let transcript = '';
+  for (const limits of REVIEW_LIMITS) {
+    transcript = render(limits);
+    if (transcript.length <= budget) return transcript;
+  }
+  // Still over budget: keep the opening and the end of the window.
+  const marker = '\n\n…[middle of this review window omitted]…\n\n';
+  const half = Math.floor((budget - marker.length) / 2);
+  return `${transcript.slice(0, half)}${marker}${transcript.slice(-half)}`;
+}
 
 // ─── Prompts ────────────────────────────────────────────────────────────────────
 
@@ -87,8 +111,7 @@ export function readSessionTranscript(sessionPath, range) {
   if (!fs.existsSync(sessionPath)) return '';
 
   if (range) {
-    return selectLessonTurns(readLessonEntries(sessionPath), range)
-      .map(entry => `[${entry.role.toUpperCase()}]: ${entry.content}`).join('\n\n');
+    return formatLessonTranscript(selectLessonTurns(readLessonEntries(sessionPath), range));
   }
 
   const raw = fs.readFileSync(sessionPath, 'utf8');
@@ -183,7 +206,9 @@ export async function runPostMortem(sessionPath, { vaultDir, inboxDir, runtimeCo
       subsystem: 'post-mortem',
       message: `LLM analysis failed for ${path.basename(sessionPath)}: ${err.message}`,
     });
-    return { patterns: [], facts: [], skill_gaps: [], violations: [], error: err.message };
+    // The reasoning owner held the call (usage threshold): nothing ran, so this is not a failure.
+    return { patterns: [], facts: [], skill_gaps: [], violations: [], error: err.message,
+      ...(err.code === 'REASONING_DEFERRED' ? { deferred: true, retryAfterMs: err.retryAfterMs } : {}) };
   }
 
   // Normalize the result

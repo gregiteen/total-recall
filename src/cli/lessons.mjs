@@ -6,12 +6,13 @@ import { parseLayerFlag, resolveBrainDir } from './agent-dir.mjs';
 import { detectProjectBrain } from '../core/brain-locate.mjs';
 import { isBrainEnabled } from '../core/brain-registry.mjs';
 import { tickLessons, enqueueSessionReviews } from '../core/lessons.mjs';
-import { isInternalJobEnv, isAutomaticLessonTask, isLessonsPaused, setLessonsPaused } from '../core/internal-sessions.mjs';
+import { isInternalJobEnv, isAutomaticLessonTask, isLessonsPaused, lessonsHeldUntil, setLessonsPaused } from '../core/internal-sessions.mjs';
 import { listTasks, cancelTask, resolveQueueDir } from '../core/task-envelope.mjs';
 
 /** Count, and with cancel, cancel pending automatic lesson work. Sessions and memory are untouched. */
 async function containLessonQueue(brainDir, { cancel = false } = {}) {
   const queueDir = resolveQueueDir(brainDir);
+  // The pending listing includes in-progress tasks.
   const tasks = listTasks(queueDir, { status: 'pending' }).filter(isAutomaticLessonTask);
   const result = { pending: tasks.filter(task => task.status === 'pending').length,
     inProgress: tasks.filter(task => task.status === 'in-progress').length, cancelled: 0, failed: [] };
@@ -37,7 +38,7 @@ export default async function lessons(args) {
     const brainDir = resolveBrainDir(layer);
     if (command !== 'status') setLessonsPaused(brainDir, command === 'pause');
     const queue = await containLessonQueue(brainDir, { cancel: flags.includes('--cancel-pending') });
-    console.log(JSON.stringify({ brainDir, paused: isLessonsPaused(brainDir), queue }));
+    console.log(JSON.stringify({ brainDir, paused: isLessonsPaused(brainDir), heldUntil: lessonsHeldUntil(brainDir), queue }));
     if (queue.failed.length) process.exitCode = 1;
     return;
   }

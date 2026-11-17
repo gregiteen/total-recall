@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 import { tickLessons, enqueueSessionReviews } from './lessons.mjs';
-import { readLessonEntries } from './lesson-sessions.mjs';
+import { readLessonEntries, countLessonTurns } from './lesson-sessions.mjs';
 import { listTasks } from './task-envelope.mjs';
 // These specs exercise ordinary sessions; a Metaharness test runner must not mark them internal.
 delete process.env.TR_META_HARNESS_RUN;
@@ -79,6 +79,59 @@ describe('local lesson trigger', () => {
     fs.writeFileSync(lock, String(process.pid));
     expect(() => tick()).toThrow('still holds');
     expect(fs.readFileSync(lock, 'utf8')).toBe(String(process.pid));
+  });
+});
+
+describe('a lesson turn is a human prompt', () => {
+  const claudeRows = [
+    { message: { role: 'user', content: 'Use tabs' } },
+    { isMeta: true, message: { role: 'user', content: 'Base directory for this skill: /x' } },
+    { message: { role: 'user', content: '<system-reminder>hook said hello</system-reminder>' } },
+    { message: { role: 'user', content: '<command-name>/clear</command-name>' } },
+    { message: { role: 'user', content: '[Request interrupted by user]' } },
+    { isCompactSummary: true, message: { role: 'user', content: 'This session is being continued...' } },
+    { message: { role: 'user', content: '<system-reminder>context</system-reminder>\nAnd fix the build' } },
+    { message: { role: 'assistant', content: 'Done' } },
+  ];
+  it('keeps injected and meta text as context and counts only what the person typed', () => {
+    fs.writeFileSync(file, claudeRows.map(row => JSON.stringify(row)).join('\n'));
+    const entries = readLessonEntries(file);
+    expect(entries.map(row => row.role)).toEqual(['user', 'context', 'context', 'context', 'context', 'context', 'user', 'assistant']);
+    expect(countLessonTurns(entries)).toBe(2);
+  });
+  it('skips request blobs and harness events, and treats any marked tool output as a tool', () => {
+    fs.writeFileSync(file, [
+      { type: 'user', message: { role: 'user', content: 'Ship it' } },
+      { type: 'api-request-blob', message: { role: 'user', content: 'Ship it' } },
+      { type: 'user', toolUseResult: { stdout: 'ok' }, message: { role: 'user', content: 'The file was updated' } },
+      { type: 'user', message: { role: 'user', content: [{ type: 'tool_reference', tool_name: 'x' }] } },
+      { type: 'user', message: { role: 'user', content: '<task-notification><task-id>1</task-id></task-notification>' } },
+      { type: 'user', message: { role: 'user', content: '<system-reminder>x</system-reminder>\n<side-sessions-event>done</side-sessions-event>' } },
+      { type: 'user', message: { role: 'user', content: [{ type: 'text', text: '<system-reminder>x</system-reminder>' }, { type: 'text', text: 'continue' }] } },
+    ].map(row => JSON.stringify(row)).join('\n'));
+    const entries = readLessonEntries(file);
+    expect(entries.map(row => row.role)).toEqual(['user', 'tool', 'tool', 'context', 'context', 'user']);
+    expect(countLessonTurns(entries)).toBe(2);
+  });
+  it('does not count Codex instruction blocks or automatic goal checks', () => {
+    fs.writeFileSync(file, [
+      { type: 'response_item', payload: { type: 'message', role: 'user', content: [{ type: 'input_text', text: '# AGENTS.md instructions for /repo' }] } },
+      { type: 'response_item', payload: { type: 'message', role: 'user', content: [{ type: 'input_text', text: '<environment_context>cwd</environment_context>' }] } },
+      { type: 'response_item', payload: { type: 'message', role: 'user', content: [{ type: 'input_text', text: 'Add a test' }] } },
+      { type: 'response_item', payload: { type: 'message', role: 'user', content: [{ type: 'input_text', text: 'Check the goal against what you did. Goal: x' }] } },
+    ].map(row => JSON.stringify(row)).join('\n'));
+    expect(countLessonTurns(readLessonEntries(file))).toBe(1);
+  });
+  it('rebases a cursor from the old count once, without queueing the past', () => {
+    write(9); tick({ interval: 100 });
+    const root = path.join(brain, 'lesson-reviews');
+    const stateFile = path.join(root, fs.readdirSync(root).find(name => name.endsWith('.json')));
+    // A cursor written by the old count: more turns than the transcript has prompts, no counter.
+    fs.writeFileSync(stateFile, JSON.stringify({ turns: 40, queuedThrough: 30 }));
+    expect(tick().tasks).toEqual([]);
+    expect(JSON.parse(fs.readFileSync(stateFile, 'utf8'))).toMatchObject({ counter: 2, turns: 9, queuedThrough: 9 });
+    write(12); expect(tick().tasks).toHaveLength(1);
+    expect(tasks().map(t => [t.payload.fromTurn, t.payload.toTurn])).toEqual([[10, 12]]);
   });
 });
 

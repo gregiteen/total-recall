@@ -805,6 +805,16 @@ describe('an agent is not bound to one repo', () => {
       expect(gate(first, { ...WORK, session_id: 'prompted-open', agent_id: 'kid' }).code).toBe(0);
       expect(gate(first, { ...WORK, session_id: 'prompted-open' }, { TR_META_HARNESS_RUN: '1' }).code).toBe(0);
     });
+    it('does not count a background-job or session notification as a new instruction', () => {
+      ackIn(first, 'prompt-event');
+      for (const prompt of ['<task-notification><task-id>b1</task-id><status>completed</status></task-notification>',
+        '<system-reminder>status</system-reminder>\n<side-sessions-event>a session finished</side-sessions-event>']) {
+        expect(remind(first, { session_id: 'prompt-event', prompt }) || '').not.toContain('new instruction');
+        expect(gate(first, { ...WORK, session_id: 'prompt-event' }).code).toBe(0);
+      }
+      remind(first, { session_id: 'prompt-event', prompt: 'now fix the other thing' });
+      expect(gate(first, { ...WORK, session_id: 'prompt-event' }).answer.rule).toBe('receipt:prompt');
+    });
     it('does not count a prompt hook fired for a subagent, or one with no session', () => {
       ackIn(first, 'prompt-kid');
       remind(first, { session_id: 'prompt-kid', agent_id: 'kid' });
