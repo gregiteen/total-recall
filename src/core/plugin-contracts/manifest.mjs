@@ -6,6 +6,8 @@ const FLAG = /^--[a-z][a-z0-9-]{0,63}$/;
 export const ARG_TYPES = ['string', 'number', 'boolean', 'choice'];
 export const COMMAND_EFFECTS = ['read', 'write', 'destructive', 'send'];
 export const OUTPUT_KINDS = ['json', 'text'];
+export const ALERT_CHANNELS = ['os', 'telegram', 'sms', 'email', 'slack', 'discord', 'webhook', 'github'];
+export const ALERT_SEVERITIES = ['info', 'high', 'critical'];
 export const TIERS = ['core', 'official', 'personal', 'community'];
 export const LICENSE_CLASSES = ['open', 'closed'];
 const BRAND_FONTS = ['system', 'inter', 'ibm-plex', 'space-grotesk', 'jetbrains-mono', 'dm-sans', 'outfit', 'fraunces', 'newsreader', 'chivo-mono'];
@@ -86,6 +88,33 @@ export function validateManifestContract(manifest) {
     else {
       if (!TIERS.includes(manifest.distribution.tier)) errors.push(`'distribution.tier' must be one of: ${TIERS.join(', ')}`);
       if (!LICENSE_CLASSES.includes(manifest.distribution.license)) errors.push(`'distribution.license' must be one of: ${LICENSE_CLASSES.join(', ')}`);
+    }
+  }
+  if (manifest.alerts !== undefined) {
+    if (!plain(manifest.alerts)) errors.push("'alerts' must be an object");
+    else {
+      if (manifest.alerts.plugin !== 'operator-alerts') errors.push("'alerts.plugin' must be 'operator-alerts'");
+      if (manifest.alerts.command !== undefined && (typeof manifest.alerts.command !== 'string' || !names.has(manifest.alerts.command))) {
+        errors.push("'alerts.command' must name a declared cli subcommand");
+      }
+      if (manifest.alerts.on_task_failure !== undefined && typeof manifest.alerts.on_task_failure !== 'boolean') {
+        errors.push("'alerts.on_task_failure' must be a boolean");
+      }
+      if (manifest.alerts.channels !== undefined) {
+        if (!Array.isArray(manifest.alerts.channels) || manifest.alerts.channels.some((c) => !ALERT_CHANNELS.includes(c))) {
+          errors.push(`'alerts.channels' entries must be one of: ${ALERT_CHANNELS.join(', ')}`);
+        }
+      }
+      if (manifest.alerts.events !== undefined) {
+        if (!Array.isArray(manifest.alerts.events)) errors.push("'alerts.events' must be an array");
+        else manifest.alerts.events.forEach((ev, idx) => {
+          const w = `alerts.events[${idx}]`;
+          if (!plain(ev)) { errors.push(`${w} must be an object`); return; }
+          if (typeof ev.id !== 'string' || !COMMAND.test(ev.id)) errors.push(`${w}.id must be lowercase kebab-case`);
+          if (!ALERT_SEVERITIES.includes(ev.severity)) errors.push(`${w}.severity must be one of: ${ALERT_SEVERITIES.join(', ')}`);
+          if (typeof ev.description !== 'string' || !ev.description.trim()) errors.push(`${w}.description is required`);
+        });
+      }
     }
   }
   validatePresentation(manifest, errors, warnings);

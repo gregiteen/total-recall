@@ -125,6 +125,11 @@ async function main() {
     process.argv = [process.argv[0], process.argv[1], 'auth', 'secret', ...args.slice(1)];
     return main();
   }
+  // Spend analytics belong to the ai-models plugin; rewrite to its namespace.
+  if (command === 'analytics') {
+    process.argv = [process.argv[0], process.argv[1], 'ai-models', 'analytics', ...args.slice(1)];
+    return main();
+  }
 
   if (!command || command === '--help' || command === '-h') {
     await printHelp();

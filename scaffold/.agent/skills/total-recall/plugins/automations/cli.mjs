@@ -118,6 +118,14 @@ export async function run(argv = [], dependencies = {}) {
     ...(parsed.receipt ? { receiptId: parsed.id } : {}),
   });
   inventory = filterInventory(inventory, parsed.filters);
+  if ((parsed.command === 'status' || parsed.command === 'list') && inventory && typeof inventory === 'object') {
+    const records = Array.isArray(inventory.records) ? inventory.records
+      : (Array.isArray(inventory.nodes) ? inventory.nodes.flatMap(node => node.automations || []) : []);
+    const pendingCount = records.filter((r) => r.state === 'pending' || r.state === 'queued').length;
+    inventory.pendingCount = pendingCount;
+    inventory.queueDepthThreshold = 100;
+    inventory.queueDepthWarning = pendingCount > 100;
+  }
   let result = inventory;
   if (parsed.command === 'show') {
     const records = inventory.nodes.flatMap(node => node.automations).filter(record => record.id === parsed.id);

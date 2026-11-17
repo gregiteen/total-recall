@@ -1,6 +1,6 @@
 {
   "name": "tr-plugin-automations",
-  "version": "1.2.1",
+  "version": "1.2.2",
   "type": "module",
   "description": "Scheduled plugin task runner plus automation sources, triggers, observed outcomes and coverage across the Total Recall mesh.",
   "scripts": {

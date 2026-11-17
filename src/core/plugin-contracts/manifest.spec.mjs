@@ -160,4 +160,17 @@ describe('brick declaration', () => {
       .toMatch(/relative .*path[\s\S]*non-empty array/);
     expect(validateManifestContract({ ...brick(), capability: { entry: 'ui/home.js', exports: ['a'] } }).errors.join('\n')).toMatch(/\.js|ui\//);
   });
+  it('validates the core alerts contract', () => {
+    const ok = base();
+    ok.alerts = { plugin: 'operator-alerts', command: 'status', channels: ['os', 'telegram'], on_task_failure: true, events: [{ id: 'runaway', severity: 'critical', description: 'Runaway spend' }] };
+    expect(validateManifestContract(ok).errors).toEqual([]);
+    const bad = base();
+    bad.alerts = { plugin: 'wrong', command: 'missing', channels: ['pigeon'], events: [{ id: 'BAD', severity: 'fatal', description: '' }] };
+    const errs = validateManifestContract(bad).errors.join('\n');
+    expect(errs).toMatch(/alerts\.plugin/);
+    expect(errs).toMatch(/alerts\.command/);
+    expect(errs).toMatch(/alerts\.channels/);
+    expect(errs).toMatch(/id must be lowercase/);
+    expect(errs).toMatch(/severity must be one of/);
+  });
 });

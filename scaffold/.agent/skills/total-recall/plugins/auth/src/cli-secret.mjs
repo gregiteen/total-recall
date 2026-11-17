@@ -644,6 +644,27 @@ function parseArgs(args) {
       case '--revoke':
         out.revokeHash = args[++i];
         break;
+      case '--target':
+        out.targetKey = args[++i];
+        break;
+      case '--set-limit':
+        out.setLimit = args[i + 1] === 'none' ? (i++, null) : parseFloat(args[++i]);
+        break;
+      case '--limit-reset':
+        out.limitReset = args[i + 1] === 'none' ? (i++, null) : args[++i];
+        break;
+      case '--disable':
+        out.disableTarget = args[++i];
+        break;
+      case '--enable':
+        out.enableTarget = args[++i];
+        break;
+      case '--disable-unstored':
+        out.disableUnstored = true;
+        break;
+      case '--alert':
+        out.alert = true;
+        break;
       case '--revoke-old':
         out.revokeOld = true;
         break;
@@ -1614,15 +1635,71 @@ export default async function secretCli(argv) {
 
     if (opts.command === 'provider-keys') {
       if (!opts.key) {
-        console.error('Usage: total-recall auth secret provider-keys <provider> [--revoke <hash>] [--json]');
+        console.error('Usage: total-recall auth secret provider-keys <provider> [--revoke <hash>] [--target <hash|KEY> --set-limit <usd|none> --limit-reset <daily|weekly|monthly|none>] [--disable <hash|KEY>] [--enable <hash|KEY>] [--disable-unstored] [--json]');
         process.exitCode = 1;
         return;
       }
       const { manageProviderKeys } = await import('./secrets-rotate.mjs');
-      const result = await manageProviderKeys(brainDir, opts.key, { revoke: opts.revokeHash });
+      const target = opts.targetKey || opts.disableTarget || opts.enableTarget;
+      const disabled = opts.disableTarget ? true : opts.enableTarget ? false : undefined;
+      const result = await manageProviderKeys(brainDir, opts.key, {
+        revoke: opts.revokeHash,
+        target,
+        limit: opts.setLimit,
+        limitReset: opts.limitReset,
+        disabled,
+        disableUnstored: opts.disableUnstored,
+      });
       if (opts.json) console.log(JSON.stringify(result, null, 2));
       else if (opts.revokeHash) console.log(`\n  ✅ Revoked ${result.name || result.label} (${result.revoked.slice(0, 12)})`);
-      else for (const item of result.keys) console.log(`  ${item.hash.slice(0, 12)}  ${String(item.name || item.label).padEnd(44)} ${item.disabled ? 'disabled' : 'active  '}  ${item.stored_as.length ? item.stored_as.join(',') : 'NOT IN STORE'}`);
+      else if (opts.disableUnstored) console.log(`\n  ✅ Disabled ${result.disabledCount} unstored provider key(s)`);
+      else if (target !== undefined) console.log(`\n  ✅ Updated ${result.name || result.hash.slice(0, 12)}: limit=${result.limit ?? 'none'} reset=${result.limit_reset ?? 'none'} disabled=${result.disabled}`);
+      else for (const item of result.keys) {
+        const cap = item.limit != null ? `cap=${item.limit}/${item.limit_reset || 'total'}` : 'uncapped';
+        console.log(`  ${item.hash.slice(0, 12)}  ${String(item.name || item.label).padEnd(44)} ${item.disabled ? 'disabled' : 'active  '}  ${cap.padEnd(18)} ${Number(item.usage || 0).toFixed(2).padStart(7)}  ${item.stored_as.length ? item.stored_as.join(',') : 'NOT IN STORE'}`);
+      }
+      return;
+    }
+
+    if (opts.command === 'budget-check') {
+      const budget = loadBudgetConfig(brainDir);
+      const daily = summarizeUsage(brainDir, { days: 1 });
+      const weekly = summarizeUsage(brainDir, { days: 7 });
+      const byKey = summarizeUsageByKey(brainDir, { days: 30 });
+      const meta = await listSecretsMeta(brainDir);
+      const cfg = budget.config?.budget || budget.config || {};
+      const dailyCap = Number(cfg.daily_cap_usd);
+      const weeklyCap = Number(cfg.weekly_cap_usd);
+      const breaches = [];
+      if (Number.isFinite(dailyCap) && dailyCap > 0 && daily.cost_usd >= dailyCap) {
+        breaches.push({ scope: 'global:daily', cost_usd: daily.cost_usd, cap_usd: dailyCap });
+      }
+      if (Number.isFinite(weeklyCap) && weeklyCap > 0 && weekly.cost_usd >= weeklyCap) {
+        breaches.push({ scope: 'global:weekly', cost_usd: weekly.cost_usd, cap_usd: weeklyCap });
+      }
+      for (const row of meta) {
+        const cap = Number(row.monthly_cap_usd);
+        const spent = Number(byKey.by_key?.[row.key]?.cost_usd || row.tracking_usage?.credits_used_monthly || 0);
+        if (Number.isFinite(cap) && cap > 0 && spent >= cap) {
+          breaches.push({ scope: `key:${row.key}`, cost_usd: spent, cap_usd: cap });
+        }
+      }
+      if (opts.alert && breaches.length) {
+        try {
+          execFileSync(process.env.TOTAL_RECALL_BIN || 'total-recall', [
+            'alerts', 'send',
+            '--title', 'Auth Budget Cap Breached',
+            '--message', breaches.map((b) => `${b.scope}: ${b.cost_usd.toFixed(2)} >= ${b.cap_usd.toFixed(2)}`).join('; '),
+            '--severity', 'critical',
+            '--source', 'auth',
+            '--event-id', `auth-budget-${new Date().toISOString().slice(0, 10)}`,
+          ], { stdio: 'pipe', timeout: 15000 });
+        } catch { /* reported in result */ }
+      }
+      const out = { ok: breaches.length === 0, daily, weekly, budget: cfg, breaches };
+      if (opts.json) console.log(JSON.stringify(out, null, 2));
+      else console.log(out.ok ? `✅ Spend within budget (24h: ${daily.cost_usd.toFixed(2)}, 7d: ${weekly.cost_usd.toFixed(2)})` : `🚨 Budget breaches: ${breaches.map((b) => `${b.scope}=${b.cost_usd.toFixed(2)}/${b.cap_usd}`).join(', ')}`);
+      if (!out.ok) process.exitCode = 1;
       return;
     }
 

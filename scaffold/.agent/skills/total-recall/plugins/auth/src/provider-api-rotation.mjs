@@ -176,7 +176,7 @@ export async function listProviderKeys({ brainDir, provider, readSecret, listRow
   }
   return keys.map((item) => {
     const held = rows.filter((row) => row.provider_key_id === item.hash || (row.fingerprint && String(item.hash).startsWith(row.fingerprint))).map((row) => row.key);
-    return { hash: item.hash, name: item.name ?? null, label: item.label ?? null, disabled: item.disabled === true, usage: item.usage ?? null, last_used_at: item.last_used_at ?? null, created_at: item.created_at ?? null, stored_as: held };
+    return { hash: item.hash, name: item.name ?? null, label: item.label ?? null, disabled: item.disabled === true, limit: item.limit ?? null, limit_remaining: item.limit_remaining ?? null, limit_reset: item.limit_reset ?? null, usage: item.usage ?? null, usage_daily: item.usage_daily ?? null, usage_weekly: item.usage_weekly ?? null, usage_monthly: item.usage_monthly ?? null, last_used_at: item.last_used_at ?? null, created_at: item.created_at ?? null, stored_as: held };
   });
 }
 
@@ -192,4 +192,55 @@ export async function revokeProviderKey({ brainDir, provider, hash, readSecret, 
   const res = await fetchImpl(`${api.base_url}${api.revoke.path(target.hash)}`, { method: api.revoke.method || 'DELETE', headers: auth });
   if (!res.ok) throw new Error(`Provider refused to revoke the key (HTTP ${res.status})`);
   return { ok: true, revoked: target.hash, name: target.name, label: target.label };
+}
+
+/** Update a provider key's spending limit, reset cadence, or disabled state by hash prefix or stored secret name. */
+export async function updateProviderKey({ brainDir, provider, target, patch = {}, readSecret, listRows, fetchImpl = fetch }) {
+  const { api, auth } = await managementContext(provider, readSecret, brainDir);
+  if (!api?.update) throw new Error(`${provider?.name || 'This provider'} declares no key-update endpoint`);
+  if (typeof target !== 'string' || !target.trim()) throw new Error('Give a key hash prefix (min 8 chars) or stored secret name');
+  const keys = await listProviderKeys({ brainDir, provider, readSecret, listRows, fetchImpl });
+  const matches = keys.filter((item) => item.stored_as.includes(target) || (target.length >= 8 && item.hash.startsWith(target)));
+  if (matches.length !== 1) throw new Error(`Target ${target} matches ${matches.length} provider keys; exactly one is required`);
+  const [found] = matches;
+  const body = {};
+  if (patch.limit !== undefined) {
+    if (patch.limit !== null && (!Number.isFinite(patch.limit) || patch.limit < 0)) throw new Error('limit must be a non-negative number or null');
+    body.limit = patch.limit;
+  }
+  if (patch.limit_reset !== undefined) {
+    if (patch.limit_reset !== null && !['daily', 'weekly', 'monthly'].includes(patch.limit_reset)) {
+      throw new Error('limit_reset must be daily, weekly, monthly, or null');
+    }
+    body.limit_reset = patch.limit_reset;
+  }
+  if (patch.disabled !== undefined) body.disabled = Boolean(patch.disabled);
+  if (!Object.keys(body).length) throw new Error('Specify at least one update field (limit, limit_reset, disabled)');
+  const res = await fetchImpl(`${api.base_url}${api.update.path(found.hash)}`, {
+    method: api.update.method || 'PATCH',
+    headers: { ...auth, 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  const data = await res.json().catch(() => null);
+  if (!res.ok) throw new Error(`Provider refused to update the key (HTTP ${res.status})`);
+  const updated = data?.data || data || {};
+  return {
+    ok: true,
+    hash: found.hash,
+    name: updated.name ?? found.name,
+    stored_as: found.stored_as,
+    disabled: updated.disabled ?? body.disabled ?? found.disabled,
+    limit: updated.limit !== undefined ? updated.limit : (body.limit !== undefined ? body.limit : found.limit),
+    limit_reset: updated.limit_reset !== undefined ? updated.limit_reset : (body.limit_reset !== undefined ? body.limit_reset : found.limit_reset),
+  };
+}
+
+/** Disable all active provider keys that are no longer held in the Total Recall secrets store. */
+export async function disableUnstoredProviderKeys({ brainDir, provider, readSecret, listRows, fetchImpl = fetch }) {
+  const keys = await listProviderKeys({ brainDir, provider, readSecret, listRows, fetchImpl });
+  const targets = keys.filter((item) => item.stored_as.length === 0 && !item.disabled);
+  const disabled = [];
+  const results = await Promise.all(targets.map((item) => updateProviderKey({ brainDir, provider, target: item.hash, patch: { disabled: true }, readSecret, listRows, fetchImpl })));
+  disabled.push(...results);
+  return { ok: true, disabledCount: disabled.length, disabled };
 }

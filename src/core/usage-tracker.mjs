@@ -2,44 +2,29 @@ import fs from 'fs';
 import path from 'path';
 import os from 'os';
 import yaml from 'yaml';
+import { execFileSync } from 'node:child_process';
 import { logger } from './logger.mjs';
 import { brainDir } from './config.mjs';
 
-// Standard pricing constants ($ per million tokens)
-// Pricing verified via web search (July 2026)
-export const PRICING = {
-  claude: {
-    // Claude 3.5 Sonnet Standard Pricing
-    input: 3.00 / 1000000,
-    output: 15.00 / 1000000,
-    cacheRead: 0.30 / 1000000, // 0.1x base
-    cacheCreation: 3.75 / 1000000 // 1.25x base
-  },
-  gemini: {
-    // Gemini 1.5 Flash (legacy)
-    input: 0.075 / 1000000,
-    output: 0.30 / 1000000
-  },
-  codex: {
-    // GPT-4o Standard (used by Codex CLI)
-    input: 2.50 / 1000000,
-    output: 10.00 / 1000000
-  }
-};
+/** Neutral fallback rates ($ per token) when live ai-models catalog cache is absent. */
+export const DEFAULT_RATES = Object.freeze({
+  input: 2.00 / 1_000_000,
+  cachedInput: 0.20 / 1_000_000,
+  cacheWrite: 2.50 / 1_000_000,
+  output: 10.00 / 1_000_000,
+});
 
-/**
- * Recursively find files in a directory.
- */
-function walkDir(dir, callback) {
+function walkRecentJsonl(dir, cutoffMs, callback) {
   if (!fs.existsSync(dir)) return;
   try {
-    const entries = fs.readdirSync(dir, { withFileTypes: true });
-    for (const entry of entries) {
+    for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
       const fullPath = path.join(dir, entry.name);
-      if (entry.isDirectory()) {
-        walkDir(fullPath, callback);
-      } else if (entry.isFile()) {
-        callback(fullPath);
+      if (entry.isDirectory()) walkRecentJsonl(fullPath, cutoffMs, callback);
+      else if (entry.isFile() && entry.name.endsWith('.jsonl')) {
+        try {
+          const stat = fs.statSync(fullPath);
+          if (stat.mtimeMs >= cutoffMs) callback(fullPath, stat);
+        } catch { /* unreadable file */ }
       }
     }
   } catch (err) {
@@ -47,316 +32,186 @@ function walkDir(dir, callback) {
   }
 }
 
+/** Load cached per-1M USD pricing from ai-models cache when available; never hardcodes model names. */
+export function loadCatalogPricing(home = os.homedir()) {
+  const map = new Map();
+  const cacheDir = path.join(home, '.agent', 'skills', 'total-recall', 'cache');
+  try {
+    for (const name of fs.readdirSync(cacheDir)) {
+      if (!name.startsWith('ai-models') || !name.endsWith('.json')) continue;
+      const data = JSON.parse(fs.readFileSync(path.join(cacheDir, name), 'utf8'));
+      const models = Array.isArray(data?.models) ? data.models : Object.values(data?.providers || {}).flatMap((p) => p?.models || []);
+      for (const m of models) {
+        if (m?.id && m?.pricing && Number.isFinite(m.pricing.inputPerM) && Number.isFinite(m.pricing.outputPerM)) {
+          map.set(m.id, {
+            input: m.pricing.inputPerM / 1_000_000,
+            cachedInput: (m.pricing.inputPerM * 0.1) / 1_000_000,
+            cacheWrite: (m.pricing.inputPerM * 1.25) / 1_000_000,
+            output: m.pricing.outputPerM / 1_000_000,
+          });
+        }
+      }
+    }
+  } catch { /* no cache */ }
+  return map;
+}
+
 /**
- * Calculates local token and dollar cost usage across Gemini, Claude, and Codex.
+ * Calculates local token and API-equivalent dollar cost across Claude, Codex, and Auth usage.jsonl.
  * Tracks usage in the last 24 hours (daily) and last 7 days (weekly).
- *
- * @returns {object} Combined daily and weekly metrics and breakdown per agent.
  */
-export function calculateCurrentCost() {
-  const now = new Date();
-  
-  const dailyLimitMs = 24 * 60 * 60 * 1000;
-  const weeklyLimitMs = 7 * 24 * 60 * 60 * 1000;
-  
-  // Format local date string as YYYY-MM-DD
-  const year = now.getFullYear();
-  const month = String(now.getMonth() + 1).padStart(2, '0');
-  const day = String(now.getDate()).padStart(2, '0');
-  const todayStr = `${year}-${month}-${day}`;
+export function calculateCurrentCost({ home = os.homedir(), now = new Date() } = {}) {
+  const nowMs = now.getTime();
+  const dailyCutoff = nowMs - 24 * 60 * 60 * 1000;
+  const weeklyCutoff = nowMs - 7 * 24 * 60 * 60 * 1000;
+  const pricing = loadCatalogPricing(home);
+  const rateFor = (model) => pricing.get(model) || DEFAULT_RATES;
 
-  const gemini = {
-    dailyInput: 0,
-    dailyOutput: 0,
-    weeklyInput: 0,
-    weeklyOutput: 0
-  };
+  const claude = { dailyUsd: 0, weeklyUsd: 0, dailyTokens: 0, weeklyTokens: 0 };
+  const codex = { dailyUsd: 0, weeklyUsd: 0, dailyTokens: 0, weeklyTokens: 0 };
+  const ledger = { dailyUsd: 0, weeklyUsd: 0, dailyTokens: 0, weeklyTokens: 0 };
 
-  const claude = {
-    dailyCost: 0,
-    weeklyCost: 0
-  };
-
-  const codex = {
-    dailyInput: 0,
-    dailyOutput: 0,
-    weeklyInput: 0,
-    weeklyOutput: 0
-  };
-
-  // 1. Gemini Ingestion
-  const geminiTmpBase = path.join(os.homedir(), '.gemini', 'tmp');
-  if (fs.existsSync(geminiTmpBase)) {
-    try {
-      const dirs = fs.readdirSync(geminiTmpBase).filter(d => {
-        const full = path.join(geminiTmpBase, d, 'chats');
-        try {
-          return fs.existsSync(full) && fs.statSync(full).isDirectory();
-        } catch {
-          return false;
-        }
-      });
-
-      for (const dir of dirs) {
-        const chatsDir = path.join(geminiTmpBase, dir, 'chats');
-        try {
-          const files = fs.readdirSync(chatsDir).filter(f => f.endsWith('.jsonl'));
-          for (const file of files) {
-            const filePath = path.join(chatsDir, file);
-            try {
-              const stat = fs.statSync(filePath);
-              const ageMs = now.getTime() - stat.mtime.getTime();
-              
-              // Skip files older than 7 days entirely to avoid reading large logs
-              if (ageMs > weeklyLimitMs) continue;
-
-              const lines = fs.readFileSync(filePath, 'utf8').split('\n').filter(Boolean);
-              for (const line of lines) {
-                try {
-                  const entry = JSON.parse(line);
-                  if (entry.tokens) {
-                    const timestamp = entry.timestamp ? new Date(entry.timestamp) : stat.mtime;
-                    const entryAgeMs = now.getTime() - timestamp.getTime();
-                    
-                    const input = entry.tokens.input || 0;
-                    const output = entry.tokens.output || 0;
-
-                    if (entryAgeMs <= dailyLimitMs) {
-                      gemini.dailyInput += input;
-                      gemini.dailyOutput += output;
-                    }
-                    if (entryAgeMs <= weeklyLimitMs) {
-                      gemini.weeklyInput += input;
-                      gemini.weeklyOutput += output;
-                    }
-                  }
-                } catch { /* malformed line */ }
-              }
-            } catch (err) { /* unreadable file */ }
-          }
-        } catch { /* unreadable directory */ }
-      }
-    } catch (err) {
-      logger.warn('usage-tracker', `Failed to read Gemini tmp chats: ${err.message}`);
+  // 1. Claude Code project transcripts (~/.claude/projects/**/*.jsonl)
+  walkRecentJsonl(path.join(home, '.claude', 'projects'), weeklyCutoff, (filePath, stat) => {
+    const seen = new Set();
+    let lines;
+    try { lines = fs.readFileSync(filePath, 'utf8').split('\n'); } catch { return; }
+    for (const line of lines) {
+      if (!line) continue;
+      let row;
+      try { row = JSON.parse(line); } catch { continue; }
+      if (row.type !== 'assistant' || !row.message?.usage) continue;
+      const msgId = row.message.id || row.uuid;
+      if (msgId && seen.has(msgId)) continue;
+      if (msgId) seen.add(msgId);
+      const ts = row.timestamp ? Date.parse(row.timestamp) : stat.mtimeMs;
+      if (!Number.isFinite(ts) || ts < weeklyCutoff) continue;
+      const u = row.message.usage;
+      const r = rateFor(row.message.model);
+      const inp = u.input_tokens || 0;
+      const cWrite = u.cache_creation_input_tokens || 0;
+      const cRead = u.cache_read_input_tokens || 0;
+      const out = u.output_tokens || 0;
+      const cost = (inp * r.input) + (cWrite * r.cacheWrite) + (cRead * r.cachedInput) + (out * r.output);
+      const tokens = inp + cWrite + cRead + out;
+      claude.weeklyUsd += cost;
+      claude.weeklyTokens += tokens;
+      if (ts >= dailyCutoff) { claude.dailyUsd += cost; claude.dailyTokens += tokens; }
     }
-  }
+  });
 
-  // 2. Claude Ingestion
-  const statsFile = path.join(os.homedir(), '.claude', 'stats-cache.json');
-  if (fs.existsSync(statsFile)) {
-    try {
-      const data = JSON.parse(fs.readFileSync(statsFile, 'utf8'));
-      const modelStats = {};
-      const fallbackCostPerToken = 5.00 / 1000000; // conservative blended rate
-
-      // Calculate historical cost per token for each model
-      const usageSrc = data.modelUsage || data.models;
-      if (usageSrc) {
-        for (const [model, stats] of Object.entries(usageSrc)) {
-          const input = stats.inputTokens || 0;
-          const output = stats.outputTokens || 0;
-          const cacheRead = stats.cacheReadInputTokens || 0;
-          const cacheCreation = stats.cacheCreationInputTokens || 0;
-          
-          const totalTokens = input + output + cacheRead + cacheCreation;
-          if (totalTokens > 0) {
-            const totalCost = (input * PRICING.claude.input) +
-                              (output * PRICING.claude.output) +
-                              (cacheRead * PRICING.claude.cacheRead) +
-                              (cacheCreation * PRICING.claude.cacheCreation);
-            modelStats[model] = {
-              costPerToken: totalCost / totalTokens
-            };
-          }
+  // 2. Codex CLI transcripts (~/.codex/sessions + archived_sessions)
+  for (const sub of ['sessions', 'archived_sessions']) {
+    walkRecentJsonl(path.join(home, '.codex', sub), weeklyCutoff, (filePath, stat) => {
+      let model = null, lastTotal = null, firstTs = 0;
+      let lines;
+      try { lines = fs.readFileSync(filePath, 'utf8').split('\n'); } catch { return; }
+      for (const line of lines) {
+        if (!line) continue;
+        let row;
+        try { row = JSON.parse(line); } catch { continue; }
+        if (!firstTs && row.timestamp) { const t = Date.parse(row.timestamp); if (Number.isFinite(t)) firstTs = t; }
+        if ((row.type === 'turn_context' || row.type === 'session_meta') && row.payload?.model) model = row.payload.model;
+        if (row.type === 'event_msg' && row.payload?.type === 'token_count' && row.payload?.info?.total_token_usage) {
+          lastTotal = row.payload.info.total_token_usage;
         }
       }
-
-      // Parse daily activity
-      if (Array.isArray(data.dailyModelTokens)) {
-        for (const entry of data.dailyModelTokens) {
-          if (!entry.date) continue;
-          
-          const entryDate = new Date(`${entry.date}T12:00:00`); // parse cleanly in local/system time
-          const diffMs = now.getTime() - entryDate.getTime();
-          const isToday = entry.date === todayStr;
-          const isThisWeek = diffMs <= weeklyLimitMs;
-
-          if (isToday || isThisWeek) {
-            let entryCost = 0;
-            if (entry.tokensByModel) {
-              for (const [model, tokens] of Object.entries(entry.tokensByModel)) {
-                const costPerToken = modelStats[model]?.costPerToken || fallbackCostPerToken;
-                entryCost += tokens * costPerToken;
-              }
-            }
-            if (isToday) {
-              claude.dailyCost += entryCost;
-            }
-            if (isThisWeek) {
-              claude.weeklyCost += entryCost;
-            }
-          }
-        }
-      }
-    } catch (err) {
-      logger.warn('usage-tracker', `Failed to read Claude stats-cache.json: ${err.message}`);
-    }
+      if (!lastTotal) return;
+      const ts = firstTs || stat.mtimeMs;
+      if (ts < weeklyCutoff) return;
+      const r = rateFor(model);
+      const input = lastTotal.input_tokens || 0;
+      const cached = lastTotal.cached_input_tokens || 0;
+      const uncached = Math.max(0, input - cached);
+      const output = lastTotal.output_tokens || 0;
+      const cost = (uncached * r.input) + (cached * r.cachedInput) + (output * r.output);
+      const tokens = input + output;
+      codex.weeklyUsd += cost;
+      codex.weeklyTokens += tokens;
+      if (ts >= dailyCutoff) { codex.dailyUsd += cost; codex.dailyTokens += tokens; }
+    });
   }
 
-  // 3. Codex Ingestion
-  const codexSessionsDir = path.join(os.homedir(), '.codex', 'sessions');
-  if (fs.existsSync(codexSessionsDir)) {
+  // 3. Auth metered usage ledger (~/.agent/skills/total-recall/logs/usage.jsonl)
+  const usageFile = path.join(home, '.agent', 'skills', 'total-recall', 'logs', 'usage.jsonl');
+  if (fs.existsSync(usageFile)) {
     try {
-      walkDir(codexSessionsDir, (filePath) => {
-        if (!filePath.endsWith('.jsonl')) return;
-        try {
-          const stat = fs.statSync(filePath);
-          const ageMs = now.getTime() - stat.mtime.getTime();
-          if (ageMs > weeklyLimitMs) return;
-
-          const lines = fs.readFileSync(filePath, 'utf8').split('\n').filter(Boolean);
-          for (const line of lines) {
-            try {
-              const entry = JSON.parse(line);
-              if (entry.usage) {
-                const timestamp = entry.timestamp ? new Date(entry.timestamp) : stat.mtime;
-                const entryAgeMs = now.getTime() - timestamp.getTime();
-                
-                const input = entry.usage.prompt_tokens || entry.usage.input_tokens || 0;
-                const output = entry.usage.completion_tokens || entry.usage.output_tokens || 0;
-
-                if (entryAgeMs <= dailyLimitMs) {
-                  codex.dailyInput += input;
-                  codex.dailyOutput += output;
-                }
-                if (entryAgeMs <= weeklyLimitMs) {
-                  codex.weeklyInput += input;
-                  codex.weeklyOutput += output;
-                }
-              }
-            } catch { /* line error */ }
-          }
-        } catch { /* file error */ }
-      });
-    } catch (err) {
-      logger.warn('usage-tracker', `Failed to scan Codex sessions: ${err.message}`);
-    }
+      for (const line of fs.readFileSync(usageFile, 'utf8').split('\n')) {
+        if (!line) continue;
+        let row;
+        try { row = JSON.parse(line); } catch { continue; }
+        const ts = Date.parse(row.ts || '');
+        if (!Number.isFinite(ts) || ts < weeklyCutoff) continue;
+        const cost = Number(row.cost_usd) || 0;
+        const tokens = (Number(row.input_tokens) || 0) + (Number(row.output_tokens) || 0);
+        ledger.weeklyUsd += cost;
+        ledger.weeklyTokens += tokens;
+        if (ts >= dailyCutoff) { ledger.dailyUsd += cost; ledger.dailyTokens += tokens; }
+      }
+    } catch { /* unreadable usage.jsonl */ }
   }
 
-  // Cost conversion
-  const geminiDailyCost = (gemini.dailyInput * PRICING.gemini.input) + (gemini.dailyOutput * PRICING.gemini.output);
-  const geminiWeeklyCost = (gemini.weeklyInput * PRICING.gemini.input) + (gemini.weeklyOutput * PRICING.gemini.output);
-  
-  const codexDailyCost = (codex.dailyInput * PRICING.codex.input) + (codex.dailyOutput * PRICING.codex.output);
-  const codexWeeklyCost = (codex.weeklyInput * PRICING.codex.input) + (codex.weeklyOutput * PRICING.codex.output);
-
-  const dailyUsd = geminiDailyCost + claude.dailyCost + codexDailyCost;
-  const weeklyUsd = geminiWeeklyCost + claude.weeklyCost + codexWeeklyCost;
+  const dailyUsd = claude.dailyUsd + codex.dailyUsd + ledger.dailyUsd;
+  const weeklyUsd = claude.weeklyUsd + codex.weeklyUsd + ledger.weeklyUsd;
 
   return {
     timestamp: now.toISOString(),
     dailyUsd,
     weeklyUsd,
-    breakdown: {
-      gemini: {
-        dailyUsd: geminiDailyCost,
-        weeklyUsd: geminiWeeklyCost,
-        dailyTokens: gemini.dailyInput + gemini.dailyOutput,
-        weeklyTokens: gemini.weeklyInput + gemini.weeklyOutput
-      },
-      claude: {
-        dailyUsd: claude.dailyCost,
-        weeklyUsd: claude.weeklyCost
-      },
-      codex: {
-        dailyUsd: codexDailyCost,
-        weeklyUsd: codexWeeklyCost,
-        dailyTokens: codex.dailyInput + codex.dailyOutput,
-        weeklyTokens: codex.weeklyInput + codex.weeklyOutput
-      },
-      openrouter: { dailyUsd: 0, weeklyUsd: 0, dailyTokens: 0, weeklyTokens: 0 },
-      tavily: { dailyUsd: 0, weeklyUsd: 0, dailyTokens: 0, weeklyTokens: 0 },
-      brave: { dailyUsd: 0, weeklyUsd: 0, dailyTokens: 0, weeklyTokens: 0 },
-      exa: { dailyUsd: 0, weeklyUsd: 0, dailyTokens: 0, weeklyTokens: 0 },
-      serper: { dailyUsd: 0, weeklyUsd: 0, dailyTokens: 0, weeklyTokens: 0 }
-    }
+    breakdown: { claude, codex, metered: ledger },
   };
 }
 
-export function syncUsageLedger(pricingMap) {
-  // Currently a no-op hook for future backend usage ledger syncing.
+export function syncUsageLedger() {
+  return calculateCurrentCost();
 }
 
-/**
- * Safely load and parse budget.yml config.
- *
- * @param {string} configPath
- * @returns {object} Budget config structure.
- */
 export function loadBudgetConfig(configPath) {
   if (!fs.existsSync(configPath)) return {};
   try {
-    const raw = fs.readFileSync(configPath, 'utf8');
-    return yaml.parse(raw) || {};
+    return yaml.parse(fs.readFileSync(configPath, 'utf8')) || {};
   } catch (err) {
     logger.warn('usage-tracker', `Failed to parse budget config at ${configPath}: ${err.message}`);
     return {};
   }
 }
 
-/**
- * Checks if the current token/dollar spend exceeds safety limits in budget.yml.
- * Throws a budget exhaustion error if caps are breached.
- *
- * @param {string} configPath - Path to the budget.yml config file.
- */
-export function checkBudgetSafety(configPath) {
+function sendBudgetAlert(title, message) {
   try {
-    let resolvedPath = configPath;
-    if (!resolvedPath || !fs.existsSync(resolvedPath)) {
-      // Fallback 1: workspace root config
-      const workspacePath = path.join(process.cwd(), 'config', 'budget.yml');
-      if (fs.existsSync(workspacePath)) {
-        resolvedPath = workspacePath;
-      } else {
-        // Fallback 2: agentDir config
-        const agentHomePath = path.join(brainDir, 'config', 'budget.yml');
-        if (fs.existsSync(agentHomePath)) {
-          resolvedPath = agentHomePath;
-        }
-      }
-    }
+    execFileSync(process.env.TOTAL_RECALL_BIN || 'total-recall', [
+      'alerts', 'send', '--title', title, '--message', message,
+      '--severity', 'critical', '--source', 'usage-tracker',
+      '--event-id', `budget-breach-${new Date().toISOString().slice(0, 10)}`,
+    ], { stdio: 'pipe', timeout: 10000 });
+  } catch { /* alert delivery must not mask the budget error */ }
+}
 
-    if (!resolvedPath || !fs.existsSync(resolvedPath)) {
-      logger.warn('usage-tracker', `Budget config not found, bypassing safety check.`);
-      return;
-    }
+export function checkBudgetSafety(configPath, { home = os.homedir(), alert = true } = {}) {
+  let resolvedPath = configPath;
+  if (!resolvedPath || !fs.existsSync(resolvedPath)) {
+    const workspacePath = path.join(process.cwd(), 'config', 'budget.yml');
+    const agentHomePath = path.join(brainDir, 'config', 'budget.yml');
+    if (fs.existsSync(workspacePath)) resolvedPath = workspacePath;
+    else if (fs.existsSync(agentHomePath)) resolvedPath = agentHomePath;
+  }
+  if (!resolvedPath || !fs.existsSync(resolvedPath)) return;
 
-    const config = loadBudgetConfig(resolvedPath);
-    if (!config.budget || config.budget.enabled === false) {
-      return;
-    }
+  const config = loadBudgetConfig(resolvedPath);
+  if (!config.budget || config.budget.enabled === false) return;
 
-    const { daily_cap_usd, weekly_cap_usd } = config.budget;
-    const usage = calculateCurrentCost();
+  const { daily_cap_usd, weekly_cap_usd } = config.budget;
+  const usage = calculateCurrentCost({ home });
 
-    if (daily_cap_usd !== undefined && usage.dailyUsd > daily_cap_usd) {
-      const errorMsg = `Budget safety limit reached! Daily spend of $${usage.dailyUsd.toFixed(4)} exceeds the cap of $${daily_cap_usd.toFixed(4)}. Dispatch blocked.`;
-      logger.error('usage-tracker', errorMsg);
-      throw new Error(errorMsg);
-    }
-
-    if (weekly_cap_usd !== undefined && usage.weeklyUsd > weekly_cap_usd) {
-      const errorMsg = `Budget safety limit reached! Weekly spend of $${usage.weeklyUsd.toFixed(4)} exceeds the cap of $${weekly_cap_usd.toFixed(4)}. Dispatch blocked.`;
-      logger.error('usage-tracker', errorMsg);
-      throw new Error(errorMsg);
-    }
-
-    logger.info('usage-tracker', `Spend within limits. Daily: $${usage.dailyUsd.toFixed(4)} / $${daily_cap_usd?.toFixed(4) || 'N/A'}. Weekly: $${usage.weeklyUsd.toFixed(4)} / $${weekly_cap_usd?.toFixed(4) || 'N/A'}.`);
-  } catch (err) {
-    if (err.message.includes('Budget safety limit reached')) {
-      throw err;
-    }
-    logger.warn('usage-tracker', `Error executing safety check: ${err.message}. Safeguard bypassed.`);
+  if (daily_cap_usd !== undefined && usage.dailyUsd > daily_cap_usd) {
+    const errorMsg = `Budget safety limit reached! Daily spend of $${usage.dailyUsd.toFixed(4)} exceeds the cap of $${daily_cap_usd.toFixed(4)}. Dispatch blocked.`;
+    logger.error('usage-tracker', errorMsg);
+    if (alert) sendBudgetAlert('Total Recall Daily Budget Breached', errorMsg);
+    throw new Error(errorMsg);
+  }
+  if (weekly_cap_usd !== undefined && usage.weeklyUsd > weekly_cap_usd) {
+    const errorMsg = `Budget safety limit reached! Weekly spend of $${usage.weeklyUsd.toFixed(4)} exceeds the cap of $${weekly_cap_usd.toFixed(4)}. Dispatch blocked.`;
+    logger.error('usage-tracker', errorMsg);
+    if (alert) sendBudgetAlert('Total Recall Weekly Budget Breached', errorMsg);
+    throw new Error(errorMsg);
   }
 }

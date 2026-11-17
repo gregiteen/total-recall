@@ -6,6 +6,7 @@ import { getActiveAdapters, inspectAgents } from './worker.mjs';
 import { dispatchTask } from './compat-harness.mjs';
 import { INTERNAL_JOB_MARKER } from './session/run.mjs';
 import { readCodexRateLimits } from './telemetry.mjs';
+import { enforceVelocityCircuitBreaker } from './alerts.mjs';
 import { readIncludedPolicy } from './included-usage.mjs';
 
 // One reasoning generation is bounded; the reasoning config may lower or raise it.
@@ -148,6 +149,7 @@ export async function checkRuntimeHealth(config, { inspect = inspectAgents } = {
 
 export async function callLocalRuntime(prompt, system, config, dependencies = {}) {
   if (typeof prompt !== 'string' || !prompt.trim()) throw new Error('A nonempty reasoning task is required');
+  await (dependencies.enforceBreaker || enforceVelocityCircuitBreaker)({ kind: 'reasoning' });
   config ||= loadRuntimeConfig();
   const text = `${INTERNAL_JOB_MARKER}\n${system ? `${system}\n\n---\n\n${prompt}` : prompt}`;
   const agents = (config.agents || []).filter(agent => agent.enabled !== false).sort((a, b) => a.priority - b.priority);

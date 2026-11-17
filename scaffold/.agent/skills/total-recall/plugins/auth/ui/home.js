@@ -324,6 +324,35 @@ template.innerHTML = `
     .state-attention { color: #fcd34d; font-weight: 600; }
     [role="alert"] { color: #fca5a5; }
     #audit-result { margin: 10px 0 0; font-size: 0.88rem; }
+    .budget-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+      gap: 12px;
+      margin-bottom: 18px;
+    }
+    .signin-card dd.stat-sub {
+      display: grid;
+      gap: 6px;
+      font-size: 0.78rem;
+      font-weight: 400;
+      color: var(--color-muted, #9ec0ac);
+    }
+    .meter {
+      height: 8px;
+      border-radius: 999px;
+      background: rgba(148, 163, 184, 0.16);
+      overflow: hidden;
+    }
+    .meter span {
+      display: block;
+      height: 100%;
+      width: 0;
+      background: #34d399;
+    }
+    .meter.over span { background: #f87171; }
+    .meter.near span { background: #fbbf24; }
+    #budget-breaches { margin: 0 0 16px; padding-inline-start: 18px; color: #fca5a5; }
+    #provider-keys-heading { margin: 4px 0 10px; }
     [hidden] { display: none !important; }
   </style>
   <main aria-label="Auth &amp; Secrets">
@@ -354,6 +383,7 @@ template.innerHTML = `
       <button type="button" data-view="brains" aria-pressed="false">Brains</button>
       <button type="button" data-view="machines" aria-pressed="false">Machines</button>
       <button type="button" data-view="sign-in" aria-pressed="false">Sign-in &amp; audit</button>
+      <button type="button" data-view="budget" aria-pressed="false">Budget &amp; key caps</button>
       <button type="button" id="refresh">Refresh</button>
     </nav>
     <section class="body" id="inventory" aria-label="Inventory">
@@ -382,6 +412,28 @@ template.innerHTML = `
         </div>
         <button type="button" class="primary" id="audit">Run baseline audit</button>
       </div>
+    </section>
+    <section class="body" id="budget" aria-label="Budget and key caps" hidden>
+      <div class="tools">
+        <span class="count-pill" id="budget-summary" role="status">Not checked</span>
+        <button type="button" class="primary" id="budget-check">Check spend and caps</button>
+      </div>
+      <p id="budget-problem" role="alert" hidden></p>
+      <dl class="budget-grid" aria-live="polite">
+        <div class="signin-card">
+          <dt>Daily spend</dt><dd id="budget-daily">—</dd>
+          <dd class="stat-sub"><div class="meter" id="budget-daily-meter"><span></span></div><span id="budget-daily-sub">Cap unreported</span></dd>
+        </div>
+        <div class="signin-card">
+          <dt>Weekly spend</dt><dd id="budget-weekly">—</dd>
+          <dd class="stat-sub"><div class="meter" id="budget-weekly-meter"><span></span></div><span id="budget-weekly-sub">Cap unreported</span></dd>
+        </div>
+      </dl>
+      <ul id="budget-breaches" aria-label="Cap breaches" hidden></ul>
+      <h2 id="provider-keys-heading">OpenRouter key limits</h2>
+      <p class="muted" id="provider-keys-summary" role="status" style="margin-bottom:10px">Not checked</p>
+      <p id="provider-keys-problem" role="alert" hidden></p>
+      <div class="table" id="provider-keys-table" role="region" aria-label="OpenRouter keys" tabindex="0" hidden></div>
     </section>
     <dialog id="credential-dialog" aria-labelledby="credential-heading">
       <h2 id="credential-heading">Edit credential</h2>
@@ -412,6 +464,24 @@ const count = value => Number.isSafeInteger(value) && value >= 0;
 const date = value => typeof value === 'string' && Number.isFinite(Date.parse(value))
   ? new Intl.DateTimeFormat(undefined, { dateStyle: 'medium' }).format(new Date(value)) : 'Unscheduled';
 const state = (value, positive, negative) => value === true ? positive : value === false ? negative : 'Unreported';
+
+const amount = value => typeof value === 'number' && Number.isFinite(value);
+const usd = value => amount(value)
+  ? new Intl.NumberFormat(undefined, { style: 'currency', currency: 'USD', maximumFractionDigits: value < 1 ? 4 : 2 }).format(value)
+  : 'Unreported';
+
+// The host resolves parsed JSON, a { code, output } run record, or rejects with the CLI output.
+// budget-check exits 1 when a cap is breached, so a parseable report is still a result.
+const report = async run => {
+  let result;
+  try { result = await run(); }
+  catch (error) {
+    try { return JSON.parse(error.message); } catch { throw error; }
+  }
+  if (result && typeof result.output === 'string') return JSON.parse(result.output);
+  if (result && 'code' in result && 'output' in result) return result.output;
+  return result;
+};
 
 const makePill = (text, tone) => {
   const span = document.createElement('span');
@@ -520,6 +590,7 @@ class AuthHome extends HTMLElement {
     this.attachShadow({ mode: 'open' }).append(template.content.cloneNode(true));
     this.field('refresh').addEventListener('click', () => void this.load());
     this.field('audit').addEventListener('click', () => void this.audit());
+    this.field('budget-check').addEventListener('click', () => void this.loadBudget());
     this.field('search').addEventListener('input', () => this.renderInventory());
     this.field('repo-filter').addEventListener('change', () => this.renderInventory());
     this.field('credential-close').addEventListener('click', () => this.field('credential-dialog').close());
@@ -589,10 +660,12 @@ class AuthHome extends HTMLElement {
 
   renderInventory() {
     this.updateSummaryCards();
-    const signing = this.activeView === 'sign-in';
-    this.field('sign-in').hidden = !signing;
-    this.field('inventory').hidden = signing;
-    if (signing) return;
+    const panel = !views[this.activeView];
+    this.field('sign-in').hidden = this.activeView !== 'sign-in';
+    this.field('budget').hidden = this.activeView !== 'budget';
+    this.field('inventory').hidden = panel;
+    if (this.activeView === 'budget' && !this.budgetChecked) void this.loadBudget();
+    if (panel) return;
 
     const view = views[this.activeView];
     const result = this.inventory[this.activeView];
@@ -731,6 +804,7 @@ class AuthHome extends HTMLElement {
     if (button.disabled) return;
     button.disabled = true;
     this.inventory = {};
+    this.budgetChecked = false;
     this.renderInventory();
     await Promise.all([
       ...Object.keys(views).map(async resource => {
@@ -784,6 +858,132 @@ class AuthHome extends HTMLElement {
       result.textContent = 'Baseline audit unavailable. Retry or run auth audit in the terminal.';
       result.className = 'state-attention';
     } finally { button.disabled = false; }
+  }
+
+  async loadBudget() {
+    const button = this.field('budget-check');
+    if (button.disabled) return;
+    button.disabled = true;
+    this.budgetChecked = true;
+    this.field('budget-summary').textContent = 'Checking spend…';
+    this.field('provider-keys-summary').textContent = 'Reading OpenRouter keys…';
+    const [budget, keys] = await Promise.allSettled([
+      report(() => this.host.run('secret', ['budget-check', '--json'])),
+      report(() => this.host.run('secret', ['provider-keys', 'openrouter', '--json'])),
+    ]);
+    this.renderBudget(budget);
+    this.renderProviderKeys(keys);
+    button.disabled = false;
+  }
+
+  renderSpend(scope, spend, cap) {
+    const spent = spend?.cost_usd;
+    const capped = amount(cap) && cap > 0;
+    const share = capped && amount(spent) ? spent / cap : 0;
+    this.field(`budget-${scope}`).textContent = capped ? `${usd(spent)} of ${usd(cap)}` : usd(spent);
+    const meter = this.field(`budget-${scope}-meter`);
+    meter.classList.toggle('over', share >= 1);
+    meter.classList.toggle('near', share >= 0.8 && share < 1);
+    meter.firstElementChild.style.width = `${Math.min(share, 1) * 100}%`;
+    meter.setAttribute('role', 'meter');
+    meter.setAttribute('aria-label', `${scope} spend against cap`);
+    meter.setAttribute('aria-valuenow', String(Math.round(share * 100)));
+    const events = count(spend?.events) ? `${spend.events} metered ${spend.events === 1 ? 'call' : 'calls'}` : 'No usage events';
+    this.field(`budget-${scope}-sub`).textContent = capped
+      ? `${Math.round(share * 100)}% of cap · ${events}` : `No cap set · ${events}`;
+  }
+
+  renderBudget(settled) {
+    const problem = this.field('budget-problem');
+    const summary = this.field('budget-summary');
+    const list = this.field('budget-breaches');
+    const result = settled.status === 'fulfilled' ? settled.value : null;
+    const valid = typeof result?.ok === 'boolean' && Array.isArray(result.breaches);
+    problem.hidden = valid;
+    problem.textContent = valid ? '' : `Could not check spend. ${settled.reason?.message || 'Invalid budget-check response'}`;
+    list.replaceChildren();
+    list.hidden = true;
+    if (!valid) { summary.textContent = 'Spend unavailable'; return; }
+    const caps = result.budget || {};
+    this.renderSpend('daily', result.daily, Number(caps.daily_cap_usd));
+    this.renderSpend('weekly', result.weekly, Number(caps.weekly_cap_usd));
+    summary.textContent = result.ok ? 'Within all caps'
+      : `${result.breaches.length} ${result.breaches.length === 1 ? 'cap' : 'caps'} reached`;
+    for (const breach of result.breaches) {
+      const scope = String(breach.scope || '');
+      const name = scope === 'global:daily' ? 'Daily cap' : scope === 'global:weekly' ? 'Weekly cap'
+        : scope.startsWith('key:') ? `${scope.slice(4)} monthly cap` : scope;
+      const item = document.createElement('li');
+      item.textContent = `${name}: ${usd(breach.cost_usd)} spent against ${usd(breach.cap_usd)}`;
+      list.append(item);
+    }
+    list.hidden = !result.breaches.length;
+  }
+
+  renderProviderKeys(settled) {
+    const problem = this.field('provider-keys-problem');
+    const summary = this.field('provider-keys-summary');
+    const region = this.field('provider-keys-table');
+    const result = settled.status === 'fulfilled' ? settled.value : null;
+    const valid = result?.ok === true && Array.isArray(result.keys);
+    region.hidden = true;
+    region.replaceChildren();
+    problem.hidden = valid;
+    problem.textContent = valid ? ''
+      : `Could not read OpenRouter keys. ${result?.error || settled.reason?.message || 'Invalid provider-keys response'}`;
+    if (!valid) { summary.textContent = 'Key limits unavailable'; return; }
+    const orphans = result.keys.filter(key => !Array.isArray(key.stored_as) || !key.stored_as.length);
+    const uncapped = result.keys.filter(key => !amount(key.limit) && !key.disabled);
+    summary.textContent = `${result.keys.length} keys at OpenRouter · ${orphans.length} not in store · ${uncapped.length} active without a limit`;
+    if (!result.keys.length) return;
+    const table = document.createElement('table');
+    table.setAttribute('aria-label', 'OpenRouter keys');
+    const heading = table.createTHead().insertRow();
+    for (const title of ['Key', 'Stored as', 'Limit', 'Remaining', 'Usage (day · week · month)', 'State']) {
+      const cell = document.createElement('th');
+      cell.scope = 'col';
+      cell.textContent = title;
+      heading.append(cell);
+    }
+    const body = table.createTBody();
+    for (const key of result.keys) {
+      const entry = body.insertRow();
+      const nameCell = entry.insertCell();
+      const nameSpan = document.createElement('span');
+      nameSpan.className = 'key-name';
+      nameSpan.textContent = key.name || key.hash || 'Unnamed';
+      nameCell.append(nameSpan);
+      if (key.label) {
+        const labelSpan = document.createElement('span');
+        labelSpan.className = 'key-label';
+        labelSpan.textContent = key.label;
+        nameCell.append(labelSpan);
+      }
+      const storedCell = entry.insertCell();
+      if (Array.isArray(key.stored_as) && key.stored_as.length) {
+        const list = document.createElement('div');
+        list.className = 'chip-list';
+        for (const stored of key.stored_as) {
+          const chip = document.createElement('span');
+          chip.className = 'chip';
+          chip.textContent = stored;
+          list.append(chip);
+        }
+        storedCell.append(list);
+      } else {
+        storedCell.append(makePill('Not in store', 'warn'));
+      }
+      const limitCell = entry.insertCell();
+      if (amount(key.limit)) limitCell.textContent = key.limit_reset ? `${usd(key.limit)} / ${key.limit_reset}` : usd(key.limit);
+      else limitCell.append(makePill('No limit', key.disabled ? 'muted' : 'warn'));
+      entry.insertCell().textContent = amount(key.limit_remaining) ? usd(key.limit_remaining) : '—';
+      entry.insertCell().textContent = [key.usage_daily, key.usage_weekly, key.usage_monthly].map(usd).join(' · ');
+      const exhausted = amount(key.limit) && amount(key.limit_remaining) && key.limit_remaining <= 0;
+      entry.insertCell().append(key.disabled ? makePill('Disabled', 'muted')
+        : exhausted ? makePill('Limit reached', 'warn') : makePill('Active', 'ready'));
+    }
+    region.append(table);
+    region.hidden = false;
   }
 }
 

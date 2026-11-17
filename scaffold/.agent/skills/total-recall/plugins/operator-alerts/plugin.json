@@ -1,0 +1,135 @@
+{
+  "$schema": "https://github.com/gregiteen/total-recall/blob/main/metadata.plugin.schema.json",
+  "id": "operator-alerts",
+  "name": "Operator Alerts",
+  "version": "1.1.0",
+  "description": "Operator alert dispatcher across desktop notifications, SMS, and webhook endpoints with quiet hours.",
+  "author": "Total Recall",
+  "license": "MIT",
+  "use_cases": [
+    "alerting"
+  ],
+  "gate": {
+    "tasks": [
+      "Send the operator an alert",
+      "Test alert channels",
+      "Read the alert log"
+    ],
+    "owned_commands": [
+      {
+        "pattern": "(terminal-notifier|notify-send)\\s",
+        "use": "total-recall alerts send --title <title> --message <message>"
+      }
+    ]
+  },
+  "cli": {
+    "command": "alerts",
+    "handler": "./cli.mjs",
+    "subcommands": [
+      {
+        "name": "send",
+        "description": "Send an alert (--dry-run to resolve config without sending)",
+        "effect": "send",
+        "sensitive_output": true
+      },
+      {
+        "name": "test",
+        "description": "Dry-run every configured channel",
+        "effect": "read",
+        "sensitive_output": true
+      },
+      {
+        "name": "config",
+        "description": "Read merged settings or save channel settings through SSSS",
+        "effect": "write",
+        "sensitive_output": true
+      },
+      {
+        "name": "log",
+        "description": "Recent sends from the ledger",
+        "effect": "read",
+        "sensitive_output": true
+      },
+      {
+        "name": "status",
+        "description": "Read configured routes and redacted receipts with an optional local dry run",
+        "effect": "read",
+        "output": "json",
+        "args": [
+          {
+            "name": "check",
+            "flag": "--check",
+            "type": "boolean",
+            "label": "Run dry check",
+            "description": "Run a local dry run of the configured routes"
+          }
+        ]
+      }
+    ]
+  },
+  "ui": {
+    "home": "home",
+    "design_tokens": "DESIGN.md",
+    "elements": [
+      {
+        "id": "home",
+        "kind": "panel",
+        "tag": "tr-operator-alerts-home",
+        "module": "ui/home.js",
+        "description": "Dispatch Watch"
+      }
+    ]
+  },
+  "auth": {
+    "plugin": "auth",
+    "methods": [
+      "passkey",
+      "google-oauth2"
+    ],
+    "session_verification": true
+  },
+  "deploy": {
+    "targets": [
+      "ssss-app",
+      "nextjs",
+      "react",
+      "flask"
+    ],
+    "required_ssss_version": ">=0.9.3",
+    "access_grants": [
+      "auth:session:verify",
+      "ssss:vault:read",
+      "ssss:vault:write",
+      "ssss:events:append"
+    ]
+  },
+  "branding": {
+    "name": "Operator Alerts",
+    "color": "#ea580c",
+    "accent": "#f97316",
+    "badge": "Operator Dispatch",
+    "font": "space-grotesk"
+  },
+  "status": {
+    "command": "status",
+    "refresh_seconds": 60
+  },
+  "distribution": {
+    "tier": "official",
+    "license": "open"
+  },
+  "reuse": {
+    "commands": [
+      "total-recall ssss status",
+      "total-recall auth session"
+    ],
+    "owned": "Operator alert rules, delivery history, and multi-channel incident notification dispatch."
+  },
+  "skills": [
+    {
+      "id": "operator-alerts",
+      "path": "./skills/operator-alerts/SKILL.md",
+      "description": "Operator alert dispatcher across desktop notifications, SMS, and webhook endpoints with quiet hours."
+    }
+  ]
+}

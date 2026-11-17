@@ -13,9 +13,21 @@
   "additionalProperties": true,
   "not": {
     "anyOf": [
-      { "required": ["card"] },
-      { "required": ["card_face"] },
-      { "required": ["card_layout"] }
+      {
+        "required": [
+          "card"
+        ]
+      },
+      {
+        "required": [
+          "card_face"
+        ]
+      },
+      {
+        "required": [
+          "card_layout"
+        ]
+      }
     ]
   },
   "properties": {
@@ -139,7 +151,10 @@
               "terminal_only_args": {
                 "type": "array",
                 "uniqueItems": true,
-                "items": { "type": "string", "pattern": "^--[a-z][a-z0-9-]{0,63}$" },
+                "items": {
+                  "type": "string",
+                  "pattern": "^--[a-z][a-z0-9-]{0,63}$"
+                },
                 "description": "Long flags reserved for the owning terminal CLI. Browser dispatch rejects separate and equals-form values."
               },
               "terminal_only": {
@@ -806,10 +821,18 @@
           "description": "WebSocket paths dispatched on the existing HTTP server to a declared module's handleUpgrade export.",
           "items": {
             "type": "object",
-            "required": ["path", "module"],
+            "required": [
+              "path",
+              "module"
+            ],
             "properties": {
-              "path": { "type": "string", "pattern": "^/[A-Za-z0-9_/-]*$" },
-              "module": { "type": "string" }
+              "path": {
+                "type": "string",
+                "pattern": "^/[A-Za-z0-9_/-]*$"
+              },
+              "module": {
+                "type": "string"
+              }
             },
             "additionalProperties": false
           }
@@ -958,6 +981,75 @@
             "use": {
               "type": "string",
               "description": "The routing command to show an agent."
+            }
+          }
+        }
+      }
+    },
+    "alerts": {
+      "type": "object",
+      "description": "Operator alerting contract: declares alert events, gateway channels, and automated check/failure routing through operator-alerts.",
+      "required": [
+        "plugin"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "plugin": {
+          "const": "operator-alerts"
+        },
+        "command": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9-]{0,63}$",
+          "description": "Declared CLI subcommand on this plugin that evaluates alert conditions"
+        },
+        "channels": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "enum": [
+              "os",
+              "telegram",
+              "sms",
+              "email",
+              "slack",
+              "discord",
+              "webhook",
+              "github"
+            ]
+          },
+          "description": "Target gateway channels; when omitted, operator-alerts broadcasts to all configured channels"
+        },
+        "on_task_failure": {
+          "type": "boolean",
+          "default": true,
+          "description": "Dispatch a high-severity alert via operator-alerts when a scheduled task of this plugin fails"
+        },
+        "events": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "id",
+              "severity",
+              "description"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "id": {
+                "type": "string",
+                "pattern": "^[a-z][a-z0-9-]{0,63}$"
+              },
+              "severity": {
+                "enum": [
+                  "info",
+                  "high",
+                  "critical"
+                ]
+              },
+              "description": {
+                "type": "string",
+                "minLength": 1
+              }
             }
           }
         }
