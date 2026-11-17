@@ -72,4 +72,63 @@ describe('Usage Tracker & Budget Safety', () => {
     fs.writeFileSync(configPath, 'budget:\n  daily_cap_usd: 10.00\n  weekly_cap_usd: 50.00\n  enabled: true\n');
     expect(() => checkBudgetSafety(configPath, { home: tempHome, alert: false })).not.toThrow();
   });
+
+  it('keeps native API-equivalent estimates in reporting without charging them to the dollar cap', () => {
+    const configPath = path.join(tempHome, 'budget.yml');
+    fs.writeFileSync(configPath, 'budget:\n  daily_cap_usd: 1\n  weekly_cap_usd: 5\n  enabled: true\n');
+    const now = new Date().toISOString();
+    const claudeDir = path.join(tempHome, '.claude', 'projects', 'included');
+    fs.mkdirSync(claudeDir, { recursive: true });
+    fs.writeFileSync(path.join(claudeDir, 'session.jsonl'), JSON.stringify({
+      type: 'assistant', timestamp: now,
+      message: { id: 'native', usage: { input_tokens: 5000000, output_tokens: 1000000 } },
+    }) + '\n');
+    const codexDir = path.join(tempHome, '.codex', 'sessions');
+    fs.mkdirSync(codexDir, { recursive: true });
+    fs.writeFileSync(path.join(codexDir, 'session.jsonl'), [
+      { type: 'session_meta', timestamp: now, payload: {} },
+      { type: 'event_msg', timestamp: now, payload: { type: 'token_count', info: {
+        total_token_usage: { input_tokens: 5000000, output_tokens: 1000000 },
+      } } },
+    ].map(row => JSON.stringify(row)).join('\n') + '\n');
+    const ledgerDir = path.join(tempHome, '.agent', 'skills', 'total-recall', 'logs');
+    fs.mkdirSync(ledgerDir, { recursive: true });
+    const ledgerFile = path.join(ledgerDir, 'usage.jsonl');
+    fs.writeFileSync(ledgerFile, JSON.stringify({ ts: now, cost_usd: 0.25 }) + '\n');
+
+    const usage = calculateCurrentCost({ home: tempHome });
+    expect(usage.dailyUsd).toBeGreaterThan(1);
+    expect(usage.breakdown.claude.dailyUsd).toBeGreaterThan(1);
+    expect(usage.breakdown.codex.dailyUsd).toBeGreaterThan(1);
+    expect(usage.breakdown.metered.dailyUsd).toBe(0.25);
+    expect(() => checkBudgetSafety(configPath, { home: tempHome, alert: false })).not.toThrow();
+
+    fs.appendFileSync(ledgerFile, JSON.stringify({ ts: now, cost_usd: 1 }) + '\n');
+    expect(() => checkBudgetSafety(configPath, { home: tempHome, alert: false }))
+      .toThrowError(/Daily spend of \$1\.2500/);
+  });
+
+  it('still blocks a weekly metered breach when daily spend is under its cap', () => {
+    const configPath = path.join(tempHome, 'budget.yml');
+    fs.writeFileSync(configPath, 'budget:\n  daily_cap_usd: 1\n  weekly_cap_usd: 5\n  enabled: true\n');
+    const logsDir = path.join(tempHome, '.agent', 'skills', 'total-recall', 'logs');
+    fs.mkdirSync(logsDir, { recursive: true });
+    fs.writeFileSync(path.join(logsDir, 'usage.jsonl'), [
+      { ts: new Date(Date.now() - 2 * 86400000).toISOString(), cost_usd: 6 },
+      { ts: new Date().toISOString(), cost_usd: 0.25 },
+    ].map(row => JSON.stringify(row)).join('\n') + '\n');
+    expect(() => checkBudgetSafety(configPath, { home: tempHome, alert: false }))
+      .toThrowError(/Weekly spend of \$6\.2500/);
+  });
+
+  it('preserves disabled budget configuration', () => {
+    const configPath = path.join(tempHome, 'budget.yml');
+    fs.writeFileSync(configPath, 'budget:\n  daily_cap_usd: 0\n  enabled: false\n');
+    const logsDir = path.join(tempHome, '.agent', 'skills', 'total-recall', 'logs');
+    fs.mkdirSync(logsDir, { recursive: true });
+    fs.writeFileSync(path.join(logsDir, 'usage.jsonl'), JSON.stringify({
+      ts: new Date().toISOString(), cost_usd: 10,
+    }) + '\n');
+    expect(() => checkBudgetSafety(configPath, { home: tempHome, alert: false })).not.toThrow();
+  });
 });

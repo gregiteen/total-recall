@@ -200,7 +200,10 @@ export function checkBudgetSafety(configPath, { home = os.homedir(), alert = tru
   if (!config.budget || config.budget.enabled === false) return;
 
   const { daily_cap_usd, weekly_cap_usd } = config.budget;
-  const usage = calculateCurrentCost({ home });
+  // Native CLI transcript costs are API-equivalent estimates, including work
+  // covered by subscriptions. Only Auth's metered ledger records dollar spend.
+  // Included-plan admission and allowance limits belong to Metaharness.
+  const usage = calculateCurrentCost({ home }).breakdown.metered;
 
   if (daily_cap_usd !== undefined && usage.dailyUsd > daily_cap_usd) {
     const errorMsg = `Budget safety limit reached! Daily spend of $${usage.dailyUsd.toFixed(4)} exceeds the cap of $${daily_cap_usd.toFixed(4)}. Dispatch blocked.`;
