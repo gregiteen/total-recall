@@ -100,35 +100,37 @@ function systemdStatus() {
 
 // ─── launchd-backed commands (macOS) ────────────────────────────────────────────
 
-function runLaunchctl(...args) {
-  return spawnSync('launchctl', args, { stdio: 'inherit' });
+const LAUNCHD_LABEL = 'com.totalrecall.daemon';
+const launchdDomain = () => `gui/${process.getuid()}`;
+const launchdTarget = () => `${launchdDomain()}/${LAUNCHD_LABEL}`;
+const launchdLoaded = () => spawnSync('launchctl', ['print', launchdTarget()], { stdio: 'ignore' }).status === 0;
+
+function launchctlOrThrow(args, action) {
+  const result = spawnSync('launchctl', args, { encoding: 'utf8' });
+  if (result.error || result.status !== 0) {
+    throw new Error(`launchctl ${action} failed: ${(result.stderr || result.error?.message || `exit ${result.status}`).trim()}`);
+  }
 }
 
+/** Start re-enables the job explicitly, loads it if needed, then starts it. */
 function launchctlStart() {
-  const plist = launchAgentPlist('com.totalrecall.daemon');
-  console.error('  Starting com.totalrecall.daemon via launchctl...');
-  const loadResult = spawnSync('launchctl', ['load', '-w', plist], { stdio: 'pipe' });
-  if (loadResult.status === 0) {
-    console.error('  ✅ Daemon started');
-    return;
-  }
-  // Already loaded — kick it
-  const startResult = runLaunchctl('start', 'com.totalrecall.daemon');
-  if (startResult.status === 0) {
-    console.error('  ✅ Daemon started');
-  } else {
-    console.error('  ⚠️  launchctl start failed');
-  }
+  console.error(`  Starting ${LAUNCHD_LABEL} via launchctl...`);
+  launchctlOrThrow(['enable', launchdTarget()], 'enable');
+  if (!launchdLoaded()) launchctlOrThrow(['bootstrap', launchdDomain(), launchAgentPlist(LAUNCHD_LABEL)], 'bootstrap');
+  launchctlOrThrow(['kickstart', launchdTarget()], 'kickstart');
+  console.error('  ✅ Daemon started');
 }
 
+/**
+ * KeepAlive restarts a job that is only stopped, so stop unloads it and disables
+ * it until an explicit start or ensure. Any failure is an error, never a warning.
+ */
 function launchctlStop() {
-  console.error('  Stopping com.totalrecall.daemon via launchctl...');
-  const result = runLaunchctl('stop', 'com.totalrecall.daemon');
-  if (result.status === 0) {
-    console.error('  ✅ Daemon stopped');
-  } else {
-    console.error('  ⚠️  launchctl stop failed');
-  }
+  console.error(`  Stopping ${LAUNCHD_LABEL} via launchctl...`);
+  launchctlOrThrow(['disable', launchdTarget()], 'disable');
+  if (launchdLoaded()) launchctlOrThrow(['bootout', launchdTarget()], 'bootout');
+  if (launchdLoaded()) throw new Error(`${LAUNCHD_LABEL} is still loaded after bootout`);
+  console.error('  ✅ Daemon stopped and unloaded');
 }
 
 function launchctlStatus() {
@@ -224,6 +226,9 @@ export default async function daemon(args) {
         // launchd reports is the one holding the brain lock.
         const label='com.totalrecall.daemon',target=`gui/${process.getuid()}/${label}`;
         const launchdPid=()=>{const r=spawnSync('launchctl',['list',label],{encoding:'utf8'});const m=r.status===0&&/"PID"\s*=\s*(\d+)/.exec(r.stdout||'');return m?Number(m[1]):0;};
+        // stop disables the job; ensure is an explicit start, so it re-enables it.
+        const enable=spawnSync('launchctl',['enable',target],{encoding:'utf8'});
+        if(enable.status!==0)throw new Error(`Cannot enable ${label}: ${(enable.stderr||'').trim()}`);
         if(spawnSync('launchctl',['list',label],{stdio:'ignore'}).status!==0){
           const boot=spawnSync('launchctl',['bootstrap',`gui/${process.getuid()}`,launchAgentPlist(label)],{encoding:'utf8'});
           if(boot.status!==0)throw new Error(`Cannot load ${label}: ${(boot.stderr||'').trim()}`);

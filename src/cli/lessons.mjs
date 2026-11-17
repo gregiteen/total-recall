@@ -4,7 +4,7 @@ import crypto from 'node:crypto';
 import { atomicWrite } from '../core/vault.mjs';
 import { parseLayerFlag, resolveBrainDir } from './agent-dir.mjs';
 import { tickLessons, enqueueSessionReviews } from '../core/lessons.mjs';
-import { isInternalJobEnv, isAutomaticLessonTask, readLessonControl, setLessonsPaused } from '../core/internal-sessions.mjs';
+import { isInternalJobEnv, isAutomaticLessonTask, isLessonsPaused, setLessonsPaused } from '../core/internal-sessions.mjs';
 import { listTasks, cancelTask, resolveQueueDir } from '../core/task-envelope.mjs';
 
 /** Count, and with cancel, cancel pending automatic lesson work. Sessions and memory are untouched. */
@@ -35,7 +35,7 @@ export default async function lessons(args) {
     const brainDir = resolveBrainDir(layer);
     if (command !== 'status') setLessonsPaused(brainDir, command === 'pause');
     const queue = await containLessonQueue(brainDir, { cancel: flags.includes('--cancel-pending') });
-    console.log(JSON.stringify({ brainDir, paused: readLessonControl(brainDir).paused === true, queue }));
+    console.log(JSON.stringify({ brainDir, paused: isLessonsPaused(brainDir), queue }));
     if (queue.failed.length) process.exitCode = 1;
     return;
   }

@@ -9,7 +9,9 @@ const LEGACY_ROLES = [
   'You are a Session Post-Mortem Analyst for an AI memory system called Total Recall.',
   'You are a Rule Compliance Auditor for an AI memory system.',
 ];
-const BOOTSTRAP_WRAPPER = 'Requested task:';
+// Metaharness bootstrap: the brief opens with the requester line and the task follows this line.
+const BOOTSTRAP_OPENING = 'Requester:';
+const BOOTSTRAP_WRAPPER = '\nRequested task:\n';
 // Context Codex injects as user messages before the real prompt.
 const INJECTED = /^(<environment_context>|<user_instructions>|<permissions|# AGENTS\.md instructions)/;
 
@@ -20,7 +22,7 @@ export function isInternalJobEnv(env = process.env) {
 
 function internalPrompt(text) {
   const body = text.trimStart();
-  const wrapped = body.indexOf(BOOTSTRAP_WRAPPER);
+  const wrapped = body.startsWith(BOOTSTRAP_OPENING) ? body.indexOf(BOOTSTRAP_WRAPPER) : -1;
   const candidates = [body, ...(wrapped < 0 ? [] : [body.slice(wrapped + BOOTSTRAP_WRAPPER.length).trimStart()])];
   return candidates.some(value => value.startsWith(INTERNAL_JOB_MARKER) || LEGACY_ROLES.some(role => value.startsWith(role)));
 }
@@ -51,8 +53,10 @@ export function readLessonControl(brainDir) {
   return value;
 }
 
+/** Paused, or disabled outright: either way nothing is queued, selected or run. */
 export function isLessonsPaused(brainDir) {
-  return readLessonControl(brainDir).paused === true;
+  const config = readLessonControl(brainDir);
+  return config.paused === true || config.enabled === false;
 }
 
 export function setLessonsPaused(brainDir, paused) {

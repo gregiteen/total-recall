@@ -33,7 +33,9 @@ describe('internal transcript detection', () => {
     expect(isInternalTranscript([user(`${INTERNAL_JOB_MARKER}\nSummarize.`), said('ok')])).toBe(true);
     expect(isInternalTranscript([user(`${LEGACY}\n\nYour job…`)])).toBe(true);
     expect(isInternalTranscript([user(`${COMPLIANCE}\nAudit.`)])).toBe(true);
-    expect(isInternalTranscript([user(`ready:true capsule…\nRequested task:\n${LEGACY}\n---`)])).toBe(true);
+    expect(isInternalTranscript([user(`Requester: the operator.\nready:true capsule…\nRequested task:\n${LEGACY}\n---`)])).toBe(true);
+    // Only the real bootstrap wrapper is unwrapped; an arbitrary quotation is not.
+    expect(isInternalTranscript([user(`Look at this log:\nRequested task:\n${LEGACY}`)])).toBe(false);
     expect(isInternalTranscript([user('<environment_context>cwd</environment_context>'), user(`${INTERNAL_JOB_MARKER} x`)])).toBe(true);
   });
   it('never excludes ordinary sessions that quote the prompts later or in tool output', () => {
@@ -82,6 +84,9 @@ describe('pause guards queued execution', () => {
       payload: { sessionPath: transcript('snap', [user('x')]) } }, queueDir);
     setLessonsPaused(brain, true);
     expect(isLessonsPaused(brain)).toBe(true);
+    fs.writeFileSync(path.join(brain, 'config', 'lessons.json'), JSON.stringify({ enabled: false }));
+    expect(isLessonsPaused(brain)).toBe(true);
+    setLessonsPaused(brain, true);
     expect(tickLessons({ brainDir: brain, sessionId: 's', transcriptPath: transcript('s', [user('a'), said('b')]), event: 'SessionEnd', env: {} }).skipped).toBe('paused');
     const result = await dispatchTask(getTask(queueDir, 'lesson-review-k-1-10'), { brainDir: brain, vaultDir: path.join(brain, 'vault'), runtimeConfig: {} });
     expect(result).toMatchObject({ success: false, skippedLLM: true });
@@ -90,7 +95,7 @@ describe('pause guards queued execution', () => {
     expect(getTask(queueDir, 'lesson-review-k-1-10').status).toBe('pending');
   });
   it('runPostMortem rejects internal snapshots itself, even behind a long bootstrap', async () => {
-    const snap = transcript('long', [user(`${'capsule '.repeat(2000)}\nRequested task:\n${LEGACY}`), said('{}')]);
+    const snap = transcript('long', [user(`Requester: the operator.\n${'capsule '.repeat(2000)}\nRequested task:\n${LEGACY}`), said('{}')]);
     expect(await runPostMortem(snap, { vaultDir: path.join(brain, 'vault'), inboxDir: path.join(brain, 'inbox'), runtimeConfig: { agents: [] } }))
       .toMatchObject({ skipped: 'internal-job', patterns: [] });
   });
