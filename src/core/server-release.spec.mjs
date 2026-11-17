@@ -16,6 +16,7 @@ import {
   retire,
   stage,
   status,
+  stopStrayDaemon,
   swapOffRules,
   swapOnRules,
   switchTraffic,
@@ -146,6 +147,10 @@ function setup(options) {
     pkg: { name: 'total-recall-brain', version: host.artifactVersion },
     entry: path.join(root, 'artifact', 'bin', 'total-recall-server-release.mjs'),
     moveCheckout: async ({ version }) => { host.checkoutVersion = version; host.moved = true; },
+    stopStrayDaemon: async ({ directory }) => {
+      host.commands.push(`stop stray daemon ${directory}`);
+      return host.strayDaemon ?? null;
+    },
     now: (() => { let t = 0; return () => { t += 1000; return t; }; })(),
     bootMs: 5000,
     homeBootMs: 5000,
@@ -411,6 +416,29 @@ describe('the whole swap', () => {
     expect(host.rule).toBe(true);
     expect(host.gaps).toEqual([]);
   });
+  it('stops a daemon started outside the old server before the checkout moves', async () => {
+    const { host, ctx, root } = setup();
+    host.strayDaemon = 4242;
+    await stageAndSwitch(ctx);
+    await finish(host, ctx);
+    const order = (needle) => host.commands.findIndex((line) => line.startsWith(needle));
+    expect(order(`stop stray daemon ${root}/checkout`)).toBeGreaterThan(order(`systemctl stop ${HOME_UNIT}`));
+    expect(order(`stop stray daemon ${root}/checkout`)).toBeLessThan(order(`systemctl start ${HOME_UNIT}`));
+    expect(JSON.parse(fs.readFileSync(ctx.stateFile, 'utf8')).converge.strayDaemon).toBe(4242);
+    expect(host.gaps).toEqual([]);
+  });
+  it('keeps traffic on the staged server when a daemon outside the old server will not stop', async () => {
+    const { host, ctx } = setup();
+    await stageAndSwitch(ctx);
+    await retire(retireInput, ctx);
+    const stuck = async () => { throw new Error('Daemon PID 4242, started outside total-recall-server.service, did not stop.'); };
+    await expect(converge({ ...ctx, stopStrayDaemon: stuck })).rejects.toThrow(/did not stop/);
+    host.convergeActive = false;
+    expect(host.moved).toBeUndefined();
+    expect(host.rule).toBe(true);
+    expect(host.bridge.active).toBe(true);
+    expect(host.gaps).toEqual([]);
+  });
   it('keeps traffic on the staged server when the daemon does not come back', async () => {
     const { host, ctx } = setup();
     await stageAndSwitch(ctx);
@@ -460,6 +488,47 @@ describe('the whole swap', () => {
     await stageAndSwitch(ctx);
     const first = await finish(host, ctx);
     expect(await retire(retireInput, ctx)).toEqual(first);
+  });
+});
+
+describe('stopStrayDaemon', () => {
+  const clock = () => { let t = 0; return () => { t += 1000; return t; }; };
+  const run = ({ status = 'running', exitsOn = 'SIGTERM' } = {}) => {
+    const signals = [];
+    let alive = status === 'running';
+    const seen = [];
+    const result = stopStrayDaemon({
+      directory: '/srv/checkout',
+      observe: (expectedEntry) => { seen.push(expectedEntry); return status === 'running' ? { status, pid: 77 } : { status }; },
+      kill: (pid, signal) => { signals.push([pid, signal]); if (signal === exitsOn) alive = false; },
+      isAlive: () => alive,
+      sleep: async () => {},
+      now: clock(),
+      graceMs: 3000,
+    });
+    return { result, signals, seen };
+  };
+  it('looks for the daemon running from the checkout, and leaves things alone when none is', async () => {
+    for (const status of ['stopped', 'not_started', 'conflict', 'unknown']) {
+      const { result, signals, seen } = run({ status });
+      await expect(result).resolves.toBeNull();
+      expect(signals).toEqual([]);
+      expect(seen).toEqual(['/srv/checkout/src/core/daemon-loop.mjs']);
+    }
+  });
+  it('stops a daemon running from the checkout with SIGTERM', async () => {
+    const { result, signals } = run();
+    await expect(result).resolves.toBe(77);
+    expect(signals).toEqual([[77, 'SIGTERM']]);
+  });
+  it('sends SIGKILL to a daemon that outlives the grace period', async () => {
+    const { result, signals } = run({ exitsOn: 'SIGKILL' });
+    await expect(result).resolves.toBe(77);
+    expect(signals).toEqual([[77, 'SIGTERM'], [77, 'SIGKILL']]);
+  });
+  it('fails when the daemon survives SIGKILL', async () => {
+    const { result } = run({ exitsOn: 'none' });
+    await expect(result).rejects.toThrow(/PID 77, started outside total-recall-server.service, did not stop/);
   });
 });
 

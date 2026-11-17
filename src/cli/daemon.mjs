@@ -40,6 +40,21 @@ function hasSystemd() {
   return os.platform() === 'linux' && commandExists('systemctl') && fs.existsSync('/run/systemd/system');
 }
 
+/**
+ * `ensure` stops the daemon before `systemctl enable --now` starts the unit. On a host
+ * whose daemon the brain server starts, there is no unit, so the stop left no daemon.
+ * Refuse before anything is stopped. `systemctl show` succeeds for a unit that does not
+ * exist, so read its LoadState.
+ */
+export function requireDaemonUnit(run = spawnSync) {
+  const load = run('systemctl', ['show', 'total-recall-daemon', '--property=LoadState', '--value'], { encoding: 'utf8' });
+  if (load.status !== 0) throw new Error('Cannot inspect managed daemon');
+  const state = (load.stdout || '').trim();
+  if (state !== 'loaded') {
+    throw new Error(`Daemon ensure refused: this host has no total-recall-daemon unit (LoadState ${state || 'unknown'}). Its daemon is started by the brain server, which restarts it within a minute if it stops. Nothing was stopped.`);
+  }
+}
+
 function launchAgentPlist(name) {
   return path.join(os.homedir(), 'Library', 'LaunchAgents', `${name}.plist`);
 }
@@ -246,6 +261,7 @@ export default async function daemon(args) {
         break;
       }
       if(!useSystemd)throw new Error('Managed daemon ensure needs systemd or a launchd agent on the daemon host');
+      requireDaemonUnit();
       // A detached worker can hold the same brain lock while systemd reports a
       // successful short-lived start. Stop that verified owner before takeover.
       const managed=spawnSync('systemctl',['show','total-recall-daemon','--property=MainPID','--value'],{encoding:'utf8'});

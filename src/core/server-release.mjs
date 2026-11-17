@@ -347,6 +347,9 @@ export async function converge(ctx) {
       const closedConnections = await drain(ctx, state.homePort);
       update({ phase: 'stopping the old server', closedConnections });
       must(ctx, 'systemctl', ['stop', HOME_UNIT], { timeout: 180000 });
+      update({ phase: 'stopping a daemon started outside the old server' });
+      const strayDaemon = await ctx.stopStrayDaemon({ directory: unit.workingDirectory, isAlive: ctx.isAlive, sleep: ctx.sleep, now: ctx.now });
+      if (strayDaemon) update({ strayDaemon });
       update({ phase: 'moving the checkout' });
       await ctx.moveCheckout({ directory: unit.workingDirectory, name: state.name, version: state.version, artifactRoot: ctx.packageRoot, exec: ctx.exec });
       update({ phase: 'starting the new server' });
@@ -388,6 +391,32 @@ export async function converge(ctx) {
     throw error;
   }
   return state.converge;
+}
+
+/**
+ * A daemon started outside the home unit (by hand, over SSH) is not in its control group, so
+ * stopping the unit leaves it running. The new server then finds a live daemon from the same
+ * path and keeps it, and the old code runs on behind a release that reports success. Stop it
+ * while nothing serves from the checkout, so the new server starts its own.
+ * @returns {Promise<number|null>} The PID stopped, or null when no daemon ran from the checkout.
+ */
+export async function stopStrayDaemon({ directory, isAlive, sleep, now, observe, kill = (pid, signal) => process.kill(pid, signal), graceMs = 35000, pollMs = 250 }) {
+  if (!observe) {
+    const [{ brainDir }, { observeDaemon }] = await Promise.all([import('./local-config.mjs'), import('./startup-health.mjs')]);
+    observe = (expectedEntry) => observeDaemon(brainDir, { expectedEntry });
+  }
+  const seen = observe(path.join(directory, 'src', 'core', 'daemon-loop.mjs'));
+  if (seen.status !== 'running') return null;
+  const { pid } = seen;
+  kill(pid, 'SIGTERM');
+  const deadline = now() + graceMs;
+  while (isAlive(pid) && now() < deadline) await sleep(pollMs);
+  if (isAlive(pid)) {
+    kill(pid, 'SIGKILL');
+    await sleep(pollMs);
+  }
+  if (isAlive(pid)) throw new Error(`Daemon PID ${pid}, started outside ${HOME_UNIT}, did not stop.`);
+  return pid;
 }
 
 /** Move the checkout while nothing runs from it. The dashboard is not in git, so it comes from the verified install. */
@@ -432,6 +461,7 @@ export function hostContext(overrides = {}) {
     now: Date.now,
     isAlive: (pid) => { try { process.kill(pid, 0); return true; } catch { return false; } },
     moveCheckout,
+    stopStrayDaemon,
     stateFile: '/run/total-recall-server-release.json',
     conntrackCountFile: '/proc/sys/net/netfilter/nf_conntrack_count',
     packageRoot: moduleRoot,

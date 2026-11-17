@@ -9,7 +9,7 @@ vi.mock('./agent-dir.mjs', () => ({ resolveBrainDir: () => '/fixture/brain' }));
 vi.mock('../core/daemon-control.mjs', () => ({ startDaemon: vi.fn(), stopDaemon: vi.fn(), readPid: vi.fn(), getDaemonObservation: vi.fn() }));
 import { execSync, execFileSync, spawnSync } from 'node:child_process';
 import { getDaemonObservation, startDaemon, stopDaemon } from '../core/daemon-control.mjs';
-import daemon from './daemon.mjs';
+import daemon, { requireDaemonUnit } from './daemon.mjs';
 
 describe('daemon manager ownership', () => {
   beforeEach(() => { vi.clearAllMocks(); });
@@ -60,5 +60,20 @@ describe('daemon manager ownership', () => {
     await daemon(['start']);
     expect(launchctlCalls().map(args => args[0])).toEqual(['enable', 'print', 'bootstrap', 'kickstart']);
     expect(launchctlCalls()[2]).toEqual(['bootstrap', `gui/${process.getuid()}`, '/fixture/Library/LaunchAgents/com.totalrecall.daemon.plist']);
+  });
+});
+
+describe('systemd ensure without a daemon unit', () => {
+  const show = (result) => vi.fn(() => ({ status: 0, stdout: '', stderr: '', ...result }));
+  it('passes when the unit is loaded', () => {
+    const run = show({ stdout: 'loaded\n' });
+    expect(() => requireDaemonUnit(run)).not.toThrow();
+    expect(run).toHaveBeenCalledWith('systemctl', ['show', 'total-recall-daemon', '--property=LoadState', '--value'], { encoding: 'utf8' });
+  });
+  it('refuses before stopping anything when the brain server owns the daemon', () => {
+    expect(() => requireDaemonUnit(show({ stdout: 'not-found\n' }))).toThrow(/no total-recall-daemon unit \(LoadState not-found\).*Nothing was stopped/);
+  });
+  it('fails when systemd cannot be asked', () => {
+    expect(() => requireDaemonUnit(show({ status: 1 }))).toThrow('Cannot inspect managed daemon');
   });
 });
