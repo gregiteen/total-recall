@@ -1,6 +1,6 @@
 # Mesh update cache repair
 
-Release candidate: 3.49.5. Source reviewed and all release checks pass; publication and runtime rollout in progress.
+Released: 3.49.5. Source, package and all three eligible active runtimes are verified.
 
 The updater previously dispatched version-pinned npm exec for every peer needing
 maintenance, including peers with a working installed CLI. This release advertises
@@ -11,8 +11,7 @@ verified durable report; local failures and stale serving processes remain failu
 
 Focused verification: 45 tests in three files pass. All eight configured fast
 checks pass with zero findings; that tier deliberately omits the full suite.
-Publication and installed-runtime verification remain required.
-No installed runtime is certified by the source tests.
+Registry artifact and serving runtimes were verified independently of source tests.
 
 The first full gate passed 3,867/3,869 tests and exposed two contended native
 integration fixtures. Their unchanged isolated run passed 22/22 in 4.92s. The
@@ -40,4 +39,19 @@ daemon and receiving CLI. A legacy peer may need one bootstrap before advertisin
 the capability. The cloud serving process uses `total-recall deploy release` with
 its configured adapter; preserve the zero-downtime replacement contract.
 
-Project evidence: docs/projects/in-progress/MESH_UPDATE_CACHE/.
+Project evidence: docs/projects/completed/MESH_UPDATE_CACHE/ (private records).
+
+Publication at source commit `a769e1903699d4b383d3d53144d9d17359dd537f`
+matches the tested tarball SHA-1 `c5789734fadf90e8474919b8beeef7490b03b0aa`.
+The owning publisher completed with zero consumer-update failures, restored the
+npm profile, and left no installer fixtures. Source-only consumers retain their
+pins without new dependency installations. Offline or non-executable peers are
+not claimed updated.
+
+All three active servers report 3.49.5 and installed status advertises the new
+capability. The two active issuer daemons use verified repaired CLI entries;
+the delegated host has no local daemon. Production used the zero-downtime
+adapter; its declared serving checkout is verified separately from the global
+CLI's strict foreign-root observation. Brain data and worker placement stayed
+with their existing owners. Final evidence is retained in the private project
+record under `docs/projects/completed/MESH_UPDATE_CACHE/`.
