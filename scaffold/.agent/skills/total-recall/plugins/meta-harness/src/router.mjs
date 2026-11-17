@@ -20,7 +20,7 @@ import { inspectNode } from './executor.mjs';
 import { getModelCatalog, joinHarnessModels } from './model-catalog.mjs';
 import { readReceipts, activeQuotaWalls, activeCredentialBlocks, includedBillingReceipts, recordRunReceipt } from './learner.mjs';
 import { resolvePool, exclusionReason, isLocalExecutionNode } from './pool.mjs';
-import { readCodexRateLimits, measuredWalls } from './telemetry.mjs';
+import { readCodexRateLimits, measuredWalls, codexWindowsByLength } from './telemetry.mjs';
 import { claudeProofCurrent, claudeTokenCurrent, INCLUDED_AGENTS, readIncludedPolicy, readCodexAllowance } from './included-usage.mjs';
 import { derivedDir } from './paths.mjs';
 import { createModelValidator, filterPoolByModel } from './model-selection.mjs';
@@ -200,8 +200,9 @@ export async function inspectQuotas(options = {}) {
       ...(wall ? { resetsAt: wall.until, wallMessage: wall.message } : {}),
     };
     if (agent.id === 'codex' && codexLimits) {
-      quota.rolling5hUsedPercent = codexLimits.primary?.used_percent ?? null;
-      quota.weeklyUsedPercent = codexLimits.secondary?.used_percent ?? null;
+      const { fiveHour, weekly } = codexWindowsByLength(codexLimits);
+      quota.rolling5hUsedPercent = fiveHour?.used_percent ?? null;
+      quota.weeklyUsedPercent = weekly?.used_percent ?? null;
       if (codexLimits.primary || codexLimits.secondary) quota.usagePercent = Math.max(quota.rolling5hUsedPercent ?? 0, quota.weeklyUsedPercent ?? 0);
       quota.quotaSource = 'codex-session-log';
       quota.observedAt = codexLimits.observedAt;

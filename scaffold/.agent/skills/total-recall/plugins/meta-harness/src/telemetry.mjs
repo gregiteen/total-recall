@@ -34,6 +34,20 @@ export function readCodexRateLimits({ sessionsDir = path.join(process.env.CODEX_
   return null;
 }
 
+/**
+ * Name Codex windows by their real length. A plan with no five-hour limit reports one weekly
+ * window as `primary`, so slot order alone mislabels it. Without a length, the order is the only guide.
+ */
+export function codexWindowsByLength(limits) {
+  const windows = [limits?.primary, limits?.secondary].filter(Boolean);
+  const measured = windows.filter(window => Number.isFinite(window.window_minutes));
+  if (!measured.length) return { fiveHour: limits?.primary || null, weekly: limits?.secondary || null };
+  return {
+    fiveHour: measured.find(window => window.window_minutes <= 300) || null,
+    weekly: measured.find(window => window.window_minutes >= 7 * 24 * 60) || null,
+  };
+}
+
 /** Quota walls from measured usage: a live window at 100% blocks the harness until it resets. */
 export function measuredWalls(limits = readCodexRateLimits()) {
   const full = [limits?.primary, limits?.secondary].filter(window => window && window.used_percent >= 100);

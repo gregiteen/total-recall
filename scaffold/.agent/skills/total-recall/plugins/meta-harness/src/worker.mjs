@@ -100,14 +100,24 @@ export const MODEL_SELECTION = Object.freeze({
   openhands: { env: 'LLM_MODEL', args: ['--override-with-envs'] },
   ollama: { positional: true },
 });
-// Operator policy: Antigravity never runs an Opus model, although `agy models` lists them.
-const MODEL_POLICY = [{ harness: 'agy', test: model => /opus/i.test(model), reason: 'Antigravity (agy) must not run Opus models. Choose a Gemini or Sonnet model, or route Opus work to claude.' }];
+function configuredAgyExcluded(env = process.env) {
+  let pattern = env?.TR_AGY_EXCLUDED_PATTERN || '';
+  if (!pattern && env?.TR_PLUGIN_CONFIG) {
+    try { pattern = JSON.parse(env.TR_PLUGIN_CONFIG)?.agyExcludedPattern || ''; } catch { /* ignore malformed */ }
+  }
+  if (!pattern) return null;
+  try { return new RegExp(String(pattern), 'i'); } catch { return null; }
+}
 
-/** Why this harness cannot run this model, or null. Shape, operator policy and harness support only; catalogs live elsewhere. */
-export function modelRefusal(harness, model) {
+/** Why this harness cannot run this model, or null. Shape, configured operator policy and harness support only; catalogs live elsewhere. */
+export function modelRefusal(harness, model, { env = process.env } = {}) {
   if (typeof model !== 'string' || !model.trim() || model.length > 200 || /[\0-\x1f\s]/.test(model) || model.startsWith('-')) return 'Invalid requested model';
-  const policy = MODEL_POLICY.find(rule => rule.harness === harness && rule.test(model));
-  if (policy) return policy.reason;
+  if (harness === 'agy') {
+    const excluded = configuredAgyExcluded(env);
+    if (excluded && excluded.test(model)) {
+      return `Antigravity (agy) excludes ${model} by configuration (${excluded.source}).`;
+    }
+  }
   if (!Object.hasOwn(MODEL_SELECTION, harness)) {
     return harness === 'dsh' ? 'DSH selects its model through its headless profile; set it with `total-recall dsh model`.' : `${harness} does not declare how it selects a model`;
   }
@@ -760,7 +770,7 @@ export async function dispatchAgent(request, { probe = runProcess, env = process
     if (openClawSession) args.splice(1, 0, '--agent', 'main', '--session-id', openClawSession,
       '--model', `openrouter/${openRouter.model}`, '--json');
   } else if (request.model !== undefined) {
-    const refusal = modelRefusal(adapter.custom ? `custom adapter ${adapter.id}` : adapter.id, request.model);
+    const refusal = modelRefusal(adapter.custom ? `custom adapter ${adapter.id}` : adapter.id, request.model, { env });
     if (refusal) throw notReady(refusal);
     if (adapter.id === 'ollama' && !state.chatModels.includes(request.model)) throw notReady(`Ollama has no chat model ${request.model} on this node`);
     modelEnv = applyModel(adapter.id, request.model, args);
@@ -811,7 +821,7 @@ export async function dispatchAgent(request, { probe = runProcess, env = process
   const liveProgress = ownerProgress ? { event: frame => { progress.event(frame); ownerProgress.event(frame); } } : progress;
   const { runSession, sessionOptions } = await import('./session/run.mjs');
   const savedRequest = Object.fromEntries(['agent', 'model', 'tools', 'settingSources', 'allowedTools', 'permissions', 'allowUnknownAuth',
-    'goal', 'maxTurns', 'maxTokens', 'maxBudgetUsd', 'resultSchema', 'approvalPolicy', 'questionTimeoutMs', 'effort', 'fallbackModel'].filter(key => request[key] !== undefined).map(key => [key, request[key]]));
+    'goal', 'maxTurns', 'maxTokens', 'maxBudgetUsd', 'resultSchema', 'approvalPolicy', 'questionTimeoutMs', 'effort', 'fallbackModel', 'internalReasoning'].filter(key => request[key] !== undefined).map(key => [key, request[key]]));
   if (savedRequest.resultSchema !== undefined) savedRequest.resultSchema = sessionOptions(request).resultSchema;
   const snapshot = JSON.stringify({ workspace: request.contextCwd || request.cwd, branch: request.branch, request: savedRequest });
   fs.writeFileSync(progressFile.replace('.events.jsonl', '.session.json'), snapshot, { mode: 0o600 });

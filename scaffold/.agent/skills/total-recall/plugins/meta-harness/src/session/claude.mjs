@@ -9,7 +9,7 @@ const ownedValues = new Set(['--input-format', '--output-format', '--session-id'
   '--max-turns', '--max-budget-usd', '--json-schema', '--effort', '--fallback-model', '--mcp-config',
   '--permission-prompt-tool']);
 const ownedSwitches = new Set(['-p', '--print', '--verbose', '--replay-user-messages',
-  '--include-hook-events', '--forward-subagent-text']);
+  '--include-hook-events', '--forward-subagent-text', '--no-session-persistence']);
 const textOf = content => typeof content === 'string' ? content : Array.isArray(content)
   ? content.filter(block => block.type === 'text').map(block => block.text).join('\n') : '';
 const failureKind = (text, subtype) => /error_max_(turns|budget_usd)/.test(subtype || '') ? 'limit'
@@ -181,6 +181,8 @@ export function createClaudeDriver({ harness, binary, args = [], cwd, env, job,
     }
     result.push('-p', '--input-format', 'stream-json', '--output-format', 'stream-json', '--verbose',
       '--replay-user-messages', '--include-hook-events', '--forward-subagent-text');
+    // Print mode only: the session is not saved to disk and cannot be resumed.
+    if (options.ephemeral) result.push('--no-session-persistence');
     if (options.resumeSession) result.push('--resume', options.sessionId);
     else result.push('--session-id', sessionId);
     if (options.forkSession) {

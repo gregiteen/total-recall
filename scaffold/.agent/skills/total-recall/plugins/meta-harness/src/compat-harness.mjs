@@ -83,6 +83,9 @@ export async function dispatchTask(id, prompt, options = {}, dependencies = {}) 
     node: options.node || 'local', permissions: { read: true, write: options.write === true },
     allowUnknownAuth: options.allowUnknownAuth === true, timeoutMs: options.timeoutMs,
     tools: options.tools, settingSources: options.settingSources, model: options.model,
+    ...(options.internalReasoning === true ? { internalReasoning: true } : {}),
+    ...(options.maxTurns !== undefined ? { maxTurns: options.maxTurns } : {}),
+    ...(options.maxTokens !== undefined ? { maxTokens: options.maxTokens } : {}),
   }, { node: options.node || 'local', role: options.role || 'Dispatch' });
   return { ...result, harnessId: id, harnessName: HARNESS_SPECS[id]?.name || id, success: result.ok === true };
 }

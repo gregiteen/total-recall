@@ -16,6 +16,7 @@ const PUBLIC_FIELDS = [
   'agent', 'cwd', 'prompt', 'permissions', 'node', 'allowUnknownAuth', 'timeoutMs',
   'model', 'tools', 'settingSources', 'allowedTools',
   'goal', 'maxTurns', 'maxTokens', 'maxBudgetUsd', 'resultSchema', 'approvalPolicy', 'questionTimeoutMs', 'effort', 'fallbackModel', 'name',
+  'internalReasoning',
 ];
 
 export function validateDispatchRequest(request) {

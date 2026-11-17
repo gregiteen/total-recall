@@ -13,14 +13,25 @@ import { mcpConfigFor, createMcpTools, NO_ANSWER, QUESTION_TIMEOUT_MS } from '..
 // driver reports its own usage; the job sums those reports without double count.
 const budgets = new Map();
 
+/** Opens every Total Recall reasoning brief, so persisted transcripts are never reviewed again. Core matches it. */
+export const INTERNAL_JOB_MARKER = '[total-recall:internal-job]';
+
 export function sessionOptions(request) {
   const result = {};
   if (request.sessionId) result.resumeSession = true;
-  for (const key of ['goal', 'maxTurns', 'maxTokens', 'maxBudgetUsd', 'resultSchema', 'approvalPolicy', 'questionTimeoutMs', 'sessionId', 'forkSession', 'atTurn', 'name', 'effort', 'fallbackModel', 'reviewTarget']) {
+  for (const key of ['goal', 'maxTurns', 'maxTokens', 'maxBudgetUsd', 'resultSchema', 'approvalPolicy', 'questionTimeoutMs', 'sessionId', 'forkSession', 'atTurn', 'name', 'effort', 'fallbackModel', 'reviewTarget', 'internalReasoning']) {
     if (request[key] !== undefined) result[key] = request[key];
   }
   for (const key of ['maxTurns', 'maxTokens', 'questionTimeoutMs']) if (result[key] !== undefined && (!Number.isSafeInteger(result[key]) || result[key] < 1)) throw new Error(`${key} must be a positive integer.`);
   if (result.maxBudgetUsd !== undefined && (!Number.isFinite(result.maxBudgetUsd) || result.maxBudgetUsd < 0)) throw new Error('maxBudgetUsd must be nonnegative.');
+  if (result.internalReasoning !== undefined && typeof result.internalReasoning !== 'boolean') throw new Error('internalReasoning must be a boolean.');
+  if (result.internalReasoning) {
+    // Internal reasoning is read-only, single-turn and token bounded, so no coding task can use it to skip its goal check.
+    if (result.sessionId || result.forkSession || result.reviewTarget) throw new Error('Internal reasoning runs in a new ephemeral session.');
+    if (request.permissions?.write === true) throw new Error('Internal reasoning is read-only.');
+    if (result.maxTurns !== 1) throw new Error('Internal reasoning requires maxTurns 1.');
+    if (result.maxTokens === undefined) throw new Error('Internal reasoning requires a token bound.');
+  }
   if (result.goal !== undefined && (typeof result.goal !== 'string' || !result.goal.trim() || result.goal.length > 4000)) throw new Error('goal must have 1..4000 characters.');
   if (result.approvalPolicy !== undefined && !['auto', 'operator', 'rules'].includes(result.approvalPolicy)) throw new Error('Approval policy must be auto, operator, or rules.');
   if (typeof result.resultSchema === 'string') result.resultSchema = JSON.parse(fs.readFileSync(path.resolve(request.cwd, result.resultSchema), 'utf8'));
@@ -33,8 +44,10 @@ export async function runSession({ request, adapter, binary, args, env, prompt, 
   const options = sessionOptions(request);
   options.captureExecution = adapter.id === 'openclaw';
   options.trackTurns = true;
+  // Internal reasoning is one bounded, unsaved generation: no native goal and no goal-check turn.
+  const internal = options.internalReasoning === true;
   let goal = options.goal || request.contextTask || request.prompt;
-  options.goal = goal.slice(0, 4000);
+  if (internal) { delete options.goal; options.ephemeral = true; } else options.goal = goal.slice(0, 4000);
   const job = request.jobId || process.env.TR_METAHARNESS_JOB || `session-${randomUUID()}`;
   const budget = budgets.get(job) || new Map();
   budgets.set(job, budget);
@@ -136,7 +149,7 @@ export async function runSession({ request, adapter, binary, args, env, prompt, 
       return { ok: false, failureKind: 'limit', error: 'Job limit reached before launch.', usage, turns };
     }
     if (options.maxBudgetUsd === 0) return { ok: false, failureKind: 'limit', error: 'Job budget limit reached before launch.', usage, turns };
-    await wait(driver.start(`${prompt}\n\nJob goal: ${goal}`));
+    await wait(driver.start(internal ? `${INTERNAL_JOB_MARKER}\n${prompt}` : `${prompt}\n\nJob goal: ${goal}`));
     if (stopResult) return stopResult;
     emit({ kind: 'capabilities', text: 'Session controls reported.', capabilities: capabilities() });
     deferredWatcher = tailInbox(job, command => {
@@ -164,7 +177,7 @@ export async function runSession({ request, adapter, binary, args, env, prompt, 
     let result = await wait(driver.done);
     // Deferred questions (A-125): the agent ended its turn after asking. Hold the session with no
     // model calls until the operator replies, then start the next turn with the answer.
-    while (result.ok && !stopResult) {
+    while (result.ok && !stopResult && !internal) {
       const open = waitingRequests(job).filter(r => r.kind === 'question' && r.source === 'deferred');
       if (!open.length) break;
       emit({ kind: 'waiting', text: `Waiting for the operator on ${open.length} question(s); no model calls until a reply.` });
@@ -185,7 +198,7 @@ export async function runSession({ request, adapter, binary, args, env, prompt, 
     }
     if ((result.ok || result.failureKind === 'schema') && options.resultSchema !== undefined) {
       let parsed = readResult(result, options.resultSchema);
-      if (parsed.errors.length) {
+      if (parsed.errors.length && !internal) {
         const corrected = await next(`Correct your final result once. Return only JSON matching ${JSON.stringify(options.resultSchema)}. Errors: ${parsed.errors.join('; ')}`, options.resultSchema);
         if (!corrected.ok) return { ...corrected, usage: { ...usage }, turns, capabilities: { ...driver.capabilities } };
         result = corrected; parsed = readResult(result, options.resultSchema);
@@ -194,7 +207,7 @@ export async function runSession({ request, adapter, binary, args, env, prompt, 
       else result.structured = parsed.value;
     }
     const work = result;
-    if (result.ok) {
+    if (result.ok && !internal) {
       const check = await next(`Check the goal against what you did. Goal: ${goal}\nReturn only JSON with schema ${JSON.stringify(GOAL_SCHEMA)}. List concrete evidence and all remaining work.`, GOAL_SCHEMA);
       if (!check.ok) result = { ...work, ...check };
       else {

@@ -1,3 +1,20 @@
+## 3.49.6 — 2026-11-17
+
+- Background lesson reviews no longer review themselves. Each review was a harness session that was then ingested and queued for review again; the loop queued about 3,200 reviews and drained plan usage with no prompt from the operator. Total Recall's own reasoning jobs are now recognised by their root prompt and by the inherited Metaharness environment, and are never ingested, queued or run as reviews.
+- `lessons pause [--cancel-pending] | resume | status` stops queueing and running automatic reviews, and can cancel queued reviews and the skill-gap tasks they filed. `status` shows a usage hold (`heldUntil`).
+- A lesson turn is something the person typed. Hook output, `<system-reminder>` text, slash-command output, task and session notifications, interruption notes, compaction summaries, Codex instruction blocks, automatic goal checks, tool output stored as text and Claude `api-request-blob` rows no longer count. They had made reviews fire up to ten times as often as every ten prompts. Existing cursors rebase once without queueing the past.
+- Each review window is bounded to 32,000 characters; every human prompt is kept and tool output shrinks first. Windows had a median of 257,598 characters and reached 4.9 million.
+- A review that the reasoning owner holds for usage is not a failure: it stays queued, and reviews wait 30 minutes before trying again.
+- The preflight prompt hook ignores background-job and session notifications. Each notification had voided the session's acknowledgement as if it were a new instruction.
+- Context applies action-gated rules only to the actions they name, keeps semantic CLI embeddings, and scopes rules by their canonical `project`. Antigravity prompt and session hooks answer in its hook format, and its prompt hook counts only the first model step of a turn.
+- macOS `daemon stop` unloads the launchd job and fails loudly; `start` and `ensure` re-enable it. Previously `launchctl stop` let KeepAlive restart the daemon at once.
+- Bundle Metaharness with background reasoning fixes:
+  - **No default reviewer:** background reasoning runs only on the harness and model the operator chose (`meta-harness reasoning-config`). With none, it is refused. It had fallen back to adapter order with no model, which ran Claude at its default model.
+  - **Usage threshold:** `--max-usage-percent` holds Codex reasoning, with no model call, while Codex usage is at or above it.
+  - **OpenRouter option:** a harness with an operator OpenRouter binding, such as DSH, can be listed for background reasoning and kept disabled until wanted.
+  - **One generation:** internal reasoning runs one bounded, unsaved generation (Codex `ephemeral` threads, Claude `--no-session-persistence`) with no goal check, capped at 64,000 tokens.
+  - **Window labels:** Codex limit windows are named by their length. A plan with only a weekly limit was reported as a five-hour window.
+
 ## 3.49.5 — 2026-11-16
 
 - The preflight gate ends a session's acknowledgement in three more cases, each with a denial that names its one clearing command. A new instruction from the user requires a new acknowledgement before any tool call. Working tools under another project brain wait until the session has that brain's capsule (`cd <brain> && total-recall context "<task>"`, or an acknowledgement there); reading stays open. Compaction or clear voids the acknowledgement. Previously an agent could keep working on one acknowledgement for 30 minutes across new instructions and repositories, with only a one-time note on arrival. Subagents and Metaharness runs are not stopped, and a sandbox that can keep no record is not held to one. The first and third rules need a harness prompt hook and session hook, which only the Claude Code adapter installs today.

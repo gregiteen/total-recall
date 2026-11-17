@@ -33,6 +33,7 @@ import { chatTarget, setChatDefault } from './src/chat.mjs';
 
 const VALUE_FLAGS = ['--result-schema-json', '--goal', '--max-turns', '--max-budget-usd', '--max-tokens', '--result-schema', '--at', '--node', '--mode', '--orchestrator', '--branch', '--reviewer', '--thread', '--status', '--platform', '--agent', '--url', '--query', '--tier', '--threshold', '--author', '--explorer', '--architect', '--implementer', '--verifier', '--title', '--summary', '--cwd', '--tools', '--setting-sources', '--model', '--name', '--tail', '--timeout-ms', '--void', '--reason', '--approvals', '--question-timeout-ms', '--brains'];
 VALUE_FLAGS.push('--k', '--repeats', '--catalog-samples', '--corpus', '--baseline', '--min-recall', '--min-mrr', '--max-p95-ms', '--max-recall-drop', '--core-root');
+VALUE_FLAGS.push('--enable', '--disable', '--max-usage-percent');
 export function parseArguments(args) {
   const positional = [];
   for (let index = 1; index < args.length; index += 1) {
@@ -151,6 +152,15 @@ async function runOperation(argv) {
   else if (operation === 'catalog') result = { adapters: getActiveAdapters(), permissions: ['read', 'write', 'send', 'destructive'] };
   else if (operation === 'chat-target') result = chatTarget(value('--brains'));
   else if (operation === 'chat-default') result = setChatDefault(positional[0], value('--url'));
+  else if (operation === 'reasoning-config') {
+    const allowed = new Set(['--json', '--agent', '--model', '--max-usage-percent', '--enable', '--disable']);
+    for (const arg of args.slice(1)) if (arg.startsWith('--') && !allowed.has(arg)) throw new Error(`Unsupported reasoning-config flag: ${arg}`);
+    if (positional.length) throw new Error('reasoning-config takes flags only');
+    const { reasoningConfig } = await import('./src/reasoning.mjs');
+    const percent = value('--max-usage-percent');
+    result = await reasoningConfig({ agent: value('--agent'), model: value('--model'), enable: value('--enable'), disable: value('--disable'),
+      maxUsagePercent: percent === undefined ? undefined : Number(percent) });
+  }
   else if (operation === 'nodes') result = await listTargets();
   else if (operation === 'adoption') {
     const node = value('--node');

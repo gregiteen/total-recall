@@ -118,7 +118,23 @@ export const agyAdapter = {
     const current = config[HOOK_NAME]?.PreToolUse;
     const { groups, added, removed: gone } = mergeGate(current, 'agy', { remove: remove || off });
     removed.push(...gone);
-    if (groups.length) config[HOOK_NAME] = { ...(config[HOOK_NAME] || {}), PreToolUse: groups };
+    const lifecycle = [
+      ['SessionStart', 'total-recall preflight session-start --harness agy'],
+    ];
+    const nextHook = groups.length ? { ...(config[HOOK_NAME] || {}), PreToolUse: groups } : {};
+    delete nextHook.PreInvocation;
+    for (const [event, cmd] of lifecycle) {
+      const existing = Array.isArray(config[HOOK_NAME]?.[event]) ? config[HOOK_NAME][event] : [];
+      const kept = existing.filter((h) => !String(h?.command || '').includes('total-recall preflight '));
+      if (remove || off) {
+        if (kept.length !== existing.length) removed.push(cmd);
+        if (kept.length) nextHook[event] = kept;
+      } else {
+        if (!existing.some((h) => h?.command === cmd)) added.push(cmd);
+        nextHook[event] = [...kept, { type: 'command', command: cmd, timeout: 10 }];
+      }
+    }
+    if (Object.keys(nextHook).length) config[HOOK_NAME] = nextHook;
     else delete config[HOOK_NAME];
     if (!dryRun && (added.length || removed.length)) writeJsonFile(hooksPath, config);
     return { settings: hooksPath, added, removed };

@@ -286,7 +286,9 @@ export function createCodexDriver({ harness, binary = 'codex', args = [], cwd, e
       // InitializeResponse reports identity/platform, not a per-method feature list. Use the
       // documented app-server surface after this handshake, never a version-string test.
       Object.assign(capabilities, Object.fromEntries(controls.map(key => [key, key === 'limits' ? 'metaharness' : 'native'])));
+      if (options.ephemeral && (options.forkSession || options.sessionId)) throw new Error('An ephemeral Codex thread cannot resume or fork.');
       const result = await rpc(options.forkSession ? 'thread/fork' : options.sessionId ? 'thread/resume' : 'thread/start', {
+        ...(options.ephemeral ? { ephemeral: true } : {}),
         ...(options.sessionId ? { threadId: options.sessionId, excludeTurns: true } : {}),
         ...(options.forkSession && options.atTurn ? { lastTurnId: options.atTurn } : {}),
         cwd, sandbox: 'danger-full-access', approvalPolicy: options.approvalPolicy === 'operator' || options.approvalPolicy === 'rules'
@@ -294,8 +296,12 @@ export function createCodexDriver({ harness, binary = 'codex', args = [], cwd, e
       // The resumable handle is thread.id; thread.sessionId can name a fork's ancestor.
       sessionId = result?.thread?.id;
       if (!sessionId) throw new Error('Codex returned no thread ID.');
-      await rpc('thread/name/set', { threadId: sessionId, name: options.name || job?.name || job?.id || (typeof job === 'string' ? job : 'Metaharness job') });
-      if (options.goal) await rpc('thread/goal/set', { threadId: sessionId, objective: options.goal });
+      // Refuse before any turn when the server would persist a thread asked to be ephemeral.
+      if (options.ephemeral && result.thread.ephemeral !== true) throw new Error('Codex ignored ephemeral: true; refusing to run a persistent reasoning thread.');
+      if (!options.ephemeral) {
+        await rpc('thread/name/set', { threadId: sessionId, name: options.name || job?.name || job?.id || (typeof job === 'string' ? job : 'Metaharness job') });
+        if (options.goal) await rpc('thread/goal/set', { threadId: sessionId, objective: options.goal });
+      }
       emit('session', { text: `Codex session ${sessionId}`, sessionId, session: sessionId, rootSessionId: result.thread.sessionId,
         capabilities: { ...capabilities }, server: initialized, harness });
       if (options.reviewTarget) {
