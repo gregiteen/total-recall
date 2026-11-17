@@ -23,7 +23,7 @@ import { getProvider, providerForKeyName } from './provider-catalog.mjs';
 import { atomicWrite, safeStringify } from './vault.mjs';
 import { getRotationPlan, generateSecretValue } from './rotation-capability.mjs';
 import { getRecipe, valueLooksValid } from './provider-rotation-recipes.mjs';
-import { rotateViaProviderApi, listProviderKeys, revokeProviderKey } from './provider-api-rotation.mjs';
+import { rotateViaProviderApi, listProviderKeys, revokeProviderKey, updateProviderKey, disableUnstoredProviderKeys } from './provider-api-rotation.mjs';
 import {
   launchRotationContext,
   openConsole,
@@ -504,10 +504,18 @@ const storedSecret = async (brain, name) => {
 };
 
 /** List the provider account's keys, or revoke one that the store no longer holds. */
-export async function manageProviderKeys(brainDir, providerId, { revoke, fetchImpl } = {}) {
+export async function manageProviderKeys(brainDir, providerId, { revoke, target, limit, limitReset, disabled, disableUnstored, fetchImpl } = {}) {
   const provider = getProvider(providerId);
   if (!provider) throw new Error(`Unknown provider: ${providerId}`);
   const context = { brainDir, provider, readSecret: storedSecret, listRows: listSecretsMeta, ...(fetchImpl ? { fetchImpl } : {}) };
   if (revoke) return revokeProviderKey({ ...context, hash: revoke });
+  if (disableUnstored) return disableUnstoredProviderKeys(context);
+  if (target !== undefined || limit !== undefined || limitReset !== undefined || disabled !== undefined) {
+    const patch = {};
+    if (limit !== undefined) patch.limit = limit;
+    if (limitReset !== undefined) patch.limit_reset = limitReset;
+    if (disabled !== undefined) patch.disabled = disabled;
+    return updateProviderKey({ ...context, target, patch });
+  }
   return { ok: true, provider: provider.id, keys: await listProviderKeys(context) };
 }

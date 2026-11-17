@@ -7,11 +7,15 @@ import { randomUUID } from 'node:crypto';
 import { includedAdmission, openRouterAdmission, readIncludedPolicy } from './included-usage.mjs';
 import { queueIncludedJob } from './usage-queue.mjs';
 import { createModelValidator } from './model-selection.mjs';
+import { enforceVelocityCircuitBreaker } from './alerts.mjs';
 
 export async function dispatchWithReceipt(request, { dispatchFn, node = request.node || 'local', role, complexityScore, escalatedFrom,
   record = recordRunReceipt, replay, retryId, manageWrites = false, validateModel, usagePolicy = readIncludedPolicy, admit = includedAdmission, admitOpenRouter = openRouterAdmission } = {}) {
   const started = Date.now();
   if (cancellationResult()) return cancellationResult();
+  try { await enforceVelocityCircuitBreaker({ kind: request.internalReasoning ? 'reasoning' : 'dispatch' }); } catch (error) {
+    return { ok: false, agent: request.agent, failureKind: 'circuit-breaker', error: error.message, launchPrevented: true, exitCode: null, durationMs: Date.now() - started };
+  }
   // A model this harness must not or cannot run is refused before launch; it says nothing about the harness, so no receipt.
   if (request.model !== undefined) {
     const check = (validateModel || createModelValidator({ local: node === 'local' }))(request.agent, request.model);

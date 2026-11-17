@@ -112,9 +112,9 @@ export async function retrieveContext({ task, projectRoot = process.cwd(), limit
     try {
       const source = sourceAt(hit.path);
       const anchor = source.lines[hit.line - 1] || '';
-      const anchorTerms = new Set(termsOf(anchor));
-      if (!terms.some(term => anchorTerms.has(term))) continue;
       const passage = excerpt(source, task, chars, hit.line);
+      const passageTerms = new Set(termsOf(`${source.relative} ${anchor} ${passage.text}`));
+      if (!terms.some(term => passageTerms.has(term))) continue;
       const score = Math.min(.9, Math.max(.2, hit.score / 100));
       const id = add(source, passage, score, 'wiki');
       if (!id) continue;

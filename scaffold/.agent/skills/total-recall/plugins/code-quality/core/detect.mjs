@@ -46,6 +46,7 @@ export function detectFacts(repoRoot) {
     flake8: has('.flake8') || has('setup.cfg') || has('tox.ini'),
     mypy: has('mypy.ini') || has('.mypy_cache'),
     black: /\[tool\.black\]/.test(readText('pyproject.toml')),
+    pluginManifest: has('plugin.json'),
     ssssScripts: Object.entries(scripts).filter(isSsssVerificationScript).map(([name]) => name),
   };
 }
@@ -70,6 +71,9 @@ export function detect({ repoRoot }) {
   if (facts.mypy) checks.push({ id: 'mypy', tier: 'fast', cmd: [python, '-m', 'mypy', '.'], parser: 'mypy' });
   for (const s of facts.ssssScripts) {
     checks.push({ id: s.replace(/^ssss:/, 'ssss-').replace(/[^a-z0-9-]/g, '-'), tier: s.includes('validate') ? 'fast' : 'full', cmd: run(s), parser: 'generic' });
+  }
+  if (facts.pluginManifest) {
+    checks.push({ id: 'plugin-compliance', tier: 'fast', cmd: ['total-recall', 'plugin', 'chunks', 'coverage', '--json'], parser: 'generic' });
   }
   if (scripts.test) checks.push({ id: 'test', tier: 'full', cmd: run('test'), parser: 'generic' });
 

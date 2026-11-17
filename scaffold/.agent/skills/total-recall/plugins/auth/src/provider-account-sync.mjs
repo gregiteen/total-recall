@@ -47,6 +47,8 @@ function looksLikeInternalPassword(key) {
     return true;
   }
   if (/SSH_KEY|SSH_PRIVATE|PRIVATE_KEY$|_CLIENT_SECRET$|APP_PRIVATE_KEY/.test(k)) return true;
+  if (/^(DEPLOY_ENV|DB_PATH|SOURCE_DB_PATH|DEST_DATABASE_URL|MAILCOW_HOST|SEARXNG_URL|CLOUDROOM_URL|CLOUDROOM_TOKEN|DEPLOY_MESH_.*)$/.test(k)) return true;
+  if (/^GRO_TEST_.*(_SESSION|_EMAIL|_PASSWORD)$|_ADMIN_SESSION$/.test(k)) return true;
   if (/_WEBHOOK_SECRET$|_SIGNING_SECRET$|COOKIE_SECRET|NEXTAUTH_SECRET/.test(k)) return true;
   if (/_LOGIN_EMAIL$|_EMAIL$/.test(k) && !/API/.test(k)) return true;
   if (/SSO_SECRET|RECOVERY_CODE|TEST_USER_/.test(k)) return true;
@@ -900,6 +902,18 @@ export async function syncSecretAccount(brainDir, key, opts = {}) {
     return skip;
   }
 
+  if (key === 'CLAUDE_CODE_OAUTH_TOKEN') {
+    const sub = baseResult(key, 'claude');
+    sub.tracking_status = 'ok';
+    sub.key_valid = true;
+    sub.account_api = true;
+    sub.subscription_api = true;
+    sub.probe = 'claude-subscription-token';
+    sub.subscription = { tier: 'included-subscription', note: 'Claude Code OAuth subscription token' };
+    await persistTracking(brainDir, key, sub, { ...meta, provider: 'claude' });
+    return sub;
+  }
+
   // Prefer a live probe when key name maps to a billable vendor (even if meta.provider is "mail")
   let probeName = resolveProbeName(key, meta, got.value);
 
@@ -974,6 +988,34 @@ export async function syncSecretAccount(brainDir, key, opts = {}) {
   let result;
   try {
     result = await PROBES[probeName](got.value);
+    if (result.tracking_status !== 'ok' && probeName === 'openai' && key !== 'OPENAI_ADMIN_API_KEY') {
+      const admin = await getSecret(brainDir, 'OPENAI_ADMIN_API_KEY', { action: 'use', actor: 'provider-account-sync' });
+      if (admin.found && admin.value) {
+        const adminRes = await PROBES.openai(admin.value);
+        if (adminRes.tracking_status === 'ok') {
+          result.tracking_status = 'ok';
+          result.usage_api = true;
+          result.subscription_api = true;
+          result.usage = adminRes.usage;
+          result.probe = `${result.probe} (org costs via OPENAI_ADMIN_API_KEY)`;
+          result.error = null;
+        }
+      }
+    }
+    if (result.tracking_status !== 'ok' && probeName === 'anthropic' && key !== 'ANTHROPIC_ADMIN_API_KEY') {
+      const admin = await getSecret(brainDir, 'ANTHROPIC_ADMIN_API_KEY', { action: 'use', actor: 'provider-account-sync' });
+      if (admin.found && admin.value) {
+        const adminRes = await PROBES.anthropic(admin.value);
+        if (adminRes.tracking_status === 'ok') {
+          result.tracking_status = 'ok';
+          result.usage_api = true;
+          result.subscription_api = true;
+          result.usage = adminRes.usage;
+          result.probe = `${result.probe} (org costs via ANTHROPIC_ADMIN_API_KEY)`;
+          result.error = null;
+        }
+      }
+    }
   } catch (e) {
     result = baseResult(key, probeName);
     result.error = e.message;

@@ -172,5 +172,16 @@
       "path": "./skills/automations/SKILL.md",
       "description": "Run scheduled plugin tasks and inspect automation sources, triggers, observed outcomes and coverage across the mesh."
     }
-  ]
+  ],
+  "alerts": {
+    "plugin": "operator-alerts",
+    "on_task_failure": true,
+    "events": [
+      {
+        "id": "queue-depth-runaway",
+        "severity": "high",
+        "description": "Pending automation queue depth exceeded threshold"
+      }
+    ]
+  }
 }
