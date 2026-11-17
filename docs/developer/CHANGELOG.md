@@ -1,7 +1,12 @@
-## 3.49.7 — 2026-11-17
+## 3.50.1 — 2026-11-17
 
+- The bundled Operator Alerts plugin (1.1.1) names Total Recall contributors in its license. 3.50.0 shipped a license naming a private product, which the repository hygiene test rejects.
 - `deploy release` stops a daemon that was started outside the server's systemd unit before it moves the checkout, so the new server starts a daemon on the new code. Such a daemon survived the unit stop, and the new server kept it because it ran from the same path; the cloud reported 3.49.6 while its daemon still ran code from four hours earlier.
 - `daemon ensure` on a systemd host with no `total-recall-daemon` unit refuses before stopping anything. It had stopped the daemon and then failed to start the missing unit, leaving none until the server's watchdog restarted it.
+
+## 3.50.0 — 2026-11-17
+
+- Core alerts manifest contract, bundled Operator Alerts, top-level analytics and usage-tracker telemetry.
 
 ## 3.49.6 — 2026-11-17
 

@@ -1,6 +1,6 @@
 {
   "name": "tr-plugin-operator-alerts",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "type": "module",
   "description": "Send operator alerts over desktop, email (SMTP2GO), SMS (Telnyx), webhook and issue-tracker alerts with dedupe, quiet hours and delivery evidence. Keys come from the secret store; recipients from config.",
   "scripts": {
