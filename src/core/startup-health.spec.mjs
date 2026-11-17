@@ -177,6 +177,36 @@ describe('startup health truth and boundaries', () => {
       expect(processIdentity(pidFile, script, { alive: () => false, command: () => 'node src/server/index.mjs' })).toEqual({ status: 'stopped' });
     });
   });
+  describe('a server still running from the copy an npm upgrade retired', () => {
+    // npm renames the old package folder to `.<name>-<random>` beside the new one and
+    // deletes it. The server keeps running old code from that missing folder, and no
+    // lifecycle command could replace it because its identity read as unknown.
+    const parent = fs.mkdtempSync(path.join(os.tmpdir(), 'startup-retired-'));
+    const install = path.join(parent, 'total-recall-brain');
+    const script = path.join(install, 'src', 'server', 'index.mjs');
+    const pidFile = path.join(parent, 'server.pid');
+    fs.mkdirSync(path.dirname(script), { recursive: true });
+    fs.writeFileSync(script, '// entry');
+    fs.writeFileSync(pidFile, '4321');
+    const run = (cwd) => processIdentity(pidFile, script, { alive: () => true, command: () => 'node src/server/index.mjs', cwd: () => cwd });
+    afterAll(() => fs.rmSync(parent, { recursive: true, force: true }));
+
+    it('is this install\'s server, so it can be replaced', () => {
+      const gone = path.join(parent, '.total-recall-brain-Ez6BbW4B');
+      expect(run(gone)).toEqual({ status: 'running', pid: 4321, entry: script, retired: gone });
+      expect(run(`${gone} (deleted)`).status).toBe('running');
+    });
+    it('stays unknown for any other missing folder', () => {
+      for (const cwd of [path.join(parent, '.other-package-Ez6BbW4B'), path.join(os.tmpdir(), '.total-recall-brain-Ez6BbW4B'), path.join(parent, 'total-recall-brain-old')]) {
+        expect(run(cwd), cwd).toMatchObject({ status: 'unknown', reason: 'process-entry-unavailable' });
+      }
+    });
+    it('does not apply while the renamed folder still exists', () => {
+      const kept = path.join(parent, '.total-recall-brain-Kept1234');
+      fs.mkdirSync(kept);
+      expect(run(kept)).toMatchObject({ status: 'unknown', reason: 'process-entry-unavailable' });
+    });
+  });
   it('startup consumes the same daemon observation as lifecycle and preserves identity details', async () => {
     const identity = (file, expected) => file.endsWith('daemon.pid')
       ? { status: 'conflict', reason: 'foreign-pid', pid: 123, entry: '/other/src/core/daemon-loop.mjs' }

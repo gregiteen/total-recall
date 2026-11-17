@@ -88,14 +88,41 @@ export function processIdentity(pidFile, hint, { alive = pid => { try { process.
   if (script) {
     // Absolute script paths resolve directly; relative ones resolve against the
     // process's own working directory, never the caller's.
+    let base = null;
     try {
-      const base = path.isAbsolute(script) ? null : cwd(pid);
+      base = path.isAbsolute(script) ? null : cwd(pid);
       if (!path.isAbsolute(script) && !base) throw new Error('Missing process cwd');
       entry = fs.realpathSync(base ? path.resolve(base, script) : script);
       if (entry === fs.realpathSync(hint)) return { status: 'running', pid, entry };
-    } catch { return { status: 'unknown', reason: 'process-entry-unavailable', pid }; }
+    } catch {
+      if (retiredInstall(base, script, hint)) return { status: 'running', pid, entry: hint, retired: base };
+      return { status: 'unknown', reason: 'process-entry-unavailable', pid };
+    }
   }
   return { status: 'conflict', reason: 'foreign-pid', pid, ...(entry ? { entry } : {}) };
+}
+
+/**
+ * True when a process started from this install still runs from the copy npm retired.
+ * An upgrade renames the old package folder to `.<name>-<random>` beside the new one
+ * and deletes it, so the process's working directory no longer exists. Its code is the
+ * old release, and the process is this install's own, so lifecycle commands may replace it.
+ */
+export function retiredInstall(base, script, hint) {
+  if (!base || path.isAbsolute(script)) return false;
+  const gone = base.replace(/ \(deleted\)$/, '');
+  if (fs.existsSync(gone)) return false;
+  let root;
+  try {
+    const expected = fs.realpathSync(hint);
+    const suffix = path.sep + path.normalize(script);
+    if (!expected.endsWith(suffix)) return false;
+    root = expected.slice(0, -suffix.length);
+  } catch { return false; }
+  let parent;
+  try { parent = fs.realpathSync(path.dirname(gone)); } catch { return false; }
+  const name = path.basename(root).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return parent === path.dirname(root) && new RegExp(`^\\.${name}-[A-Za-z0-9]+$`).test(path.basename(gone));
 }
 
 /** The single installation-aware daemon observation for status and lifecycle. */

@@ -1,3 +1,7 @@
+## 3.50.3 — 2026-11-17
+
+- A server or daemon still running from the copy an npm upgrade retired is recognised as this install's own process, so `server ensure` and `update --automatic` can replace it. npm renames the old package folder to `.total-recall-brain-<random>` and deletes it; the process kept running the old release from that missing folder, its identity read as unknown, and every lifecycle command refused to touch it. The Mac mini's server had been serving 3.49.5 this way through three releases.
+
 ## 3.50.2 — 2026-11-17
 
 - The preflight gate no longer makes the session the user is talking to route its own task through Metaharness, and no longer denies its writes because a route picked another harness. Routing is for work handed to another harness; raw harness launches (`codex exec`, `claude -p` and the rest) still point at `meta-harness route --execute`. The gate's route stamps, route selection record, `preflight mode --router` and the hook that recorded route results are removed. Generated agent instructions now say to do the work and to use `route --execute` when handing it off.
