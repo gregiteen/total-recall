@@ -62,13 +62,19 @@ export async function compactNodes({ task, actions = [], budget, expand = [], co
   const terms = String(task).toLowerCase().match(/[\p{L}\p{N}_-]{3,}/gu) || [];
   const semantic = Boolean(taskVector);
 
-  const score = (slug, text) => semantic && vectors[slug] ? cosineSimilarity(taskVector, vectors[slug]) : lexicalScore(terms, text);
+  const score = (slug, text, node) => {
+    const lex = lexicalScore(terms, text);
+    const base = semantic && vectors[slug] ? cosineSimilarity(taskVector, vectors[slug]) * 0.75 + lex * 0.25 : lex;
+    const curatedBoost = node?._directive ? 0.15 : 0;
+    const invariantBoost = node?.category === 'invariants' ? 0.05 : 0;
+    return base + curatedBoost + invariantBoost;
+  };
   const items = rules.map(node => {
     const body = (node._directive || node.body || node.content || '').trim();
     return {
       slug: node.slug, body, priority: node.priority, importance: node.importance,
       text: node._directive ? `[${node.slug}] ${node._directive}` : `## ${node.title || node.slug} [${node.slug}]\n\n${body}`,
-      vector: vectors[node.slug], score: score(node.slug, `${node.title || ''} ${body}`),
+      vector: vectors[node.slug], score: score(node.slug, `${node.title || ''} ${body}`, node),
     };
   });
   for (const { id, text } of legacyRuleContributions(skillsDir)) {

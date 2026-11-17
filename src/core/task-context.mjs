@@ -99,7 +99,7 @@ export async function retrieveTaskKnowledge({ query, nodes = [], derivedDir, ind
     }
   }
   let plugin = { candidates: [], diagnostics: [], coverage: [] };
-  try { plugin = await providers({ task: query, projectRoot, actions, limit: 4, maxChars: 1000 }); }
+  try { plugin = await providers({ task: query, projectRoot, actions, limit: 4, maxChars: 1000, queryVector }); }
   catch (error) { diagnostics.push(`plugin evidence unavailable: ${String(error.message).slice(0, 120)}`); }
   diagnostics.push(...(plugin.diagnostics || []));
   const memoryMode = queryVector && vectors ? 'hybrid' : 'lexical';

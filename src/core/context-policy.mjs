@@ -3,6 +3,7 @@ import path from 'node:path';
 
 export const RULE_CATEGORIES = new Set(['invariants', 'preferences', 'anti-patterns']);
 export const CONTEXT_ACTIONS = new Set(['read', 'edit', 'test', 'build', 'publish', 'deploy', 'secrets', 'network', 'memory', 'skills', 'project']);
+const ACTION_ALIASES = Object.freeze({ compose: 'edit', create: 'edit', plan: 'project' });
 export const estimateTokens = text => Math.ceil(String(text || '').length / 4);
 
 /** Curation is local, explicit and invalidated by any canonical rule change. */
@@ -32,10 +33,9 @@ export function curatedRules(nodes, now = Date.now()) {
   });
 }
 
-/** A rule scoped to other repos (repos[] or project) never reaches this repo's capsule. */
+/** A rule scoped to another project never reaches this repo's capsule. */
 export function ruleAppliesToRepo(node, repo) {
   const r = String(repo).toLowerCase();
-  if (node.repos?.length && !node.repos.some(x => String(x).toLowerCase() === r)) return false;
   if (node.project && String(node.project).toLowerCase() !== r) return false;
   return true;
 }
@@ -69,12 +69,23 @@ export function selectRules(nodes, { actions = [], projectRoot = process.cwd(), 
     if (!ruleAppliesToRepo(node, repo)) return false;
     const tags = Array.isArray(node.tags) ? node.tags : [];
     if (tags.includes('context:universal')) return true;
+    const triggers = tags.flatMap(t => {
+      if (typeof t !== 'string') return [];
+      if (t.startsWith('context:action:')) {
+        const raw = t.slice(15);
+        return [ACTION_ALIASES[raw] || raw];
+      }
+      if (t === 'context:edit' || t === 'context:read' || t === 'context:test') return [t.slice(8)];
+      return [];
+    });
+    if (triggers.length && !bootstrap) {
+      // Unknown actions conservatively activate every conditional restriction.
+      return !actions.length || actions.some(action => !CONTEXT_ACTIONS.has(action)) ||
+        triggers.some(trigger => !CONTEXT_ACTIONS.has(trigger) || actions.includes(trigger));
+    }
     if (node.priority === 'absolute' || node.immutable === true) return true;
     if (bootstrap) return false;
-    const triggers = tags.filter(t => typeof t === 'string' && t.startsWith('context:action:')).map(t => t.slice(15));
-    // Unknown actions conservatively activate every conditional restriction.
-    return !triggers.length || !actions.length || actions.some(action => !CONTEXT_ACTIONS.has(action)) ||
-      triggers.some(trigger => !CONTEXT_ACTIONS.has(trigger) || actions.includes(trigger));
+    return true;
   });
   return applicable.filter(node => !applicable.some(other => other !== node && other.subject && other.subject === node.subject &&
     other.supersedes?.includes(node.slug))).sort((a, b) =>

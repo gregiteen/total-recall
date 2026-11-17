@@ -13,7 +13,7 @@ const inside = (root, file) => {
 
 /** The same contract serves CLI and HTTP consumers; never spawn a CLI from an HTTP request. */
 export async function retrievePluginContext({ task, projectRoot = process.cwd(), actions = [],
-  limit = 6, maxChars = 1400, timeoutMs = 2500, plugins, loadModule } = {}) {
+  limit = 6, maxChars = 1400, timeoutMs = 2500, queryVector = null, plugins, loadModule } = {}) {
   const root = fs.realpathSync(projectRoot);
   const diagnostics = [], candidates = [], coverage = [];
   let installed;
@@ -38,7 +38,7 @@ export async function retrievePluginContext({ task, projectRoot = process.cwd(),
       const result = await Promise.race([(async () => {
         const mod = await load(file);
         if (typeof mod.retrieveContext !== 'function') throw new Error('provider must export retrieveContext');
-        return mod.retrieveContext({ task, projectRoot: root, actions, limit, maxChars, signal: controller.signal });
+        return mod.retrieveContext({ task, projectRoot: root, actions, limit, maxChars, queryVector, signal: controller.signal });
       })(), timeout]);
       if (!result || !Array.isArray(result.candidates)) throw new Error('provider returned no candidates array');
       const accepted = [], errors = (result.diagnostics || []).slice(0, 3).map(detail);

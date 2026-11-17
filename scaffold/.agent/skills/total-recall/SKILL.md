@@ -10,7 +10,7 @@ metadata:
 
 Run `total-recall --help` first (source checkout: `node bin/total-recall.mjs --help`). Run `total-recall context "task description" --action read,edit,test` before action; read the complete capsule and require `ready:true`. On exit 2, inspect overflow and raise the explicit budget or curate applicability. Refresh when the task, action, project, rules or skills change.
 
-Total Recall is working memory and the operation toolbox. Before decisions about credentials, nodes, agents, configuration or earlier user instructions, run `total-recall recall "topic" --local`. Canonical memory is SSSS Markdown; writes use validated CLI or kernel operations. Never search, edit or copy vault files directly. Derived indexes and compiled instruction surfaces are disposable.
+Total Recall is working memory and the operation toolbox. Before decisions about credentials, nodes, agents, configuration or earlier user instructions, run `total-recall recall "topic"`. Canonical memory is SSSS Markdown; writes use validated CLI or kernel operations. Never search, edit or copy vault files directly. Derived indexes and compiled instruction surfaces are disposable.
 
 ## Route the work to its owner
 

@@ -535,9 +535,17 @@ function judge(call, { harness, readablePaths, session = null, subagent = false,
  * user out of their own session.
  */
 function remind(args) {
+  const isAgy = flag(args, '--harness') === 'agy';
   try {
     let call = {};
     try { call = JSON.parse(readStdin() || '{}'); } catch { /* the payload is optional here */ }
+    const agyMode = isAgy || call.hookEventName === 'PreInvocation';
+    // In Antigravity, PreInvocation fires before every model step in a turn; only invocationNum === 1 is a new user prompt.
+    if (agyMode && call.invocationNum !== undefined && Number(call.invocationNum) > 1) {
+      console.log('{}');
+      process.exitCode = 0;
+      return;
+    }
     const root = findRoot(call.cwd || process.cwd());
     const session = sessionOf(call);
     const result = checkAgentReceipt(root, session, { maxAgeMs: envMaxAgeMs() });
@@ -558,8 +566,11 @@ function remind(args) {
         ? `TR-PREFLIGHT: this is a new instruction, and the earlier acknowledgement was for earlier work. If answering it needs any tool, first run this on its own, naming the new task, and read everything it prints: ${ACK_COMMAND}`
         : null);
     if (args.includes('--json')) console.log(JSON.stringify({ reminder: text }));
+    else if (agyMode) console.log(text ? JSON.stringify({ injectSteps: [{ systemMessage: { systemMessage: text } }] }) : '{}');
     else if (text) console.log(text);
-  } catch { /* advisory only */ }
+  } catch {
+    if (isAgy) console.log('{}');
+  }
   process.exitCode = 0;
 }
 
@@ -567,7 +578,8 @@ function remind(args) {
  * Session-hook entry. A session that was compacted or cleared no longer has any capsule it was
  * handed, in any repository, so its next ack prints one. Exits 0 on every path: this hook only ever costs tokens.
  */
-function sessionStart() {
+function sessionStart(args = []) {
+  const isAgy = flag(args, '--harness') === 'agy';
   try {
     const call = JSON.parse(readStdin() || '{}');
     const session = sessionOf(call);
@@ -575,7 +587,10 @@ function sessionStart() {
       forgetCapsuleDeliveries(session);
       voidSessionAck(session, call.source);
     }
-  } catch { /* the 2-hour ceiling still applies */ }
+    if (isAgy || call.hookEventName === 'SessionStart') console.log('{}');
+  } catch {
+    if (isAgy) console.log('{}');
+  }
   process.exitCode = 0;
 }
 
@@ -658,7 +673,7 @@ export default async function preflight(args = []) {
   if (first === '--check' || first === 'check') return check(args);
   if (first === 'gate') return gate(args.slice(1));
   if (first === 'remind') return remind(args);
-  if (first === 'session-start') return sessionStart();
+  if (first === 'session-start') return sessionStart(args.slice(1));
   if (first === 'install') return install(args.slice(1));
   if (first === 'mode') return mode(args.slice(1));
   if (first === 'coverage') return coverage(args.slice(1));

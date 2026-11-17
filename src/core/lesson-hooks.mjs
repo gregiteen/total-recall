@@ -35,11 +35,13 @@ export function installLessonHooks(row, { dryRun = false, remove = false } = {})
     return { status: remove ? 'removed' : dryRun ? 'would-install' : 'installed', settings: file };
   }
   const events = harness === 'cursor' ? [['stop', false], ['sessionEnd', true]]
-    : ['claude', 'codex', 'dsh', 'agy'].includes(harness) ? [['Stop', false], ['SessionEnd', true]] : null;
+    : harness === 'agy' ? [['Stop', false]]
+    : ['claude', 'codex', 'dsh'].includes(harness) ? [['Stop', false], ['SessionEnd', true]] : null;
   if (!events || !settings.endsWith('.json')) return { status: 'session-ingest', note: 'Native lesson hook requires the harness owner; use session-end ingest.' };
   const text = fs.existsSync(settings) ? fs.readFileSync(settings, 'utf8') : '{}';
   const config = JSON.parse(text);
   const hooks = harness === 'agy' ? (config['total-recall-lessons'] ||= {}) : (config.hooks ||= {});
+  if (harness === 'agy') delete hooks.SessionEnd;
   for (const [event, end] of events) {
     const old = hooks[event] || [];
     if (!Array.isArray(old)) throw new Error(`${harness} ${event} hooks must be a list`);
@@ -52,7 +54,11 @@ export function installLessonHooks(row, { dryRun = false, remove = false } = {})
       return managed(group) ? [] : [group];
     });
     if (!remove) hooks[event].push(harness === 'cursor' ? { command: command(harness, end), timeout: 10 }
+      : harness === 'agy' ? { type: 'command', command: command(harness, end), timeout: 10 }
       : { hooks: [{ type: 'command', command: command(harness, end), timeout: 10 }] });
+  }
+  if (harness === 'agy' && remove && !Object.values(hooks).some(arr => Array.isArray(arr) && arr.length)) {
+    delete config['total-recall-lessons'];
   }
   if (!dryRun) atomicWrite(settings, JSON.stringify(config, null, 2) + '\n');
   return { status: remove ? 'removed' : dryRun ? 'would-install' : 'installed', settings };

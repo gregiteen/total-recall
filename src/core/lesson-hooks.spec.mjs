@@ -17,7 +17,14 @@ it.each(['claude', 'codex', 'dsh', 'agy', 'cursor'])('installs, repeats and remo
   installLessonHooks(row, { dryRun: true }); expect(JSON.parse(fs.readFileSync(settings, 'utf8'))).toEqual(original);
   installLessonHooks(row); const once = fs.readFileSync(settings, 'utf8');
   installLessonHooks(row); expect(fs.readFileSync(settings, 'utf8')).toBe(once);
-  expect(once).toContain('lessons tick'); expect(once).toContain('lessons session-end'); expect(once).toContain('mine');
+  expect(once).toContain('lessons tick');
+  if (harness === 'agy') {
+    expect(once).not.toContain('SessionEnd');
+    expect(JSON.parse(once)['total-recall-lessons'].Stop[0]).toMatchObject({ type: 'command', command: expect.stringContaining('lessons tick') });
+  } else {
+    expect(once).toContain('lessons session-end');
+  }
+  expect(once).toContain('mine');
   installLessonHooks(row, { remove: true });
   const removed = fs.readFileSync(settings, 'utf8'); expect(removed).not.toContain('lessons tick'); expect(removed).toContain('mine');
 });

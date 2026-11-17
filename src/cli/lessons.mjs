@@ -3,6 +3,8 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import { atomicWrite } from '../core/vault.mjs';
 import { parseLayerFlag, resolveBrainDir } from './agent-dir.mjs';
+import { detectProjectBrain } from '../core/brain-locate.mjs';
+import { isBrainEnabled } from '../core/brain-registry.mjs';
 import { tickLessons, enqueueSessionReviews } from '../core/lessons.mjs';
 import { isInternalJobEnv, isAutomaticLessonTask, isLessonsPaused, setLessonsPaused } from '../core/internal-sessions.mjs';
 import { listTasks, cancelTask, resolveQueueDir } from '../core/task-envelope.mjs';
@@ -62,17 +64,20 @@ export default async function lessons(args) {
     const raw = fs.readFileSync(0, 'utf8');
     if (raw.trim()) input = JSON.parse(raw);
   }
+  const sessionCwd = input.cwd || input.workspacePaths?.[0];
+  const projectBrain = sessionCwd ? detectProjectBrain(sessionCwd) : null;
+  const targetBrainDir = (projectBrain && isBrainEnabled(projectBrain.brainDir)) ? projectBrain.brainDir : brainDir;
   const history = input.entries || input.conversation_history || input.extra?.conversation_history;
   if (!opts.transcript && !input.transcript_path && Array.isArray(history)) {
     const id = input.session_id || input.sessionId;
     if (!id) throw new Error('Lesson hook history requires a session id');
     const key = crypto.createHash('sha256').update(`${opts.harness || 'unknown'}:${id}`).digest('hex').slice(0, 12);
-    const dir = path.join(brainDir, 'sessions');
+    const dir = path.join(targetBrainDir, 'sessions');
     fs.mkdirSync(dir, { recursive: true });
     opts.transcript = path.join(dir, `${key}.jsonl`);
     atomicWrite(opts.transcript, history.map(entry => JSON.stringify(entry)).join('\n') + '\n');
   }
-  const result = tickLessons({ brainDir, sessionId: opts.session || input.session_id || input.sessionId || input.conversation_id,
+  const result = tickLessons({ brainDir: targetBrainDir, sessionId: opts.session || input.session_id || input.sessionId || input.conversation_id,
     transcriptPath: opts.transcript || input.transcript_path || input.transcriptPath,
     harness: opts.harness || 'unknown', turnId: input.turn_id || input.prompt_id,
     event: command === 'session-end' ? 'SessionEnd' : (opts.event || input.hook_event_name || input.event || 'Stop'),

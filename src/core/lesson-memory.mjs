@@ -3,6 +3,7 @@ import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { execFile } from 'node:child_process';
 import { loadNodes } from './vault.mjs';
+import { brainDir as globalBrainDir } from './local-config.mjs';
 
 const cli = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../bin/total-recall.mjs');
 
@@ -14,7 +15,9 @@ export function rememberLessonRule(content, { brainDir, title, sourceRef, hold =
   const slug = `lesson-rule-${crypto.createHash('sha256').update(content).digest('hex').slice(0, 16)}`;
   const existing = loadNodes(path.join(brainDir, 'memory-vault')).find(node => node.slug === slug);
   if (existing && existing.body?.trim() === content.trim()) return Promise.resolve({ slug, existing: true });
-  const args = [cli, 'remember', 'invariant', content, '--global', '--slug', slug,
+  const isGlobal = path.resolve(brainDir) === path.resolve(globalBrainDir);
+  const scopeFlag = isGlobal ? '--global' : '--project';
+  const args = [cli, 'remember', 'invariant', content, scopeFlag, '--slug', slug,
     '--status', hold ? 'draft' : 'active', '--tags', 'lesson-review',
     ...(title ? ['--title', title] : [])];
   return new Promise((resolve, reject) => {

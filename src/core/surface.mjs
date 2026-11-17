@@ -523,9 +523,9 @@ export const ENTRY_BLOCK = `# Total Recall: start here
 This repository uses Total Recall. Its rules are not copied into this file: they are compiled for your task when you acknowledge preflight.
 
 1. Read \`.agent/skills/total-recall/SKILL.md\`.
-2. Run \`total-recall tr-preflight --ack --task "<task>" --action read,edit,test\` and read everything it prints. Those are the rules for this task. Until it passes, working tools are denied.
+2. Run \`total-recall tr-preflight --ack --task "<task>" --action read,edit,test\` and read everything it prints. Those are the rules for this task. Re-run \`tr-preflight --ack\` whenever the task, action, or repository changes. Until it passes, working tools are denied.
 3. Route the task through Metaharness with \`total-recall meta-harness route "<task>" --json\` and follow the route.
-4. Look commands up only when you need them: \`total-recall --help\`, \`total-recall <namespace> --help\`, \`total-recall plugin library\`.`;
+4. Look commands and architecture up when needed: \`total-recall --help\`, \`total-recall <namespace> --help\`, \`total-recall plugin library\`, \`total-recall openwiki hubs --json\`.`;
 
 async function writeShim(shimPath, skillsDir, nodes = [], { vaultDir, derivedDir, force = false } = {}) {
   const shimDir = path.dirname(shimPath);

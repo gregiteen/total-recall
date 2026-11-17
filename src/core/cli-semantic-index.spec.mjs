@@ -146,6 +146,16 @@ describe('CLI Semantic Index', () => {
     expect(results).toHaveLength(1);
     expect(results[0]).toMatchObject({ description: 'Current daemon status.', vectorScore: null });
   });
+
+  it('preserves existing 768-dim embeddings when rebuilt with force:true and semantic:false', async () => {
+    const verb = { id: 'core:status', name: 'status', verb: 'total-recall status', description: 'Status.' };
+    const sample = [{ ...verb, hash: hashVerb(verb) }];
+    await buildCliSemanticIndex({ derivedDir: tempDir, force: true, semantic: true, harvest: () => sample });
+    const preserved = await buildCliSemanticIndex({ derivedDir: tempDir, force: true, semantic: false, harvest: () => sample });
+    expect(preserved.skipped).toBe(sample.length);
+    const loaded = loadCliSemanticIndex(tempDir);
+    expect(loaded.verbs.every(v => Array.isArray(v.embedding) && v.embedding.length === 768)).toBe(true);
+  });
 });
 
 describe('formatSubcommandArgs', () => {

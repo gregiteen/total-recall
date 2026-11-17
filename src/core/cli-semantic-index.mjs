@@ -469,7 +469,8 @@ export async function buildCliSemanticIndex({
   }
 
   const harvested = harvest({ projectRoot, skillsDir });
-  const existing = force ? null : loadCliSemanticIndex(derivedDir);
+  const allowSemantic = semantic && process.env.TR_EMBEDDINGS_DISABLED !== '1';
+  const existing = (force && allowSemantic) ? null : loadCliSemanticIndex(derivedDir);
   const existingMap = new Map();
 
   if (existing?.verbs && Array.isArray(existing.verbs)) {
@@ -485,15 +486,13 @@ export async function buildCliSemanticIndex({
   let failedCount = 0;
   const processedVerbs = [];
 
-  const allowSemantic = semantic && process.env.TR_EMBEDDINGS_DISABLED !== '1';
-
   // Process with concurrency batching
   const BATCH_SIZE = 8;
   for (let i = 0; i < harvested.length; i += BATCH_SIZE) {
     const batch = harvested.slice(i, i + BATCH_SIZE);
     await Promise.all(batch.map(async (verb) => {
       const prior = existingMap.get(verb.id);
-      if (prior && prior.hash === verb.hash && !force) {
+      if (prior && prior.hash === verb.hash && (!force || !allowSemantic)) {
         processedVerbs.push({
           ...verb,
           embedding: prior.embedding
