@@ -99,9 +99,12 @@ export function readSessionUsageAnalytics({
   home = process.env.HOME || os.homedir(),
   codexHome = process.env.CODEX_HOME,
   claudeHome = process.env.CLAUDE_HOME,
+  // Sessions that started earlier than this are skipped before their logs are parsed.
+  windowMs = 7 * 86400_000,
 } = {}) {
   const win = { m15: 15 * 60_000, h1: 3600_000, h24: 86400_000, d7: 7 * 86400_000 };
-  const cutoff = now - win.d7;
+  const cutoff = now - Math.min(windowMs, win.d7);
+  const tooOld = (firstTs) => firstTs > 0 && now - firstTs > windowMs;
   const makeHarness = () => ({ m15: emptyBucket(), h1: emptyBucket(), h24: emptyBucket(), d7: emptyBucket() });
   const codex = makeHarness();
   const claude = makeHarness();
@@ -116,6 +119,7 @@ export function readSessionUsageAnalytics({
       let o;
       try { o = JSON.parse(line); } catch { continue; }
       if (!firstTs && o.timestamp) { const t = Date.parse(o.timestamp); if (Number.isFinite(t)) firstTs = t; }
+      if (tooOld(firstTs)) break;
       if ((o.type === 'turn_context' || o.type === 'session_meta') && o.payload?.model) model = String(o.payload.model);
       if (o.type === 'event_msg' && (o.payload?.type === 'thread_goal_updated' || o.payload?.type === 'user_message')) {
         const txt = o.payload?.goal?.objective || o.payload?.message || '';
@@ -131,7 +135,7 @@ export function readSessionUsageAnalytics({
     }
     if (!firstTs) { try { firstTs = fs.statSync(file).mtimeMs; } catch { continue; } }
     const age = now - firstTs;
-    if (age > win.d7) continue;
+    if (age > win.d7 || tooOld(firstTs)) continue;
     const input = lastTotal?.input_tokens || 0;
     const cached = lastTotal?.cached_input_tokens || 0;
     const output = lastTotal?.output_tokens || 0;
@@ -158,6 +162,7 @@ export function readSessionUsageAnalytics({
       let o;
       try { o = JSON.parse(line); } catch { continue; }
       if (!firstTs && o.timestamp) { const t = Date.parse(o.timestamp); if (Number.isFinite(t)) firstTs = t; }
+      if (tooOld(firstTs)) break;
       if (o.type === 'user' && o.message?.content) {
         const txt = typeof o.message.content === 'string' ? o.message.content : JSON.stringify(o.message.content);
         if (INTERNAL_MARKERS.some((m) => txt.includes(m))) internal = true;
@@ -174,7 +179,7 @@ export function readSessionUsageAnalytics({
     }
     if (!firstTs) { try { firstTs = fs.statSync(file).mtimeMs; } catch { continue; } }
     const age = now - firstTs;
-    if (age > win.d7) continue;
+    if (age > win.d7 || tooOld(firstTs)) continue;
     const row = { internal, input: input + cached, cached, output, credits: 0 };
     if (age <= win.m15) addToBucket(claude.m15, row);
     if (age <= win.h1) addToBucket(claude.h1, row);

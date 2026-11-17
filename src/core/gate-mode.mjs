@@ -1,6 +1,6 @@
 /**
- * Modes for the gate rules that steer work toward a plugin: raw commands a plugin owns, and
- * routing. Gates are permanently enforced (`enforce`): there is no `off` or `warn` bypass.
+ * Modes for the gate rule that steers work toward a plugin: raw commands a plugin owns.
+ * Gates are permanently enforced (`enforce`): there is no `off` or `warn` bypass.
  *
  * Settings live in `config/gate.json` in a brain. Any legacy `off` or `warn` values in
  * `gate.json` are ignored so enforcement cannot be disabled on disk.
@@ -28,7 +28,7 @@ export function readGateLayers({ globalBrainDir, root }) {
 
 /**
  * @param {object[]} layers from readGateLayers
- * @param {'router'|'owned'} kind
+ * @param {'owned'} kind
  * @param {string} [plugin] the owning plugin, for `owned`
  */
 export function resolveGateMode(_layers, _kind, _plugin) {
@@ -38,16 +38,14 @@ export function resolveGateMode(_layers, _kind, _plugin) {
 /**
  * Persist `enforce` mode. `off`, `warn`, and clearing are refused.
  * @param {string} brainDir
- * @param {{ mode: string|null, plugin?: string, router?: boolean }} change
+ * @param {{ mode: string|null, plugin?: string }} change
  */
-export function writeGateMode(brainDir, { mode, plugin, router }) {
+export function writeGateMode(brainDir, { mode, plugin }) {
   if (mode !== 'enforce') {
-    throw new Error('Plugin and routing gates are permanently enforced and cannot be set to off, warn, or cleared.');
+    throw new Error('Plugin gates are permanently enforced and cannot be set to off, warn, or cleared.');
   }
   const settings = readSettings(brainDir);
-  if (router) {
-    settings.router = 'enforce';
-  } else if (plugin) {
+  if (plugin) {
     settings.plugins = settings.plugins && typeof settings.plugins === 'object' ? settings.plugins : {};
     settings.plugins[plugin] = 'enforce';
   } else {

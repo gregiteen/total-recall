@@ -314,41 +314,6 @@ export function lastConsultMs(root, { home = os.homedir() } = {}) {
 /** A session id is whatever the harness sends, so it is hashed before it names a file. */
 export const sessionKey = (session) => crypto.createHash('sha256').update(String(session)).digest('hex').slice(0, 16);
 const scoped = (stem, root, session) => `${stem}-${rootKey(root)}${session ? `-${sessionKey(session)}` : ''}.stamp`;
-/** What belongs to the agent goes with it between repositories. With no session, the directory is all there is to go on. */
-const agentScoped = (stem, root, session) => `${stem}-${session ? sessionKey(session) : rootKey(root)}.stamp`;
-
-export const routePath = (root, home = os.homedir(), session = null) => path.join(stateDir(home), agentScoped('route', root, session));
-
-/** Marks that this agent's current task was routed just now, or this directory's when it has no session. */
-export function markRouted(root, { home = os.homedir(), now = Date.now(), session = null } = {}) {
-  writeStamp(routePath(root, home, session), now);
-}
-
-export function lastRoutedMs(root, { home = os.homedir(), session = null } = {}) {
-  return readStamp(routePath(root, home, session));
-}
-
-const routeWarnedPath = (root, home, session) => path.join(stateDir(home), agentScoped('route-warned', root, session));
-
-/** Marks that this session has been told about routing, so one acknowledgement warns only once. */
-export function markRouteWarned(root, { home = os.homedir(), now = Date.now(), session = null } = {}) {
-  writeStamp(routeWarnedPath(root, home, session), now);
-}
-
-export function lastRouteWarnedMs(root, { home = os.homedir(), session = null } = {}) {
-  return readStamp(routeWarnedPath(root, home, session));
-}
-
-const selectionPath = (root, home) => path.join(stateDir(home), scoped('route-selected', root));
-
-/** The harness the router chose for work in this repository, or null when it chose none. */
-export function markRouteSelection(root, harness, { home = os.homedir(), now = Date.now() } = {}) {
-  writeBookkeeping(selectionPath(root, home), (target) => fs.writeFileSync(target, JSON.stringify({ at: now, harness: harness || null, root }), { mode: 0o600 }));
-}
-
-export function lastRouteSelection(root, { home = os.homedir() } = {}) {
-  return newestRecord(selectionPath(root, home));
-}
 
 const sessionAckPath = (session, home) => path.join(stateDir(home), `session-ack-${sessionKey(session)}.stamp`);
 const delegatedPath = (root, home) => path.join(stateDir(home), scoped('delegated', root));

@@ -23,7 +23,8 @@ export async function notifyAlert({ title = 'Metaharness', message = '', severit
   }
 }
 
-export function evaluateRunawayBreakers({ analytics = readSessionUsageAnalytics(), limits = DEFAULT_BREAKER_LIMITS } = {}) {
+// The breakers read only the 15-minute and 1-hour windows, so older sessions are never parsed.
+export function evaluateRunawayBreakers({ analytics = readSessionUsageAnalytics({ windowMs: 3600_000 }), limits = DEFAULT_BREAKER_LIMITS } = {}) {
   const internal15m = (analytics?.codex?.m15?.internalSessions || 0) + (analytics?.claude?.m15?.internalSessions || 0);
   const total15m = (analytics?.codex?.m15?.sessions || 0) + (analytics?.claude?.m15?.sessions || 0);
   const tokens1h = (analytics?.codex?.h1?.totalTokens || 0) + (analytics?.claude?.h1?.totalTokens || 0);

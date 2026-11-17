@@ -38,19 +38,17 @@ function latestRuns(receipts) {
 
 /** This query never launches an agent or treats a synthetic hook test as live activity. */
 export async function inspectLocalAdoption({ inspect = inspectAgents, receipts = readReceipts, preflight = readPreflight } = {}) {
-  const [inventory, history, gates, mode] = await Promise.allSettled([
-    inspect(), receipts(), preflight(['report']), preflight(['mode', '--router']),
+  const [inventory, history, gates] = await Promise.allSettled([
+    inspect(), receipts(), preflight(['report']),
   ]);
   const issues = [];
   const inventoryRows = Array.isArray(inventory.value?.agents) ? inventory.value.agents : null;
   const receiptRows = Array.isArray(history.value) ? history.value : null;
   const adapterRows = Array.isArray(gates.value?.adapters) ? gates.value.adapters : null;
   const decisions = gates.value?.compliance?.byHarness;
-  const routerMode = mode.value?.router?.mode;
   if (!inventoryRows) issues.push('Agent inventory unavailable');
   if (!receiptRows) issues.push('Managed run receipts unavailable');
   if (!adapterRows || !decisions) issues.push('Native preflight evidence unavailable');
-  if (!['off', 'warn', 'enforce'].includes(routerMode)) issues.push('Native router policy unavailable');
   const runs = latestRuns(receiptRows || []);
   const adapters = new Map((adapterRows || []).map(row => [row.id, row.verification]));
   const agents = (inventoryRows || []).map(({ id, name, installed, authenticated, version, blockedBy }) => {
@@ -67,7 +65,7 @@ export async function inspectLocalAdoption({ inspect = inspectAgents, receipts =
   const installed = agents.filter(agent => agent.installed);
   const managedCompletions = installed.filter(agent => agent.managedRun.lastCompleted).length;
   return {
-    ok: issues.length === 0, pluginVersion: version, routerMode: routerMode ?? null,
+    ok: issues.length === 0, pluginVersion: version,
     issues, agents,
     summary: { installed: installed.length, managedCompletions, liveHookActivity: installed.filter(agent => agent.nativeGate.recentDecisions > 0).length },
   };

@@ -7,8 +7,8 @@ import { detectProjectBrain } from '../core/brain-locate.mjs';
 import { globalBrainDirFor, isBrainEnabled } from '../core/brain-registry.mjs';
 import { GATE_MODES, gateConfigPath, projectBrainDir, readGateLayers, resolveGateMode, writeGateMode } from '../core/gate-mode.mjs';
 import { installHarnessHooks, loadGateAdapters } from '../core/harness-hooks.mjs';
-import { ackDirectory, capsuleVerb, decide, gatePackageBroken, isAckCommand, isCheckCommand, isRouteCommand, isSubagentPayload, nativeToolOf, sessionOf, SWEEP_CONSULT_MS, whenGateFails } from '../core/preflight-gate.mjs';
-import { ACK_COMMAND, CAPSULE_REFRESH_MS, acknowledge, canKeepStamps, checkAgentReceipt, checkAnyReceipt, findRoot, forgetCapsuleDeliveries, lastArrivalMs, lastCapsuleDelivery, lastConsultMs, lastRoutedMs, lastRouteSelection, lastRouteWarnedMs, lastSessionAck, lastPromptMs, markArrival, markDelegated, markPrompt, markRouted, markRouteSelection, markRouteWarned, markSessionAck, noteCaller, recordDecision, sessionHasStanding, sessionKey, readDecisions, takeCaller, voidSessionAck } from '../core/preflight-receipt.mjs';
+import { ackDirectory, capsuleVerb, decide, gatePackageBroken, isAckCommand, isCheckCommand, isSubagentPayload, nativeToolOf, sessionOf, SWEEP_CONSULT_MS, whenGateFails } from '../core/preflight-gate.mjs';
+import { ACK_COMMAND, CAPSULE_REFRESH_MS, acknowledge, canKeepStamps, checkAgentReceipt, checkAnyReceipt, findRoot, forgetCapsuleDeliveries, lastArrivalMs, lastCapsuleDelivery, lastConsultMs, lastSessionAck, lastPromptMs, markArrival, markDelegated, markPrompt, markSessionAck, noteCaller, recordDecision, sessionHasStanding, sessionKey, readDecisions, takeCaller, voidSessionAck } from '../core/preflight-receipt.mjs';
 
 const USAGE = `Usage: total-recall preflight <command>
   ack --task "<task>" [--action read,edit,test] [--json]   Record a receipt after context ready:true and rules verify, and print the capsule.
@@ -20,9 +20,10 @@ const USAGE = `Usage: total-recall preflight <command>
   remind [--json]                                           Prompt-hook entry: records the new instruction, so the next tool call needs a new ack; always exits 0
   session-start                                             Session-hook entry: compaction or clear voids the session's ack, and the next ack prints the capsule; always exits 0
   install [--harness <id>|--all] [--dry-run]                Install the gate for a harness, or for every harness here. Install and update do this. No off switch.
-  mode [enforce] [--plugin <id>|--router] [--repo] [--json]
-                                                            Show gate enforcement status. All plugin and routing gates are permanently
+  mode [enforce] [--plugin <id>] [--repo] [--json]
+                                                            Show gate enforcement status. Plugin gates are permanently
                                                             enforced; off, warn, and clear bypasses are disabled.
+                                                            The session the user is talking to is never asked to route its own work.
   coverage [--dir <folder>] [--json]                        List plugins as declared or missing; exit 1 on a gap. Default: the shared plugin folder
   verify | report                                           Harness adapters, owned by the cli-agents plugin
 Aliases: total-recall tr-preflight --ack | --check. A receipt lasts 30 minutes (config preflight_max_age_minutes).
@@ -342,7 +343,7 @@ async function report(args) {
  * the edit that repairs it.
  */
 export function readGateDeclarations(pluginsDir = path.join(globalBrainDirFor(), 'plugins')) {
-  const declared = { owned: [], router: null };
+  const declared = { owned: [] };
   let names;
   try { names = fs.readdirSync(pluginsDir); } catch { return declared; }
   for (const name of names) {
@@ -352,8 +353,6 @@ export function readGateDeclarations(pluginsDir = path.join(globalBrainDirFor(),
       for (const row of manifest.gate?.owned_commands || []) {
         if (row?.pattern && row?.use) declared.owned.push({ plugin, pattern: row.pattern, use: row.use });
       }
-      const router = manifest.gate?.router;
-      if (router?.pattern && router?.use && !declared.router) declared.router = { plugin, ...router };
     } catch { /* unreadable manifest: declares nothing */ }
   }
   return declared;
@@ -399,33 +398,6 @@ function projectBrainRoot(dir) {
   return brain && isBrainEnabled(brain.brainDir) ? brain.projectRoot : null;
 }
 
-/** How long a route's selection binds when the receipt names no window: the default receipt lifetime. */
-const ROUTE_SELECTION_MS = 30 * 60000;
-
-/**
- * Records which harness a router command selected, so the gate can deny writes from the others.
- * Called after the router plugin's own command runs, with what it printed. Output that is not a
- * route result records nothing. Bookkeeping only: it never throws.
- * @returns {string|null|undefined} the selected harness, null when the route chose none, undefined when nothing was recorded
- */
-export function noteRouteSelection({ manifest, args = [], stdout = '', cwd = process.cwd() } = {}) {
-  try {
-    const router = manifest?.gate?.router;
-    if (!router?.pattern) return undefined;
-    const command = `${manifest.cli?.command || manifest.id} ${args.map(String).join(' ')}`;
-    if (!new RegExp(`(?:^|\\s)(?:${router.pattern})(\\s|$)`).test(command)) return undefined;
-    const text = String(stdout || '').trim();
-    let result;
-    try { result = JSON.parse(text); } catch { result = JSON.parse(text.split('\n').pop()); }
-    if (!result || typeof result !== 'object' || !('selected' in result)) return undefined;
-    const selected = typeof result.selected === 'string' && result.selected ? result.selected : null;
-    const root = findRoot(cwd);
-    markRouted(root);
-    markRouteSelection(root, selected);
-    return selected;
-  } catch { return undefined; }
-}
-
 /** The gate's answer to a call. Nothing here may throw, because an answer is all that keeps its repair reachable. */
 function evaluate(call, options = {}) {
   try {
@@ -453,15 +425,10 @@ function judge(call, { harness, readablePaths, session = null, subagent = false,
   const check = () => (delegated ? checkAnyReceipt(root, { maxAgeMs: limit }) : checkAgentReceipt(root, session, { maxAgeMs: limit }));
   const working = own && !delegated ? rootOfWork(call, root) : null;
   let arrivedAt = null;
-  // What this session's route is measured from. Another agent's acknowledgement must not void it.
-  const ackedAt = (receipt) => ownAck || Date.parse(receipt?.at || 0);
   let layers;
   const decision = decide(call, {
     readablePaths,
     ownedCommands: () => declared.owned,
-    router: () => declared.router,
-    routed: (receipt) => lastRoutedMs(root, { session }) >= ackedAt(receipt),
-    routeWarned: (receipt) => lastRouteWarnedMs(root, { session }) >= ackedAt(receipt),
     sessionAcknowledged: (result) => runByRouter || subagent || sessionHasStanding(root, session, { limitMs: limit ?? result.limitMs }),
     // Asked only once standing has failed, so an acknowledgement on record means it has expired.
     sessionLapsed: () => (own?.voided ? 'compacted' : Boolean(ownAck)),
@@ -484,15 +451,6 @@ function judge(call, { harness, readablePaths, session = null, subagent = false,
       return resolveGateMode(layers, kind, plugin);
     },
     ownerHealthy: (plugin, use) => ownerRuns(plugin, use, root),
-    // A subagent or a run the router started reports to whoever routed the work.
-    dispatched: runByRouter || subagent || Boolean(session && !ownAck),
-    // Only a named harness can be told apart from the one the router chose.
-    harness: harness && harness !== 'generic' ? harness : null,
-    routerRun: runByRouter,
-    selection: (receipt) => {
-      const chosen = lastRouteSelection(root);
-      return chosen && Date.now() - chosen.at < (limit ?? receipt?.limitMs ?? ROUTE_SELECTION_MS) ? chosen : null;
-    },
     check,
     recentConsult: () => {
       const now = Date.now();
@@ -508,9 +466,7 @@ function judge(call, { harness, readablePaths, session = null, subagent = false,
       // A subagent shares its parent's session id and has not seen the parent's capsule.
       const verb = session && !subagent ? (isCheckCommand(call.command) ? 'check' : capsuleVerb(call.command)) : null;
       if (verb) noteCaller(findRoot(ackDirectory(call.command, call.cwd || process.cwd())), session, verb, call.command);
-      if (isRouteCommand(call.command, declared.router)) markRouted(root, { session });
     }
-    if (decision.warned?.includes('route')) markRouteWarned(root, { session });
     if (arrivedAt && decision.warned?.includes('arrival')) markArrival(arrivedAt, session);
     if (decision.decision === 'allow' && call.tool === 'agent' && !subagent && (!session || ownAck)) markDelegated(root);
     recordDecision({
@@ -618,14 +574,14 @@ function coverage(args) {
     if (!tasks.length) missing.push('tasks');
     if (!Array.isArray(owned)) missing.push('owned commands');
     if (!readme.includes(AGENT_DOC_HEADING)) missing.push('docs');
-    rows.push({ plugin: manifest.id || name, tasks: tasks.length, owned: Array.isArray(owned) ? owned.length : 0, router: Boolean(manifest.gate?.router), missing });
+    rows.push({ plugin: manifest.id || name, tasks: tasks.length, owned: Array.isArray(owned) ? owned.length : 0, missing });
   }
   const gaps = rows.filter((row) => row.missing.length);
   if (!rows.length || gaps.length) process.exitCode = 1;
   if (args.includes('--json')) return console.log(JSON.stringify({ ok: rows.length > 0 && !gaps.length, dir, declared: rows.length - gaps.length, missing: gaps.length, plugins: rows }, null, 2));
   if (!rows.length) return console.error(`No plugins found in ${dir}.`);
   for (const row of rows) {
-    const detail = row.missing.length ? `missing ${row.missing.join(', ')}` : `${row.tasks} tasks, ${row.owned ? `${row.owned} raw commands` : 'no raw commands'}${row.router ? ', router' : ''}`;
+    const detail = row.missing.length ? `missing ${row.missing.join(', ')}` : `${row.tasks} tasks, ${row.owned ? `${row.owned} raw commands` : 'no raw commands'}`;
     console.log(`${row.missing.length ? '✖' : '✔'} ${row.plugin}: ${detail}`);
   }
   console.log(`${rows.length - gaps.length} of ${rows.length} plugins declared.`);
@@ -641,20 +597,16 @@ async function mode(args) {
   const repo = args.includes('--repo');
   const brain = repo ? projectBrainDir(root) : globalBrainDirFor();
   if (value !== undefined) {
-    if (value !== 'enforce') return fail(`✖ Plugin and routing gates are permanently enforced and have no "${value}" bypass.`);
+    if (value !== 'enforce') return fail(`✖ Plugin gates are permanently enforced and have no "${value}" bypass.`);
     const plugin = flag(args, '--plugin');
-    const router = args.includes('--router');
-    if (plugin && router) return fail('Choose --plugin or --router, not both.');
     if (plugin && !plugins.includes(plugin)) return fail(`No plugin here declares raw commands under "${plugin}". Declared: ${plugins.join(', ') || 'none'}.`);
-    if (router && !declared.router) return fail('No plugin here declares a router.');
     if (repo && !fs.existsSync(brain)) return fail(`${root} has no project brain to hold this setting. Run total-recall init there, or leave off --repo.`);
-    writeGateMode(brain, { mode: 'enforce', plugin, router });
+    writeGateMode(brain, { mode: 'enforce', plugin });
   }
   const layers = readGateLayers({ globalBrainDir: globalBrainDirFor(), root });
   const { adapters } = await loadGateAdapters(root);
   const report = {
     settings: { machine: gateConfigPath(globalBrainDirFor()), repo: gateConfigPath(projectBrainDir(root)) },
-    router: declared.router ? { plugin: declared.router.plugin, mode: resolveGateMode(layers, 'router') } : null,
     plugins: plugins.map((plugin) => ({ plugin, mode: resolveGateMode(layers, 'owned', plugin) })),
     harnesses: adapters ? adapters.list().map((adapter) => ({ harness: adapter.id, ...(adapter.warnings || { delivery: 'none', via: null }) })) : null,
   };
@@ -662,7 +614,6 @@ async function mode(args) {
   console.log('Gate modes. The preflight receipt is always required and has no mode.');
   console.log(`  machine settings: ${report.settings.machine}`);
   console.log(`  repo settings:    ${report.settings.repo}`);
-  if (report.router) console.log(`  routing (${report.router.plugin}): ${report.router.mode}`);
   for (const row of report.plugins) console.log(`  ${row.plugin}: ${row.mode}`);
   console.log('Whether a warning can reach the agent:');
   if (!report.harnesses) return console.log('  unknown: the harness adapters could not load.');

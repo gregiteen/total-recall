@@ -1,3 +1,9 @@
+## 3.50.2 — 2026-11-17
+
+- The preflight gate no longer makes the session the user is talking to route its own task through Metaharness, and no longer denies its writes because a route picked another harness. Routing is for work handed to another harness; raw harness launches (`codex exec`, `claude -p` and the rest) still point at `meta-harness route --execute`. The gate's route stamps, route selection record, `preflight mode --router` and the hook that recorded route results are removed. Generated agent instructions now say to do the work and to use `route --execute` when handing it off.
+- The bundled Metaharness (0.5.4) no longer declares a router to the gate, and its `adoption` report no longer requires a router mode.
+- Metaharness 0.5.4: the runaway circuit breaker that runs before every dispatch and background reasoning run reads only sessions from the last hour. In 0.5.3 it parsed seven days of every Claude and Codex session log on each dispatch, which took seconds per dispatch and made the cancellation tests time out. Its tests no longer read the machine's real Claude logs.
+
 ## 3.50.1 — 2026-11-17
 
 - The bundled Operator Alerts plugin (1.1.1) names Total Recall contributors in its license. 3.50.0 shipped a license naming a private product, which the repository hygiene test rejects.

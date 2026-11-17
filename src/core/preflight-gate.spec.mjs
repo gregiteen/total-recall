@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { ackDirectory, capsuleVerb, decide, findOwnedCommand, GATE_PACKAGE, gatePackageBroken, isAckCommand, isCheckCommand, isPlainTotalRecall, isRepoSweep, isRouteCommand, isSatisfyingCommand, SWEEP_CONSULT_MS, TOOL_CLASSES, whenGateFails } from './preflight-gate.mjs';
+import { ackDirectory, capsuleVerb, decide, findOwnedCommand, GATE_PACKAGE, gatePackageBroken, isAckCommand, isCheckCommand, isPlainTotalRecall, isRepoSweep, isSatisfyingCommand, SWEEP_CONSULT_MS, TOOL_CLASSES, whenGateFails } from './preflight-gate.mjs';
 
 describe('compact in the gate', () => {
   it('is open when plain and closed when chained or piped', () => {
@@ -290,89 +290,22 @@ describe('decide: commands a plugin owns', () => {
   });
 });
 
-describe('decide: every task goes through the declared router', () => {
-  const router = { plugin: 'meta-harness', pattern: 'meta-harness\\s+(route|coordinate)', use: 'total-recall meta-harness route "<task>" --json' };
-  const base = { router: () => router, recentConsult: () => true, mode: () => 'enforce' };
-  const unrouted = fresh({ ...base, routed: () => false });
-  const routed = fresh({ ...base, routed: () => true });
+describe('decide: the session the user is talking to does its own work', () => {
+  const stale = { router: () => ({ plugin: 'meta-harness', pattern: 'meta-harness\\s+route', use: 'total-recall meta-harness route "<task>" --json' }), routed: () => false, selection: () => ({ harness: 'codex', at: Date.now() }), harness: 'claude' };
 
-  it('in enforce, denies working tools until the task is routed, and names the command', () => {
+  it('never asks it to route first, and never denies its writes over a harness a router picked', () => {
     for (const call of [{ tool: 'write', path: 'a' }, { tool: 'shell', command: 'npm test' }, { tool: 'mcp' }]) {
-      expect(decide(call, unrouted), call.tool).toMatchObject({ decision: 'deny', rule: 'route', fix: router.use });
-      expect(decide(call, routed).decision, call.tool).toBe('allow');
-    }
-  });
-  it('keeps reading, searching and Total Recall commands open, so routing can run', () => {
-    for (const call of [{ tool: 'read', path: 'a' }, { tool: 'search' }, { tool: 'web' }, { tool: 'shell', command: 'total-recall meta-harness route "x; y" --json' }]) {
-      expect(decide(call, unrouted).decision, JSON.stringify(call)).toBe('allow');
+      expect(decide(call, fresh({ ...stale, recentConsult: () => true })), call.tool).toEqual({ decision: 'allow', rule: 'receipt:fresh' });
     }
   });
   it('does not treat a chained command as a Total Recall command', () => {
     expect(isPlainTotalRecall('total-recall status; npm test')).toBe(false);
     expect(isPlainTotalRecall('total-recall status | head')).toBe(false);
-    expect(decide({ tool: 'shell', command: 'total-recall status && npm test' }, unrouted).decision).toBe('deny');
-  });
-  it('always allows native subagents, routed or not', () => {
-    expect(decide({ tool: 'agent' }, unrouted).decision).toBe('allow');
-    expect(decide({ tool: 'agent' }, routed).decision).toBe('allow');
-  });
-  it('lets a process the router started work', () => {
-    const inner = fresh({ ...base, routed: () => false, dispatched: true });
-    expect(decide({ tool: 'write', path: 'a' }, inner).decision).toBe('allow');
-  });
-  it('applies nothing when no plugin declares a router', () => {
-    expect(decide({ tool: 'write', path: 'a' }, fresh({ router: () => null })).decision).toBe('allow');
-  });
-  it('recognises only plain route commands', () => {
-    expect(isRouteCommand('total-recall meta-harness route "x" --json', router)).toBe(true);
-    expect(isRouteCommand('node bin/total-recall.mjs meta-harness coordinate "x"', router)).toBe(true);
-    expect(isRouteCommand('total-recall meta-harness status', router)).toBe(false);
-    expect(isRouteCommand('total-recall recall "meta-harness route"', router)).toBe(false);
-    expect(isRouteCommand('total-recall meta-harness route "x"; rm a', router)).toBe(false);
-  });
-});
-
-describe('decide: once the router selects a harness, only that harness writes', () => {
-  const router = { plugin: 'meta-harness', pattern: 'meta-harness\\s+route', use: 'total-recall meta-harness route "<task>" --json' };
-  const chose = (harness) => fresh({ router: () => router, routed: () => true, recentConsult: () => true, mode: () => 'warn', selection: () => ({ harness, at: Date.now() }) });
-
-  it('denies a write from a harness the router did not select, whatever the mode', () => {
-    for (const mode of ['off', 'warn', 'enforce']) {
-      const answer = decide({ tool: 'write', path: 'a' }, { ...chose('codex'), mode: () => mode, harness: 'claude' });
-      expect(answer, mode).toMatchObject({ decision: 'deny', rule: 'route:selected', fix: router.use });
-      expect(answer.reason).toContain('selected codex');
-      expect(answer.reason).toContain('claude may not write');
-    }
-  });
-  it('lets the selected harness write', () => {
-    expect(decide({ tool: 'write', path: 'a' }, { ...chose('codex'), harness: 'codex' })).toMatchObject({ decision: 'allow' });
-  });
-  it('lets a run the router started write, whichever harness it runs in', () => {
-    expect(decide({ tool: 'write', path: 'a' }, { ...chose('codex'), harness: 'claude', routerRun: true, dispatched: true }).decision).toBe('allow');
-  });
-  it('blocks only writes: reading, searching, shell and subagents stay as before', () => {
-    for (const call of [{ tool: 'read', path: 'a' }, { tool: 'search' }, { tool: 'shell', command: 'npm test' }, { tool: 'agent' }]) {
-      expect(decide(call, { ...chose('codex'), harness: 'claude' }).decision, call.tool).toBe('allow');
-    }
-  });
-  it('applies nothing before a selection, after a route that chose none, or for a call with no named harness', () => {
-    expect(decide({ tool: 'write', path: 'a' }, { ...chose('codex'), selection: () => null, harness: 'claude' }).decision).toBe('allow');
-    expect(decide({ tool: 'write', path: 'a' }, { ...chose(null), harness: 'claude' }).decision).toBe('allow');
-    expect(decide({ tool: 'write', path: 'a' }, { ...chose('codex'), harness: null }).decision).toBe('allow');
-  });
-  it('still asks for the receipt first', () => {
-    expect(decide({ tool: 'write', path: 'a' }, { ...noReceipt, router: () => router, selection: () => ({ harness: 'codex', at: Date.now() }), harness: 'claude' }).rule).toBe('receipt');
-  });
-  it('passes the receipt to the selection, so its age can be judged against the receipt window', () => {
-    let seen;
-    decide({ tool: 'write', path: 'a' }, { check: () => ({ ok: true, problems: [], limitMs: 1234 }), harness: 'claude', selection: (receipt) => { seen = receipt; return null; } });
-    expect(seen.limitMs).toBe(1234);
   });
 });
 
 describe('decide: modes for the rules that steer work toward a plugin', () => {
   const owned = [{ plugin: 'git-sentinel', pattern: 'git\\s+status\\b', use: 'total-recall git-sentinel audit' }];
-  const router = { plugin: 'meta-harness', pattern: 'meta-harness\\s+route', use: 'total-recall meta-harness route "<task>" --json' };
   const raw = { tool: 'shell', command: 'git status' };
   const base = { ownedCommands: () => owned, recentConsult: () => true };
 
@@ -386,12 +319,6 @@ describe('decide: modes for the rules that steer work toward a plugin', () => {
     const broken = decide(raw, fresh({ ...base, mode: () => 'enforce', ownerHealthy: () => false }));
     expect(broken.decision).toBe('allow');
     expect(broken.warning).toContain('failed its health check');
-  });
-  it('enforces routing when not yet routed', () => {
-    const first = decide({ tool: 'write', path: 'a' }, fresh({ router: () => router, routed: () => false, ownerHealthy: () => true }));
-    expect(first).toMatchObject({ decision: 'deny', rule: 'route' });
-    expect(first.fix).toContain(router.use);
-    expect(decide({ tool: 'write', path: 'a' }, fresh({ router: () => router, routed: () => true, ownerHealthy: () => true }))).toEqual({ decision: 'allow', rule: 'receipt:fresh' });
   });
   it('never turns off the receipt or plugin gates, even if mode() returns off', () => {
     const noReceipt = { check: () => ({ ok: false, problems: ['no receipt'] }), mode: () => 'off' };
@@ -407,7 +334,7 @@ describe('decide: modes for the rules that steer work toward a plugin', () => {
   });
   it('never gates native subagents, in any mode', () => {
     for (const mode of ['off', 'warn', 'enforce']) {
-      expect(decide({ tool: 'agent' }, fresh({ router: () => router, routed: () => false, mode: () => mode, ownerHealthy: () => true }))).toEqual({ decision: 'allow', rule: 'receipt:fresh' });
+      expect(decide({ tool: 'agent' }, fresh({ ownedCommands: () => owned, mode: () => mode, ownerHealthy: () => true }))).toEqual({ decision: 'allow', rule: 'receipt:fresh' });
     }
   });
 });

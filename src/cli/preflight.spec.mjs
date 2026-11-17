@@ -317,10 +317,10 @@ describe('bookkeeping never decides anything (a sandbox may refuse every write t
     acknowledge({ root: repo, task: 'spec', home, run: (a) => (a[0] === 'context' ? { ok: true, out: 'ready:true tokens:1 version:aa', err: '', code: 0 } : { ok: true, out: '', err: '', code: 0 }) });
     fs.mkdirSync(path.join(pluginDir(), 'ui'), { recursive: true });
     fs.writeFileSync(path.join(pluginDir(), 'plugin.json'), JSON.stringify({
-      id: 'fx', name: 'Fixture', version: '1.0.0', description: 'A plugin that owns one raw command and routes.',
+      id: 'fx', name: 'Fixture', version: '1.0.0', description: 'A plugin that owns one raw command.',
       cli: { command: 'fx', handler: './cli.mjs', subcommands: [{ name: 'route', description: 'Route.' }] },
       ui: { home: 'home', design_tokens: 'DESIGN.md', elements: [{ id: 'home', kind: 'panel', tag: 'fx-home', module: 'ui/home.js' }] },
-      gate: { owned_commands: [{ pattern: 'rawthing\\b', use: 'total-recall fx route' }], router: { pattern: 'fx\\s+route', use: 'total-recall fx route "<task>"' } },
+      gate: { owned_commands: [{ pattern: 'rawthing\\b', use: 'total-recall fx route' }] },
     }));
     fs.writeFileSync(path.join(pluginDir(), 'cli.mjs'), 'process.exit(0);');
     fs.writeFileSync(path.join(pluginDir(), 'ui', 'home.js'), '');
@@ -330,15 +330,11 @@ describe('bookkeeping never decides anything (a sandbox may refuse every write t
     for (const d of [home, repo, tmp]) fs.rmSync(d, { recursive: true, force: true });
   });
 
-  it('allows and warns with the state folder unwritable, keeping the stamp in the temp folder', () => {
+  it('allows with the state folder unwritable', () => {
     refuseWrites(state());
     try {
-      const first = gate({ tool: 'write', path: 'a' });
-      expect(first.code).toBe(0);
-      expect(first.answer).toMatchObject({ decision: 'allow', warned: ['route'] });
       expect(gate({ tool: 'write', path: 'a' }).answer).toEqual({ decision: 'allow', rule: 'receipt:fresh' });
       expect(gate({ tool: 'shell', command: 'rawthing' }).code).toBe(0);
-      expect(fs.readdirSync(state()).some((name) => name.startsWith('route-warned-'))).toBe(false);
     } finally { allowWrites(state()); }
   });
   it('allows with both places unwritable, and only warns again', () => {
@@ -538,22 +534,10 @@ describe('receipts count per session', () => {
     expect(denied.code).toBe(2);
     expect(denied.err.match(/tr-preflight --ack/g)).toHaveLength(1);
   });
-  it('does not let one agent acknowledging void another session route', () => {
-    expect(gate({ tool: 'shell', command: ACK, session_id: 'router-a' }).code).toBe(0);
-    expect(gate({ ...WORK, session_id: 'router-a' }).answer.rule).toBe('route');
-    expect(gate({ tool: 'shell', command: 'total-recall fx route "x"', session_id: 'router-a' }).code).toBe(0);
-    expect(gate({ ...WORK, session_id: 'router-a' }).code).toBe(0);
-    expect(gate({ tool: 'shell', command: ACK, session_id: 'router-b' }).code).toBe(0);
-    expect(gate({ ...WORK, session_id: 'router-a' }).code).toBe(0);
-    expect(gate({ ...WORK, session_id: 'router-b' }).answer.rule).toBe('route');
-  });
-  it('enforces routing per session until routed', () => {
-    expect(gate({ tool: 'shell', command: ACK, session_id: 'warn-a' }).code).toBe(0);
-    expect(gate({ tool: 'shell', command: ACK, session_id: 'warn-b' }).code).toBe(0);
-    expect(gate({ ...WORK, session_id: 'warn-a' }).answer.rule).toBe('route');
-    expect(gate({ tool: 'shell', command: ROUTE, session_id: 'warn-a' }).code).toBe(0);
-    expect(gate({ ...WORK, session_id: 'warn-a' }).code).toBe(0);
-    expect(gate({ ...WORK, session_id: 'warn-b' }).answer.rule).toBe('route');
+  it('lets an acknowledged session work without routing its own task, even where a plugin declares a router', () => {
+    expect(gate({ tool: 'shell', command: ACK, session_id: 'unrouted' }).code).toBe(0);
+    expect(gate({ ...WORK, session_id: 'unrouted' }).answer).toEqual({ decision: 'allow', rule: 'receipt:fresh' });
+    expect(gate({ tool: 'shell', command: 'npm test', session_id: 'unrouted' }).code).toBe(0);
   });
   it('tells a prompt hook when only this session is missing, and never blocks', () => {
     const r = spawnSync(process.execPath, [BIN, 'preflight', 'remind', '--json'], { cwd: repo, input: JSON.stringify({ cwd: repo, session_id: 'prompt-only' }), encoding: 'utf8', env: env() });
@@ -948,7 +932,7 @@ describe('preflight coverage', () => {
   });
 });
 
-describe('a route selection binds writes from other harnesses (real process)', () => {
+describe('a route selection never binds the session the user is talking to (real process)', () => {
   let home;
   let repo;
   let tmp;
@@ -980,24 +964,17 @@ describe('a route selection binds writes from other harnesses (real process)', (
   });
   afterAll(() => { for (const d of [home, repo, tmp]) fs.rmSync(d, { recursive: true, force: true }); });
 
-  it('allows any harness to write before a route has selected one', () => {
-    expect(route('').status).toBe(0);
-    expect(gate(EDIT, 'claude').code).toBe(0);
-  });
-  it('denies the harness the route did not select, and allows the selected one and the router\'s own runs', () => {
+  it('lets every harness write after a route picked another one', () => {
     expect(route('codex').status).toBe(0);
-    const denied = gate(EDIT, 'claude');
-    expect(denied.code).not.toBe(0);
-    expect(`${denied.out}${denied.err}`).toContain('selected codex');
-    expect(gate(EDIT, 'codex').code).toBe(0);
-    expect(gate(EDIT, 'claude', { TR_META_HARNESS_RUN: '1' }).code).toBe(0);
-    expect(gate({ tool_name: 'Read', tool_input: { file_path: 'a.txt' } }, 'claude').code).toBe(0);
-  });
-  it('lets the next route replace the selection, and a route that chose none clear it', () => {
-    expect(route('claude').status).toBe(0);
     expect(gate(EDIT, 'claude').code).toBe(0);
-    expect(gate(EDIT, 'codex').code).not.toBe(0);
-    route('');
     expect(gate(EDIT, 'codex').code).toBe(0);
+    expect(route('claude').status).toBe(0);
+    expect(gate(EDIT, 'codex').code).toBe(0);
+  });
+  it('records no selection', () => {
+    route('codex');
+    const state = path.join(home, '.agent', 'tr-preflight');
+    const names = fs.existsSync(state) ? fs.readdirSync(state) : [];
+    expect(names.filter((name) => name.startsWith('route'))).toEqual([]);
   });
 });

@@ -24,20 +24,17 @@ afterEach(() => fs.rmSync(dir, { recursive: true, force: true }));
 describe('gate modes', () => {
   it('enforces by default', () => {
     expect(DEFAULT_GATE_MODE).toBe('enforce');
-    expect(modeOf('router')).toBe('enforce');
     expect(modeOf('owned', 'mesh')).toBe('enforce');
   });
   it('ignores off/warn overrides and stays enforced', () => {
-    write(globalBrainDir, { default: 'off', router: 'warn', plugins: { mesh: 'off', 'git-sentinel': 'warn' } });
+    write(globalBrainDir, { default: 'off', plugins: { mesh: 'off', 'git-sentinel': 'warn' } });
     write(projectBrainDir(root), { default: 'off', plugins: { mesh: 'off' } });
-    expect(modeOf('router')).toBe('enforce');
     expect(modeOf('owned', 'mesh')).toBe('enforce');
     expect(modeOf('owned', 'git-sentinel')).toBe('enforce');
   });
   it('treats a bad file or unknown value as enforce', () => {
-    for (const bad of ['{ not json', '[]', 'null', '{"default":"block","router":7,"plugins":{"mesh":"yes"}}']) {
+    for (const bad of ['{ not json', '[]', 'null', '{"default":"block","plugins":{"mesh":"yes"}}']) {
       write(globalBrainDir, bad);
-      expect(modeOf('router'), bad).toBe('enforce');
       expect(modeOf('owned', 'mesh'), bad).toBe('enforce');
     }
   });
@@ -53,12 +50,12 @@ describe('writeGateMode', () => {
   it('refuses off, warn, or null overrides', () => {
     for (const mode of ['off', 'warn', null]) {
       expect(() => writeGateMode(globalBrainDir, { mode, plugin: 'mesh' })).toThrow(/permanently enforced/);
-      expect(() => writeGateMode(projectBrainDir(root), { mode, router: true })).toThrow(/permanently enforced/);
+      expect(() => writeGateMode(projectBrainDir(root), { mode })).toThrow(/permanently enforced/);
     }
   });
   it('creates the config folder when writing enforce', () => {
     const file = writeGateMode(globalBrainDir, { mode: 'enforce' });
     expect(file).toBe(gateConfigPath(globalBrainDir));
-    expect(modeOf('router')).toBe('enforce');
+    expect(modeOf('owned', 'mesh')).toBe('enforce');
   });
 });

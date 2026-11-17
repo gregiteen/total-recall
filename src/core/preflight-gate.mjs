@@ -29,16 +29,10 @@
  *      (`gate.owned_commands`), so core names no plugin here. Text in quotes or a
  *      heredoc is not a command being run, so a remote command passed to
  *      `total-recall mesh exec` or a commit message never matches.
- *   7. With a receipt, working tools draw the routing command until the task has been
- *      routed since that receipt, when an installed plugin declares a router
- *      (`gate.router`). Reading, searching and native subagents stay open, as does any
- *      plain Total Recall command, so routing can always run. A process the router
- *      started has already been routed. It warns once per receipt, not on every call.
- *   8. With a receipt, once the router has selected a harness for this repository, a write from
- *      any other harness is denied, whatever the mode. Only a run the router started may write
- *      for it. A selection lasts as long as a receipt, and routing again replaces it. A call with
- *      no named harness is not judged by this rule, because it cannot be told apart.
- * Rules 6 and 7 follow a mode (see gate-mode.mjs): `off`, `warn` (the default) or `enforce`.
+ *   The session the user is talking to is never asked to route its own work and never loses
+ *   writes to a harness a router picked: the user chose it by talking to it. Routing applies
+ *   when work is handed to another harness, which rule 6 steers through its owner's command.
+ * Rule 6 follows a mode (see gate-mode.mjs).
  * `enforce` blocks only while the owner passes its health check, so a broken plugin can
  * never trap an agent. Warnings are statements of fact, because harnesses treat
  * command-style text from a hook as a possible prompt injection.
@@ -108,12 +102,6 @@ const PLAIN_TR = /^(cd\s+\S+\s*&&\s*)?(npx\s+)?(total-recall|node\s+\S*bin\/tota
 export function isPlainTotalRecall(command) {
   const text = String(command || '').trim();
   return PLAIN_TR.test(text) && !/[;&|`\n<>]|\$\(/.test(runnableText(text).replace(PLAIN_TR, ''));
-}
-
-/** True when the command routes work through the declared router. */
-export function isRouteCommand(command, router) {
-  if (!router?.pattern || !isPlainTotalRecall(command)) return false;
-  try { return new RegExp(`\\s(?:${router.pattern})(\\s|$)`).test(runnableText(command)); } catch { return false; }
 }
 
 /** The harness's session id from a raw hook payload, or null when it sends none. */
@@ -300,7 +288,7 @@ export function whenGateFails(call, err) {
 
 /**
  * @param {{ tool: string, command?: string, path?: string, cwd?: string }} call
- * @param {{ check: () => { ok: boolean, problems: string[], ageMs?: number|null, limitMs?: number }, recentConsult?: () => boolean, readablePaths?: RegExp[], ownedCommands?: () => { plugin: string, pattern: string, use: string }[], router?: () => ({ plugin: string, pattern: string, use: string } | null), routed?: (receipt: object) => boolean, routeWarned?: (receipt: object) => boolean, sessionAcknowledged?: (receipt: object) => boolean, sessionLapsed?: () => (boolean | 'compacted'), arrival?: () => ({ brain: string, use: string, told: boolean } | null), promptPending?: () => boolean, dispatched?: boolean, harness?: string|null, routerRun?: boolean, selection?: (receipt: object) => ({ harness: string|null, at: number } | null), mode?: (kind: 'router'|'owned', plugin: string) => string, ownerHealthy?: (plugin: string, use: string) => boolean }} deps
+ * @param {{ check: () => { ok: boolean, problems: string[], ageMs?: number|null, limitMs?: number }, recentConsult?: () => boolean, readablePaths?: RegExp[], ownedCommands?: () => { plugin: string, pattern: string, use: string }[], sessionAcknowledged?: (receipt: object) => boolean, sessionLapsed?: () => (boolean | 'compacted'), arrival?: () => ({ brain: string, use: string, told: boolean } | null), promptPending?: () => boolean, mode?: (kind: 'owned', plugin: string) => string, ownerHealthy?: (plugin: string, use: string) => boolean }} deps
  */
 export function decide(call, deps) {
   try {
@@ -339,15 +327,6 @@ export function decide(call, deps) {
       return deny('sweep', 'TR-PREFLIGHT gate: do not sweep or search the repository before consulting Total Recall / OpenWiki. Run `total-recall openwiki hubs --json`, `total-recall recall "<topic>" --local`, or `total-recall help "<task>"` first.',
         'total-recall help "<task>"');
     }
-    const router = deps.router ? deps.router() : null;
-    if (tool === 'write' && deps.harness && !deps.routerRun) {
-      const chosen = deps.selection ? deps.selection(receipt) : null;
-      if (chosen?.harness && chosen.harness !== deps.harness) {
-        const by = router?.plugin || 'the router';
-        return deny('route:selected', `TR-PREFLIGHT gate: ${by} selected ${chosen.harness} for this task, so ${deps.harness} may not write here. Only a run ${by} started may write: hand the task over with its --execute form, or route it again.`,
-          router?.use || 'route the task again');
-      }
-    }
     const notes = [];
     const arrival = deps.arrival ? deps.arrival() : null;
     if (arrival) {
@@ -357,21 +336,6 @@ export function decide(call, deps) {
       }
       if (!arrival.told) {
         notes.push({ name: 'arrival', warning: `Total Recall note: this session is now working under the brain at ${arrival.brain}, which has its own rules and skills, and it has not received them. Reading stays open; every other tool there is denied until it runs \`${arrival.use}\`.` });
-      }
-    }
-    if (router && !deps.dispatched) {
-      const open = ['read', 'search', 'web', 'agent'].includes(tool) || (tool === 'shell' && isPlainTotalRecall(call.command));
-      if (!open && !(deps.routed ? deps.routed(receipt.receipt) : false)) {
-        const result = steer(deps, {
-          kind: 'router',
-          plugin: router.plugin,
-          name: 'route',
-          reason: `TR-PREFLIGHT gate: every task goes through ${router.plugin}. Run \`${router.use}\` for this task first.`,
-          note: `Total Recall note: this task has not been routed through ${router.plugin}. The routing command is \`${router.use}\`.`,
-          use: router.use,
-        });
-        if (result?.decision === 'deny') return result;
-        if (result && !(deps.routeWarned ? deps.routeWarned(receipt.receipt) : false)) notes.push(result);
       }
     }
     if (tool === 'shell') {

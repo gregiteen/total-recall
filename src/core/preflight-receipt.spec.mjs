@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import crypto from 'node:crypto';
-import { CAPSULE_REFRESH_MS, SKILLS, acknowledge, checkAgentReceipt, checkAnyReceipt, checkReceipt, consultPath, findRoot, forgetCapsuleDeliveries, lastArrivalMs, lastCapsuleDelivery, lastSessionAck, markArrival, markSessionAck, lastConsultMs, noteCaller, readReceipt, recordCapsuleDelivery, takeCaller, receiptPath, skillHashes, touchConsult, recordDecision, readDecisions, decisionsLogPath, markRouted, lastRoutedMs, markRouteWarned, lastRouteWarnedMs } from './preflight-receipt.mjs';
+import { CAPSULE_REFRESH_MS, SKILLS, acknowledge, checkAgentReceipt, checkAnyReceipt, checkReceipt, consultPath, findRoot, forgetCapsuleDeliveries, lastArrivalMs, lastCapsuleDelivery, lastSessionAck, markArrival, markSessionAck, lastConsultMs, noteCaller, readReceipt, recordCapsuleDelivery, takeCaller, receiptPath, skillHashes, touchConsult, recordDecision, readDecisions, decisionsLogPath } from './preflight-receipt.mjs';
 
 let root;
 let home;
@@ -180,11 +180,7 @@ describe('bookkeeping writes never throw', () => {
 
   it('keeps stamps and decisions in the temp folder when the state folder refuses writes', () => {
     fs.chmodSync(state(), 0o500);
-    markRouted('/r', { home, now: 111 });
-    markRouteWarned('/r', { home, now: 222 });
     touchConsult('/r', { home, now: 333 });
-    expect(lastRoutedMs('/r', { home })).toBe(111);
-    expect(lastRouteWarnedMs('/r', { home })).toBe(222);
     expect(lastConsultMs('/r', { home })).toBe(333);
     expect(recordDecision({ harness: 'x', decision: 'allow' }, { home, now: 1000 })).toMatchObject({ harness: 'x' });
     expect(readDecisions({ home }).map((row) => row.harness)).toEqual(['x']);
@@ -199,9 +195,9 @@ describe('bookkeeping writes never throw', () => {
   it('returns quietly with nowhere to write', () => {
     fs.chmodSync(state(), 0o500);
     fs.chmodSync(tmp, 0o500);
-    expect(() => { markRouted('/r', { home }); markRouteWarned('/r', { home }); touchConsult('/r', { home }); }).not.toThrow();
+    expect(() => { touchConsult('/r', { home }); }).not.toThrow();
     expect(recordDecision({ harness: 'x' }, { home })).toBeNull();
-    expect(lastRoutedMs('/r', { home })).toBe(0);
+    expect(lastConsultMs('/r', { home })).toBe(0);
   });
 });
 
@@ -347,12 +343,6 @@ describe('an agent is not bound to one repository', () => {
     expect(checkAnyReceipt(other, { home }).ok).toBe(false);
     acknowledged(root);
     expect(checkAnyReceipt(other, { home })).toMatchObject({ ok: true, receipt: { repo: root } });
-  });
-  it('keeps a routed task routed across repositories, for that session only', () => {
-    markRouted('/a', { home, session: 's1', now: 5 });
-    expect(lastRoutedMs('/b', { home, session: 's1' })).toBe(5);
-    expect(lastRoutedMs('/b', { home, session: 's2' })).toBe(0);
-    expect(lastRoutedMs('/b', { home })).toBe(0);
   });
   it("forgets every repository's capsule and arrival for a compacted session, and no other session's", () => {
     for (const repo of [root, other]) {
