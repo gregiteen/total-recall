@@ -157,7 +157,9 @@ try {
   check('dsh hook bridge mounted', fs.existsSync(patch) && fs.readFileSync(patch, 'utf8').includes('dsh-hooks-claude-code'));
 
   const mode = JSON.parse(run(bin, ['preflight', 'mode', '--json'], { cwd: project }).out || '{}');
-  check('gate enforces by default', mode.router?.mode === 'enforce' && (mode.plugins || []).every((row) => row.mode === 'enforce'), JSON.stringify(mode.router || null));
+  const plugins = mode.plugins || [];
+  check('gate enforces by default', plugins.length > 0 && plugins.every((row) => row.mode === 'enforce'), JSON.stringify(plugins));
+  check('gate asks no session to route its own task', !('router' in mode), JSON.stringify(mode.router ?? null));
   check('harness adapters load from the install', (mode.harnesses || []).length >= 9, `${(mode.harnesses || []).length} adapters`);
   const unwired = (mode.harnesses || []).filter((row) => row.delivery === undefined);
   check('every adapter reports whether it can warn', unwired.length === 0);
