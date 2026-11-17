@@ -174,3 +174,6 @@ docs/projects/
 .agent/skills/total-recall/config/secrets.enc.bak-*
 .agent/skills/total-recall/config/leader.json
 .agent/skills/total-recall/*.pid
+
+# Internal deployment record: local only, never tracked in the public repo.
+/HANDOFF.md

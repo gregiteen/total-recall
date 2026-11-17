@@ -154,7 +154,7 @@ describe('rules CLI', () => {
   });
 
   it('finds a repository\'s rules from a subfolder or nested checkout, by its brain\'s root', async () => {
-    const scoped = { slug: 'scoped-rule', category: 'invariants', status: 'active', body: 'Scoped.', repos: ['the-repo'], _layer: 'project' };
+    const scoped = { slug: 'scoped-rule', category: 'invariants', status: 'active', body: 'Scoped.', project: 'the-repo', _layer: 'project' };
     const policy = { slug: 'policy', category: 'decisions', status: 'active', tags: ['context:policy'], _layer: 'project',
       body: JSON.stringify({ rules: { 'project:scoped-rule': { source_hash: ruleFingerprint(scoped), directive: 'Scoped.' } } }) };
     const log = vi.spyOn(console, 'log').mockImplementation(() => {});
