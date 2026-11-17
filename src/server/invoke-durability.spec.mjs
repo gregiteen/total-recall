@@ -18,9 +18,36 @@ beforeEach(() => {
     target: 'server', selectedBrain: brain, serverBrain: brain, registryBrain: brain,
     signal: controller.signal, limits: INVOKE_LIMITS, run };
 });
-afterEach(() => { vi.restoreAllMocks(); fs.rmSync(brain, { recursive: true, force: true }); });
+async function stopOwnedWorkers() {
+  // A readiness assertion can fail while a real transaction is still running.
+  // Stop and reap every owned worker before removing the files it may access.
+  controller.abort();
+  await Promise.allSettled(run.mock.results.filter(result => result.type === 'return').map(result => result.value));
+}
+afterEach(async () => {
+  await stopOwnedWorkers();
+  vi.restoreAllMocks();
+  fs.rmSync(brain, { recursive: true, force: true });
+});
 
 describe('fixed host durability broker', () => {
+  it('reaps an owned real worker after a readiness assertion fails', async () => {
+    const ready = path.join(brain, 'worker.pid');
+    const pending = run({ entry: '', nodeArgs: ['--eval',
+      `require('node:fs').writeFileSync(${JSON.stringify(ready)}, String(process.pid)); setInterval(() => {}, 1000);`],
+      cwd: brain, env: {}, timeoutMs: 10000 });
+    await vi.waitFor(() => expect(fs.existsSync(ready)).toBe(true), { timeout: 7500 });
+    const pid = Number(fs.readFileSync(ready, 'utf8'));
+    expect(() => process.kill(pid, 0)).not.toThrow();
+    let failure;
+    try { expect(fs.existsSync(path.join(brain, 'never-created'))).toBe(true); }
+    catch (error) { failure = error; }
+    finally { await stopOwnedWorkers(); }
+    expect(failure).toBeInstanceOf(Error);
+    expect(await pending).toMatchObject({ termination_reason: 'authority-ended', signal: 'SIGKILL' });
+    expect(() => process.kill(pid, 0)).toThrow(expect.objectContaining({ code: 'ESRCH' }));
+  });
+
   it('commits via the actual SSSS worker then indexes with no canonical write grant', async () => {
     const result = await brokerConfinedFact({ content: 'durable broker glacier' }, context);
     expect(result).toMatchObject({ committed: true, indexed: true });
@@ -51,7 +78,8 @@ describe('fixed host durability broker', () => {
       input: JSON.stringify({ brain, params: { content: 'must not create' }, caller: key.id }), limits: INVOKE_LIMITS });
     expect(rejected.exit_code).toBe(1);
     expect(fs.readdirSync(path.join(brain, 'memory-vault/facts'))).toHaveLength(1);
-  });
+  // Several real native workers exercise commit, projection and denied writes.
+  }, 60000);
 
   it.each(['revoked', 'read-only', 'full', 'foreign', 'identity', 'invalid-params'])('independently denies %s before starting a transaction', async mode => {
     if (mode === 'revoked') key.revoked = true;
@@ -94,12 +122,17 @@ describe('fixed host durability broker', () => {
     fs.mkdirSync(events, { recursive: true });
     const lock = path.join(events, 'confined-memory.jsonl.lock');
     fs.writeFileSync(lock, JSON.stringify({ pid: process.pid, host: os.hostname(), acquired_at: new Date().toISOString() }));
-    const pending = brokerConfinedFact({ content: 'interrupted before event commit', timeoutMs: mode === 'timeout' ? 1800 : 10000 }, context);
+    const pending = brokerConfinedFact({ content: 'interrupted before event commit', timeoutMs: 10000 }, context);
     // Attach rejection handling immediately while waiting for the real worker.
     const observed = pending.catch(error => error);
     // Atomic writes expose a temporary entry before rename; abort only after the real fact exists.
-    await vi.waitFor(() => expect(fs.readdirSync(path.join(brain, 'memory-vault/facts'))
-      .filter(name => /^fact-[0-9a-f-]{36}\.md$/.test(name))).toHaveLength(1), { timeout: 1500 });
+    // Cold native-worker startup can exceed 1.5s under contention. Wait for the
+    // real canonical file (not a temporary atomic-write entry), within its deadline.
+    await vi.waitFor(() => {
+      const facts = path.join(brain, 'memory-vault/facts');
+      expect(fs.existsSync(facts) ? fs.readdirSync(facts)
+        .filter(name => /^fact-[0-9a-f-]{36}\.md$/.test(name)) : []).toHaveLength(1);
+    }, { timeout: 7500 });
     if (mode === 'abort') controller.abort();
     const error = await observed;
     expect(error).toMatchObject({ code: mode === 'timeout' ? 'timeout' : 'authority-ended', result: { committed: 'unknown', indexed: false } });

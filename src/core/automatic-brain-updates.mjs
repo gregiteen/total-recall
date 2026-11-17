@@ -19,7 +19,7 @@ import { handOffDefaultsToRelease } from './release-defaults-handoff.mjs';
 export function automaticUpdateStatus(brainDir) {
   let last;
   try { last=JSON.parse(fs.readFileSync(path.join(brainDir,'memory-derived/automatic-brain-updates.json'),'utf8')); } catch {}
-  return {enabled:isPackageAutoUpdateEnabled(), intervalMs:60*60*1000, last:last || null};
+  return {enabled:isPackageAutoUpdateEnabled(), intervalMs:60*60*1000, capabilities:{automaticLocalUpdate:true}, last:last || null};
 }
 
 // Keep synchronous package-manager work outside the daemon's event loop. This

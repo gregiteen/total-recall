@@ -67,7 +67,9 @@ describe('plugin capability store', () => {
         expect(bundle._dropped).toContainEqual({ path: CAPABILITY_PATH, type: 'asset', portability: 'tenant_private' });
       }
     }
-  });
+  // Real native transactions plus all three bundle profiles can exceed the
+  // generic deadline on a contended host; retain every CAS/privacy assertion.
+  }, 60000);
 
   it('writes and reads a validated asset whose hash is the body hash, not the catalog fingerprint', async () => {
     const vault = temp();

@@ -20,6 +20,11 @@ const temporary=[];
 afterEach(()=>{vi.useRealTimers();for(const root of temporary.splice(0))fs.rmSync(root,{recursive:true,force:true});});
 const brain=()=>{const dir=fs.mkdtempSync(path.join(os.tmpdir(),'tr-automatic-'));temporary.push(dir);return dir;};
 describe('daemon automatic package maintenance',()=>{
+  it('advertises installed local-only maintenance independently of the last report',()=>{
+    expect(automaticUpdateStatus(brain())).toMatchObject({
+      capabilities:{automaticLocalUpdate:true},last:null,
+    });
+  });
   it('reports a server left on an old release without counting it a failure',async()=>{
     const compile=vi.fn().mockResolvedValue({ok:true,results:[]});
     const update=vi.fn().mockResolvedValue({versions:{'total-recall-brain':'3.43.2'},failed:0,results:[]});

@@ -1,3 +1,8 @@
+## 3.49.5 — 2026-11-16
+
+- Mesh package maintenance reuses an installed Total Recall CLI that explicitly advertises local automatic-update support. Previously every stale or failed peer report launched a version-pinned `npm exec`, leaving another dependency installation in the npm cache for each release. Missing, broken and older CLIs retain the pinned bootstrap; independent report verification and failures remain unchanged.
+- Native durability tests abort and reap their workers before deleting fixtures, including when readiness assertions fail. Native transaction/export integration cases keep bounded deadlines that allow cold startup under contention; rollback, permission and privacy assertions remain intact.
+
 ## 3.49.4 — 2026-11-16
 
 - `status` and `doctor` ask the port in this host's `brain.json` instead of 3000. On a host whose server answers elsewhere they had reported a healthy server as offline and failed on an unrelated service's port.

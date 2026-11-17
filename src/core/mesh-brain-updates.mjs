@@ -27,16 +27,19 @@ export async function updateMeshBrainPackages({version,versions,listNodes,exec,n
     try{
       // Read the durable report first, then launch only when stale or failed.
       const observed=await exec(node.ip,'cd "$HOME" && total-recall update --status --json',{timeoutMs:20000});
-      let report,serving;try{const status=JSON.parse(observed.stdout);report=status.last;serving=status.server;}catch{}
+      let status,report,serving;try{status=JSON.parse(observed.stdout);report=status?.last;serving=status?.server;}catch{}
       const localFailed=report?(report.local_failed ?? Math.max(0,(report.failed || 0)-(report.mesh?.failed || 0))):null;
       const current=observed.success && report && localFailed===0 && now()>=report.checkedAt && now()-report.checkedAt<2*60*60*1000 && report.versions?.['total-recall-brain']===version && (!versions?.['@gregiteen/ssss-cli'] || report.versions?.['@gregiteen/ssss-cli']===versions['@gregiteen/ssss-cli']);
       // Maintenance could not fix this server, or it would have reported a local failure above and
       // been dispatched again, so this is reported. One that lags since the last run waits for that run's report to age.
       if(current && serving?.status==='stale'){row.status='failed';row.report=report;row.server=serving;row.error=serving.reason;continue;}
       if(current){row.status='verified';row.report=report;continue;}
-      // npm exec pins the verified release so an old installed CLI can bootstrap
-      // this capability. The remote command owns its lock, verification and report.
-      const command=`cd "$HOME" && nohup npm exec --yes --package=total-recall-brain@${version} -- total-recall update --automatic --local-only --json </dev/null >/tmp/total-recall-automatic-update.log 2>&1 &`;
+      // Reuse a capable installed CLI; bootstrapping every release otherwise leaves a
+      // full dependency install in the npm exec cache. Older/broken CLIs still bootstrap.
+      const maintenance=observed.success && status?.capabilities?.automaticLocalUpdate===true
+        ? 'total-recall update --automatic --local-only --json'
+        : `npm exec --yes --package=total-recall-brain@${version} -- total-recall update --automatic --local-only --json`;
+      const command=`cd "$HOME" && nohup ${maintenance} </dev/null >/tmp/total-recall-automatic-update.log 2>&1 &`;
       const launched=await exec(node.ip,command,{timeoutMs:20000});
       row.status=launched.success?'dispatched':'failed';
       row.error=!launched.success?launched.stderr || 'Mesh maintenance dispatch failed'

@@ -61,4 +61,71 @@ describe('updateMeshBrainPackages', () => {
     expect(stale.results[0].status).toBe('dispatched');
     expect(stale.failed).toBe(1);
   });
+
+  it.each([
+    null,
+    { checkedAt: 0, local_failed: 0, versions: { 'total-recall-brain': '1.0.0' } },
+    { checkedAt: 900, local_failed: 2, versions },
+  ])('reuses a capable installed CLI when its maintenance report needs work: %j', async (last) => {
+    const exec = vi.fn()
+      .mockResolvedValueOnce({ success: true, stdout: JSON.stringify({ capabilities: { automaticLocalUpdate: true }, last }) })
+      .mockResolvedValueOnce({ success: true });
+    const report = await run([self, linux()], exec);
+    const command = exec.mock.calls[1][1];
+    expect(command).toContain('nohup total-recall update --automatic --local-only --json');
+    expect(command).not.toContain('npm exec');
+    expect(command).toContain('</dev/null >/tmp/total-recall-automatic-update.log 2>&1 &');
+    expect(report.results[0].status).toBe('dispatched');
+    expect(report.failed).toBe(1);
+    if (last?.local_failed) expect(report.results[0].error).toContain('2 local maintenance failure(s)');
+  });
+
+  it.each([
+    { success: false, stdout: '', stderr: 'command not found' },
+    { success: false, stdout: JSON.stringify({ capabilities: { automaticLocalUpdate: true } }) },
+    { success: true, stdout: 'old CLI usage output' },
+    { success: true, stdout: 'null' },
+    { success: true, stdout: JSON.stringify({ last: null }) },
+    { success: true, stdout: JSON.stringify({ capabilities: { automaticLocalUpdate: 'true' } }) },
+  ])('retains the pinned bootstrap when a successful capability probe is unavailable: %j', async (observed) => {
+    const exec = vi.fn().mockResolvedValueOnce(observed).mockResolvedValueOnce({ success: true });
+    const report = await run([self, linux()], exec);
+    expect(exec.mock.calls[1][1]).toContain(`nohup npm exec --yes --package=total-recall-brain@${version} -- total-recall update --automatic --local-only --json`);
+    expect(report.results[0].status).toBe('dispatched');
+    expect(report.failed).toBe(1);
+  });
+
+  it('does not dispatch again when a capable peer has an independently verified report', async () => {
+    const exec = vi.fn().mockResolvedValue({ success: true, stdout: JSON.stringify({
+      capabilities: { automaticLocalUpdate: true }, last: { checkedAt: 900, local_failed: 0, versions },
+    }) });
+    expect((await run([self, linux()], exec)).failed).toBe(0);
+    expect(exec).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps a verified report with a stale serving process failed without dispatching again', async () => {
+    const exec = vi.fn().mockResolvedValue({ success: true, stdout: JSON.stringify({
+      capabilities: { automaticLocalUpdate: true }, last: { checkedAt: 900, local_failed: 0, versions },
+      server: { status: 'stale', reason: 'old serving process' },
+    }) });
+    const report = await run([self, linux()], exec);
+    expect(report.results[0]).toMatchObject({ status: 'failed', error: 'old serving process' });
+    expect(exec).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([true, false])('reports a failed maintenance dispatch for either command path (capable %s)', async (capable) => {
+    const exec = vi.fn()
+      .mockResolvedValueOnce({ success: true, stdout: JSON.stringify({ capabilities: { automaticLocalUpdate: capable }, last: null }) })
+      .mockResolvedValueOnce({ success: false, stderr: 'transport refused' });
+    const report = await run([self, linux()], exec);
+    expect(report.results[0]).toMatchObject({ status: 'failed', error: 'transport refused' });
+    expect(report.failed).toBe(1);
+  });
+
+  it('does not turn a thrown status transport failure into an assumed capable peer', async () => {
+    const exec = vi.fn().mockRejectedValue(new Error('peer timeout'));
+    const report = await run([self, linux()], exec);
+    expect(report.results[0]).toMatchObject({ status: 'failed', error: 'peer timeout' });
+    expect(exec).toHaveBeenCalledTimes(1);
+  });
 });

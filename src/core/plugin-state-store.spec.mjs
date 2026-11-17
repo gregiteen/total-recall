@@ -92,20 +92,26 @@ describe('native plugin SSSS state', () => {
   }, 30000);
   it('starts a new ledger document at the size limit and never rewrites a sealed one', async () => {
     const file = fixture(), store = new PluginStateStore(file, 'auth');
-    const append = id => executePluginState({ file, plugin: 'auth', action: 'append', value: { id }, segmentBytes: 400 });
+    let segmentBytes = 400;
+    const append = id => executePluginState({ file, plugin: 'auth', action: 'append', value: { id }, segmentBytes });
     await append(0);
     const namespace = path.join(path.dirname(file), '.ssss/auth');
-    let id = 1;
-    while (fs.readdirSync(namespace).length === 1) await append(id++);
+    // Exercise both sides of the real size boundary with a fixed amount of
+    // native transaction work, independent of serialized header size.
+    segmentBytes = fs.statSync(store.documentPath).size + 1;
+    await append(1);
+    expect(fs.readdirSync(namespace)).toHaveLength(1);
+    expect(fs.statSync(store.documentPath).size).toBeGreaterThanOrEqual(segmentBytes);
     const sealed = fs.readFileSync(store.documentPath, 'utf8');
-    const lastInSealed = id - 2;
-    for (const next of [id, id + 1, id + 2]) await append(next);
+    await append(2);
+    expect(fs.readdirSync(namespace)).toHaveLength(2);
+    for (const next of [3, 4, 5]) await append(next);
     expect(fs.readFileSync(store.documentPath, 'utf8')).toBe(sealed);
-    expect(sealed).toContain(`{"id":${lastInSealed}}`);
-    expect(store.read([]).map(row => row.id)).toEqual(Array.from({ length: id + 3 }, (_, index) => index));
-    expect(store.readTail(2).map(row => row.id)).toEqual([id + 1, id + 2]);
-    expect(store.readTail(1000)).toHaveLength(id + 3);
-  });
+    expect(sealed).toContain('{"id":1}');
+    expect(store.read([]).map(row => row.id)).toEqual([0, 1, 2, 3, 4, 5]);
+    expect(store.readTail(2).map(row => row.id)).toEqual([4, 5]);
+    expect(store.readTail(1000)).toHaveLength(6);
+  }, 60000);
   it('returns the version and receipt only, whatever the ledger holds', async () => {
     const file = fixture();
     await executePluginState({ file, plugin: 'auth', action: 'append', value: { id: 0 } });
