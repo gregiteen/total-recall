@@ -45,6 +45,43 @@ describe('local lesson trigger', () => {
     enqueueSessionReviews({ brainDir: brain, interval: 3, now: Date.now() + 600_000 });
     expect(tasks()).toHaveLength(3);
   });
+  it('skips an unchanged session without rewriting its cursor, and still finishes it when it goes quiet', () => {
+    write(4); tick();
+    const saved = path.join(brain, 'sessions');
+    const [name] = fs.readdirSync(saved);
+    const transcript = path.join(saved, name);
+    const cursor = path.join(brain, 'lesson-reviews', name.replace(/\.jsonl$/, '.json'));
+    // Still active: the first scan records what it saw, then nothing changes.
+    const active = Date.now();
+    enqueueSessionReviews({ brainDir: brain, interval: 3, now: active });
+    const before = fs.statSync(cursor);
+    const rename = vi.spyOn(fs, 'renameSync');
+    const skipped = enqueueSessionReviews({ brainDir: brain, interval: 3, now: active });
+    expect(skipped[0].skipped).toBe('unchanged');
+    expect(rename).not.toHaveBeenCalled();
+    expect(fs.statSync(cursor).ino).toBe(before.ino);
+    expect(fs.readdirSync(path.join(brain, 'lesson-reviews')).filter(n => n.endsWith('.lock'))).toEqual([]);
+    rename.mockRestore();
+    expect(tasks()).toHaveLength(1);
+    // Turn 4 is pending; once the session goes quiet the same transcript is reviewed to the end.
+    const quiet = enqueueSessionReviews({ brainDir: brain, interval: 3, now: active + 600_000 });
+    expect(quiet[0].queuedThrough).toBe(4);
+    expect(tasks()).toHaveLength(2);
+    // Fully queued and unchanged: skipped from then on.
+    expect(enqueueSessionReviews({ brainDir: brain, interval: 3, now: active + 600_000 })[0].skipped).toBe('unchanged');
+    // A changed transcript is read again.
+    fs.appendFileSync(transcript, JSON.stringify({ role: 'user', content: 'Correction 5' }) + '\n');
+    expect(enqueueSessionReviews({ brainDir: brain, interval: 3, now: active })[0].skipped).toBeUndefined();
+  });
+  it('rewrites a cursor only when its state changes', () => {
+    write(2); tick();
+    const cursor = path.join(brain, 'lesson-reviews', fs.readdirSync(path.join(brain, 'lesson-reviews')).find(n => n.endsWith('.json')));
+    const ino = fs.statSync(cursor).ino;
+    tick();
+    expect(fs.statSync(cursor).ino).toBe(ino);
+    write(3); tick();
+    expect(fs.statSync(cursor).ino).not.toBe(ino);
+  });
   it('keeps progress unchanged when task persistence fails and can retry', () => {
     write(3);
     const spy = vi.spyOn(fs, 'renameSync').mockImplementationOnce(() => { throw new Error('disk full'); });

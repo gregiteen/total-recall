@@ -39,7 +39,8 @@ export function tickLessons({ brainDir, sessionId, transcriptPath, event = 'Stop
   const lockFd = acquireBrainUpdateLock(lock, { waitMs: 0 });
   try {
     const stateFile = path.join(root, `${key}.json`);
-    const state = fs.existsSync(stateFile) ? JSON.parse(fs.readFileSync(stateFile, 'utf8')) : { turns: 0, queuedThrough: 0, counter: TURN_COUNTER };
+    const stored = fs.existsSync(stateFile) ? fs.readFileSync(stateFile, 'utf8') : null;
+    const state = stored ? JSON.parse(stored) : { turns: 0, queuedThrough: 0, counter: TURN_COUNTER };
     let entries;
     const savedTranscript = path.join(sessionsDir, `${key}.jsonl`);
     if (!transcriptPath && fs.existsSync(savedTranscript)) transcriptPath = savedTranscript;
@@ -87,7 +88,18 @@ export function tickLessons({ brainDir, sessionId, transcriptPath, event = 'Stop
         state.queuedThrough = toTurn;
       }
     }
-    atomicWrite(stateFile, JSON.stringify(state));
+    // What the cursor last saw, so the session scan can skip an unchanged transcript.
+    if (transcriptPath) {
+      try {
+        const st = fs.statSync(transcriptPath);
+        state.seen = { mtimeMs: st.mtimeMs, size: st.size, final };
+      } catch { delete state.seen; }
+    }
+    // Rewrite only on change. The scan visits every saved session on every pass, and an
+    // unconditional rewrite replaced thousands of files a minute, which local snapshots
+    // then pinned on disk for hours.
+    const next = JSON.stringify(state);
+    if (next !== stored) atomicWrite(stateFile, next);
     return { turns: state.turns, queuedThrough: state.queuedThrough, tasks };
   } finally {
     // Remove only the inode this process acquired. A dead hook's lock is reclaimed
@@ -101,10 +113,24 @@ export function tickLessons({ brainDir, sessionId, transcriptPath, event = 'Stop
 export function enqueueSessionReviews({ brainDir, now = Date.now(), quietMs = 5 * 60_000, interval, hold } = {}) {
   const dir = path.join(brainDir, 'sessions');
   if (!fs.existsSync(dir) || isLessonsPaused(brainDir)) return [];
+  const root = path.join(brainDir, 'lesson-reviews');
   return fs.readdirSync(dir).filter(name => name.endsWith('.jsonl')).map(name => {
     const transcriptPath = path.join(dir, name);
+    const key = path.basename(name, '.jsonl');
+    const st = fs.statSync(transcriptPath);
+    const final = now - st.mtimeMs >= quietMs;
+    // An unchanged transcript yields the same result as last time: skip it without taking
+    // a lock, re-reading the transcript or rewriting the cursor. It is revisited only when
+    // the transcript changes or, with turns still pending, when the session goes quiet.
+    let state = null;
+    try { state = JSON.parse(fs.readFileSync(path.join(root, `${key}.json`), 'utf8')); } catch { /* first visit */ }
+    const seen = state?.seen;
+    if (state?.counter === TURN_COUNTER && seen && seen.mtimeMs === st.mtimeMs && seen.size === st.size
+      && (state.queuedThrough >= state.turns || seen.final === final)) {
+      return { turns: state.turns, queuedThrough: state.queuedThrough, tasks: [], skipped: 'unchanged' };
+    }
     // The scan reviews other sessions, so the caller's own environment does not apply.
-    return tickLessons({ brainDir, sessionId: path.basename(name, '.jsonl'), transcriptPath, interval, hold, env: {},
-      event: now - fs.statSync(transcriptPath).mtimeMs >= quietMs ? 'SessionEnd' : 'Stop', harness: 'session-ingest' });
+    return tickLessons({ brainDir, sessionId: key, transcriptPath, interval, hold, env: {},
+      event: final ? 'SessionEnd' : 'Stop', harness: 'session-ingest' });
   });
 }
