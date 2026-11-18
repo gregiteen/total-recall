@@ -138,6 +138,7 @@ export async function bindClaudeIncludedKey(evidence, { readKey = authKey, now =
 
 export const claudeProofCurrent = (policy, now = Date.now()) => Date.parse(policy.claude?.expiresAt) > now;
 export const claudeTokenCurrent = policy => Boolean(policy?.claudeToken?.fingerprint);
+export const readClaudeToken = keyName => authClaudeToken(keyName).catch(() => null);
 
 /**
  * Bind Claude to the subscription token in Total Recall Auth (Greg, 2026-11-15: everything uses the auth

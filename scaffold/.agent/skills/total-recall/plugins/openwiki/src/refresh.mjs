@@ -291,7 +291,11 @@ export function resolveKey({ provider = null, keys = null, run = spawnSync } = {
   const activeProvider = provider || (typeof loadOpenWikiConfig === 'function' ? loadOpenWikiConfig().provider : 'openrouter');
   const candidateKeys = keys || (activeProvider === 'google'
     ? ['GOOGLE_API_KEY', 'GEMINI_API_KEY']
-    : ['OPENROUTER_API_KEY', 'JSN_OPENROUTER_API_KEY']);
+    : activeProvider === 'anthropic'
+      ? ['PORTFOLIO_ANTHROPIC_ACCOUNT_KEY', 'ANTHROPIC_API_KEY']
+      : activeProvider === 'claude-plan'
+        ? ['CLAUDE_CODE_OAUTH_TOKEN']
+        : ['OPENROUTER_API_KEY', 'JSN_OPENROUTER_API_KEY']);
 
   for (const form of [['auth', 'secret', 'get'], ['secret', 'get']]) {
     for (const name of candidateKeys) {
@@ -326,8 +330,14 @@ export function resolveKey({ provider = null, keys = null, run = spawnSync } = {
  * cache, so use that before going to the network, and only reach for `--yes`
  * when nothing cached exists.
  */
-export function resolveGenerator({ pluginRoot = null, run = spawnSync, env = process.env, home = os.homedir(), targetVersion = null, requireBundled = false } = {}) {
+export function resolveGenerator({ pluginRoot = null, run = spawnSync, env = process.env, home = os.homedir(), targetVersion = null, requireBundled = false, provider = null } = {}) {
   const root = pluginRoot !== null ? pluginRoot : PLUGIN_ROOT;
+  if (provider === 'claude-plan' && root) {
+    const runner = path.join(root, 'src', 'claude-plan-runner.mjs');
+    if (fs.existsSync(runner)) {
+      return { command: process.execPath, args: [runner], via: 'claude-plan (Max OAuth)' };
+    }
+  }
   if (root) {
     const bundled = path.join(root, 'vendor', 'openwiki.mjs');
     if (fs.existsSync(bundled)) {
@@ -425,14 +435,28 @@ export const NO_MODEL = 'No OpenWiki model is configured. Check current OpenRout
 
 export function buildGeneratorInvocation({ baseArgs = [], mode = 'update', config = {}, key = '' } = {}) {
   const selectedModel = String(config.model || '').trim();
-  if (!selectedModel) throw new Error(NO_MODEL);
   const selectedProvider = config.provider || 'openrouter';
-  const cmdArgs = [...baseArgs, `--${mode}`, '-p', '--modelId', selectedModel];
+  if (!selectedModel && selectedProvider !== 'claude-plan') throw new Error(NO_MODEL);
+  const cmdArgs = selectedProvider === 'claude-plan' ? [...baseArgs] : [...baseArgs, `--${mode}`, '-p', '--modelId', selectedModel];
   const childEnv = { ...process.env };
-  if (selectedProvider === 'google') {
+  if (selectedProvider === 'claude-plan') {
+    childEnv.CLAUDE_CODE_OAUTH_TOKEN = key;
+    childEnv.OPENWIKI_MODE = mode;
+    if (selectedModel) childEnv.OPENWIKI_MODEL = selectedModel;
+    delete childEnv.OPENAI_API_KEY;
+    delete childEnv.OPENROUTER_API_KEY;
+  } else if (selectedProvider === 'google') {
     childEnv.GOOGLE_API_KEY = key;
     childEnv.GEMINI_API_KEY = key;
     childEnv.OPENWIKI_PROVIDER = 'gemini';
+    delete childEnv.OPENAI_API_KEY;
+    delete childEnv.OPENROUTER_API_KEY;
+  } else if (selectedProvider === 'anthropic') {
+    childEnv.ANTHROPIC_API_KEY = key;
+    childEnv.OPENWIKI_PROVIDER = 'anthropic';
+    if (config.max_tokens) {
+      childEnv.OPENWIKI_MAX_OUTPUT_TOKENS = String(config.max_tokens);
+    }
     delete childEnv.OPENAI_API_KEY;
     delete childEnv.OPENROUTER_API_KEY;
   } else {
@@ -510,9 +534,11 @@ export function refreshProject(project, {
   const uninitialized = !hasWiki(project.root);
   const mode = generationMode(project.root);
 
+  const config = loadOpenWikiConfig();
+  const activeProvider = provider || config.provider;
   let command = binary, args = binaryArgs, via = binary ? 'explicit' : null;
   if (!command) {
-    const resolved = resolveGenerator({ run, targetVersion, pluginRoot, requireBundled: uninitialized });
+    const resolved = resolveGenerator({ run, targetVersion, pluginRoot, requireBundled: uninitialized, provider: activeProvider });
     if (!resolved.command) {
       const reason = uninitialized ? 'OpenWiki initialization requires the bundled plugin generator' : 'no openwiki generator available (no local .bin, no PATH entry, no npx)';
       return { ...project, action: 'failed', reason, ...before };
@@ -520,11 +546,10 @@ export function refreshProject(project, {
     ({ command, args, via } = resolved);
   }
 
-  const config = loadOpenWikiConfig();
   const { cmdArgs, childEnv } = buildGeneratorInvocation({
     baseArgs: args,
     mode,
-    config: { ...config, model: model || config.model, provider: provider || config.provider },
+    config: { ...config, model: model || config.model, provider: activeProvider },
     key,
   });
 
@@ -551,9 +576,11 @@ export async function refreshProjectAsync(project, {
   const before = staleness(project.root, { git });
   const uninitialized = !hasWiki(project.root);
   const mode = generationMode(project.root);
+  const config = loadOpenWikiConfig();
+  const activeProvider = provider || config.provider;
   let command = binary, args = binaryArgs, via = binary ? 'explicit' : null;
   if (!command) {
-    const resolved = resolveGenerator({ run: spawnSync, targetVersion, pluginRoot, requireBundled: uninitialized });
+    const resolved = resolveGenerator({ run: spawnSync, targetVersion, pluginRoot, requireBundled: uninitialized, provider: activeProvider });
     if (!resolved.command) {
       const reason = uninitialized ? 'OpenWiki initialization requires the bundled plugin generator' : 'no openwiki generator available (no local .bin, no PATH entry, no npx)';
       return { ...project, action: 'failed', reason, ...before };
@@ -561,11 +588,10 @@ export async function refreshProjectAsync(project, {
     ({ command, args, via } = resolved);
   }
 
-  const config = loadOpenWikiConfig();
   const { cmdArgs, childEnv } = buildGeneratorInvocation({
     baseArgs: args,
     mode,
-    config: { ...config, model: model || config.model, provider: provider || config.provider },
+    config: { ...config, model: model || config.model, provider: activeProvider },
     key,
   });
 

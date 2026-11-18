@@ -93,11 +93,17 @@ export async function generateWiki({
   const config = loadOpenWikiConfig();
   const { key, from } = resolveKey({ provider: config.provider });
   if (!key) {
-    const keyName = config.provider === 'google' ? 'GOOGLE_API_KEY' : 'OPENROUTER_API_KEY';
+    const keyName = config.provider === 'google'
+      ? 'GOOGLE_API_KEY'
+      : config.provider === 'anthropic'
+        ? 'ANTHROPIC_API_KEY'
+        : config.provider === 'claude-plan'
+          ? 'CLAUDE_CODE_OAUTH_TOKEN'
+          : 'OPENROUTER_API_KEY';
     throw new Error(`No API credential found for provider '${config.provider}'. Save via: total-recall auth secret set ${keyName} --stdin`);
   }
 
-  const gen = resolveGenerator();
+  const gen = resolveGenerator({ provider: config.provider });
   if (!gen.command) {
     throw new Error('No openwiki generator available (missing bundled generator, local .bin, PATH entry, or npx)');
   }

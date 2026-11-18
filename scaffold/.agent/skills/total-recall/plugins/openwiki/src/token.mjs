@@ -9,6 +9,8 @@ import { spawnSync } from 'node:child_process';
 
 const PROVIDER_KEY_MAP = {
   openrouter: 'OPENROUTER_API_KEY',
+  anthropic: 'ANTHROPIC_API_KEY',
+  'claude-plan': 'CLAUDE_CODE_OAUTH_TOKEN',
   google: 'GOOGLE_API_KEY',
 };
 
@@ -41,7 +43,7 @@ export function getTokenStatus({ run = spawnSync } = {}) {
  */
 export function setTokenValue(provider, secretValue, { run = spawnSync } = {}) {
   const id = typeof provider === 'string' && provider.toLowerCase();
-  if (!Object.hasOwn(PROVIDER_KEY_MAP, id)) throw new Error('Supported token providers are openrouter and google');
+  if (!Object.hasOwn(PROVIDER_KEY_MAP, id)) throw new Error('Supported token providers are openrouter, anthropic, and google');
   const keyName = PROVIDER_KEY_MAP[id];
 
   if (!secretValue || typeof secretValue !== 'string' || !secretValue.trim()) {

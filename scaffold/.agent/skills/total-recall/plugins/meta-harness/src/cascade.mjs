@@ -160,6 +160,9 @@ export async function executeRoutedTask(task, options = {}) {
 
     if (stopped?.cancelled) return { ...stopped, route, attempts, alerts, branch: attempt.branch, commit: attempt.commit, wip: attempt.wip, harness };
     if (attempt.ok) {
+      for (const prev of attempts.slice(0, -1)) {
+        if (prev.branch && !prev.keptWorktree) { deleteBranch(cwd, prev.branch); prev.branch = null; }
+      }
       const push = options.push === false ? { pushed: false, reason: 'push disabled for this run' } : pushBranch(cwd, attempt.branch);
       return { ok: true, route, goalCheck: attempt.goalCheck, structured: attempt.structured, review: attempt.review,
         gateApplied: Boolean(options.gate), branch: attempt.branch, commit: attempt.commit, push, harness, attempts, alerts };
@@ -173,6 +176,12 @@ export async function executeRoutedTask(task, options = {}) {
     previous = harness;
     harness = next?.recommendedHarness && !tried.has(next.recommendedHarness) ? next.recommendedHarness : null;
     if (harness) alerts.push(await notifyAlert({ title: 'Metaharness: escalating', message: `${previous} failed on "${task.slice(0, 60)}"; escalating to ${harness}.`, severity: 'warning' }));
+  }
+  const lastBranch = attempts.at(-1)?.branch;
+  if (lastBranch) {
+    for (const prev of attempts.slice(0, -1)) {
+      if (prev.branch && !prev.keptWorktree) { deleteBranch(cwd, prev.branch); prev.branch = null; }
+    }
   }
   return { ok: false, route, gateApplied: Boolean(options.gate), attempts, alerts, error: 'No attempt passed.' };
 }

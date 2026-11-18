@@ -614,7 +614,7 @@ export async function totalRecallBootstrap(request, { probe = runProcess, env = 
 }
 
 /** Authentication is `true` or `false` only when a real probe says so. Everything else stays 'unknown' until a run proves it. */
-export async function inspectAgents({ probe = runProcess, env = process.env, ids, cwd, claudeKey, claudePlan, claudeToken, settingSources } = {}) {
+export async function inspectAgents({ probe = runProcess, env = process.env, ids, cwd, claudeKey, claudePlan, claudeToken, openRouterAgents, settingSources } = {}) {
   const selected = getActiveAdapters().filter(adapter => !ids || ids.includes(adapter.id));
   // Probes run together: this is on the path of every route, and each harness answers on its own.
   const agents = await Promise.all(selected.map(async adapter => {
@@ -647,6 +647,8 @@ export async function inspectAgents({ probe = runProcess, env = process.env, ids
         const names = String(list.stdout || '').split('\n').slice(1).map(line => line.trim().split(/\s+/)[0]).filter(Boolean);
         item.chatModels = names.filter(name => !/embed|bge-|minilm|rerank/i.test(name));
         if (!item.chatModels.length) item.blockedBy = 'no-chat-model';
+      } else if (Array.isArray(openRouterAgents) && openRouterAgents.includes(adapter.id)) {
+        item.authenticated = true;
       } else if (adapter.auth?.length) {
         const auth = await probe(binary, adapter.auth, { timeoutMs: 15000, env: agentEnvironment(env) });
         item.authenticated = auth.reason ? 'unknown' : auth.exitCode === 0;
@@ -869,7 +871,7 @@ export async function dispatchAgent(request, { probe = runProcess, env = process
 }
 
 export async function runWorker(request) {
-  if (request.operation === 'inspect') return { ...await inspectAgents(), defaultCwd: os.homedir() };
+  if (request.operation === 'inspect') return { ...await inspectAgents(request.inspectOptions), defaultCwd: os.homedir() };
   if (request.operation === 'dispatch') return dispatchAgent(request);
   if (request.operation === 'direct') {
     if (!Array.isArray(request.argv) || request.argv.some(arg => typeof arg !== 'string')) throw new Error('Explicit argv required');
