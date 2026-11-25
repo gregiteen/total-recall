@@ -4,7 +4,7 @@ import os from 'os';
 import crypto from 'crypto';
 import { atomicWrite } from './vault.mjs';
 import { logger } from './logger.mjs';
-import { readLessonEntries } from './lesson-sessions.mjs';
+import { readLessonEntries, transcriptRole } from './lesson-sessions.mjs';
 import { isInternalTranscript } from './internal-sessions.mjs';
 
 /**
@@ -169,7 +169,7 @@ export function parseClaudeCode(filePath) {
     // Real Claude Code format: role/content inside parsed.message
     // Legacy/fallback: role/content at top level
     const msgObj   = parsed.message || parsed;
-    const role     = msgObj.role || parsed.type || 'assistant';
+    let role       = msgObj.role || parsed.type || 'assistant';
     const rawContent = msgObj.content ?? '';
 
     let content = '';
@@ -185,11 +185,15 @@ export function parseClaudeCode(filePath) {
             if (typeof c === 'string') return `[tool_result] ${c}`;
             if (Array.isArray(c)) return c.filter(b => b.type === 'text').map(b => b.text).join(' ');
           }
+          // A prompt can be only an attachment; it still has to count as one.
+          if (role === 'user' && ['image', 'document'].includes(block.type)) return `[${block.type}]`;
           return '';
         })
         .filter(Boolean)
         .join('\n');
     }
+    // Tool results and injected text arrive as user rows but nobody typed them.
+    if (role === 'user' || role === 'human') role = transcriptRole(parsed, { ...msgObj, role }, content);
 
     // Inspect tool_use or tool_calls payloads
     const toolUse = msgObj.tool_use || parsed.tool_use || null;

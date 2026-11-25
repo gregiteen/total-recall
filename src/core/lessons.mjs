@@ -8,8 +8,9 @@ import { acquireBrainUpdateLock } from './brain-updates.mjs';
 import { isInternalJobEnv, isInternalTranscript, isLessonsPaused } from './internal-sessions.mjs';
 
 export const DEFAULT_LESSON_INTERVAL = 10;
-// Version of the turn count stored in each cursor. 2 counts only human prompts.
-const TURN_COUNTER = 2;
+// Version of the turn count stored in each cursor. 2 counts only human prompts; 3 does so
+// in saved Claude sessions too.
+const TURN_COUNTER = 3;
 const hash = value => crypto.createHash('sha256').update(value).digest('hex').slice(0, 12);
 
 /** A local hook only queues work. It never calls a model or elects a leader. */
@@ -58,6 +59,10 @@ export function tickLessons({ brainDir, sessionId, transcriptPath, event = 'Stop
       // Rebase it and treat the past as handled, so the change never queues a backlog.
       if (!Number.isInteger(turnCount) || turnCount < 0) throw new Error('Lesson transcript turn count is invalid');
       Object.assign(state, { counter: TURN_COUNTER, turns: turnCount, queuedThrough: turnCount });
+    }
+    if (localTranscript && turnCount < state.turns) {
+      // A saved session is derived and can be rebuilt with fewer turns than an earlier copy had.
+      Object.assign(state, { turns: turnCount, queuedThrough: Math.min(state.queuedThrough, turnCount) });
     }
     if (turnCount !== undefined) {
       if (!Number.isInteger(turnCount) || turnCount < state.turns) throw new Error('Lesson transcript turn count went backwards');

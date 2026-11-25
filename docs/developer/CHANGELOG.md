@@ -1,3 +1,7 @@
+## Unreleased
+
+- A saved Claude session counts the same turns as its transcript. Tool results, meta rows, compaction summaries and injected text were saved as prompts, so one session with 3 prompts could queue dozens of lesson reviews. Existing cursors migrate once without queueing the past, and a saved session rebuilt with fewer turns no longer stops the scan.
+
 ## 3.51.0 — 2026-11-25
 
 - Creating a project brain sets up what the installed plugins own in it. `init --project`, `brain ensure`, `brain register` and `plugin create` run the `project-provision` module of each enabled plugin that declares one, and report what it did. A failing plugin never undoes the brain. `plugin create` also gives the new repository its own brain.

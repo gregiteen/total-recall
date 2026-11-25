@@ -15,6 +15,23 @@ export function isHumanPrompt(content) {
   return Boolean(remainder) && !NOT_A_PROMPT.test(remainder);
 }
 
+/**
+ * The role an entry has in a review. The session watcher uses it too, so a saved session
+ * and its native transcript count the same turns.
+ */
+export function transcriptRole(row, message, content) {
+  const role = message.role === 'human' || (!message.role && row.role === 'human') ? 'user' : message.role || row.role;
+  // Claude tool results have role user, but do not start a user turn.
+  // Claude marks tool output with toolUseResult even when it is stored as text.
+  if (row.toolUseResult !== undefined || (Array.isArray(message.content) &&
+      message.content.every(block => block.type === 'tool_result' || block.type === 'tool_reference'))) return 'tool';
+  // Request blobs and harness events annotate the conversation.
+  if (role === 'user' && row.message && typeof row.type === 'string' && !['user', 'assistant'].includes(row.type)) return 'context';
+  // Meta rows, compaction summaries and injected text are evidence, not a turn.
+  if (role === 'user' && (row.isMeta === true || row.isCompactSummary === true || !isHumanPrompt(content))) return 'context';
+  return role;
+}
+
 /** Normalize native hook transcripts and the session-ingest format. Keep tool evidence. */
 export function readLessonEntries(file) {
   const records = fs.readFileSync(file, 'utf8').split('\n').filter(Boolean).flatMap(line => {
@@ -39,17 +56,11 @@ export function readLessonEntries(file) {
       if (!['user_message', 'agent_message'].includes(payload.type)) return [];
       message = { role: payload.type === 'user_message' ? 'user' : 'assistant', content: payload.message };
     }
-    let role = message.role || row.role;
-    if (role === 'human') role = 'user';
-    if (!['user', 'assistant', 'tool', 'context'].includes(role)) return [];
+    const sourceRole = message.role || row.role;
+    if (!['user', 'human', 'assistant', 'tool', 'context'].includes(sourceRole)) return [];
     const content = [text(message.content ?? message.text), ...(message.tool_calls ? [JSON.stringify(message.tool_calls)] : [])].filter(Boolean).join('\n');
     if (!content.trim()) return [];
-    // Claude tool results have role user, but do not start a user turn.
-    // Claude marks tool output with toolUseResult even when it is stored as text.
-    if (row.toolUseResult !== undefined || (Array.isArray(message.content) &&
-        message.content.every(block => block.type === 'tool_result' || block.type === 'tool_reference'))) role = 'tool';
-    // Meta rows, compaction summaries and injected text are evidence, not a turn.
-    else if (role === 'user' && (row.isMeta === true || row.isCompactSummary === true || !isHumanPrompt(content))) role = 'context';
+    const role = transcriptRole(row, message, content);
     return [{ role, content, ts: row.ts || row.timestamp, ...(row.cwd ? { cwd: row.cwd } : {}) }];
   });
 }

@@ -5,6 +5,7 @@ import os from 'node:os';
 import { tickLessons, enqueueSessionReviews } from './lessons.mjs';
 import { readLessonEntries, countLessonTurns } from './lesson-sessions.mjs';
 import { listTasks } from './task-envelope.mjs';
+import { parseClaudeCode, writeSession } from './session-watcher.mjs';
 // These specs exercise ordinary sessions; a Metaharness test runner must not mark them internal.
 delete process.env.TR_META_HARNESS_RUN;
 
@@ -166,9 +167,56 @@ describe('a lesson turn is a human prompt', () => {
     // A cursor written by the old count: more turns than the transcript has prompts, no counter.
     fs.writeFileSync(stateFile, JSON.stringify({ turns: 40, queuedThrough: 30 }));
     expect(tick().tasks).toEqual([]);
-    expect(JSON.parse(fs.readFileSync(stateFile, 'utf8'))).toMatchObject({ counter: 2, turns: 9, queuedThrough: 9 });
+    expect(JSON.parse(fs.readFileSync(stateFile, 'utf8'))).toMatchObject({ counter: 3, turns: 9, queuedThrough: 9 });
     write(12); expect(tick().tasks).toHaveLength(1);
     expect(tasks().map(t => [t.payload.fromTurn, t.payload.toTurn])).toEqual([[10, 12]]);
+  });
+});
+
+describe('a saved Claude session counts the same turns as its transcript', () => {
+  const rows = [
+    { type: 'user', message: { role: 'user', content: 'Fix the build' } },
+    { type: 'user', message: { role: 'user', content: [{ type: 'tool_result', content: 'ok' }] } },
+    { type: 'user', message: { role: 'user', content: [{ type: 'tool_result', content: [{ type: 'text', text: 'no prefix' }] }] } },
+    { type: 'user', toolUseResult: { stdout: 'x' }, message: { role: 'user', content: 'The file was updated' } },
+    { type: 'user', isMeta: true, message: { role: 'user', content: 'Skill text' } },
+    { type: 'user', isCompactSummary: true, message: { role: 'user', content: 'Summary text' } },
+    { type: 'api-request-blob', message: { role: 'user', content: 'Fix the build' } },
+    { type: 'user', message: { role: 'user', content: '<system-reminder>hook</system-reminder>' } },
+    { type: 'user', message: { role: 'user', content: [{ type: 'image', source: { data: 'x' } }] } },
+    { type: 'assistant', message: { role: 'assistant', content: [{ type: 'text', text: 'Done' }] } },
+  ];
+  const save = list => {
+    fs.writeFileSync(file, list.map(row => JSON.stringify(row)).join('\n'));
+    const sessions = path.join(brain, 'sessions');
+    writeSession(parseClaudeCode(file), sessions, file);
+    return path.join(sessions, fs.readdirSync(sessions)[0]);
+  };
+  it('keeps tool results and injected text out of the count', () => {
+    const saved = readLessonEntries(save(rows));
+    expect(saved.map(row => row.role)).toEqual(['user', 'tool', 'tool', 'tool', 'context', 'context', 'context', 'context', 'user', 'assistant']);
+    expect(countLessonTurns(saved)).toBe(countLessonTurns(readLessonEntries(file)));
+    expect(parseClaudeCode(file).filter(row => row.type === 'task')).toHaveLength(2);
+  });
+  it('rebases an inflated version 2 cursor without queueing anything', () => {
+    const key = path.basename(save(rows), '.jsonl');
+    const stateFile = path.join(brain, 'lesson-reviews', `${key}.json`);
+    fs.mkdirSync(path.dirname(stateFile), { recursive: true });
+    fs.writeFileSync(stateFile, JSON.stringify({ counter: 2, turns: 523, queuedThrough: 520 }));
+    enqueueSessionReviews({ brainDir: brain, now: Date.now() + 600_000 });
+    expect(tasks()).toEqual([]);
+    expect(JSON.parse(fs.readFileSync(stateFile, 'utf8'))).toMatchObject({ counter: 3, turns: 2, queuedThrough: 2 });
+  });
+  it('shares its cursor with the native hook', () => {
+    save(rows); tick();
+    expect(enqueueSessionReviews({ brainDir: brain, interval: 3 })[0].turns).toBe(2);
+    expect(tick().turns).toBe(2);
+  });
+  it('follows a saved session rebuilt with fewer turns and keeps scanning', () => {
+    const prompts = n => Array.from({ length: n }, (_, i) => ({ type: 'user', message: { role: 'user', content: `Prompt ${i}` } }));
+    save(prompts(9)); enqueueSessionReviews({ brainDir: brain, interval: 100 });
+    save(prompts(4));
+    expect(enqueueSessionReviews({ brainDir: brain, interval: 100 })[0]).toMatchObject({ turns: 4, queuedThrough: 0 });
   });
 });
 
