@@ -413,6 +413,19 @@ export function buildInstalledPluginsSummary(projectRoot = process.cwd()) {
   }
 }
 
+/**
+ * Tier 1 lead rules: the absolute invariants and top operational directives
+ * that must never be truncated out of the head of an instruction surface.
+ *
+ * Selection is by the fields every rule can carry, never by slug:
+ * `priority: absolute`, `importance >= 5`, or the `tier:1` tag. Any user's
+ * vault can mark its own lead rules with the same fields.
+ */
+export function selectTier1Rules(rules = []) {
+  return rules.filter(r => r.priority === 'absolute' || r.immutable === true ||
+    Number(r.importance) >= 5 || (Array.isArray(r.tags) && r.tags.includes('tier:1')));
+}
+
 export async function buildRulesBlock(skillsDir, nodes = [], {
   consumer = 'ide', derivedDir, vaultDir, projectRoot, actions = [], bootstrap = false, total,
 } = {}) {
@@ -424,8 +437,9 @@ export async function buildRulesBlock(skillsDir, nodes = [], {
   const counts = category => rules.filter(n => n.category === category).length;
   const commands = buildCommandsSection(listSurfaceCommands(commandDirsFor(skillsDir)));
 
-  // Tier 1 Absolute Invariants & Top Operational Directives lead lines 1-50 so they are never truncated
-  const tier1Rules = rules.filter(r => r.priority === 'absolute' || r.immutable === true || r.slug === 'invariants-8cd098fd' || r.slug === 'invariants-dc116371');
+  // Tier 1 Absolute Invariants & Top Operational Directives lead lines 1-50 so they are never truncated.
+  // They are selected only by the fields every rule can carry (priority/importance/tier tag); no slug is special.
+  const tier1Rules = selectTier1Rules(rules);
   const otherRules = rules.filter(r => !tier1Rules.includes(r));
 
   for (const node of tier1Rules) {

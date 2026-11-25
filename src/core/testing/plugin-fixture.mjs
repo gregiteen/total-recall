@@ -8,7 +8,7 @@
  * those specs keep asserting what they mean to assert.
  *
  * The Home here is deliberately generic and exists only in tests. Production
- * plugin UI is always hand-authored per plugin (invariants-b6e8fcac).
+ * plugin UI is always hand-authored per plugin.
  */
 import fs from 'node:fs';
 import path from 'node:path';

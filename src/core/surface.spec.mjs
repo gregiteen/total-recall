@@ -7,8 +7,11 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import crypto from 'node:crypto';
-import { replaceFirstManagedInjectionBlock, heuristicCompact, buildRulesBlock, extractWikilinks, mergeGlobalRuleNodes, isSurfaceCodeStale, compileSurface } from './surface.mjs';
+import { fileURLToPath } from 'node:url';
+import { replaceFirstManagedInjectionBlock, heuristicCompact, buildRulesBlock, extractWikilinks, mergeGlobalRuleNodes, isSurfaceCodeStale, compileSurface, selectTier1Rules } from './surface.mjs';
 import { ruleFingerprint } from './context-policy.mjs';
+
+const coreSrcDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
 describe('instruction artifact integrity', () => {
   async function withBrain(layer, test) {
@@ -570,6 +573,67 @@ describe('compileSurface both-layer harness readback (R13)', () => {
     } finally {
       fs.rmSync(root, { recursive: true, force: true });
     }
+  });
+});
+
+describe('tier 1 lead rules are field-based, never slug-based', () => {
+  const rule = (slug, extra = {}) => ({ slug, category: 'invariants', status: 'active', title: slug, body: `Body of ${slug}`, ...extra });
+
+  it('selects only priority absolute, immutability, importance >= 5, or the tier:1 tag', () => {
+    const nodes = [
+      rule('absolute-rule', { priority: 'absolute' }),
+      rule('immutable-rule', { immutable: true }),
+      rule('important-rule', { importance: 5 }),
+      rule('tier-tagged', { tags: ['tier:1'] }),
+      rule('ordinary', { importance: 3 }),
+      rule('former-critical-slug-1'),
+      rule('former-critical-slug-2', { importance: 4 }),
+    ];
+    expect(selectTier1Rules(nodes).map(n => n.slug)).toEqual(['absolute-rule', 'immutable-rule', 'important-rule', 'tier-tagged']);
+  });
+
+  it('never promotes a rule because of its slug, even the former hardcoded pair', async () => {
+    for (const slug of ['invariants-8cd098fd', 'invariants-dc116371']) {
+      const plain = rule(slug, { importance: 1 });
+      expect(selectTier1Rules([plain])).toEqual([]);
+      // The block must not lead with a bare slug: importance 1 sorts it after the absolute lead rule.
+      const block = await buildRulesBlock(null, [plain, rule('lead', { priority: 'absolute' })], { total: 20000 });
+      expect(block.indexOf('[lead]')).toBeGreaterThan(-1);
+      expect(block.indexOf(`[${slug}]`)).toBeGreaterThan(block.indexOf('[lead]'));
+    }
+  });
+
+  it('leads with every qualifying rule, renders each rule once, and keeps the surrounding size limits', async () => {
+    const nodes = [
+      rule('lead-a', { priority: 'absolute', body: 'Lead A body.' }),
+      rule('lead-b', { importance: 5, body: 'Lead B body.' }),
+      rule('lead-c', { tags: ['tier:1'], body: 'Lead C body.' }),
+      rule('tail', { importance: 2, body: 'Tail body.' }),
+    ];
+    const block = await buildRulesBlock(null, nodes, { total: 20000 });
+    for (const slug of ['lead-a', 'lead-b', 'lead-c', 'tail']) expect(block).toContain(`[${slug}]`);
+    for (const slug of ['lead-a', 'lead-b', 'lead-c']) expect(block.indexOf(`[${slug}]`)).toBeLessThan(block.indexOf('[tail]'));
+    // A rule promoted to tier 1 is not also rendered again in the trailing section.
+    expect(block.split('[lead-a]')).toHaveLength(2);
+    // A small non-tier-1 rule still compiles inside the default token budget.
+    expect(await buildRulesBlock(null, [rule('tail-only', { importance: 1, body: 'Tail only.' })])).toContain('[tail-only]');
+  });
+
+  it('names no rule slug in core source outside specs', () => {
+    const files = [];
+    const walk = dir => {
+      for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+        const full = path.join(dir, entry.name);
+        if (entry.isDirectory()) walk(full);
+        else if (entry.name.endsWith('.mjs') && !entry.name.endsWith('.spec.mjs')) files.push(full);
+      }
+    };
+    walk(coreSrcDir);
+    expect(files.length).toBeGreaterThan(0);
+    // A concrete memory slug: a rule category prefix plus a hex suffix.
+    const slugPattern = /\b(?:invariants|preferences|anti-patterns)-[0-9a-f]{6,}\b/;
+    const offenders = files.filter(file => slugPattern.test(fs.readFileSync(file, 'utf8')));
+    expect(offenders.map(file => path.relative(coreSrcDir, file))).toEqual([]);
   });
 });
 

@@ -34,7 +34,7 @@ function printHelp() {
   project brain first (if one exists), then in the global brain.
 
   Examples:
-    npx total-recall edit anti-patterns-7a7fb6a5 "Never run tests on the MacBook."
+    npx total-recall edit <slug> "Never run tests on the MacBook."
     npx total-recall edit my-rule --priority absolute --modality must --global
     cat new-body.md | npx total-recall edit my-fact -
 `);
