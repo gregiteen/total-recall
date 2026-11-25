@@ -763,8 +763,6 @@
 
 ## Unreleased
 
-- A lesson review that re-extracts a rule already saved is no longer a failure. `remember` exits 3 for a duplicate rule only (nothing written; other failures stay 1), the lesson writer resolves it as already saved, the review keeps saving its other rules and reports how many were duplicates, and `lessons status` counts failed reviews in the queue and names them.
-
 ## 3.39.7
 
 - Embedding rows record the provider and model that actually served the vector. Ollama is tried first and answers with a model discovered from the server, so rows were previously stamped with the requested hosted default even for locally produced vectors — making it impossible to tell from the index whether vault text had left the machine. `getEmbeddingWithProvenance` reports the serving pair and both writers persist it; `getEmbedding` keeps returning the bare vector for existing callers.
