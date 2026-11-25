@@ -670,8 +670,7 @@ export function writeSession(entries, sessionsDir, sourceFile) {
 
   // Generate a deterministic session ID from the source file path
   // so re-ingesting the same file doesn't create duplicates
-  const sourceHash = crypto.createHash('sha256').update(sourceFile).digest('hex').slice(0, 12);
-  const sessionFile = path.join(sessionsDir, `${sourceHash}.jsonl`);
+  const sessionFile = sessionFileFor(sessionsDir, sourceFile);
 
   const jsonl = entries.map((e) => JSON.stringify(e)).join('\n') + '\n';
 
@@ -733,8 +732,32 @@ function findFiles(root, filter, maxDepth = 5, dirFilter = null) {
 
 // ─── Scan & Ingest ──────────────────────────────────────────────────────────────
 
+// What the last successful pass in this process saw for each transcript. The daemon scans
+// about once a minute; without this every pass parsed every transcript on the machine again.
+// Not persisted: a restart reads everything once.
+const scanned = new Map();
+
+/** Size and mtime of a file, or null when it cannot be read. */
+function fileState(file) {
+  try {
+    const st = fs.statSync(file);
+    return { size: st.size, mtimeMs: st.mtimeMs };
+  } catch {
+    return null;
+  }
+}
+
+/** The session file a transcript is written to; deterministic so re-ingest never duplicates. */
+function sessionFileFor(sessionsDir, sourceFile) {
+  const sourceHash = crypto.createHash('sha256').update(sourceFile).digest('hex').slice(0, 12);
+  return path.join(sessionsDir, `${sourceHash}.jsonl`);
+}
+
 /**
  * Scan all known IDE sources and ingest any new conversation files.
+ *
+ * A transcript unchanged since the last successful pass is skipped, unless the session
+ * file it produced is gone. Content-dedup runs (`derivedDir`) always read every transcript.
  *
  * @param {string} sessionsDir  Path to .agent/skills/total-recall/sessions/
  * @param {object} [opts]
@@ -759,11 +782,22 @@ export function scanAndIngest(sessionsDir, opts = {}) {
     let ingested = 0;
 
     for (const file of files) {
+      const key = `${sessionsDir}\0${source.name}\0${file}`;
+      // Observed before reading: a write during the read changes it and is seen next pass.
+      const state = derivedDir ? null : fileState(file);
+      const last = state && scanned.get(key);
+      if (last && last.size === state.size && last.mtimeMs === state.mtimeMs
+        && (!last.output || fs.existsSync(last.output))) continue;
+      scanned.delete(key);
       try {
         let entries = source.adapter(file);
+        let output = null;
         // Total Recall's own reasoning sessions are never ingested for review. Adapters
         // truncate long messages, so also read the untruncated native root prompt.
-        if (isInternalTranscript(entries) || (file.endsWith('.jsonl') && isInternalTranscript(readLessonEntries(file)))) continue;
+        if (isInternalTranscript(entries) || (file.endsWith('.jsonl') && isInternalTranscript(readLessonEntries(file)))) {
+          if (state) scanned.set(key, { ...state, output });
+          continue;
+        }
         if (entries.length > 0) {
           // Content-hash dedup: collapse identical facts from multiple sources
           if (derivedDir) {
@@ -773,12 +807,14 @@ export function scanAndIngest(sessionsDir, opts = {}) {
           }
           if (entries.length > 0) {
             const written = writeSession(entries, sessionsDir, file);
+            output = sessionFileFor(sessionsDir, file);
             if (written) {
               ingested++;
               totalIngested++;
             }
           }
         }
+        if (state) scanned.set(key, { ...state, output });
       } catch (err) {
         logger.info({
           subsystem: 'session-watcher',

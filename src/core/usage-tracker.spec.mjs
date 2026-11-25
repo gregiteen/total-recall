@@ -121,6 +121,18 @@ describe('Usage Tracker & Budget Safety', () => {
       .toThrowError(/Weekly spend of \$6\.2500/);
   });
 
+  it('checks the budget without reading harness transcripts', () => {
+    const configPath = path.join(tempHome, 'budget.yml');
+    fs.writeFileSync(configPath, 'budget:\n  daily_cap_usd: 5\n  weekly_cap_usd: 25\n');
+    const projects = path.join(tempHome, '.claude', 'projects', 'demo');
+    fs.mkdirSync(projects, { recursive: true });
+    const transcript = path.join(projects, 'sess.jsonl');
+    fs.writeFileSync(transcript, '{}\n');
+    const read = vi.spyOn(fs, 'readFileSync');
+    checkBudgetSafety(configPath, { home: tempHome, alert: false });
+    expect(read.mock.calls.some(([file]) => file === transcript)).toBe(false);
+  });
+
   it('preserves disabled budget configuration', () => {
     const configPath = path.join(tempHome, 'budget.yml');
     fs.writeFileSync(configPath, 'budget:\n  daily_cap_usd: 0\n  enabled: false\n');

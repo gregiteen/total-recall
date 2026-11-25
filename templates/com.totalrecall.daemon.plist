@@ -8,7 +8,7 @@
   <key>ProgramArguments</key>
   <array>
     <string>__NODE__</string>
-    <string>src/core/dream.mjs</string>
+    <string>src/core/daemon-loop.mjs</string>
   </array>
 
   <key>WorkingDirectory</key>

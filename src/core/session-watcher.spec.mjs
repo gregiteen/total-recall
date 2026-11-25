@@ -346,6 +346,64 @@ describe('scanAndIngest', () => {
     expect(result.ingested).toBe(0);
     expect(result.sources).toEqual([]);
   });
+
+  describe('unchanged transcripts', () => {
+    let home, sessionsDir, transcript, scan, reads;
+    const line = text => JSON.stringify({ type: 'user', message: { role: 'user', content: text } }) + '\n';
+    beforeEach(async () => {
+      home = path.join(dir, 'home');
+      transcript = path.join(home, '.claude', 'projects', 'p', 'one.jsonl');
+      sessionsDir = path.join(dir, 'sessions');
+      fs.mkdirSync(path.dirname(transcript), { recursive: true });
+      fs.writeFileSync(transcript, line('Use tabs.'));
+      // SOURCES resolves the home directory at import time.
+      vi.stubEnv('HOME', home);
+      vi.resetModules();
+      vi.spyOn(os, 'homedir').mockReturnValue(home);
+      const fresh = await import('./session-watcher.mjs');
+      scan = opts => fresh.scanAndIngest(sessionsDir, { enabledSources: ['claude-code'], ...opts });
+      const read = vi.spyOn(fs, 'readFileSync');
+      reads = () => { const n = read.mock.calls.filter(([file]) => file === transcript).length; read.mockClear(); return n; };
+    });
+    afterEach(() => { vi.restoreAllMocks(); vi.unstubAllEnvs(); vi.resetModules(); });
+    const saved = () => fs.readdirSync(sessionsDir).map(name => fs.readFileSync(path.join(sessionsDir, name), 'utf8')).join('');
+
+    it('reads a transcript once while it does not change', () => {
+      expect(scan().ingested).toBe(1);
+      expect(reads()).toBeGreaterThan(0);
+      expect(scan().ingested).toBe(0);
+      expect(reads()).toBe(0);
+    });
+
+    it('reads a changed transcript again and saves what was added', () => {
+      scan(); reads();
+      fs.appendFileSync(transcript, line('Never use spaces.'));
+      expect(scan().ingested).toBe(1);
+      expect(reads()).toBeGreaterThan(0);
+      expect(saved()).toContain('Never use spaces.');
+    });
+
+    it('rebuilds a session file that was removed', () => {
+      scan(); reads();
+      for (const name of fs.readdirSync(sessionsDir)) fs.unlinkSync(path.join(sessionsDir, name));
+      expect(scan().ingested).toBe(1);
+      expect(saved()).toContain('Use tabs.');
+    });
+
+    it('retries a transcript that failed to read', () => {
+      const real = fs.readFileSync.getMockImplementation?.();
+      fs.readFileSync.mockImplementationOnce(() => { throw new Error('disk error'); });
+      expect(scan().ingested).toBe(0);
+      if (real) fs.readFileSync.mockImplementation(real);
+      expect(scan().ingested).toBe(1);
+    });
+
+    it('never skips a content-dedup run', () => {
+      scan(); reads();
+      scan({ derivedDir: path.join(dir, 'derived') });
+      expect(reads()).toBeGreaterThan(0);
+    });
+  });
 });
 
 // ─── Content-hash deduplication ──────────────────────────────────────────────────

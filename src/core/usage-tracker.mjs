@@ -56,6 +56,32 @@ export function loadCatalogPricing(home = os.homedir()) {
   return map;
 }
 
+/** Metered dollar spend from Auth's ledger (~/.agent/skills/total-recall/logs/usage.jsonl). Reads no transcripts. */
+export function meteredUsage({ home = os.homedir(), now = new Date() } = {}) {
+  const nowMs = now.getTime();
+  const dailyCutoff = nowMs - 24 * 60 * 60 * 1000;
+  const weeklyCutoff = nowMs - 7 * 24 * 60 * 60 * 1000;
+  const ledger = { dailyUsd: 0, weeklyUsd: 0, dailyTokens: 0, weeklyTokens: 0 };
+  const usageFile = path.join(home, '.agent', 'skills', 'total-recall', 'logs', 'usage.jsonl');
+  if (fs.existsSync(usageFile)) {
+    try {
+      for (const line of fs.readFileSync(usageFile, 'utf8').split('\n')) {
+        if (!line) continue;
+        let row;
+        try { row = JSON.parse(line); } catch { continue; }
+        const ts = Date.parse(row.ts || '');
+        if (!Number.isFinite(ts) || ts < weeklyCutoff) continue;
+        const cost = Number(row.cost_usd) || 0;
+        const tokens = (Number(row.input_tokens) || 0) + (Number(row.output_tokens) || 0);
+        ledger.weeklyUsd += cost;
+        ledger.weeklyTokens += tokens;
+        if (ts >= dailyCutoff) { ledger.dailyUsd += cost; ledger.dailyTokens += tokens; }
+      }
+    } catch { /* unreadable usage.jsonl */ }
+  }
+  return ledger;
+}
+
 /**
  * Calculates local token and API-equivalent dollar cost across Claude, Codex, and Auth usage.jsonl.
  * Tracks usage in the last 24 hours (daily) and last 7 days (weekly).
@@ -69,7 +95,6 @@ export function calculateCurrentCost({ home = os.homedir(), now = new Date() } =
 
   const claude = { dailyUsd: 0, weeklyUsd: 0, dailyTokens: 0, weeklyTokens: 0 };
   const codex = { dailyUsd: 0, weeklyUsd: 0, dailyTokens: 0, weeklyTokens: 0 };
-  const ledger = { dailyUsd: 0, weeklyUsd: 0, dailyTokens: 0, weeklyTokens: 0 };
 
   // 1. Claude Code project transcripts (~/.claude/projects/**/*.jsonl)
   walkRecentJsonl(path.join(home, '.claude', 'projects'), weeklyCutoff, (filePath, stat) => {
@@ -132,24 +157,8 @@ export function calculateCurrentCost({ home = os.homedir(), now = new Date() } =
     });
   }
 
-  // 3. Auth metered usage ledger (~/.agent/skills/total-recall/logs/usage.jsonl)
-  const usageFile = path.join(home, '.agent', 'skills', 'total-recall', 'logs', 'usage.jsonl');
-  if (fs.existsSync(usageFile)) {
-    try {
-      for (const line of fs.readFileSync(usageFile, 'utf8').split('\n')) {
-        if (!line) continue;
-        let row;
-        try { row = JSON.parse(line); } catch { continue; }
-        const ts = Date.parse(row.ts || '');
-        if (!Number.isFinite(ts) || ts < weeklyCutoff) continue;
-        const cost = Number(row.cost_usd) || 0;
-        const tokens = (Number(row.input_tokens) || 0) + (Number(row.output_tokens) || 0);
-        ledger.weeklyUsd += cost;
-        ledger.weeklyTokens += tokens;
-        if (ts >= dailyCutoff) { ledger.dailyUsd += cost; ledger.dailyTokens += tokens; }
-      }
-    } catch { /* unreadable usage.jsonl */ }
-  }
+  // 3. Auth metered usage ledger
+  const ledger = meteredUsage({ home, now });
 
   const dailyUsd = claude.dailyUsd + codex.dailyUsd + ledger.dailyUsd;
   const weeklyUsd = claude.weeklyUsd + codex.weeklyUsd + ledger.weeklyUsd;
@@ -203,7 +212,8 @@ export function checkBudgetSafety(configPath, { home = os.homedir(), alert = tru
   // Native CLI transcript costs are API-equivalent estimates, including work
   // covered by subscriptions. Only Auth's metered ledger records dollar spend.
   // Included-plan admission and allowance limits belong to Metaharness.
-  const usage = calculateCurrentCost({ home }).breakdown.metered;
+  // This runs before every model call, so it must not parse harness transcripts.
+  const usage = meteredUsage({ home });
 
   if (daily_cap_usd !== undefined && usage.dailyUsd > daily_cap_usd) {
     const errorMsg = `Budget safety limit reached! Daily spend of $${usage.dailyUsd.toFixed(4)} exceeds the cap of $${daily_cap_usd.toFixed(4)}. Dispatch blocked.`;
