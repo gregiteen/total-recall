@@ -1,6 +1,6 @@
 {
   "name": "total-recall-brain",
-  "version": "3.50.3",
+  "version": "3.51.0",
   "description": "The Vibe Coding Brain & Autonomous Software Factory: memory, rules, secrets, and 33 visual plugins automatically managed across all your devices.",
   "type": "module",
   "bin": {
@@ -81,7 +81,7 @@
   "homepage": "https://github.com/gregiteen/total-recall#readme",
   "dependencies": {
     "@simplewebauthn/server": "^13.3.2",
-    "@ssss/cli": "npm:@gregiteen/ssss-cli@0.14.5",
+    "@ssss/cli": "npm:@gregiteen/ssss-cli@0.14.6",
     "bcrypt": "^6.0.0",
     "better-sqlite3": "^12.11.1",
     "cookie-parser": "^1.4.7",

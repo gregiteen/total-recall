@@ -1,6 +1,6 @@
 {
   "name": "tr-plugin-git",
-  "version": "2.3.1",
+  "version": "2.3.2",
   "type": "module",
   "description": "Reports the state of the current git repository: branch, dirty files, unpushed commits and stashes.",
   "scripts": {
@@ -22,9 +22,9 @@
     "access": "public"
   },
   "dependencies": {
-    "@gregiteen/ssss-cli": "0.14.5"
+    "@gregiteen/ssss-cli": "0.14.6"
   },
   "overrides": {
-    "@ssss/cli": "npm:@gregiteen/ssss-cli@0.14.5"
+    "@ssss/cli": "npm:@gregiteen/ssss-cli@0.14.6"
   }
 }

@@ -2,7 +2,7 @@
   "$schema": "https://github.com/gregiteen/total-recall/blob/main/metadata.plugin.schema.json",
   "id": "operator-alerts",
   "name": "Operator Alerts",
-  "version": "1.1.1",
+  "version": "1.1.2",
   "description": "Operator alert dispatcher across desktop notifications, SMS, and webhook endpoints with quiet hours.",
   "author": "Total Recall",
   "license": "MIT",

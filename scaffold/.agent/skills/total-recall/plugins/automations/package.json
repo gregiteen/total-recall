@@ -1,6 +1,6 @@
 {
   "name": "tr-plugin-automations",
-  "version": "1.2.2",
+  "version": "1.2.3",
   "type": "module",
   "description": "Scheduled plugin task runner plus automation sources, triggers, observed outcomes and coverage across the Total Recall mesh.",
   "scripts": {
@@ -29,9 +29,9 @@
     "access": "public"
   },
   "dependencies": {
-    "@gregiteen/ssss-cli": "0.14.5"
+    "@gregiteen/ssss-cli": "0.14.6"
   },
   "overrides": {
-    "@ssss/cli": "npm:@gregiteen/ssss-cli@0.14.5"
+    "@ssss/cli": "npm:@gregiteen/ssss-cli@0.14.6"
   }
 }

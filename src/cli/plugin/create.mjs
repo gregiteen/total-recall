@@ -553,6 +553,27 @@ test('every file the manifest references exists', () => {
     installed = true;
   }
 
+  // ── Project brain and provisioning ──────────────────────────────────────
+  // A plugin repository is a Total Recall project from the start: its own SSSS vault, then whatever
+  // the enabled plugins set up in a new project (quality gates, for code-quality).
+  if (installed) {
+    try {
+      const { ensureFullProjectBrain } = await import('../../core/project-brain.mjs');
+      const { globalBrainDirFor } = await import('../../core/brain-registry.mjs');
+      const { ensureProjectGitignore } = await import('../init.mjs');
+      const { provisionProject } = await import('../../core/project-provisioning.mjs');
+      ensureFullProjectBrain(pluginDir, { name: path.basename(pluginDir), tags: ['plugin', 'project-brain'], globalBrainDir: globalBrainDirFor() });
+      ensureProjectGitignore(pluginDir);
+      for (const result of await provisionProject(pluginDir)) {
+        if (result.status === 'ok') console.log(`   Provisioned: ${result.plugin} — ${result.summary}`);
+        else if (result.status === 'failed') console.error(`⚠️  ${result.plugin} could not provision this repository: ${result.summary}`);
+      }
+    } catch (err) {
+      console.error(`⚠️  Project brain setup failed; run 'total-recall brain ensure ${pluginDir}': ${err.message}`);
+      process.exitCode = 1;
+    }
+  }
+
   // ── Optional GitHub repository (private unless --public) ────────────────
   let githubUrl = null;
   if (createGithub) {

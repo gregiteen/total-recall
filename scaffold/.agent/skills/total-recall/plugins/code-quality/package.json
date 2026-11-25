@@ -1,6 +1,6 @@
 {
   "name": "tr-plugin-code-quality",
-  "version": "0.3.2",
+  "version": "0.4.0",
   "type": "module",
   "description": "Total Recall code-quality plugin: shared gate runner core and per-repo gate configuration.",
   "license": "MIT",
@@ -11,7 +11,7 @@
     "validate": "ssss conformance --engine"
   },
   "dependencies": {
-    "@gregiteen/ssss-cli": "0.14.5"
+    "@gregiteen/ssss-cli": "0.14.6"
   },
   "files": [
     "cli.mjs",
@@ -28,6 +28,6 @@
     "access": "public"
   },
   "overrides": {
-    "@ssss/cli": "npm:@gregiteen/ssss-cli@0.14.5"
+    "@ssss/cli": "npm:@gregiteen/ssss-cli@0.14.6"
   }
 }

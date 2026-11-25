@@ -105,20 +105,7 @@ export async function executeOnNode(node, request, { worker = runWorker, process
 }
 
 export async function inspectNode(node = 'local', dependencies) {
-  let inspectOptions;
-  if (!node || node === 'local') {
-    try {
-      const policy = await readIncludedPolicy();
-      const openRouterAgents = Object.keys(policy.openRouter || {});
-      inspectOptions = { openRouterAgents };
-      if (policy.claudeToken?.keyName && policy.claudeToken?.fingerprint) {
-        const { readClaudeToken } = await import('./included-usage.mjs');
-        const token = await readClaudeToken(policy.claudeToken.keyName);
-        if (token) inspectOptions.claudeToken = token;
-      }
-    } catch { /* fall back to raw local probes */ }
-  }
-  return executeOnNode(node, { operation: 'inspect', ...(inspectOptions ? { inspectOptions } : {}) }, dependencies);
+  return executeOnNode(node, { operation: 'inspect' }, dependencies);
 }
 
 export function quoteArgument(value) { return "'" + String(value).replaceAll("'", "'\\''") + "'"; }

@@ -17,12 +17,34 @@ import { readFileSync, existsSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+// Extensions the fallback check scans when a repository has no other gate.
+const FLOOR_EXTENSIONS = ['.md', '.txt', '.json', '.yml', '.yaml', '.toml', '.sh', '.html', '.css', '.sql', '.js', '.mjs', '.cjs', '.ts', '.tsx', '.jsx', '.py', '.go', '.rs', '.swift', '.java'];
+const JS_EXTENSIONS = ['.ts', '.tsx', '.js', '.jsx', '.mjs', '.cjs'];
+
 const SSSS_VERIFICATION_NAME = /^ssss:(?:validate|verify|check|conformance|test|lint)(?::[a-z0-9_-]+)*$/;
 
+// `ssss <verb>` run by a script, whatever the script is called.
+const SSSS_VERIFICATION_COMMAND = /(?:^|[\s&|;])ssss\s+(?:conformance|validate|verify|check|lint)(?=\s|$)/;
+
 function isSsssVerificationScript([name, command]) {
-  if (!SSSS_VERIFICATION_NAME.test(name) || typeof command !== 'string' || !command.trim()) return false;
+  if (typeof command !== 'string' || !command.trim()) return false;
   const launcher = /^(?:(?:npx|pnpm exec|npm exec --)\s+)?ssss(?:\s+(?:help|version)(?:\s+.*)?)?$/;
-  return !launcher.test(command.trim()) && !/(?:^|\s)(?:--help|-h|--version|-v)(?:\s|$)/.test(command);
+  if (launcher.test(command.trim()) || /(?:^|\s)(?:--help|-h|--version|-v)(?:\s|$)/.test(command)) return false;
+  return SSSS_VERIFICATION_NAME.test(name) || SSSS_VERIFICATION_COMMAND.test(command);
+}
+
+/** Gate id for an ssss script: `ssss:validate` keeps its old id, `validate` becomes `ssss-validate`. */
+function ssssGateId(name) {
+  const id = name.startsWith('ssss:') ? name.slice(5) : name.replace(/^ssss-/, '');
+  return `ssss-${id}`.toLowerCase().replace(/[^a-z0-9-]/g, '-').replace(/-+/g, '-');
+}
+
+/** The test runner a Python repository already declares, or null. */
+function pytestDeclared(readText, has) {
+  if (!['tests', 'test'].some((dir) => has(dir))) return false;
+  return has('pytest.ini') || has('tox.ini') && /\[pytest\]/.test(readText('tox.ini'))
+    || /\[tool\.pytest/.test(readText('pyproject.toml'))
+    || ['requirements.txt', 'requirements-dev.txt', 'pyproject.toml'].some((file) => /(^|[\s"'])pytest\b/m.test(readText(file)));
 }
 
 export function detectFacts(repoRoot) {
@@ -37,7 +59,8 @@ export function detectFacts(repoRoot) {
     packageJson: !!pkg,
     packageManager: has('pnpm-lock.yaml') ? 'pnpm' : has('yarn.lock') ? 'yarn' : pkg ? 'npm' : null,
     workspace: has('pnpm-workspace.yaml') || !!pkg?.workspaces,
-    typescript: !!deps.typescript || has('tsconfig.json'),
+    // A library that uses the compiler as a dependency has nothing for tsc to check.
+    typescript: has('tsconfig.json') || (!!deps.typescript && !!scripts.typecheck),
     tsProjectRefs: readJson('tsconfig.json')?.references?.length || 0,
     eslint: !!deps.eslint || ['.eslintrc', '.eslintrc.json', '.eslintrc.cjs', 'eslint.config.js', 'eslint.config.mjs'].some(has),
     biome: !!deps['@biomejs/biome'] || has('biome.json') || has('biome.jsonc'),
@@ -46,6 +69,11 @@ export function detectFacts(repoRoot) {
     flake8: has('.flake8') || has('setup.cfg') || has('tox.ini'),
     mypy: has('mypy.ini') || has('.mypy_cache'),
     black: /\[tool\.black\]/.test(readText('pyproject.toml')),
+    ruff: has('ruff.toml') || has('.ruff.toml') || /\[tool\.ruff/.test(readText('pyproject.toml')),
+    pytest: pytestDeclared(readText, has),
+    go: has('go.mod'),
+    rust: has('Cargo.toml'),
+    pluginManifest: has('plugin.json'),
     ssssScripts: Object.entries(scripts).filter(isSsssVerificationScript).map(([name]) => name),
   };
 }
@@ -65,20 +93,49 @@ export function detect({ repoRoot }) {
   }
   if (facts.biome && scripts.lint) checks.push({ id: 'lint', tier: 'fast', cmd: run('lint'), parser: 'generic' });
   else if (facts.eslint && scripts.lint) checks.push({ id: 'lint', tier: 'fast', cmd: run('lint'), parser: 'eslint-stylish' });
+  // The repository's own lint script, whichever linter it runs.
+  else if (scripts.lint) checks.push({ id: 'lint', tier: 'fast', cmd: run('lint'), parser: 'generic' });
   if (facts.flake8) checks.push({ id: 'flake8', tier: 'fast', cmd: [python, '-m', 'flake8', '.'], parser: 'flake8' });
   if (facts.black) checks.push({ id: 'black-check', tier: 'fast', cmd: [python, '-m', 'black', '--check', '.'], parser: 'black' });
   if (facts.mypy) checks.push({ id: 'mypy', tier: 'fast', cmd: [python, '-m', 'mypy', '.'], parser: 'mypy' });
+  if (facts.ruff) checks.push({ id: 'ruff', tier: 'fast', cmd: [python, '-m', 'ruff', 'check', '.'], parser: 'generic' });
+  if (facts.go) checks.push({ id: 'go-vet', tier: 'fast', cmd: ['go', 'vet', './...'], parser: 'generic' });
+  if (facts.rust) checks.push({ id: 'cargo-check', tier: 'fast', cmd: ['cargo', 'check', '--workspace', '--all-targets'], parser: 'generic' });
   for (const s of facts.ssssScripts) {
-    checks.push({ id: s.replace(/^ssss:/, 'ssss-').replace(/[^a-z0-9-]/g, '-'), tier: s.includes('validate') ? 'fast' : 'full', cmd: run(s), parser: 'generic' });
+    // `ssss:*` scripts keep their tiers; a script found by its command is one cheap engine pass.
+    const tier = s.includes('validate') || !SSSS_VERIFICATION_NAME.test(s) ? 'fast' : 'full';
+    checks.push({ id: ssssGateId(s), tier, cmd: run(s), parser: 'generic' });
+  }
+  if (facts.pluginManifest) {
+    checks.push({ id: 'plugin-compliance', tier: 'fast', cmd: ['total-recall', 'code-quality', 'plugin-check'], parser: 'generic' });
   }
   if (scripts.test) checks.push({ id: 'test', tier: 'full', cmd: run('test'), parser: 'generic' });
+  if (facts.pytest) checks.push({ id: 'pytest', tier: 'full', cmd: [python, '-m', 'pytest', '-q'], parser: 'generic' });
+  if (facts.go) checks.push({ id: 'go-test', tier: 'full', cmd: ['go', 'test', './...'], parser: 'generic' });
+  if (facts.rust) checks.push({ id: 'cargo-test', tier: 'full', cmd: ['cargo', 'test', '--workspace'], parser: 'generic' });
 
+  // A repository with none of the above still needs one real gate: leftover merge-conflict markers.
+  const floor = checks.length === 0;
+  if (floor) checks.push({
+    id: 'conflict-markers', tier: 'fast', kind: 'grep-forbid',
+    extensions: FLOOR_EXTENSIONS,
+    patterns: [{ pattern: '^(?:<<<<<<< |>>>>>>> )', code: 'CONFLICT-MARKER', message: 'Unresolved merge conflict marker.' }],
+  });
+
+  const toolchain = facts.python && !facts.typescript ? 'python'
+    : facts.typescript ? 'typescript'
+      : facts.packageJson ? 'javascript'
+        : facts.go ? 'go' : facts.rust ? 'rust' : floor ? 'generic' : 'javascript';
+  const sourceExtensions = floor ? FLOOR_EXTENSIONS
+    : facts.python ? ['.py']
+      : facts.packageJson ? JS_EXTENSIONS
+        : facts.go ? ['.go'] : facts.rust ? ['.rs'] : JS_EXTENSIONS;
   return {
     version: 3,
-    toolchain: facts.python && !facts.typescript ? 'python' : facts.typescript ? 'typescript' : 'javascript',
+    toolchain,
     globalLock: true,
     lock: { staleAfterMinutes: 45 },
-    sourceExtensions: facts.python ? ['.py'] : ['.ts', '.tsx', '.js', '.jsx', '.mjs', '.cjs'],
+    sourceExtensions,
     checks,
   };
 }

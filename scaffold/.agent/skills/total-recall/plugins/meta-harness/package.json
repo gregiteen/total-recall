@@ -1,6 +1,6 @@
 {
   "name": "tr-plugin-meta-harness",
-  "version": "0.5.4",
+  "version": "0.5.5",
   "description": "Total Recall Metaharness plugin",
   "type": "module",
   "scripts": {
@@ -23,9 +23,9 @@
     "access": "public"
   },
   "dependencies": {
-    "@gregiteen/ssss-cli": "0.14.5"
+    "@gregiteen/ssss-cli": "0.14.6"
   },
   "overrides": {
-    "@ssss/cli": "npm:@gregiteen/ssss-cli@0.14.5"
+    "@ssss/cli": "npm:@gregiteen/ssss-cli@0.14.6"
   }
 }

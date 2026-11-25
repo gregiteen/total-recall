@@ -29,6 +29,21 @@ total-recall code-quality report            # latest report; never starts a chec
 total-recall code-quality report file src/  # findings for one path
 ```
 
+## Gates in every repository
+
+A repository gets its gates when Total Recall creates its brain (`init --project`, `new`, `brain ensure`, `plugin create`). Existing repositories are covered with:
+
+```bash
+total-recall code-quality coverage          # which registered repositories have gates
+total-recall code-quality ensure            # set them up here
+total-recall code-quality ensure --all      # every registered project with a commit in the last 30 days
+total-recall code-quality ensure --all --dry-run
+```
+
+`ensure` proposes only commands the repository already declares, and adds one merge-conflict-marker check where it finds nothing else. It never replaces an existing list. It records an unrecorded `config.json`, rebuilds a missing one, and reports a list that has drifted or is invalid. It never runs a gate.
+
+`total-recall startup check` and `brief` show `gate-status`, so a repository with no gates is visible when a session starts.
+
 ## Verify on the Mac mini
 
 Run development gates in the local isolated checkout on the Mac mini. Start the one-shot check in a background job and read its final report and exit. The plugin's `snapshot` command is an optional transfer mechanism for installations that configure a separate test node. The owner workflow runs directly on the Mac mini.

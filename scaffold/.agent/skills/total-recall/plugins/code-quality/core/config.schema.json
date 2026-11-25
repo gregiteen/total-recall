@@ -8,6 +8,7 @@
   "properties": {
     "version": { "const": 3 },
     "toolchain": { "type": "string", "minLength": 1, "description": "Primary toolchain label shown in reports (javascript, typescript, python, …)" },
+    "notes": { "description": "Free-form notes for people. Never read by the runner." },
     "repoDescription": { "type": "string", "description": "What quality means in this repo" },
     "repoRoot": { "type": "string", "description": "Override the repo root (default: three levels above the skill)" },
     "remoteNode": { "type": "string", "minLength": 1, "description": "Mesh node that runs the gates for the pre-push hook" },
@@ -65,16 +66,31 @@
           "patterns": {
             "type": "array",
             "items": {
-              "type": "object",
-              "additionalProperties": false,
-              "oneOf": [{ "required": ["pattern"] }, { "required": ["patternFile"] }],
-              "properties": {
-                "pattern": { "type": "string", "minLength": 1 },
-                "patternFile": { "type": "string", "minLength": 1, "description": "Repo-relative file of literal terms, one a line, for words the published config must not contain. The rule reports that it did not run when the file is absent." },
-                "flags": { "type": "string", "pattern": "^[dgimsuvy]*$" },
-                "code": { "type": "string" },
-                "message": { "type": "string" }
-              }
+              "description": "Exactly one of pattern and patternFile. Each branch lists its own keys because the host's JSON Schema reader does not enforce a bare required list inside oneOf.",
+              "oneOf": [
+                {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": ["pattern"],
+                  "properties": {
+                    "pattern": { "type": "string", "minLength": 1 },
+                    "flags": { "type": "string", "pattern": "^[dgimsuvy]*$" },
+                    "code": { "type": "string" },
+                    "message": { "type": "string" }
+                  }
+                },
+                {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": ["patternFile"],
+                  "properties": {
+                    "patternFile": { "type": "string", "minLength": 1, "description": "Repo-relative file of literal terms, one a line, for words the published config must not contain. The rule reports that it did not run when the file is absent." },
+                    "flags": { "type": "string", "pattern": "^[dgimsuvy]*$" },
+                    "code": { "type": "string" },
+                    "message": { "type": "string" }
+                  }
+                }
+              ]
             }
           },
           "scope": { "type": "string", "enum": ["all", "changed"] },

@@ -9,7 +9,6 @@ id: budget-key-caps
 intents: [check daily spend against cap, check weekly spend against cap, review openrouter key limits, find openrouter keys not in store]
 surfaces: [page]
 operations: [secret]
-data: ["secret:/daily/cost_usd", "secret:/weekly/cost_usd", "secret:/budget/daily_cap_usd", "secret:/budget/weekly_cap_usd", "secret:/breaches", "secret:/keys"]
 ---
 
 <section>

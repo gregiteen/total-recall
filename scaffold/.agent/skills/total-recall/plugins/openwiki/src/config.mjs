@@ -41,8 +41,6 @@ export const ALLOWED_CONFIG_KEYS = Object.freeze([
 
 export const ALLOWED_PROVIDERS = Object.freeze([
   'openrouter',
-  'anthropic',
-  'claude-plan',
   'google',
   'custom'
 ]);

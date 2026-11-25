@@ -1,6 +1,6 @@
 {
   "name": "tr-plugin-embeddings",
-  "version": "0.2.2",
+  "version": "0.2.4",
   "type": "module",
   "description": "Local embedding model management: provider/model status, benchmark, index build and coverage",
   "scripts": {
@@ -18,9 +18,9 @@
     "skills/"
   ],
   "dependencies": {
-    "@gregiteen/ssss-cli": "0.14.5"
+    "@gregiteen/ssss-cli": "0.14.6"
   },
   "overrides": {
-    "@ssss/cli": "npm:@gregiteen/ssss-cli@0.14.5"
+    "@ssss/cli": "npm:@gregiteen/ssss-cli@0.14.6"
   }
 }

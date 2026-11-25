@@ -1,6 +1,6 @@
 {
   "name": "tr-plugin-mesh",
-  "version": "0.3.2",
+  "version": "0.3.4",
   "type": "module",
   "description": "Headscale and Tailscale SSH control-server mesh administration and node discovery",
   "scripts": {
@@ -10,7 +10,7 @@
   "license": "MIT",
   "dependencies": {
     "express": "^5.2.1",
-    "@gregiteen/ssss-cli": "0.14.5"
+    "@gregiteen/ssss-cli": "0.14.6"
   },
   "files": [
     "cli.mjs",
@@ -26,6 +26,6 @@
     "skills/"
   ],
   "overrides": {
-    "@ssss/cli": "npm:@gregiteen/ssss-cli@0.14.5"
+    "@ssss/cli": "npm:@gregiteen/ssss-cli@0.14.6"
   }
 }

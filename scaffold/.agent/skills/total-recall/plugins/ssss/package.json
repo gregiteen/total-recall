@@ -1,6 +1,6 @@
 {
   "name": "tr-plugin-ssss",
-  "version": "0.2.1",
+  "version": "0.2.3",
   "private": true,
   "type": "module",
   "description": "Canonical SSSS distribution, scaffolding and validation for Total Recall installations.",
@@ -21,7 +21,7 @@
     "check:ssss-conformance": "node cli.mjs conformance"
   },
   "dependencies": {
-    "@gregiteen/ssss-cli": "0.14.5"
+    "@gregiteen/ssss-cli": "0.14.6"
   },
   "license": "MIT"
 }

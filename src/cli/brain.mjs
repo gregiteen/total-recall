@@ -101,6 +101,19 @@ async function handleToggle(enabled, targetArgs, globalBrainDir) {
   if (!enabled) console.log('     recall skips it until: npx total-recall brain on ' + target.name);
 }
 
+/** Let installed plugins set up what they own in the project (gates, for code-quality). Reports, never throws. */
+async function provisionAndReport(projectRoot) {
+  try {
+    const { provisionProject } = await import('../core/project-provisioning.mjs');
+    for (const result of await provisionProject(projectRoot)) {
+      if (result.status === 'ok') console.log(`  ✅ ${result.plugin}: ${result.summary}`);
+      else if (result.status === 'failed') console.error(`  ⚠️  ${result.plugin} could not provision this project: ${result.summary}`);
+    }
+  } catch (err) {
+    console.error(`  ⚠️  Plugin provisioning failed: ${err.message}`);
+  }
+}
+
 async function handleEnsure(targetArgs, globalBrainDir) {
   const targetPath = targetArgs[0];
   if (!targetPath) {
@@ -120,6 +133,7 @@ async function handleEnsure(targetArgs, globalBrainDir) {
   const health = inspectProjectBrain(abs);
   const { ensureProjectGitignore } = await import('./init.mjs');
   const ignored = ensureProjectGitignore(abs);
+  await provisionAndReport(abs);
   console.log(`\n  ✅ Full project brain ready`);
   console.log(`     Repo:  ${result.repoRoot}`);
   console.log(`     Brain: ${result.brainDir}`);
@@ -267,6 +281,7 @@ async function handleRegister(registryPath, targetArgs) {
     const { ensureProjectGitignore } = await import('./init.mjs');
     const ignored = ensureProjectGitignore(absoluteRoot);
     if (ignored.length) console.log(`  ✅ .gitignore +${ignored.length} brain-state exclusions`);
+    await provisionAndReport(absoluteRoot);
   } catch (err) {
     console.error(`  ⚠️  Could not fully provision brain layout: ${err.message}`);
     process.exitCode = 1;

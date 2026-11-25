@@ -1,3 +1,11 @@
+## 3.51.0 — 2026-11-25
+
+- Creating a project brain sets up what the installed plugins own in it. `init --project`, `brain ensure`, `brain register` and `plugin create` run the `project-provision` module of each enabled plugin that declares one, and report what it did. A failing plugin never undoes the brain. `plugin create` also gives the new repository its own brain.
+- Bundled code-quality 0.4.0: `ensure` gives a repository its quality gates from the commands it already declares and never replaces a list; `coverage` shows which registered repositories have gates; `plugin-check` validates a plugin's working tree, replacing a gate that could not fail; `gate-status` puts a missing gate list in `startup check`. A gate list with a `grep-forbid` pattern can be recorded again: the contract had rejected every one.
+- Carries SSSS 0.14.6 in core and in every bundled plugin. On 3.50.3, `brain ensure`, `init --project`, `new` and `plugin create` failed wherever a newer SSSS package was installed globally, because a package elsewhere on the machine hid the pinned one. The SSSS plugin (0.2.3) now picks the engine at the version it pins.
+- The bundled Metaharness (0.5.5) and OpenWiki (0.4.2) are the 3.50.3 releases with the SSSS pin changed. Edits made to them only in this repository after 3.50.3, including a runner for OpenWiki that used a Claude subscription token, are not part of this release.
+- The daemon skips unchanged transcripts and reads only the ledger in its budget check. Lesson reviews skip unchanged sessions and rewrite a cursor only when it changed. Dollar caps apply to metered spend, not to native token estimates.
+
 ## 3.50.3 — 2026-11-17
 
 - A server or daemon still running from the copy an npm upgrade retired is recognised as this install's own process, so `server ensure` and `update --automatic` can replace it. npm renames the old package folder to `.total-recall-brain-<random>` and deletes it; the process kept running the old release from that missing folder, its identity read as unknown, and every lifecycle command refused to touch it. The Mac mini's server had been serving 3.49.5 this way through three releases.

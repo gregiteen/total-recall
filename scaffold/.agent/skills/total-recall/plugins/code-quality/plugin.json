@@ -2,7 +2,7 @@
   "$schema": "https://github.com/gregiteen/total-recall/blob/main/metadata.plugin.schema.json",
   "id": "code-quality",
   "name": "Code Quality Gates",
-  "version": "0.3.2",
+  "version": "0.4.0",
   "description": "Fail-closed deterministic code-quality gates, lint rules, and test compliance reporting.",
   "author": "Total Recall contributors",
   "license": "MIT",
@@ -68,8 +68,64 @@
         "name": "init",
         "description": "Create the repo-layer config from defaults, detection and prompts",
         "effect": "write"
+      },
+      {
+        "name": "ensure",
+        "description": "Set up gates where a repository has none (--all for every active registered project); imports or rebuilds a list and never overwrites one",
+        "effect": "write",
+        "timeoutMs": 600000,
+        "args": [
+          {
+            "name": "repo",
+            "flag": "--repo",
+            "type": "string",
+            "label": "Repository path"
+          },
+          {
+            "name": "all",
+            "flag": "--all",
+            "type": "boolean",
+            "label": "Every active registered project"
+          },
+          {
+            "name": "dryRun",
+            "flag": "--dry-run",
+            "type": "boolean",
+            "label": "Show what would change"
+          }
+        ]
+      },
+      {
+        "name": "coverage",
+        "description": "Which registered repositories have gates, and how old their last reports are",
+        "effect": "read",
+        "timeoutMs": 120000
+      },
+      {
+        "name": "gate-status",
+        "description": "One line: whether this repository has gates and whether the last run passed",
+        "effect": "read",
+        "output": "json"
+      },
+      {
+        "name": "plugin-check",
+        "description": "Validate the plugin in this repository: manifest, referenced files, UI blocks and versions. Exits 1 on a problem",
+        "effect": "read",
+        "timeoutMs": 60000
       }
     ]
+  },
+  "startup_check": {
+    "command": "gate-status",
+    "args": [
+      "--json"
+    ],
+    "timeout_ms": 10000
+  },
+  "runtime": {
+    "modules": {
+      "project-provision": "./core/provision.mjs"
+    }
   },
   "commands": [
     {

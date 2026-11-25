@@ -1,6 +1,6 @@
 {
   "name": "tr-plugin-operator-alerts",
-  "version": "1.1.1",
+  "version": "1.1.2",
   "type": "module",
   "description": "Send operator alerts over desktop, email (SMTP2GO), SMS (Telnyx), webhook and issue-tracker alerts with dedupe, quiet hours and delivery evidence. Keys come from the secret store; recipients from config.",
   "scripts": {
@@ -23,9 +23,9 @@
     "access": "public"
   },
   "dependencies": {
-    "@gregiteen/ssss-cli": "0.14.5"
+    "@gregiteen/ssss-cli": "0.14.6"
   },
   "overrides": {
-    "@ssss/cli": "npm:@gregiteen/ssss-cli@0.14.5"
+    "@ssss/cli": "npm:@gregiteen/ssss-cli@0.14.6"
   }
 }

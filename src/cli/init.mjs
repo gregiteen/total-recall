@@ -903,6 +903,18 @@ export default async function init(args) {
         logWarn(`Could not update .gitignore: ${ignoreErr.message}`);
       }
 
+      // Plugins set up what they own in a new project (the code-quality plugin records its gates).
+      // A failure is reported; it never undoes the brain that was just created.
+      try {
+        const { provisionProject } = await import('../core/project-provisioning.mjs');
+        for (const result of await provisionProject(cwd)) {
+          if (result.status === 'ok') logOk(`${result.plugin}: ${result.summary}`);
+          else if (result.status === 'failed') logWarn(`${result.plugin} could not provision this project: ${result.summary}`);
+        }
+      } catch (provisionErr) {
+        logWarn(`Plugin provisioning failed (non-fatal): ${provisionErr.message}`);
+      }
+
       // Auto-sync all .md files from the repo into the vault
       try {
         const { syncSingleRepo } = await import('../core/repo-sync.mjs');
