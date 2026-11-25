@@ -52,7 +52,7 @@ function noteDelivery(query, rulesHash) {
  * Compact the over-budget capsule, or explain the budget it needs. `fullRequired` is what the uncompacted capsule would take.
  * @returns {Promise<boolean>} whether a ready capsule was printed
  */
-async function printCompacted({ query, actions, budget, format, version, rulesHash, nodes, projectRoot, skillsDir, derivedDirs, knowledge }) {
+async function printCompacted({ query, actions, budget, format, version, rulesHash, nodes, projectRoot, skillsDir, derivedDirs, knowledge, explicitBudget }) {
   const { compactNodes } = await import('./compact.mjs');
   const header = compactedHeader(version, budget, rulesHash);
   const compact = target => compactNodes({ task: query, actions, budget: target, complete: true, nodes, projectRoot, skillsDir, derivedDirs, header,
@@ -100,6 +100,10 @@ async function printCompacted({ query, actions, budget, format, version, rulesHa
     // Measure the actual floor through the same encoder; leave room for the changed budget digits on retry.
     const floor = await compact(error.requiredBudget);
     const requiredBudget = estimateTokens(`${output(floor)}\n`) + 16;
+    // Without a budget from the caller, the rules decide the size: refusing would stop the agent, and dropping one is never allowed.
+    if (!explicitBudget) {
+      return printCompacted({ query, actions, budget: requiredBudget, format, version, rulesHash, nodes, projectRoot, skillsDir, derivedDirs, knowledge, explicitBudget: true });
+    }
     const requiredIds = Array.isArray(error.requiredIds) ? error.requiredIds : [];
     const requiredPreview = requiredIds.length
       ? ` required_set:${requiredIds.slice(0, 6).join(',')}${requiredIds.length > 6 ? `,+${requiredIds.length - 6}` : ''}`
@@ -114,7 +118,7 @@ async function printCompacted({ query, actions, budget, format, version, rulesHa
 
 export default async function context(args = []) {
   if (!args.length || args.includes('--help')) {
-    console.log(`Usage: total-recall context "task" [--action edit,test,publish] [--budget ${CAPSULE_LIMIT}] [--format text|json] [--knowledge] [--debug] [--project|--global]\nApplicable rules plus semantically retrieved task memory and active plugin evidence by default; unavailable vectors use a labelled lexical fallback. Unknown rule applicability is required. Over budget, compaction preserves selected task evidence and accounts for every rule: absolute rules keep at least a summary and every other rule keeps at least its slug. Configured budgets are capped at ${CAPSULE_LIMIT}; pass a larger --budget to print the full capsule. Exit 2 means the complete capsule cannot fit; do not act until ready:true. --knowledge remains accepted; --debug exposes retrieval inventories within the same budget. Refresh on task/action/project or policy changes.`);
+    console.log(`Usage: total-recall context "task" [--action edit,test,publish] [--budget ${CAPSULE_LIMIT}] [--format text|json] [--knowledge] [--debug] [--project|--global]\nApplicable rules plus semantically retrieved task memory and active plugin evidence by default; unavailable vectors use a labelled lexical fallback. Unknown rule applicability is required. Over budget, compaction preserves selected task evidence and accounts for every rule: absolute rules keep at least a summary and every other rule keeps at least its slug. Configured budgets are capped at ${CAPSULE_LIMIT}; pass a larger --budget to print the full capsule. Without --budget, the capsule grows to the size its rules need. Exit 2 means an explicit --budget cannot hold them; do not act until ready:true. --knowledge remains accepted; --debug exposes retrieval inventories within the same budget. Refresh on task/action/project or policy changes.`);
     return;
   }
   const { layer, remainingArgs } = parseLayerFlag(args);
@@ -128,14 +132,14 @@ export default async function context(args = []) {
     }
     return undefined;
   })();
-  let actions = [], budget = Math.min(configuredBudget ?? CAPSULE_LIMIT, CAPSULE_LIMIT), format = 'text', includeKnowledge = true, debug = false;
+  let actions = [], budget = Math.min(configuredBudget ?? CAPSULE_LIMIT, CAPSULE_LIMIT), explicitBudget = false, format = 'text', includeKnowledge = true, debug = false;
   for (let i = 1; i < remainingArgs.length; i++) {
     const flag = remainingArgs[i];
     if (flag === '--knowledge') { includeKnowledge = true; continue; }
     if (flag === '--debug') { debug = true; continue; }
     const value = remainingArgs[++i];
     if (flag === '--action') actions = value?.split(',').filter(Boolean) || [];
-    else if (flag === '--budget') budget = Number(value);
+    else if (flag === '--budget') { budget = Number(value); explicitBudget = true; }
     else if (flag === '--format' && ['json', 'text'].includes(value)) format = value;
     else throw new Error(`Unknown context option: ${flag}`);
   }
@@ -153,7 +157,7 @@ export default async function context(args = []) {
     derivedDir, action: actions, query, consumer: 'cli',
   });
   if (!response.ready && !debug) {
-    const printed = await printCompacted({ query, actions, budget, format, version: response.stats.version, rulesHash: result.stats.rules_hash, nodes, projectRoot, skillsDir, derivedDirs, knowledge: result.taskKnowledge });
+    const printed = await printCompacted({ query, actions, budget, format, version: response.stats.version, rulesHash: result.stats.rules_hash, nodes, projectRoot, skillsDir, derivedDirs, knowledge: result.taskKnowledge, explicitBudget });
     if (printed) noteDelivery(query, result.stats.rules_hash);
     return;
   }

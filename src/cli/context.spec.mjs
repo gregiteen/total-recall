@@ -47,6 +47,19 @@ describe('context CLI', () => {
     expect(text).not.toContain('Preserve records.');
     expect(text.length).toBeLessThan(512);
   });
+  it('grows the default budget instead of refusing the rules, and keeps an explicit budget exact', async () => {
+    const log = vi.spyOn(console, 'log').mockImplementation(() => {});
+    for (let i = 0; i < 400; i++) extraNodes.push({ slug: `absolute-rule-${i}`, category: 'invariants', status: 'active', priority: 'absolute', body: `Absolute rule ${i}: ${'keep this constraint '.repeat(6)}` });
+    for (const format of ['json', 'text']) {
+      await context(['deployment', '--format', format]);
+      const text = log.mock.calls.at(-1)[0];
+      expect(text.slice(0, 40)).toContain(format === 'json' ? '"ready":true' : 'ready:true');
+      for (const i of [0, 199, 399]) expect(text).toContain(`absolute-rule-${i}`);
+      expect(process.exitCode).toBe(originalExitCode);
+    }
+    await context(['deployment', '--budget', '7000']);
+    expect(log.mock.calls.at(-1)[0]).toMatch(/^ready:false reason:budget-overflow/);
+  });
   it('provides a local action capsule entrypoint', () => expect(typeof context).toBe('function'));
   it('defaults to bounded task knowledge and accounts for everything printed', async () => {
     const log = vi.spyOn(console, 'log').mockImplementation(() => {});
