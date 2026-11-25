@@ -1,3 +1,9 @@
+## 3.51.2 — 2026-11-25
+
+- The default context budget grows to the size a project's rules need. A project whose rules needed more than 7,000 tokens was refused outright, which stopped lesson reviews and dispatch there. An explicit `--budget` stays exact.
+- A lesson that is already saved is not a failed review. `remember` exits 3 for a duplicate rule, the review keeps its other rules and completes. `lessons status` counts failed reviews with their errors, and a failed task keeps its error.
+- Rules are ordered by their own fields. No rule is named in core code, and a spec fails if one is named again.
+
 ## 3.51.1 — 2026-11-25
 
 - A saved Claude session counts the same turns as its transcript. Tool results, meta rows, compaction summaries and injected text were saved as prompts, so one session with 3 prompts could queue dozens of lesson reviews. Existing cursors migrate once without queueing the past, and a saved session rebuilt with fewer turns no longer stops the scan.
