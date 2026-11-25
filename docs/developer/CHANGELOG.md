@@ -1,4 +1,4 @@
-## Unreleased
+## 3.51.1 — 2026-11-25
 
 - A saved Claude session counts the same turns as its transcript. Tool results, meta rows, compaction summaries and injected text were saved as prompts, so one session with 3 prompts could queue dozens of lesson reviews. Existing cursors migrate once without queueing the past, and a saved session rebuilt with fewer turns no longer stops the scan.
 
