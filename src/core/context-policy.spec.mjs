@@ -14,6 +14,36 @@ describe('explicit context policy', () => {
     const nodes = [rule('a', [], { body, subject: 'one' }), rule('b', [], { body, subject: 'two', supersedes: ['a'] })];
     expect(selectRules(nodes)).toHaveLength(2);
   });
+  it('orders rules only by absolute priority, importance, then slug', () => {
+    const nodes = [
+      rule('zeta', [], { importance: 2 }),
+      rule('alpha', [], { importance: 5 }),
+      rule('mid', [], { importance: 3 }),
+      rule('absolute', [], { priority: 'absolute', importance: 1 }),
+      rule('default', []),
+    ];
+    // Missing importance defaults to 3, so 'default' ties 'mid' and both sort by slug.
+    expect(selectRules(nodes).map(n => n.slug)).toEqual(['absolute', 'alpha', 'default', 'mid', 'zeta']);
+  });
+  it('treats no slug as special: every rule ranks by its fields alone', () => {
+    const formerCritical = ['invariants-8cd098fd', 'invariants-dc116371', 'never-ask-for-a-secret-before-searching-all-tr-stores',
+      'push-only-on-request', 'report-breakage-then-fix-at-the-source', 'invariants-bbbbec36', 'invariants-5d8df45d',
+      'invariants-7780389f', 'rule-total-recall-for-everything-always'];
+    for (const slug of formerCritical) {
+      const nodes = [rule(slug, [], { importance: 1 }), rule('plain', [], { importance: 5 })];
+      expect(selectRules(nodes).map(n => n.slug)).toEqual(['plain', slug]);
+      const absolute = [rule(slug), rule('plain', [], { priority: 'absolute' })];
+      expect(selectRules(absolute).map(n => n.slug)).toEqual(['plain', slug]);
+    }
+  });
+  it('is stable regardless of input order', () => {
+    const nodes = [rule('c', [], { importance: 2 }), rule('a', [], { importance: 2 }), rule('b', [], { priority: 'absolute' }),
+      rule('d', [], { importance: 4 }), rule('e', [], { importance: 2 })];
+    const forward = selectRules(nodes).map(n => n.slug);
+    const reverse = selectRules([...nodes].reverse()).map(n => n.slug);
+    expect(forward).toEqual(['b', 'd', 'a', 'c', 'e']);
+    expect(reverse).toEqual(forward);
+  });
   it('does not drop any required text or falsely claim compliance', () => {
     const result = assembleContext([{ id: 'required', text: 'x'.repeat(100), required: true }], { total: 10 });
     expect(result.ready).toBe(false);
