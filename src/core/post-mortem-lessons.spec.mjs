@@ -5,11 +5,13 @@ import path from 'node:path';
 import matter from './frontmatter.mjs';
 vi.mock('./runtime.mjs', () => ({ callLocalRuntime: vi.fn() }));
 vi.mock('./vault-cache.mjs', () => ({ getNodes: vi.fn(() => []) }));
+vi.mock('./logger.mjs', () => ({ logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() } }));
 import { callLocalRuntime } from './runtime.mjs';
 import { runPostMortem, readSessionTranscript, formatLessonTranscript, REVIEW_TRANSCRIPT_BUDGET } from './post-mortem.mjs';
 import { lessonsHeldUntil } from './internal-sessions.mjs';
 import { listTasks } from './task-envelope.mjs';
 import { dispatchTask, resolveExecutor } from './task-executors.mjs';
+import { logger } from './logger.mjs';
 // These specs exercise ordinary sessions; a Metaharness test runner must not mark them internal.
 delete process.env.TR_META_HARNESS_RUN;
 
@@ -95,4 +97,48 @@ it('fails a review executor when its transcript is missing', async () => {
   const result = await dispatchTask({ slug: 'lesson-review-test', executor: 'lesson-review', payload: { sessionPath: path.join(dir, 'missing.jsonl') } },
     { brainDir: dir, vaultDir: opts.vaultDir });
   expect(result.success).toBe(false); expect(result.error).toContain('not found');
+});
+it('counts a duplicate rule as already saved and still saves the other rules', async () => {
+  callLocalRuntime.mockResolvedValue(JSON.stringify({ rules: [
+    { title: 'Tabs', description: 'Use tabs.', evidence: 'Prompt 117' },
+    { title: 'Spaces', description: 'Use four spaces.', evidence: 'Prompt 117' },
+  ] }));
+  const rememberRule = vi.fn(async description => description === 'Use tabs.' ? { slug: 'lesson-rule-tabs', duplicate: true } : { slug: 'lesson-rule-spaces' });
+  const result = await runPostMortem(file, { ...opts, rememberRule });
+  expect(result.error).toBeUndefined();
+  expect(rememberRule).toHaveBeenCalledTimes(2);
+  expect(rememberRule).toHaveBeenNthCalledWith(1, 'Use tabs.', expect.objectContaining({ sourceRef: 's/turns/116-117' }));
+  expect(rememberRule).toHaveBeenNthCalledWith(2, 'Use four spaces.', expect.objectContaining({ sourceRef: 's/turns/116-117' }));
+  expect(result.duplicates).toBe(1);
+  expect(result.rules).toHaveLength(2);
+  const logged = logger.info.mock.calls.map(([entry, message]) => typeof entry === 'string' ? message : entry?.message)
+    .find(message => typeof message === 'string' && message.includes('s/turns/116-117'));
+  expect(logged).toContain('1 duplicate');
+});
+it('a real duplicate alongside a new rule completes the review without an error', async () => {
+  callLocalRuntime.mockResolvedValue(JSON.stringify({ rules: [
+    { title: 'Tabs', description: 'Use tabs.', evidence: 'Prompt 117' },
+    { title: 'Spaces', description: 'Use four spaces.', evidence: 'Prompt 117' },
+  ] }));
+  const { rememberLessonRule, DUPLICATE_RULE_EXIT_CODE } = await import('./lesson-memory.mjs');
+  // A review brain lives at <agent>/skills/total-recall.
+  const brain = path.join(dir, 'agent', 'skills', 'total-recall');
+  const vaultDir = path.join(brain, 'memory-vault');
+  const existing = '---\ntype: memory\nslug: lesson-rule-tabs\ncategory: invariants\ntitle: Tabs\nstatus: active\npriority: absolute\nmodality: must\n---\n\nUse tabs.\n';
+  fs.mkdirSync(path.join(vaultDir, 'invariants'), { recursive: true });
+  fs.writeFileSync(path.join(vaultDir, 'invariants', 'lesson-rule-tabs.md'), existing);
+  const saved = [];
+  const rememberRule = (content, options) => rememberLessonRule(content, { ...options, execute: (binary, args, opts, done) => {
+    saved.push(content);
+    const duplicate = content === 'Use tabs.';
+    const error = duplicate ? Object.assign(new Error('exited 3'), { code: DUPLICATE_RULE_EXIT_CODE }) : null;
+    done(error, '', duplicate ? 'Rule already exists' : '');
+  } });
+  const result = await runPostMortem(file, { ...opts, vaultDir, rememberRule, fromTurn: 1, toTurn: Infinity });
+  expect(result.error).toBeUndefined();
+  expect(result.duplicates).toBe(1);
+  expect(saved).toEqual(['Use tabs.', 'Use four spaces.']);
+  // Nothing was written for the duplicate; the vault still holds only the seeded rule.
+  expect(fs.readdirSync(path.join(vaultDir, 'invariants'))).toEqual(['lesson-rule-tabs.md']);
+  expect(fs.readFileSync(path.join(vaultDir, 'invariants', 'lesson-rule-tabs.md'), 'utf8')).toBe(existing);
 });

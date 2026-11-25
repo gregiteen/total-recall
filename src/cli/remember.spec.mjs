@@ -2,10 +2,12 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { spawnSync } from 'node:child_process';
 vi.mock('../core/config.mjs', async importOriginal => ({ ...await importOriginal(), googleApiKey: 'auth-fixture-key' }));
 import remember from './remember.mjs';
 import recall from './recall.mjs';
 import { saveEmbeddingToIndex } from '../core/embeddings.mjs';
+import { DUPLICATE_RULE_EXIT_CODE } from '../core/lesson-memory.mjs';
 
 describe('remember and recall CLI commands', () => {
   let tmpAgentDir;
@@ -195,5 +197,29 @@ Core Invariants`
 
     global.fetch = origFetch;
     consoleSpy.mockRestore();
+  });
+
+  it('exits with the duplicate code and writes nothing when the rule already exists', () => {
+    // A real child process: the duplicate guard is the only step that can exit 3.
+    const brain = path.join(tmpAgentDir, 'skills', 'total-recall');
+    const vaultDir = path.join(brain, 'memory-vault');
+    const body = 'Always rotate the staging signing keys every ninety days without exception.';
+    const cli = path.resolve('bin/total-recall.mjs');
+    const run = args => spawnSync(process.execPath, [cli, 'remember', ...args], {
+      cwd: tmpAgentDir, encoding: 'utf8', timeout: 30000,
+      env: { ...process.env, AGENT_DIR: tmpAgentDir, _TR_TEST_AGENT_DIR: tmpAgentDir, TR_SESSION_ID: 'duplicate-spec' },
+    });
+    const first = run(['invariant', body, '--project', '--slug', 'invariants-duplicate-spec']);
+    expect(first.status, first.stderr).toBe(0);
+    const vaultFiles = () => fs.readdirSync(vaultDir, { recursive: true })
+      .filter(name => name.endsWith('.md')).sort();
+    const before = vaultFiles();
+    expect(before).toContain(path.join('invariants', 'invariants-duplicate-spec.md'));
+
+    const second = run(['invariant', body, '--project', '--slug', 'invariants-duplicate-spec-copy']);
+    expect(second.status, second.stderr).toBe(DUPLICATE_RULE_EXIT_CODE);
+    expect(second.stderr).toContain('DUPLICATE RULE REJECTED');
+    expect(vaultFiles()).toEqual(before);
+    expect(fs.readdirSync(path.join(vaultDir, 'invariants'))).toEqual(['invariants-duplicate-spec.md']);
   });
 });

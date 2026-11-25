@@ -14,8 +14,13 @@ async function containLessonQueue(brainDir, { cancel = false } = {}) {
   const queueDir = resolveQueueDir(brainDir);
   // The pending listing includes in-progress tasks.
   const tasks = listTasks(queueDir, { status: 'pending' }).filter(isAutomaticLessonTask);
+  // The daemon moves a task to the failed DLQ after three attempts, so a failed review is no
+  // longer pending and never appeared in this report. Count those separately.
+  const failedTasks = listTasks(queueDir, { status: 'failed' }).filter(isAutomaticLessonTask)
+    .map(task => ({ slug: task.slug, last_error: task.last_error ?? null, retry_count: task.retry_count ?? 0 }));
   const result = { pending: tasks.filter(task => task.status === 'pending').length,
-    inProgress: tasks.filter(task => task.status === 'in-progress').length, cancelled: 0, failed: [] };
+    inProgress: tasks.filter(task => task.status === 'in-progress').length,
+    failedCount: failedTasks.length, failedTasks, cancelled: 0, failed: [] };
   if (!cancel) return result;
   for (const task of tasks.filter(item => item.status === 'pending')) {
     const outcome = await cancelTask(queueDir, task.slug, { expectedStatus: 'pending' });

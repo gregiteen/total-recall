@@ -324,7 +324,10 @@ export default async function remember(args) {
       });
     } catch (err) {
       if (err.code === 'ERR_DUPLICATE_RULE') {
-        process.exit(1);
+        // A distinct code so a lesson review can tell "already saved" from a real failure.
+        // Nothing is written for a duplicate; every other failure keeps exit code 1.
+        const { DUPLICATE_RULE_EXIT_CODE } = await import('../core/lesson-memory.mjs');
+        process.exit(DUPLICATE_RULE_EXIT_CODE);
       }
       throw err;
     }

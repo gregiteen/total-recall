@@ -323,7 +323,10 @@ export async function transitionTaskStatus(queueDir, task, status, { expectedSta
   data.updated_at = new Date().toISOString();
   if (status === 'cancelled') data.cancelled_at = data.updated_at;
   if (status === 'completed') data.completed_at = data.updated_at;
-  if (lastError) data.last_error = lastError;
+  // The daemon records the error on the task object, then hands it here; reading only
+  // the argument dropped both fields from a failed task's envelope.
+  const error = lastError || task.last_error;
+  if (error) data.last_error = error;
   if (task.retry_count !== undefined) data.retry_count = task.retry_count;
   try {
     await vfs.writeAtomic(relative, Buffer.from(safeStringify(content, data)), { version: current.version });

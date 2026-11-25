@@ -274,19 +274,23 @@ export async function runPostMortem(sessionPath, { vaultDir, inboxDir, runtimeCo
   }
   const userText = (fromTurn ? selectLessonTurns(readLessonEntries(sessionPath), { fromTurn, toTurn }) : readLessonEntries(sessionPath))
     .filter(entry => entry.role === 'user').map(entry => entry.content);
+  // A duplicate is already saved, not a failure: keep the review going with the other rules.
+  let duplicates = 0;
   for (const rule of ruleCandidates) {
     if (typeof rule.evidence !== 'string' || !rule.evidence.trim() || !userText.some(content => content.includes(rule.evidence))) {
-      return { patterns, facts, skill_gaps: skillGaps, violations, error: 'Rule candidate has no exact user evidence in this turn range' };
+      return { patterns, facts, skill_gaps: skillGaps, violations, rules: ruleCandidates, duplicates,
+        error: 'Rule candidate has no exact user evidence in this turn range' };
     }
-    await rememberRule(rule.description, { brainDir: reviewBrainDir, title: rule.title, sourceRef: sessionSlug, hold });
+    const saved = await rememberRule(rule.description, { brainDir: reviewBrainDir, title: rule.title, sourceRef: sessionSlug, hold });
+    if (saved?.duplicate) duplicates++;
   }
 
   logger.info({
     subsystem: 'post-mortem',
-    message: `Session ${sessionSlug}: ${patterns.length} patterns, ${facts.length} facts, ${skillGaps.length} gaps, ${violations.length} violations`,
+    message: `Session ${sessionSlug}: ${patterns.length} patterns, ${facts.length} facts, ${skillGaps.length} gaps, ${violations.length} violations, ${ruleCandidates.length} rules (${duplicates} duplicate)`,
   });
 
-  return { patterns, facts, skill_gaps: skillGaps, violations, rules: ruleCandidates };
+  return { patterns, facts, skill_gaps: skillGaps, violations, rules: ruleCandidates, duplicates };
 }
 
 // ─── Draft Node Writers ─────────────────────────────────────────────────────────

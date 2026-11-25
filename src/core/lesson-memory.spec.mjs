@@ -2,7 +2,7 @@ import { it, expect, vi, beforeEach, afterEach } from 'vitest';
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
-import { rememberLessonRule } from './lesson-memory.mjs';
+import { rememberLessonRule, DUPLICATE_RULE_EXIT_CODE } from './lesson-memory.mjs';
 let agent, brain;
 beforeEach(() => { agent = fs.mkdtempSync(path.join(os.tmpdir(), 'lesson-remember-')); brain = path.join(agent, 'skills/total-recall'); });
 afterEach(() => fs.rmSync(agent, { recursive: true, force: true }));
@@ -21,4 +21,19 @@ it('keeps the real remember hard limit and propagates its refusal without a cano
   // remember may create the empty vault folder at startup; the refusal must leave no memory file.
   const files = d => fs.existsSync(d) ? fs.readdirSync(d, { withFileTypes: true }).flatMap(e => e.isDirectory() ? files(path.join(d, e.name)) : [e.name]) : [];
   expect(files(path.join(brain, 'memory-vault')).filter(f => f.endsWith('.md'))).toEqual([]);
+});
+const exitWith = code => Object.assign(new Error(`Lesson remember failed: exited ${code}`), { code, exitCode: code });
+it('resolves a duplicate as already saved when remember exits with the duplicate code', async () => {
+  const execute = vi.fn((binary, args, opts, done) => done(exitWith(DUPLICATE_RULE_EXIT_CODE), '', 'Rule already exists'));
+  const result = await rememberLessonRule('Use tabs.', { brainDir: brain, sourceRef: 's/turns/1-10', execute });
+  expect(DUPLICATE_RULE_EXIT_CODE).toBe(3);
+  expect(result).toMatchObject({ duplicate: true });
+  expect(result.slug).toMatch(/^lesson-rule-/);
+  expect(execute).toHaveBeenCalledTimes(1);
+});
+it('rejects every other remember failure, including a generic exit code 1', async () => {
+  const execute = vi.fn((binary, args, opts, done) => done(exitWith(1), '', 'validation failed'));
+  await expect(rememberLessonRule('Use tabs.', { brainDir: brain, sourceRef: 's/turns/1-10', execute })).rejects.toThrow('Lesson remember failed');
+  const killed = vi.fn((binary, args, opts, done) => done(Object.assign(new Error('killed'), { code: 'ETIMEDOUT' }), '', ''));
+  await expect(rememberLessonRule('Use tabs.', { brainDir: brain, sourceRef: 's/turns/1-10', execute: killed })).rejects.toThrow('Lesson remember failed');
 });

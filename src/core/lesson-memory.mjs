@@ -7,6 +7,18 @@ import { brainDir as globalBrainDir } from './local-config.mjs';
 
 const cli = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../bin/total-recall.mjs');
 
+/**
+ * The exit code `remember` uses when its duplicate guard refuses a rule that already exists.
+ * It is not a failure: the review's rule is already saved. Remember imports this constant, so
+ * the writer and every reader share one definition and neither module imports the other.
+ */
+export const DUPLICATE_RULE_EXIT_CODE = 3;
+
+/** True when a child-process failure is remember's duplicate refusal, not a real error. */
+export function isDuplicateRuleExit(error) {
+  return error?.code === DUPLICATE_RULE_EXIT_CODE || error?.exitCode === DUPLICATE_RULE_EXIT_CODE;
+}
+
 /** Use remember's length, duplicate and validated-write guards, with a pinned brain. */
 export function rememberLessonRule(content, { brainDir, title, sourceRef, hold = false, execute = execFile } = {}) {
   if (typeof content !== 'string' || !content.trim()) throw new Error('Lesson rule has no content');
@@ -22,6 +34,10 @@ export function rememberLessonRule(content, { brainDir, title, sourceRef, hold =
     ...(title ? ['--title', title] : [])];
   return new Promise((resolve, reject) => {
     execute(process.execPath, args, { env: { ...process.env, AGENT_DIR: agentDir, TR_SESSION_ID: sourceRef }, timeout: 120_000, maxBuffer: 1024 * 1024 },
-      (error, stdout, stderr) => error ? reject(new Error(`Lesson remember failed: ${stderr || error.message}`)) : resolve({ slug, stdout }));
+      (error, stdout, stderr) => {
+        if (error && isDuplicateRuleExit(error)) return resolve({ slug, duplicate: true, stdout });
+        if (error) return reject(new Error(`Lesson remember failed: ${stderr || error.message}`));
+        resolve({ slug, stdout });
+      });
   });
 }
